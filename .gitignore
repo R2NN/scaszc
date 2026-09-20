@@ -1,0 +1,18 @@
+.pytest_cache/
+**/__pycache__/
+*.py[cod]
+
+# Local runtime caches and diagnostics
+tmp/
+runtime/*.sqlite3
+runtime/*.log
+runtime/*.jsonl
+
+# Large local transport index; restore it from the handoff dataset when needed
+data/transit/*.sqlite
+
+# Local editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

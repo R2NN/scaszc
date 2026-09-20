@@ -1,0 +1,20 @@
+{
+  "artifact_type": "EXACT_PLAN_MATERIALIZATION",
+  "status": "ROUTING_INCOMPLETE",
+  "exact_provider_queries": 3,
+  "identity_legs": 0,
+  "failure": {
+    "engineer_id": "EAST-ENG-01",
+    "job_id": "EAST-53587",
+    "origin_location_id": "LOC-0087",
+    "destination_location_id": "LOC-0055",
+    "departure_at": "2026-08-17T12:58:00+03:00",
+    "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/public_transport/2.0; request_sha256=c5d61100be81d2758eeb578566f4d4d978ef5939a79dc52bca4339cf2041fc09; reason=TimeoutError: The read operation timed out"
+  },
+  "plan": null,
+  "validation": null,
+  "publication_allowed": false,
+  "dataset_sha256": "c1f5f64639233d4bf65b9c4e367d6d841bf62162c4d2fbea567c30f2fd2c97da",
+  "master_solution_content_sha256": "b8219ba16df2ecd2ac53f8be306708460a618e5b8fb4d5d2ad2cd7cd3fca263f",
+  "content_sha256": "c69837713a93cac0ba23e74e8733d88d503a076e54891e6fb22e9330c04598e0"
+}

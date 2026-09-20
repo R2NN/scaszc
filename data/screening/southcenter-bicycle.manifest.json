@@ -1,0 +1,18 @@
+{
+  "matrix_schema_version": "1.0.0",
+  "dataset_version": "2.1.0",
+  "provider": "LOCAL_VALHALLA_MATRIX",
+  "purpose": "SCREENING_ONLY_NOT_AUTHORITATIVE_FOR_TIME_DEPENDENT_CONSTRAINTS",
+  "zone_id": "SOUTHCENTER",
+  "mode": "BICYCLE",
+  "departure_at_label": "2026-08-17T07:00:00+03:00",
+  "departure_time_honored": false,
+  "locations": 56,
+  "cells": 3136,
+  "status_counts": {
+    "OK": 3136
+  },
+  "matrix_file": "southcenter-bicycle.csv",
+  "matrix_file_sha256": "db2090200f8c9b56143beafd866c7dc9e180614b7d5832f52e064f11628173e4",
+  "matrix_content_sha256": "623e5a3f0d9c313ce5cc4dfc4f9e4ea906e1a3342a193ade46d2d27a4c09747e"
+}

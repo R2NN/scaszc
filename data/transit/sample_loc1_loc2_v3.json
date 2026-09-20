@@ -1,0 +1,1413 @@
+{
+  "origin_id": "LOC-0001",
+  "destination_id": "LOC-0002",
+  "mode": "PUBLIC_TRANSIT",
+  "departure_at": "2026-08-17T09:00:00+03:00",
+  "status": "OK",
+  "duration_seconds": 5333,
+  "duration_minutes": 89,
+  "distance_m": 15455,
+  "geometry": [
+    [
+      55.696598,
+      37.752521
+    ],
+    [
+      55.6964,
+      37.752652
+    ],
+    [
+      55.694341,
+      37.754011
+    ],
+    [
+      55.694198,
+      37.752202
+    ],
+    [
+      55.694116,
+      37.751339
+    ],
+    [
+      55.694051,
+      37.750645
+    ],
+    [
+      55.693974,
+      37.749634
+    ],
+    [
+      55.693892,
+      37.748664
+    ],
+    [
+      55.693879,
+      37.748496
+    ],
+    [
+      55.693868,
+      37.748314
+    ],
+    [
+      55.693742,
+      37.74683
+    ],
+    [
+      55.693684,
+      37.746059
+    ],
+    [
+      55.693549,
+      37.74445
+    ],
+    [
+      55.693539,
+      37.744326
+    ],
+    [
+      55.693534,
+      37.744217
+    ],
+    [
+      55.693423,
+      37.744249
+    ],
+    [
+      55.693374,
+      37.744264
+    ],
+    [
+      55.69304,
+      37.740182
+    ],
+    [
+      55.693008,
+      37.739785
+    ],
+    [
+      55.692884,
+      37.73841
+    ],
+    [
+      55.692713,
+      37.736385
+    ],
+    [
+      55.692622,
+      37.735283
+    ],
+    [
+      55.692565,
+      37.735226
+    ],
+    [
+      55.692541,
+      37.73523
+    ],
+    [
+      55.692532,
+      37.73514
+    ],
+    [
+      55.692513,
+      37.734948
+    ],
+    [
+      55.692503,
+      37.734843
+    ],
+    [
+      55.692918,
+      37.73469
+    ],
+    [
+      55.693172,
+      37.734596
+    ],
+    [
+      55.693093,
+      37.734081
+    ],
+    [
+      55.693207,
+      37.734001
+    ],
+    [
+      55.693508,
+      37.733707
+    ],
+    [
+      55.693769,
+      37.73337
+    ],
+    [
+      55.693894,
+      37.733135
+    ],
+    [
+      55.693839,
+      37.733041
+    ],
+    [
+      55.693535,
+      37.732584
+    ],
+    [
+      55.6935,
+      37.732407
+    ],
+    [
+      55.693418,
+      37.731986
+    ],
+    [
+      55.693346,
+      37.732032
+    ],
+    [
+      55.693132,
+      37.732168
+    ],
+    [
+      55.693048,
+      37.732221
+    ],
+    [
+      55.693024,
+      37.732101
+    ],
+    [
+      55.685123,
+      37.734066
+    ],
+    [
+      55.674019,
+      37.728027
+    ],
+    [
+      55.661325,
+      37.717035
+    ],
+    [
+      55.649425,
+      37.700874
+    ],
+    [
+      55.641173,
+      37.690119
+    ],
+    [
+      55.64041735,
+      37.68599686
+    ],
+    [
+      55.64225471,
+      37.68139989
+    ],
+    [
+      55.64407322,
+      37.67660013
+    ],
+    [
+      55.64724084,
+      37.66825052
+    ],
+    [
+      55.64968546,
+      37.66220064
+    ],
+    [
+      55.65540617,
+      37.64998741
+    ],
+    [
+      55.65528694,
+      37.6500954
+    ],
+    [
+      55.66278336,
+      37.65725241
+    ],
+    [
+      55.66751439,
+      37.66130277
+    ],
+    [
+      55.66882808,
+      37.66221737
+    ],
+    [
+      55.6723714,
+      37.66319533
+    ],
+    [
+      55.67815803,
+      37.6645479
+    ],
+    [
+      55.6799932,
+      37.66492138
+    ],
+    [
+      55.68051005,
+      37.66513963
+    ],
+    [
+      55.680516,
+      37.665092
+    ],
+    [
+      55.680949,
+      37.665263
+    ],
+    [
+      55.680928,
+      37.66557
+    ],
+    [
+      55.680925,
+      37.665619
+    ],
+    [
+      55.680924,
+      37.666127
+    ],
+    [
+      55.680956,
+      37.66613
+    ],
+    [
+      55.68101,
+      37.666137
+    ],
+    [
+      55.681186,
+      37.666636
+    ],
+    [
+      55.681359,
+      37.666668
+    ],
+    [
+      55.681358,
+      37.667195
+    ],
+    [
+      55.681359,
+      37.66819
+    ],
+    [
+      55.681359,
+      37.66826
+    ],
+    [
+      55.681359,
+      37.668514
+    ],
+    [
+      55.681438,
+      37.668938
+    ],
+    [
+      55.681438,
+      37.668975
+    ],
+    [
+      55.681437,
+      37.66904
+    ],
+    [
+      55.681432,
+      37.66976
+    ],
+    [
+      55.681571,
+      37.669862
+    ],
+    [
+      55.681792,
+      37.670522
+    ],
+    [
+      55.6818,
+      37.670661
+    ],
+    [
+      55.681828,
+      37.670709
+    ],
+    [
+      55.681828,
+      37.671251
+    ],
+    [
+      55.681828,
+      37.671643
+    ],
+    [
+      55.681828,
+      37.672146
+    ],
+    [
+      55.681828,
+      37.6722
+    ],
+    [
+      55.681828,
+      37.672285
+    ],
+    [
+      55.682137,
+      37.672329
+    ],
+    [
+      55.682261,
+      37.672463
+    ],
+    [
+      55.682346,
+      37.672749
+    ],
+    [
+      55.682358,
+      37.672938
+    ],
+    [
+      55.68274,
+      37.672937
+    ]
+  ],
+  "itinerary": [
+    {
+      "sequence": 0,
+      "mode": "walking",
+      "duration_seconds": 1339,
+      "distance_m": 1869,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.696598,
+          37.752521
+        ],
+        [
+          55.6964,
+          37.752652
+        ],
+        [
+          55.694341,
+          37.754011
+        ],
+        [
+          55.694198,
+          37.752202
+        ],
+        [
+          55.694116,
+          37.751339
+        ],
+        [
+          55.694051,
+          37.750645
+        ],
+        [
+          55.693974,
+          37.749634
+        ],
+        [
+          55.693892,
+          37.748664
+        ],
+        [
+          55.693879,
+          37.748496
+        ],
+        [
+          55.693868,
+          37.748314
+        ],
+        [
+          55.693742,
+          37.74683
+        ],
+        [
+          55.693684,
+          37.746059
+        ],
+        [
+          55.693549,
+          37.74445
+        ],
+        [
+          55.693539,
+          37.744326
+        ],
+        [
+          55.693534,
+          37.744217
+        ],
+        [
+          55.693423,
+          37.744249
+        ],
+        [
+          55.693374,
+          37.744264
+        ],
+        [
+          55.69304,
+          37.740182
+        ],
+        [
+          55.693008,
+          37.739785
+        ],
+        [
+          55.692884,
+          37.73841
+        ],
+        [
+          55.692713,
+          37.736385
+        ],
+        [
+          55.692622,
+          37.735283
+        ],
+        [
+          55.692565,
+          37.735226
+        ],
+        [
+          55.692541,
+          37.73523
+        ],
+        [
+          55.692532,
+          37.73514
+        ],
+        [
+          55.692513,
+          37.734948
+        ],
+        [
+          55.692503,
+          37.734843
+        ],
+        [
+          55.692918,
+          37.73469
+        ],
+        [
+          55.693172,
+          37.734596
+        ],
+        [
+          55.693093,
+          37.734081
+        ],
+        [
+          55.693207,
+          37.734001
+        ],
+        [
+          55.693508,
+          37.733707
+        ],
+        [
+          55.693769,
+          37.73337
+        ],
+        [
+          55.693894,
+          37.733135
+        ],
+        [
+          55.693839,
+          37.733041
+        ],
+        [
+          55.693535,
+          37.732584
+        ],
+        [
+          55.6935,
+          37.732407
+        ],
+        [
+          55.693418,
+          37.731986
+        ],
+        [
+          55.693346,
+          37.732032
+        ],
+        [
+          55.693132,
+          37.732168
+        ],
+        [
+          55.693048,
+          37.732221
+        ]
+      ],
+      "attributes": {
+        "source": "LOCAL_VALHALLA",
+        "purpose": "station_access"
+      }
+    },
+    {
+      "sequence": 1,
+      "mode": "station_entry",
+      "duration_seconds": 300,
+      "distance_m": 0,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.693024,
+          37.732101
+        ]
+      ],
+      "attributes": {
+        "source": "MOSMETRO_SCHEMA",
+        "station": "Печатники"
+      }
+    },
+    {
+      "sequence": 2,
+      "mode": "waiting",
+      "duration_seconds": 221,
+      "distance_m": 0,
+      "waiting_seconds": 221,
+      "geometry": [
+        [
+          55.693024,
+          37.732101
+        ]
+      ],
+      "attributes": {
+        "station": "Печатники",
+        "source": "YANDEX_RASP_NORMAL_MONDAY"
+      }
+    },
+    {
+      "sequence": 3,
+      "mode": "Иволга",
+      "duration_seconds": 60,
+      "distance_m": 888,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.693024,
+          37.732101
+        ],
+        [
+          55.685123,
+          37.734066
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Печатники",
+        "to_stop": "Люблино",
+        "line": "7242/7241",
+        "headsign": "Нахабино — Подольск",
+        "trip_id": "r:7242x7241_0_9601122_g25_4",
+        "departure_seconds": 34260,
+        "arrival_seconds": 34320,
+        "timetable_source": "YANDEX_RASP_NORMAL_MONDAY",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 4,
+      "mode": "waiting",
+      "duration_seconds": 60,
+      "distance_m": 0,
+      "waiting_seconds": 60,
+      "geometry": [
+        [
+          55.685123,
+          37.734066
+        ]
+      ],
+      "attributes": {
+        "station": "Люблино",
+        "source": "YANDEX_RASP_NORMAL_MONDAY"
+      }
+    },
+    {
+      "sequence": 5,
+      "mode": "Иволга",
+      "duration_seconds": 60,
+      "distance_m": 1292,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.685123,
+          37.734066
+        ],
+        [
+          55.674019,
+          37.728027
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Люблино",
+        "to_stop": "Депо",
+        "line": "7242/7241",
+        "headsign": "Нахабино — Подольск",
+        "trip_id": "r:7242x7241_0_9601122_g25_4",
+        "departure_seconds": 34380,
+        "arrival_seconds": 34440,
+        "timetable_source": "YANDEX_RASP_NORMAL_MONDAY",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 6,
+      "mode": "waiting",
+      "duration_seconds": 60,
+      "distance_m": 0,
+      "waiting_seconds": 60,
+      "geometry": [
+        [
+          55.674019,
+          37.728027
+        ]
+      ],
+      "attributes": {
+        "station": "Депо",
+        "source": "YANDEX_RASP_NORMAL_MONDAY"
+      }
+    },
+    {
+      "sequence": 7,
+      "mode": "Иволга",
+      "duration_seconds": 120,
+      "distance_m": 1571,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.674019,
+          37.728027
+        ],
+        [
+          55.661325,
+          37.717035
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Депо",
+        "to_stop": "Перерва",
+        "line": "7242/7241",
+        "headsign": "Нахабино — Подольск",
+        "trip_id": "r:7242x7241_0_9601122_g25_4",
+        "departure_seconds": 34500,
+        "arrival_seconds": 34620,
+        "timetable_source": "YANDEX_RASP_NORMAL_MONDAY",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 8,
+      "mode": "waiting",
+      "duration_seconds": 60,
+      "distance_m": 0,
+      "waiting_seconds": 60,
+      "geometry": [
+        [
+          55.661325,
+          37.717035
+        ]
+      ],
+      "attributes": {
+        "station": "Перерва",
+        "source": "YANDEX_RASP_NORMAL_MONDAY"
+      }
+    },
+    {
+      "sequence": 9,
+      "mode": "Иволга",
+      "duration_seconds": 120,
+      "distance_m": 1667,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.661325,
+          37.717035
+        ],
+        [
+          55.649425,
+          37.700874
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Перерва",
+        "to_stop": "Курьяново",
+        "line": "7242/7241",
+        "headsign": "Нахабино — Подольск",
+        "trip_id": "r:7242x7241_0_9601122_g25_4",
+        "departure_seconds": 34680,
+        "arrival_seconds": 34800,
+        "timetable_source": "YANDEX_RASP_NORMAL_MONDAY",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 10,
+      "mode": "waiting",
+      "duration_seconds": 60,
+      "distance_m": 0,
+      "waiting_seconds": 60,
+      "geometry": [
+        [
+          55.649425,
+          37.700874
+        ]
+      ],
+      "attributes": {
+        "station": "Курьяново",
+        "source": "YANDEX_RASP_NORMAL_MONDAY"
+      }
+    },
+    {
+      "sequence": 11,
+      "mode": "Иволга",
+      "duration_seconds": 60,
+      "distance_m": 1140,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.649425,
+          37.700874
+        ],
+        [
+          55.641173,
+          37.690119
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Курьяново",
+        "to_stop": "Москворечье",
+        "line": "7242/7241",
+        "headsign": "Нахабино — Подольск",
+        "trip_id": "r:7242x7241_0_9601122_g25_4",
+        "departure_seconds": 34860,
+        "arrival_seconds": 34920,
+        "timetable_source": "YANDEX_RASP_NORMAL_MONDAY",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 12,
+      "mode": "walking_transfer",
+      "duration_seconds": 625,
+      "distance_m": 456,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.641173,
+          37.690119
+        ],
+        [
+          55.64041735,
+          37.68599686
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Москворечье",
+        "to_stop": "МЦД Москворечье",
+        "source": "VALHALLA_WALK_MATRIX",
+        "measured_walk_seconds": 325,
+        "geometry_quality": "stop_to_stop_chord"
+      }
+    },
+    {
+      "sequence": 13,
+      "mode": "waiting",
+      "duration_seconds": 95,
+      "distance_m": 0,
+      "waiting_seconds": 95,
+      "geometry": [
+        [
+          55.64041735,
+          37.68599686
+        ]
+      ],
+      "attributes": {
+        "station": "МЦД Москворечье",
+        "source": "GTFS"
+      }
+    },
+    {
+      "sequence": 14,
+      "mode": "bus",
+      "duration_seconds": 60,
+      "distance_m": 354,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.64041735,
+          37.68599686
+        ],
+        [
+          55.64225471,
+          37.68139989
+        ]
+      ],
+      "attributes": {
+        "from_stop": "МЦД Москворечье",
+        "to_stop": "З-д полиметаллов",
+        "line": "770",
+        "headsign": "",
+        "trip_id": "g:141500628_100011109_2_6",
+        "departure_seconds": 35640,
+        "arrival_seconds": 35700,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 15,
+      "mode": "bus",
+      "duration_seconds": 60,
+      "distance_m": 363,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.64225471,
+          37.68139989
+        ],
+        [
+          55.64407322,
+          37.67660013
+        ]
+      ],
+      "attributes": {
+        "from_stop": "З-д полиметаллов",
+        "to_stop": "Институт автоматики",
+        "line": "770",
+        "headsign": "",
+        "trip_id": "g:141500628_100011109_2_6",
+        "departure_seconds": 35700,
+        "arrival_seconds": 35760,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 16,
+      "mode": "bus",
+      "duration_seconds": 120,
+      "distance_m": 632,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.64407322,
+          37.67660013
+        ],
+        [
+          55.64724084,
+          37.66825052
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Институт автоматики",
+        "to_stop": "Д/к «Москворечье»",
+        "line": "770",
+        "headsign": "",
+        "trip_id": "g:141500628_100011109_2_6",
+        "departure_seconds": 35760,
+        "arrival_seconds": 35880,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 17,
+      "mode": "bus",
+      "duration_seconds": 60,
+      "distance_m": 467,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.64724084,
+          37.66825052
+        ],
+        [
+          55.64968546,
+          37.66220064
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Д/к «Москворечье»",
+        "to_stop": "МИФИ",
+        "line": "770",
+        "headsign": "",
+        "trip_id": "g:141500628_100011109_2_6",
+        "departure_seconds": 35880,
+        "arrival_seconds": 35940,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 18,
+      "mode": "bus",
+      "duration_seconds": 240,
+      "distance_m": 996,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.64968546,
+          37.66220064
+        ],
+        [
+          55.65540617,
+          37.64998741
+        ]
+      ],
+      "attributes": {
+        "from_stop": "МИФИ",
+        "to_stop": "Метро «Каширская» (северный вход)",
+        "line": "770",
+        "headsign": "",
+        "trip_id": "g:141500628_100011109_2_6",
+        "departure_seconds": 35940,
+        "arrival_seconds": 36180,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 19,
+      "mode": "walking_transfer",
+      "duration_seconds": 66,
+      "distance_m": 89,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.65540617,
+          37.64998741
+        ],
+        [
+          55.65528694,
+          37.6500954
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Метро «Каширская» (северный вход)",
+        "to_stop": "Метро «Каширская»",
+        "source": "VALHALLA_WALK_MATRIX",
+        "measured_walk_seconds": 66,
+        "geometry_quality": "stop_to_stop_chord"
+      }
+    },
+    {
+      "sequence": 20,
+      "mode": "waiting",
+      "duration_seconds": 414,
+      "distance_m": 0,
+      "waiting_seconds": 414,
+      "geometry": [
+        [
+          55.65528694,
+          37.6500954
+        ]
+      ],
+      "attributes": {
+        "station": "Метро «Каширская»",
+        "source": "GTFS"
+      }
+    },
+    {
+      "sequence": 21,
+      "mode": "bus",
+      "duration_seconds": 240,
+      "distance_m": 947,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.65528694,
+          37.6500954
+        ],
+        [
+          55.66278336,
+          37.65725241
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Метро «Каширская»",
+        "to_stop": "Парк имени Юрия Лужкова",
+        "line": "899",
+        "headsign": "",
+        "trip_id": "g:3321_100011950_5_1",
+        "departure_seconds": 36660,
+        "arrival_seconds": 36900,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 22,
+      "mode": "bus",
+      "duration_seconds": 60,
+      "distance_m": 585,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.66278336,
+          37.65725241
+        ],
+        [
+          55.66751439,
+          37.66130277
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Парк имени Юрия Лужкова",
+        "to_stop": "Музей «Коломенское»",
+        "line": "899",
+        "headsign": "",
+        "trip_id": "g:3321_100011950_5_1",
+        "departure_seconds": 36900,
+        "arrival_seconds": 36960,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 23,
+      "mode": "bus",
+      "duration_seconds": 60,
+      "distance_m": 157,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.66751439,
+          37.66130277
+        ],
+        [
+          55.66882808,
+          37.66221737
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Музей «Коломенское»",
+        "to_stop": "Коломенский проезд",
+        "line": "899",
+        "headsign": "",
+        "trip_id": "g:3321_100011950_5_1",
+        "departure_seconds": 36960,
+        "arrival_seconds": 37020,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 24,
+      "mode": "bus",
+      "duration_seconds": 60,
+      "distance_m": 399,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.66882808,
+          37.66221737
+        ],
+        [
+          55.6723714,
+          37.66319533
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Коломенский проезд",
+        "to_stop": "Центр московского долголетия",
+        "line": "899",
+        "headsign": "",
+        "trip_id": "g:3321_100011950_5_1",
+        "departure_seconds": 37020,
+        "arrival_seconds": 37080,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 25,
+      "mode": "bus",
+      "duration_seconds": 120,
+      "distance_m": 650,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.6723714,
+          37.66319533
+        ],
+        [
+          55.67815803,
+          37.6645479
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Центр московского долголетия",
+        "to_stop": "Метро «Коломенская»",
+        "line": "899",
+        "headsign": "",
+        "trip_id": "g:3321_100011950_5_1",
+        "departure_seconds": 37080,
+        "arrival_seconds": 37200,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 26,
+      "mode": "bus",
+      "duration_seconds": 60,
+      "distance_m": 206,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.67815803,
+          37.6645479
+        ],
+        [
+          55.6799932,
+          37.66492138
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Метро «Коломенская»",
+        "to_stop": "Метро «Коломенская»",
+        "line": "899",
+        "headsign": "",
+        "trip_id": "g:3321_100011950_5_1",
+        "departure_seconds": 37200,
+        "arrival_seconds": 37260,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 27,
+      "mode": "bus",
+      "duration_seconds": 0,
+      "distance_m": 60,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.6799932,
+          37.66492138
+        ],
+        [
+          55.68051005,
+          37.66513963
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Метро «Коломенская»",
+        "to_stop": "Метро «Коломенская»",
+        "line": "899",
+        "headsign": "",
+        "trip_id": "g:3321_100011950_5_1",
+        "departure_seconds": 37260,
+        "arrival_seconds": 37260,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 28,
+      "mode": "walking",
+      "duration_seconds": 473,
+      "distance_m": 667,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.680516,
+          37.665092
+        ],
+        [
+          55.680949,
+          37.665263
+        ],
+        [
+          55.680928,
+          37.66557
+        ],
+        [
+          55.680925,
+          37.665619
+        ],
+        [
+          55.680924,
+          37.666127
+        ],
+        [
+          55.680956,
+          37.66613
+        ],
+        [
+          55.68101,
+          37.666137
+        ],
+        [
+          55.681186,
+          37.666636
+        ],
+        [
+          55.681359,
+          37.666668
+        ],
+        [
+          55.681358,
+          37.667195
+        ],
+        [
+          55.681359,
+          37.66819
+        ],
+        [
+          55.681359,
+          37.66826
+        ],
+        [
+          55.681359,
+          37.668514
+        ],
+        [
+          55.681438,
+          37.668938
+        ],
+        [
+          55.681438,
+          37.668975
+        ],
+        [
+          55.681437,
+          37.66904
+        ],
+        [
+          55.681432,
+          37.66976
+        ],
+        [
+          55.681571,
+          37.669862
+        ],
+        [
+          55.681792,
+          37.670522
+        ],
+        [
+          55.6818,
+          37.670661
+        ],
+        [
+          55.681828,
+          37.670709
+        ],
+        [
+          55.681828,
+          37.671251
+        ],
+        [
+          55.681828,
+          37.671643
+        ],
+        [
+          55.681828,
+          37.672146
+        ],
+        [
+          55.681828,
+          37.6722
+        ],
+        [
+          55.681828,
+          37.672285
+        ],
+        [
+          55.682137,
+          37.672329
+        ],
+        [
+          55.682261,
+          37.672463
+        ],
+        [
+          55.682346,
+          37.672749
+        ],
+        [
+          55.682358,
+          37.672938
+        ],
+        [
+          55.68274,
+          37.672937
+        ]
+      ],
+      "attributes": {
+        "source": "LOCAL_VALHALLA",
+        "purpose": "station_egress"
+      }
+    }
+  ],
+  "provider_status": "TIMETABLE_PATH_METRO_MAY_BE_FASTER",
+  "provenance": {
+    "provider": "LOCAL_GTFS_RASP_VALHALLA",
+    "endpoint": "A:\\LCT2-routing\\handoff\\work\\transit\\moscow_2026-08-17.sqlite",
+    "request_sha256": "7d6c4079ef8e8f43ff72f1d11e40b09bf831fb5bcdacf8ed994ae31c4142be8b",
+    "response_sha256": "fa8bc5237fdad57670fb1b13e0175dd9ea0ce286f6e8775b273d43a6f5b62db2",
+    "fetched_at": "2026-09-16T16:44:02.750651+00:00",
+    "cache_hit": true,
+    "provider_metadata": {
+      "surface_schedule_date": "2026-08-17",
+      "rail_normal_weekday_reference_date": "2026-09-21",
+      "rail_schedule_applied_to_date": "2026-08-17",
+      "metro_departure_schedule_available": false,
+      "metro_ride_included": false,
+      "distance_quality": "lower_bound_for_transit_legs",
+      "geometry_quality": "stop_to_stop_for_transit_legs",
+      "network_completeness": "surface_gtfs_and_mcc_mcd_subset",
+      "metro_no_wait_estimate": {
+        "duration_seconds_without_train_wait": 2362,
+        "station_ids": [
+          267,
+          265,
+          495,
+          496,
+          497
+        ],
+        "station_names": [
+          "Волжская",
+          "Печатники",
+          "Печатники",
+          "Нагатинский Затон",
+          "Кленовый бульвар"
+        ],
+        "ride_or_transfer_links": 4,
+        "train_wait": "UNKNOWN_NO_FULL_METRO_DEPARTURE_SCHEDULE",
+        "source": "https://prodapp.mosmetro.ru/api/schema/v1.0"
+      }
+    }
+  },
+  "content_sha256": "d10e7137ad34773ab0ca0cb60954752382153941d185195b4521ce544652540e"
+}

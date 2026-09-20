@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.sites-runtime/
+.wrangler/
+*.log
+.dev.vars
+.codex-work/

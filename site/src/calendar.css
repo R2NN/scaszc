@@ -1,0 +1,127 @@
+/* Large GeoPotok-style calendar with independent month and year selection. */
+.date-control{top:10px}
+.date-switch{gap:9px;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible}
+.date-switch button{height:52px;border:1px solid #dfe3e8!important;border-radius:12px!important;background:#fff;box-shadow:0 3px 12px rgba(34,42,55,.08);transition:background .16s,color .16s,border-color .16s,box-shadow .16s,transform .16s}
+.date-switch button:first-child,.date-switch button:last-child{width:52px;color:#393d42}
+.date-switch button:nth-child(2){min-width:276px;padding:0 20px;gap:12px;background:#fff}
+.date-switch button:nth-child(2)>svg:first-child{color:#9a7600}
+.date-switch button:hover:not(:disabled){border-color:#e5bd21!important;background:#fff4ad;box-shadow:0 6px 17px rgba(83,64,5,.13);transform:translateY(-1px)}
+.date-switch button:nth-child(2).active{border-color:#e6b600!important;background:#fff1a0;box-shadow:0 0 0 3px rgba(255,210,31,.2),0 6px 17px rgba(83,64,5,.12)}
+.date-switch button:disabled{background:#f4f5f6;color:#a8adb4;box-shadow:none;opacity:.72}
+.date-switch strong{font-size:16px;letter-spacing:.015em}
+.date-switch span{padding:3px 8px;font-size:11px}
+.date-popover{top:62px;width:424px;padding:18px;border-radius:17px;box-shadow:0 22px 58px rgba(32,39,51,.2),0 4px 14px rgba(32,39,51,.08)}
+.calendar-head{height:46px;grid-template-columns:44px 1fr 44px;gap:10px;margin-bottom:12px}
+.calendar-head>button:first-child,.calendar-head>button:last-child{width:44px;height:44px;border:1px solid #e2e5e9;border-radius:11px;color:#5f4a08}
+.calendar-head>button:disabled{background:#f3f4f5;color:#b8bcc1;border-color:#e7e9ec;opacity:.8;transform:none}
+.calendar-selectors{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(92px,.75fr);gap:8px}
+.calendar-select{height:44px;border:1px solid #e2e5e9!important;border-radius:11px!important;background:#fff!important;display:flex;align-items:center;justify-content:center;gap:8px;color:#2d3035;font-size:15px;font-weight:800;cursor:pointer}
+.calendar-select:hover,.calendar-select.active{border-color:#e3b600!important;background:#fff8ce!important;color:#493800}
+.calendar-select svg{width:15px;height:15px;transition:transform .17s}
+.calendar-select.active svg{transform:rotate(180deg)}
+.weekday-row{height:34px;font-size:12px}
+.calendar-grid{gap:5px}
+.calendar-grid button{height:44px;border-radius:11px;font-size:14px}
+.calendar-grid button.future{color:#c7cacf;cursor:not-allowed;opacity:.55}
+.calendar-grid button.future:hover{background:transparent;color:#c7cacf;transform:none}
+.calendar-footer{margin-top:15px;padding-top:14px}
+.calendar-footer button{height:36px;padding:0 12px;font-size:13px}
+.calendar-footer span{font-size:12px}
+.month-grid,.year-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:8px 0 12px}
+.month-grid button,.year-grid button{height:48px;border:1px solid #e3e6ea;border-radius:11px;background:#fff;color:#4e535b;font-size:13px;font-weight:750;cursor:pointer;transition:background .15s,color .15s,border-color .15s,transform .15s}
+.month-grid button:hover:not(:disabled),.year-grid button:hover{border-color:#e1b600;background:#fff5b8;color:#493800;transform:translateY(-1px)}
+.calendar-grid button.selected{background:#fff;color:#2d3035;font-weight:820;box-shadow:inset 0 0 0 2px #ffd21f,0 4px 11px rgba(131,92,0,.1)}
+.month-grid button.selected,.year-grid button.selected{border-color:#d9ad00;background:#fff;color:#272000;box-shadow:inset 0 0 0 1px #ffd21f,0 4px 11px rgba(121,84,0,.08)}
+.month-grid button:disabled{background:#f4f5f6;color:#b8bcc2;border-color:#e8eaed;cursor:not-allowed;opacity:.75}
+.app-shell.dark .date-switch{background:transparent!important;border:0!important;box-shadow:none!important}
+.app-shell.dark .date-switch button{background:#202329;color:#eef0f2;border-color:#3b4149!important;box-shadow:0 4px 15px rgba(0,0,0,.25)}
+.app-shell.dark .date-switch button:nth-child(2){background:#202329}
+.app-shell.dark .date-switch button:hover:not(:disabled),.app-shell.dark .date-switch button:nth-child(2).active{background:#302d1b!important;color:#ffe16a;border-color:#8d7518!important}
+.app-shell.dark .date-switch button:disabled{background:#1a1d21;color:#626971;border-color:#30353c!important;box-shadow:none}
+.app-shell.dark .calendar-head>button:first-child,.app-shell.dark .calendar-head>button:last-child,.app-shell.dark .calendar-select,.app-shell.dark .month-grid button,.app-shell.dark .year-grid button{background:#252930!important;color:#e6e9ec;border-color:#3d434b!important}
+.app-shell.dark .calendar-select:hover,.app-shell.dark .calendar-select.active,.app-shell.dark .month-grid button:hover:not(:disabled),.app-shell.dark .year-grid button:hover{background:rgba(255,210,31,.12)!important;color:#ffe16a;border-color:#8d7518!important}
+.app-shell.dark .calendar-grid button.selected{background:#fff!important;color:#1f2226!important;box-shadow:inset 0 0 0 2px #ffd21f,0 4px 13px rgba(0,0,0,.25)}
+.app-shell.dark .month-grid button.selected,.app-shell.dark .year-grid button.selected{background:#fff!important;color:#1f2226!important;border-color:#ffd21f!important;box-shadow:inset 0 0 0 1px #ffd21f}
+.app-shell.dark .month-grid button:disabled,.app-shell.dark .calendar-head>button:disabled{background:#1a1d21!important;color:#5f666f;border-color:#30353c!important}
+@media(max-width:1180px){.date-switch button:nth-child(2){min-width:220px}.date-switch span{display:none}}
+@media(max-width:900px){.date-control{top:9px}.date-switch{gap:0}.date-switch button:nth-child(2){min-width:170px;height:42px}.date-popover{top:52px;width:min(404px,calc(100vw - 82px));padding:15px}.calendar-grid button{height:40px}}
+
+/* The analytics page uses exactly the same date control without topbar positioning. */
+.analytics-date-control{position:relative;z-index:25;top:auto;left:auto;transform:none;display:inline-block;margin-bottom:20px}
+.analytics-date-control .date-popover{left:0;transform:none;transform-origin:top left}
+.analytics-date-control .date-popover{animation:analyticsCalendarIn .2s cubic-bezier(.2,.75,.25,1)}
+@keyframes analyticsCalendarIn{from{opacity:0;transform:translateY(-7px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:900px){.analytics-date-control{top:auto}.analytics-date-control .date-switch{gap:7px}.analytics-date-control .date-switch button:first-child,.analytics-date-control .date-switch button:last-child{display:flex}.analytics-date-control .date-switch span{display:inline-flex}.analytics-date-control .date-popover{width:min(404px,calc(100vw - 100px))}}
+
+/* Larger sidebar labels and icons, with the same center line in collapsed mode. */
+.sidebar nav{gap:7px;padding:10px}
+.sidebar nav button,.sidebar-bottom>button,.sidebar.expanded nav button,.sidebar.expanded .sidebar-bottom>button{height:52px;padding:0 17px;gap:17px;border-radius:11px}
+.sidebar nav button>svg,.sidebar-bottom>button>svg{width:22px;height:22px;min-width:22px;stroke-width:2.15}
+.sidebar nav em,.sidebar-bottom>button>em,.sidebar.expanded nav button em,.sidebar.expanded .sidebar-bottom>button>em{font-size:15px;font-weight:650}
+.workspace{height:62px;margin:7px 10px;padding:8px 12px}
+.workspace>span{width:34px;height:34px;flex-basis:34px;font-size:13px}
+.workspace strong{font-size:16px}
+.sidebar-bottom .profile-button{height:62px}
+.profile-copy em{font-size:15px!important}.profile-copy small{font-size:12px}
+.theme-switch{height:52px}.theme-switch em{font-size:15px}
+.sidebar:not(.expanded) nav button,.sidebar:not(.expanded) .sidebar-bottom>button{width:52px;padding:0;justify-content:center;margin-inline:auto}
+.sidebar:not(.expanded) nav button.active:before,.sidebar:not(.expanded) .sidebar-bottom>button.active:before{left:-10px}
+@media(max-height:760px){.sidebar nav{gap:3px;padding-block:5px}.sidebar nav button,.sidebar-bottom>button{height:46px}.workspace{height:54px}.sidebar-bottom{gap:2px;padding-block:5px}.sidebar-bottom .profile-button{height:52px}.theme-switch{height:46px}}
+
+@media (min-width: 761px) and (max-height: 820px) {
+  .sidebar nav button,
+  .sidebar-bottom > button,
+  .sidebar.expanded nav button,
+  .sidebar.expanded .sidebar-bottom > button {
+    height: 40px;
+  }
+
+  .sidebar-bottom .profile-button {
+    height: 42px;
+  }
+
+  .sidebar .theme-switch {
+    height: 40px;
+  }
+}
+
+/* Settings stay above the current workspace while the sidebar remains usable. */
+.modal-backdrop,.settings-modal-layer,.sidebar.expanded~.settings-modal-layer{z-index:3000;inset:0;left:0;background:rgba(22,27,35,.5);backdrop-filter:blur(1.5px);pointer-events:auto}
+.settings-modal-layer{transition:none}
+.modal.wide.settings-modal-dialog{position:relative;width:min(1220px,calc(100% - 28px));height:min(890px,calc(100vh - 42px));max-height:calc(100vh - 42px);border:1px solid var(--line);border-radius:18px;overflow:auto}
+.settings-modal-dialog .page{min-height:0;margin-left:0;padding:24px 28px 30px;background:transparent}
+.settings-modal-dialog .page>header{padding-right:82px}
+.settings-modal-dialog .page>header .primary{margin-right:8px}
+.settings-modal-dialog .settings-overview{margin-bottom:14px}
+.settings-modal-dialog .settings-modern{min-height:590px}
+.settings-modal-close{position:sticky;z-index:5;float:right;top:7px;right:20px;width:42px;height:42px;margin:18px 20px -60px 0;border:1px solid var(--line);border-radius:11px;background:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 12px rgba(30,36,46,.08);transition:background .16s,border-color .16s,color .16s,transform .16s}
+.settings-modal-close:hover{border-color:#e1b600;background:#fff4ad;color:#4f3d00;transform:translateY(-1px)}
+.settings-modal-close svg{width:20px;height:20px}
+.app-shell.dark .settings-modal-dialog{background:#17191d;border-color:#3a4048;box-shadow:0 28px 90px rgba(0,0,0,.58)}
+.app-shell.dark .settings-modal-close{background:#252930;color:#eef0f2;border-color:#414750;box-shadow:0 5px 16px rgba(0,0,0,.3)}
+.app-shell.dark .settings-modal-close:hover{background:rgba(255,210,31,.14);color:#ffe16a;border-color:#8d7518}
+@media(max-width:760px){.settings-modal-layer,.sidebar.expanded~.settings-modal-layer{left:0}.settings-modal-dialog{width:calc(100vw - 16px);height:calc(100vh - 16px);max-height:calc(100vh - 16px);border-radius:14px}.settings-modal-dialog .page{padding:18px 12px}.settings-modal-close{top:10px;right:10px;margin:10px 10px -52px 0}.settings-modal-dialog .settings-modern{min-height:0}}
+
+/* Profile content is deliberately more legible; footer actions keep their current scale. */
+.profile-modal-head h2{font-size:22px}.profile-modal-head p{font-size:14px}
+.profile-modal-head>button{width:38px;height:38px}.profile-modal-head>button svg{width:20px;height:20px}
+.profile-preview .profile-avatar,.profile-preview .profile-initials{width:144px;height:144px;font-size:34px}
+.profile-preview h3{font-size:21px}.profile-preview p{font-size:17px}.profile-preview small{font-size:14px;line-height:1.4}
+.profile-fields>label,.profile-fields .form-row label,.profile-fields .form-row>.profile-field{font-size:14px}
+.profile-fields input,.role-select{height:48px;font-size:15px}
+.role-select svg{width:20px;height:20px}
+.avatar-picker-head h3{font-size:22px}.avatar-picker-head p{font-size:13px}.avatar-picker-head>span{font-size:12px;padding:6px 10px}
+.avatar-grid button{min-height:138px}.avatar-grid img{width:88px;height:88px}.avatar-grid button>span{font-size:12px}.avatar-grid button>i{width:25px;height:25px}.avatar-grid button>i svg{width:15px;height:15px}
+
+/* Airier settings rhythm: navigation items and option copy read as separate groups. */
+.settings-modal-dialog .settings-modern{grid-template-columns:300px minmax(0,1fr)}
+.settings-modal-dialog .settings-modern>aside{gap:9px;padding:18px}
+.settings-modal-dialog .settings-modern>aside button{min-height:52px;height:auto;padding-block:8px;line-height:1.3}
+.settings-modal-dialog .settings-modern>section{padding:36px 40px}
+.settings-modal-dialog .settings-heading{margin-bottom:28px}
+.settings-modal-dialog .settings-heading h2{margin-top:8px;margin-bottom:10px}
+.settings-modal-dialog .settings-heading p{line-height:1.65}
+.settings-modal-dialog .settings-toggle{min-height:88px;padding:21px 0}
+.settings-modal-dialog .settings-toggle>div{display:flex;flex-direction:column;gap:8px;padding-right:24px}
+.settings-modal-dialog .settings-toggle small{line-height:1.5}
+@media(max-width:760px){.settings-modal-dialog .settings-modern{grid-template-columns:1fr}.settings-modal-dialog .settings-modern>aside{gap:7px;padding:12px}.settings-modal-dialog .settings-modern>aside button{min-height:48px}.settings-modal-dialog .settings-modern>section{padding:26px 20px}.settings-modal-dialog .settings-toggle{min-height:82px;padding:18px 0}}

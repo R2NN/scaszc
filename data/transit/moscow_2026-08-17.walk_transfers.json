@@ -1,0 +1,8 @@
+{
+  "rapid_transit_stops": 442,
+  "measured_walk_arcs": 5938,
+  "failed_stops": [],
+  "radius_m": 450,
+  "neighbor_count": 8,
+  "walking_source": "http://127.0.0.1:8002/sources_to_targets"
+}

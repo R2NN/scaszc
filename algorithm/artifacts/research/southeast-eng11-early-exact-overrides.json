@@ -1,0 +1,990 @@
+{
+  "artifact_type": "EXACT_ENGINEER_ARC_OVERRIDES",
+  "dataset_sha256": "90ed8195fdaf89781b05c5ed80d5119e952b53f2ff8b18f812cb92f3da3cee9f",
+  "engineer_id": "SOUTHEAST-ENG-11",
+  "window_end_hour": 12,
+  "job_ids": [
+    "SOUTHEAST-11899",
+    "SOUTHEAST-14494",
+    "SOUTHEAST-23807",
+    "SOUTHEAST-40919",
+    "SOUTHEAST-44117",
+    "SOUTHEAST-58129",
+    "SOUTHEAST-65717",
+    "SOUTHEAST-79144",
+    "SOUTHEAST-876",
+    "SOUTHEAST-93798",
+    "SOUTHEAST-95692"
+  ],
+  "overrides": [
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 44,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "ab2de1a4ffcbcdcb11a6ddcd7d381421ec8a55df1276a9a446f2ec05a93c95cc"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 59,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "1d9d695439b8ad53b30bb0f35f80b8c4f992c08a14fcd8e4129ecc4d63ec1a89"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 40,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "4f05ea2f91fafded890d4cd9725f0db100165d1279f19062b8755e53161d55f6"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 59,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "3ef300a2e9add9c46bd5d7d8b6dcfd17418e8a672a6c95b7a5ccc1f38c2bdc0a"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 34,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "55377609c44e4f33948d0af795d2d48aa409120e019e0d02b137afb9aaf0f634"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 59,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "3ef300a2e9add9c46bd5d7d8b6dcfd17418e8a672a6c95b7a5ccc1f38c2bdc0a"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 46,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "d1066e6ba427254a621e8d0f672ad82e70784de54b5019ea5485cfbaa3c06763"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 47,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "58cd940937feece169952183d352ae6b2e457a52f12a1d703f865402437dfcbf"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 40,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "4f05ea2f91fafded890d4cd9725f0db100165d1279f19062b8755e53161d55f6"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 66,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "f09ed5fab4f7f9b381a106b2aa80b8c7653d7d7d0fab043dbf60261aec192312"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 67,
+      "observed_departure_at": "2026-08-17T10:00:00+03:00",
+      "request_sha256": "ee86b563dc0f1b55cf82e4a1878be7bfeb7dea0fc98a9d4724ca6118b3cf3293"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-11899",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 139,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "20369be014e39d4e2644e18ec582b1d1a75da1b9552e74b66c8d6d8a38ea9bae"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-11899",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 14,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "42764354ca5473e649af8237eaec624badc6fe95065db0ff67c59b8c715ca943"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-11899",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 88,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "c5881414f463a37b67d89865e9284e922c970f05de6a4780661f81fcc7c884c3"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-11899",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 76,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "f2c4129f1eea1bd6c7ffe72818c9028bfc6843324ebc434973bab0b22f708084"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-11899",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 88,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "c5881414f463a37b67d89865e9284e922c970f05de6a4780661f81fcc7c884c3"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-11899",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 90,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "d543d00371f80e503005fc461f5b86310489a29e0a709c7d79d605129d35ab41"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-11899",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 74,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "91e78b1e88134e5691987210273cd4c46d0f8425743f4657e6a1f28b1eca95a1"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-11899",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 14,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "42764354ca5473e649af8237eaec624badc6fe95065db0ff67c59b8c715ca943"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-11899",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 96,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "428e5e7763bdad426af03ef5d080cd45cc0cd63d4913e5b28928d1aa35088582"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-11899",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 111,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "8438a94f1cb59d1216369c048a65dd29841eb7256d3c23ed82b8340597940fb3"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-14494",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 139,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "fbbf9ef81b0c0a0c1184ca5ee9c8213e11b376a704df36304ed7c0dc3444ec0e"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-14494",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 127,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "78fee73514a4416eaf645076fbab641e26b0005e503e6cbaf4dabb8c2134906f"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-14494",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 30,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "e5a8dd396b6e3e13dbe182a0b317feaa74c5f2c387b368845e6e4785357f318a"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-14494",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 39,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "6d8c19744ba3c2d434c694ddde5abcd2e823931eab497315a48b38800dee2313"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-14494",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 30,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "e5a8dd396b6e3e13dbe182a0b317feaa74c5f2c387b368845e6e4785357f318a"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-14494",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 43,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "09efe481e4aef6faa3faa4f324331ed979a75d27bfdccab994debbf6905a0df4"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-14494",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 33,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "4e740e2a538117bfa4f18c5a73137eed9b96655e41c6e2f294e73ee4bb335d31"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-14494",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 127,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "78fee73514a4416eaf645076fbab641e26b0005e503e6cbaf4dabb8c2134906f"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-14494",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 33,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "d636fc372c276aeb856c23e7c26545a9158293cc7eaa225285de953f49af4d2f"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-14494",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 27,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "ab481b35ef2ac3a472b89c561ac7a3ddb2f80039c24395cc296109f4d72ed97d"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-23807",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 14,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "d2babd17c90cf57efa25aa4bfab89679ea879b9de2f3532871e4f7fb2f7ac160"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-23807",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 127,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "5c5680f24081ee65536271167574f70e6a5e469c0f022e8644bf83c409502110"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-23807",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 77,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "12362d0755f64677bc407f38d4e35f328ff1f10312850d2b538f5191506e610c"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-23807",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 68,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "f2b2d5518298ec7e6734e7355c4dc757ff8e6aba4d54934773073afd8a11e6c4"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-23807",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 77,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "12362d0755f64677bc407f38d4e35f328ff1f10312850d2b538f5191506e610c"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-23807",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 82,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "9aaf611c58a02115d6842126e5707d119a5c33f90ec2053a9c6fea2ef8b7f66c"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-23807",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 63,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "23f2098fa14e50a8b430eeab29956d18a49d2ae00ac8a49df5f6bdc069fc365b"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-23807",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 0,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": null
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-23807",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 84,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "7f4579d198231b980bc1e5640d041aaafe311c83611dd3c18d0744918b8a9194"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-23807",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 100,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "b89eecab2e4934bafcda81c3e5dccc4b365de9a7fa13281b274f3684a6ffe840"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-40919",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 88,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "e9aa67f8e6e518760b8b7f618ec25491a8934e1ee04ca5db0f2d14cdd8b3e6dc"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-40919",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 30,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "68f2b034c6ce8b6e4f03c44438ababb32423ab00ed81698c5b7c5c8b5ac7c075"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-40919",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 77,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "e155d7becb7687782bc8408ff0ac8d2af95aa46fad6ee0f7fb10917f2ff4dcf3"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-40919",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 41,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "574b49d9bf8ef94d1616071c9be9d222d28777a4589fe2a6d608a1336d3c9e58"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-40919",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 0,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": null
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-40919",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 43,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "15efcf22c0f49c1d01a3568d8ce5e556b76800d70d6e1547feec308c8bac9d96"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-40919",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 24,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "5470df6c6f03f449e595fdb3ada913a34a87a8869ba2b1b4b99c5440b473aa89"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-40919",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 77,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "e155d7becb7687782bc8408ff0ac8d2af95aa46fad6ee0f7fb10917f2ff4dcf3"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-40919",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 9,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "3ecd9b740d4d978a7ec6c108bec30907b2c8495e308b9c4938a7a28d52edf0c8"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-40919",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 33,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "f13ebe48c22c9d03639168e8a6713a4568d29c769c5fd728eb63af4096f7ff96"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-44117",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 76,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "6d64c8a431633d9e42ebea5122b9a27e96946c87c9d256ead535c2e63a4438ad"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-44117",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 41,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "29ab0d925584fb8f144deed618ffb1ab9453bf0c0b4b74bfa567cd12b90d8812"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-44117",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 68,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "c5b2936ad8f4e92d3154fe3f72736678e6093605050afd0e63f25ebc117598fa"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-44117",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 41,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "f05e705d7fa2c05c487ad125ed45309d89e8afc5a1be3bccae9929b8293f865a"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-44117",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 41,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "f05e705d7fa2c05c487ad125ed45309d89e8afc5a1be3bccae9929b8293f865a"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-44117",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 26,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "531e63bfbf0aae0599467d518dff1bc3ebf2a7ed8bd3dfc253ea360b0190703c"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-44117",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 41,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "c3a813819ed3c3e846c523a5a7fdbca6c4b1e2ae127c4f48294f123d3bafe4bb"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-44117",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 68,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "c5b2936ad8f4e92d3154fe3f72736678e6093605050afd0e63f25ebc117598fa"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-44117",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 49,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "46f867397aefb59082c9a7275c7582b18948a207e5365df0e3ab4d0ecab5399b"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-44117",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 50,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "4a96efa9cbc8f3f5ac4ccdf65f3a8514a3da8a10dd367e485fe4244f95fe4499"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-58129",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 88,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "e9aa67f8e6e518760b8b7f618ec25491a8934e1ee04ca5db0f2d14cdd8b3e6dc"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-58129",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 30,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "2038edd520c1cfdbbc637cfa1b1e956c5aeaee81d862f908bdd78ca685dd85d1"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-58129",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 77,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "e155d7becb7687782bc8408ff0ac8d2af95aa46fad6ee0f7fb10917f2ff4dcf3"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-58129",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 0,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": null
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-58129",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 39,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "449c3c1fa0ae2543d051a55354bc1ae662c0da67e98d2108834cbcb9314894fe"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-58129",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 43,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "867328458947163ac5c95dd88eb4b63c3995d7c56e9daa77835b3c0d56e0923a"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-58129",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 24,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "5470df6c6f03f449e595fdb3ada913a34a87a8869ba2b1b4b99c5440b473aa89"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-58129",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 77,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "e155d7becb7687782bc8408ff0ac8d2af95aa46fad6ee0f7fb10917f2ff4dcf3"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-58129",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 9,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "3ecd9b740d4d978a7ec6c108bec30907b2c8495e308b9c4938a7a28d52edf0c8"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-58129",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 33,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "f13ebe48c22c9d03639168e8a6713a4568d29c769c5fd728eb63af4096f7ff96"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-65717",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 90,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "86debdf7d57a2b446a07971949cd333726408cf072e5df792f9d713ae79bfe7d"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-65717",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 43,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "d746790ac0a04ec380b3fd7c98d81af0798ac133a052730d145deead00f475f4"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-65717",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 82,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "4e3df85211e18e700ac26a1f03fc1c42d499df7c670cbdaeaf4bead932056687"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-65717",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 43,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "353a70354bf9831b8e71c2043aa3fcc63f220f0d882f2c1e2541d89acf218a98"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-65717",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 26,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "8037c34559f6fd2216e715c05b9b9504b10d2c213861f49bd80b7aec00063d13"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-65717",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 43,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "353a70354bf9831b8e71c2043aa3fcc63f220f0d882f2c1e2541d89acf218a98"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-65717",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 42,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "7415521e388b2a6b0d41a0ad7c19c2567c909884f3a6d8b2f62c4dd4aa914053"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-65717",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 82,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "4e3df85211e18e700ac26a1f03fc1c42d499df7c670cbdaeaf4bead932056687"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-65717",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 49,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "eb04d7797299b72c29a11fdac7c3eda7362c633d54a1ea8c5a24f4f1066a4c57"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-65717",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 51,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "b295fa75f5c5945e2a98e46879a64be931694d4ecf33d835485b9c412f05ea35"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-79144",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 74,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "a3ec6c4dbcd6884ca24567f70fa02be32dc5eeb6c6d3c5c1156f9da8e363a7ab"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-79144",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 35,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "294408719f166ce1a5538d009ae5cc528226e0a20629cd95ce9669a2abaada22"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-79144",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 63,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "4965cfbf8dfe0e20ec609eb574ecb737b3136d25c6199ada11a427239c3491bb"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-79144",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 24,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "4c8cad838966261d073af844688bbc001bbf712e44d2da33795b0a3fd809e26e"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-79144",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 39,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "e5e41babd662d7b899bb9de5038d90d49b363e3d6c012c97e1fa64003c5973d6"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-79144",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 24,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "4c8cad838966261d073af844688bbc001bbf712e44d2da33795b0a3fd809e26e"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-79144",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 42,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "cd06476c5ba40fc7faaf9f060f4c36144e794db30aa771616fadea6bd0a3fc85"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-79144",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 63,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "4965cfbf8dfe0e20ec609eb574ecb737b3136d25c6199ada11a427239c3491bb"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-79144",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 31,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "5e2241929682cd1202964f33ffd845a77d4b553ba0c6a37e1cf3a2667811e4ef"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-79144",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 43,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "a44c11b6f1e9285a7c6e2cd71b5adb01c4a4cfcc51eda55cbd0b608897ee56ff"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-876",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 14,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "d2babd17c90cf57efa25aa4bfab89679ea879b9de2f3532871e4f7fb2f7ac160"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-876",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 127,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "5c5680f24081ee65536271167574f70e6a5e469c0f022e8644bf83c409502110"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-876",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 0,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": null
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-876",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 77,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "12362d0755f64677bc407f38d4e35f328ff1f10312850d2b538f5191506e610c"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-876",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 68,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "f2b2d5518298ec7e6734e7355c4dc757ff8e6aba4d54934773073afd8a11e6c4"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-876",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 77,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "12362d0755f64677bc407f38d4e35f328ff1f10312850d2b538f5191506e610c"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-876",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 82,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "9aaf611c58a02115d6842126e5707d119a5c33f90ec2053a9c6fea2ef8b7f66c"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-876",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 63,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "23f2098fa14e50a8b430eeab29956d18a49d2ae00ac8a49df5f6bdc069fc365b"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-876",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 84,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "7f4579d198231b980bc1e5640d041aaafe311c83611dd3c18d0744918b8a9194"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-876",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 100,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "b89eecab2e4934bafcda81c3e5dccc4b365de9a7fa13281b274f3684a6ffe840"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-93798",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 96,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "882edef47f56165a1866dd9f4415c85e357fd8367c34cbaec935c576914df26c"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-93798",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 33,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "7e9777dd8a3728625504f6d086553117f2079ae91abeb08a1aada63d01c4caf3"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-93798",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 84,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "068559e720d3f1212c58a10216d33af25a12d3771c00834cf009032fcf019efe"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-93798",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 9,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "826ecae7f247c058bdbd436555469bfef67ee6cfd9d437b9ca6c739b3526fcdb"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-93798",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 49,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "65aa8af8b49a63dad10468a50df1b853a8a4cb0ab9c0c018ee82ae23807031c4"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-93798",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 9,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "826ecae7f247c058bdbd436555469bfef67ee6cfd9d437b9ca6c739b3526fcdb"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-93798",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 50,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "8f92589eb7190f9a9a9f54ca3e38ea87465f23f69321182702df7d4db4c873e6"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-93798",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 31,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "70fa76fac95c288ff4da8b5d46da6c6d88355d33d8bf9296eb6b9efe0e60dc19"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-93798",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 84,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "068559e720d3f1212c58a10216d33af25a12d3771c00834cf009032fcf019efe"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-93798",
+      "destination_job_id": "SOUTHEAST-95692",
+      "duration_minutes": 27,
+      "observed_departure_at": "2026-08-17T11:10:00+03:00",
+      "request_sha256": "38d8f0dc83414f6302eaa8504560addd73c1db9623919a6490e0951bb6ef53a3"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-95692",
+      "destination_job_id": "SOUTHEAST-11899",
+      "duration_minutes": 111,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "816f8b2849455084e0e89e066c993d6fa50b131700e35b1dc43d8ecf443ff46e"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-95692",
+      "destination_job_id": "SOUTHEAST-14494",
+      "duration_minutes": 31,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "62b9b9908a986d92a81bd143f54bd709fc14a5dab99ec34fe94f59fd9feee1db"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-95692",
+      "destination_job_id": "SOUTHEAST-23807",
+      "duration_minutes": 100,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "2e65260232c818e2b84eb673640e4d65b3fbeaf25efb73f1f52f6d5c94592865"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-95692",
+      "destination_job_id": "SOUTHEAST-40919",
+      "duration_minutes": 32,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "881e45e5276b32e34202762e5c7ac4d25eb921694204896d0fcf686c05180e66"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-95692",
+      "destination_job_id": "SOUTHEAST-44117",
+      "duration_minutes": 50,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "9da7dd3a17600cf9361ba3940d5b67f78197417f58200f4b934659e1a4d8a195"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-95692",
+      "destination_job_id": "SOUTHEAST-58129",
+      "duration_minutes": 32,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "881e45e5276b32e34202762e5c7ac4d25eb921694204896d0fcf686c05180e66"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-95692",
+      "destination_job_id": "SOUTHEAST-65717",
+      "duration_minutes": 51,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "ab20bde569c4d93bd39a84353bb522576088e0be2d31d5f9710918dd0c6c54fd"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-95692",
+      "destination_job_id": "SOUTHEAST-79144",
+      "duration_minutes": 43,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "5712bb737db141f54446b256514e6dfbcf97d4d567cb89ead55013b83cc0f04f"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-95692",
+      "destination_job_id": "SOUTHEAST-876",
+      "duration_minutes": 100,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "2e65260232c818e2b84eb673640e4d65b3fbeaf25efb73f1f52f6d5c94592865"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "SOUTHEAST-95692",
+      "destination_job_id": "SOUTHEAST-93798",
+      "duration_minutes": 27,
+      "observed_departure_at": "2026-08-17T10:30:00+03:00",
+      "request_sha256": "65aa05e0933a2327844487435db8b1f9193d13b9899ae986a08c53df31309374"
+    }
+  ],
+  "content_sha256": "e8e994a07b954e211b3c3b8b45ccd1e600c4b6143435558497cb728f242e161d"
+}

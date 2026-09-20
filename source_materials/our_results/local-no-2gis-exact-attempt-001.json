@@ -1,0 +1,20 @@
+{
+  "artifact_type": "EXACT_PLAN_MATERIALIZATION",
+  "status": "ORDER_INFEASIBLE",
+  "exact_provider_queries": 17,
+  "identity_legs": 0,
+  "failure": {
+    "engineer_id": "EAST-ENG-04",
+    "job_id": "EAST-54964",
+    "origin_location_id": "LOC-0194",
+    "destination_location_id": "LOC-0199",
+    "departure_at": "2026-08-17T11:38:00+03:00",
+    "reason": "exact arrival makes the closed service-start window impossible"
+  },
+  "plan": null,
+  "validation": null,
+  "publication_allowed": false,
+  "dataset_sha256": "c1f5f64639233d4bf65b9c4e367d6d841bf62162c4d2fbea567c30f2fd2c97da",
+  "master_solution_content_sha256": "5a902fdfc3f29f9633d3c2b3bb076caa5d7b2c6a66181596309fef7a664c4ad3",
+  "content_sha256": "b7a5f9af86edee6d0bb608c212c92d555eb6630fce36d934c6665e980a943748"
+}

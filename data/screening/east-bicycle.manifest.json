@@ -1,0 +1,18 @@
+{
+  "matrix_schema_version": "1.0.0",
+  "dataset_version": "2.1.0",
+  "provider": "LOCAL_VALHALLA_MATRIX",
+  "purpose": "SCREENING_ONLY_NOT_AUTHORITATIVE_FOR_TIME_DEPENDENT_CONSTRAINTS",
+  "zone_id": "EAST",
+  "mode": "BICYCLE",
+  "departure_at_label": "2026-08-17T07:00:00+03:00",
+  "departure_time_honored": false,
+  "locations": 67,
+  "cells": 4489,
+  "status_counts": {
+    "OK": 4489
+  },
+  "matrix_file": "east-bicycle.csv",
+  "matrix_file_sha256": "7718049b5836e90ed42392eb9a38d8cfed23f349e4c19b2cda595b1ed9d2727a",
+  "matrix_content_sha256": "bba2dbfaa0806158cce48dfb28216de6d08bacc7b347d292bebad3bdde8162e4"
+}

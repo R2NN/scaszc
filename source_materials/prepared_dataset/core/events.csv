@@ -1,0 +1,2 @@
+﻿apply_order;event_id;event_time;event_type;target_id;zone_id;description;unavailable_until;payload_json
+1;CORE-EVT-001;2026-08-17T13:30:00+03:00;NEW_URGENT_JOB;EAST-EVENT-001;EAST;Поступила срочная аварийная заявка. Требуется перепланировать только незавершённые работы.;;"{""job_id"":""EAST-EVENT-001"",""freeze_started_jobs"":true}"

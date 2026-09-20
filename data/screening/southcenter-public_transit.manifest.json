@@ -1,0 +1,22 @@
+{
+  "matrix_schema_version": "1.0.0",
+  "dataset_version": "2.1.0",
+  "provider": "LOCAL_TRANSIT_STATIC_SCREENING",
+  "purpose": "SCREENING_ONLY_NOT_AUTHORITATIVE_FOR_TIME_DEPENDENT_CONSTRAINTS",
+  "zone_id": "SOUTHCENTER",
+  "mode": "PUBLIC_TRANSIT",
+  "departure_at_label": "2026-08-17T07:00:00+03:00",
+  "departure_time_honored": false,
+  "estimate_policy": "STATIC_NETWORK_LOWER_BOUND_COMPARED_TO_LOCAL_VALHALLA_WALKING; no time multiplier or buffer; exact local timetable routing remains mandatory",
+  "network_time_factor": 1.0,
+  "network_time_padding_seconds": 0,
+  "transit_index_sha256": "4f0351e28bf490038a1edcb11f9d87b76bdd79a05b753b5cd5fe6e96681abd00",
+  "locations": 56,
+  "cells": 3136,
+  "status_counts": {
+    "OK": 3136
+  },
+  "matrix_file": "southcenter-public_transit.csv",
+  "matrix_file_sha256": "3bbeb4f358fe0a1b9181c5e81807c4dfaf10daa08a91822b3a0f67d64d0e8129",
+  "matrix_content_sha256": "d374812bb27dd2f674707ec632523393ecf9d0dae4faff386e2a42cbdb3b662e"
+}

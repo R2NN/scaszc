@@ -1,0 +1,62 @@
+{
+  "validated_at": "2026-09-16T17:46:05.489737+00:00",
+  "status": "READY_FOR_LOCAL_ROUTING",
+  "scenario_date": "2026-08-17",
+  "index_sha256": "4f0351e28bf490038a1edcb11f9d87b76bdd79a05b753b5cd5fe6e96681abd00",
+  "sqlite_integrity": "ok",
+  "index_counts": {
+    "connections": 1699050,
+    "metro_paths": 77006,
+    "walk_transfers": 16763,
+    "official_transfers": 342
+  },
+  "coverage": {
+    "mcc": "31/31",
+    "mcd": "139/139",
+    "metro_stations": 278
+  },
+  "tests": "64 passed, 2 skipped",
+  "sample_mixed_route": {
+    "origin": "LOC-0001",
+    "destination": "LOC-0003",
+    "departure_at": "2026-08-17T09:00:00+03:00",
+    "status": "OK",
+    "duration_minutes": 48,
+    "provider_status": "MIXED_TIMETABLE_METRO_MODEL",
+    "step_duration_sum_matches_total": true,
+    "metro_boardings": 2,
+    "wait_sensitivity_seconds": {
+      "zero_wait": 2513,
+      "five_minutes_per_boarding": 3113
+    }
+  },
+  "sample_car_route": {
+    "status": "OK",
+    "duration_minutes": 33
+  },
+  "known_limit": "Metro departures are modelled with 180 seconds per boarding because a complete historical departure timetable is unavailable.",
+  "planning_validation": {
+    "candidate_file": "work\\planning\\all-local-screening-candidate.json",
+    "candidate_sha256": "bfc1379180c5dfd3bad963caaed839140565dbb77a1335f91bde5ea9d7fc1549",
+    "materialized_plan_file": "work\\planning\\all-local-materialized-plan.json",
+    "materialized_plan_sha256": "df44b2a1266d190d250fbde92766c5e792eca73a826fcdaf1abcfe94d5f85924",
+    "status": "EXACT_VALID",
+    "constraint_validation_status": "VALID",
+    "violations": 0,
+    "served_jobs": 150,
+    "used_engineers": 33,
+    "exact_provider_queries": 147,
+    "identity_legs": 3,
+    "public_transit_non_identity_legs": 21,
+    "metro_legs": 5,
+    "metro_modeled_wait_events": 6,
+    "provider_status_counts": {
+      "TIMETABLE_PATH": 7,
+      "WALKING_ONLY_SHORT_TRIP": 9,
+      "OK": 126,
+      "MIXED_TIMETABLE_METRO_MODEL": 5
+    },
+    "query_time_api_key_required": false,
+    "exact_historical_metro_timetable_proof": false
+  }
+}

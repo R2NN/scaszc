@@ -1,0 +1,60 @@
+{
+  "status": "STARTED_ACTIVITY_FROZEN",
+  "counterfactual_only": true,
+  "publication_allowed": false,
+  "query": {
+    "job_id": "EAST-10245",
+    "forced_engineer_id": "EAST-ENG-01"
+  },
+  "actual": {
+    "engineer_id": "EAST-ENG-07",
+    "service_start_at": "2026-08-17T13:17:00+03:00"
+  },
+  "counterfactual": {
+    "engineer_id": null,
+    "service_start_at": null,
+    "move_kind": null,
+    "displaced_job_ids": []
+  },
+  "explanation": {
+    "summary_ru": "К моменту события бригада уже выехала; начатую активность менять нельзя.",
+    "claim_level": "EXACT_FACT",
+    "static_rejection_codes": [
+      "STARTED_ACTIVITY_FROZEN"
+    ],
+    "forced_pair_infeasibility_proven": true,
+    "global_optimality_proven": false,
+    "global_impossibility_proven": false
+  },
+  "comparison": {
+    "metrics_delta_counterfactual_minus_actual": {},
+    "changes": {
+      "newly_assigned": [],
+      "removed_from_route": [],
+      "changed_assignment": [],
+      "changed_visit_time": []
+    }
+  },
+  "search": {
+    "exact_route_checks": 0,
+    "budget_exhausted": false
+  },
+  "artifact_type": "EXACT_ASSIGNMENT_COUNTERFACTUAL",
+  "dataset_sha256": "90ed8195fdaf89781b05c5ed80d5119e952b53f2ff8b18f812cb92f3da3cee9f",
+  "source_plan": "work\\planning\\normatives-event-001-explained-v2.json",
+  "source_plan_content_sha256": "40c83b6dcdf06003b12f239e9b3119fc9656a2df1f21e54b418885012eb77f3f",
+  "replayed_event_id": "CORE-EVT-001",
+  "search_scope": {
+    "max_route_checks": 200,
+    "max_displacements": 1,
+    "global_search": false
+  },
+  "routing_configuration": {
+    "provider": "valhalla-local-transit",
+    "transit_index": "work\\transit\\moscow_2026-08-17.sqlite",
+    "metro_wait_assumption_seconds": 180,
+    "exact_historical_metro_timetable_proof": false
+  },
+  "hypothetical_plan_evidence": null,
+  "content_sha256": "5a4735c797b8f47723c8b45e4a1c913d08ea3fdc6cb830cdad6a46bc1c46e002"
+}

@@ -1,0 +1,19 @@
+Initial exact plan: 204 served, 1 unserved
+Checked 25 changed route orders
+Checked 50 changed route orders
+Checked 75 changed route orders
+Checked 100 changed route orders
+Checked 125 changed route orders
+Checked 150 changed route orders
+Checked 175 changed route orders
+Checked 200 changed route orders
+Checked 225 changed route orders
+Checked 250 changed route orders
+Checked 275 changed route orders
+Checked 300 changed route orders
+Checked 325 changed route orders
+Checked 350 changed route orders
+Checked 375 changed route orders
+Checked 400 changed route orders
+Pass 1: no move, 7072 exact route checks; budget exhausted=True
+{"status": "EXACT_VALID", "served_jobs": 204, "unserved_jobs": 1, "accepted_moves": 0, "output": "C:\\Users\\р\\Desktop\\аналитика\\.algorithm-work\\results\\full-coverage-exact-reordered-chain-v3.json"}

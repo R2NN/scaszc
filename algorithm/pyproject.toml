@@ -1,0 +1,21 @@
+[build-system]
+requires = ['setuptools>=72']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'beeline-routing'
+version = '0.1.0'
+description = 'Auditable multimodal routing layer for the Beeline workforce planning case'
+requires-python = '>=3.12'
+dependencies = [
+    'ortools==9.15.6755',
+]
+
+[project.scripts]
+beeline-routing = 'beeline_routing.cli:main'
+
+[tool.setuptools]
+package-dir = {'' = 'src'}
+
+[tool.setuptools.packages.find]
+where = ['src']

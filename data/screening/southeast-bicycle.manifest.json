@@ -1,0 +1,18 @@
+{
+  "matrix_schema_version": "1.0.0",
+  "dataset_version": "2.1.0",
+  "provider": "LOCAL_VALHALLA_MATRIX",
+  "purpose": "SCREENING_ONLY_NOT_AUTHORITATIVE_FOR_TIME_DEPENDENT_CONSTRAINTS",
+  "zone_id": "SOUTHEAST",
+  "mode": "BICYCLE",
+  "departure_at_label": "2026-08-17T07:00:00+03:00",
+  "departure_time_honored": false,
+  "locations": 77,
+  "cells": 5929,
+  "status_counts": {
+    "OK": 5929
+  },
+  "matrix_file": "southeast-bicycle.csv",
+  "matrix_file_sha256": "d26634ab5d0d980d9783393727072349597584d6ae51ccaae789303ebb0559ac",
+  "matrix_content_sha256": "f24d6ace518af51fa3004084cfa6dc02a6fad73f1398fb2de62bfd769a9fbe00"
+}

@@ -1,0 +1,8 @@
+{
+  "active_surface_stops": 9188,
+  "measured_walk_arcs": 10825,
+  "failed_measurements": 0,
+  "radius_m": 120,
+  "nearest_neighbor_limit": 5,
+  "walking_source": "http://127.0.0.1:8002/sources_to_targets"
+}

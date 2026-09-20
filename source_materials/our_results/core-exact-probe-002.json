@@ -1,0 +1,321 @@
+{
+  "artifact_type": "EXACT_ROUTE_REFINEMENT_PROBE",
+  "probe_complete": true,
+  "dataset_sha256": "c1f5f64639233d4bf65b9c4e367d6d841bf62162c4d2fbea567c30f2fd2c97da",
+  "master_solution_content_sha256": "7a67cb3de43b05cedaf75b0c87699d28675007f6e4af48cc0bee7cd55da45b9c",
+  "total_engineer_routes": 34,
+  "processed_engineer_routes": 34,
+  "exact_provider_queries": 53,
+  "identity_legs": 0,
+  "complete_engineer_ids": [
+    "EAST-ENG-01",
+    "EAST-ENG-04",
+    "EAST-ENG-09",
+    "EAST-ENG-11"
+  ],
+  "failures": [
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "EAST-ENG-02",
+      "origin_node_id": "EAST-26645",
+      "job_id": "EAST-21571",
+      "origin_location_id": "LOC-0132",
+      "destination_location_id": "LOC-0014",
+      "departure_at": "2026-08-17T16:40:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=181417d43278d5c6a9bfb66f5ca10d35c3e38c7d64018da5a1368ad494c9c6f7; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "EAST-ENG-03",
+      "origin_node_id": "START:EAST-ENG-03",
+      "job_id": "EAST-37272",
+      "origin_location_id": "LOC-0154",
+      "destination_location_id": "LOC-0138",
+      "departure_at": "2026-08-17T10:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=4646d21647fa08e109e33a51fa05f2f972a9dc51ad8acca3ddd127c5471ee0e5; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "EAST-ENG-05",
+      "origin_node_id": "START:EAST-ENG-05",
+      "job_id": "EAST-74949",
+      "origin_location_id": "LOC-0154",
+      "destination_location_id": "LOC-0108",
+      "departure_at": "2026-08-17T10:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=543fc37a9a6d542c185d08891a7cdaa8ea45a792d2c5d70829f574d6ff427b4c; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "EAST-ENG-06",
+      "origin_node_id": "START:EAST-ENG-06",
+      "job_id": "EAST-4893",
+      "origin_location_id": "LOC-0154",
+      "destination_location_id": "LOC-0089",
+      "departure_at": "2026-08-17T12:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=3110f833df0fc706f7a2b995f0c6ae46b1b75eab4cfc7e8d59025e2e08094019; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "EAST-ENG-07",
+      "origin_node_id": "EAST-33527",
+      "job_id": "EAST-52405",
+      "origin_location_id": "LOC-0188",
+      "destination_location_id": "LOC-0084",
+      "departure_at": "2026-08-17T10:45:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=096a394170ca97e18fe29969db680ef10b8b2105e1baf0e621bd95017176ebb6; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "EAST-ENG-08",
+      "origin_node_id": "START:EAST-ENG-08",
+      "job_id": "EAST-98182",
+      "origin_location_id": "LOC-0154",
+      "destination_location_id": "LOC-0115",
+      "departure_at": "2026-08-17T10:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=47ed4f43cf962741774d93db95b6d78b8ab2bb899c58f0c056d62cf021acd18d; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "EAST-ENG-10",
+      "origin_node_id": "EAST-34366",
+      "job_id": "EAST-77563",
+      "origin_location_id": "LOC-0103",
+      "destination_location_id": "LOC-0087",
+      "departure_at": "2026-08-17T11:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/public_transport/2.0; request_sha256=c04c9bbeb5bfab7ed0805c9fd63a8f14476a7f0173fb5e89a57922ca9e2b5d90; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "EAST-ENG-12",
+      "origin_node_id": "START:EAST-ENG-12",
+      "job_id": "EAST-41077",
+      "origin_location_id": "LOC-0154",
+      "destination_location_id": "LOC-0117",
+      "departure_at": "2026-08-17T12:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=ac28a3ec2838ded30f34f1ad4f6007d4c74b15e524fd658da63fd4f7621b90cd; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHCENTER-ENG-01",
+      "origin_node_id": "SOUTHCENTER-16024",
+      "job_id": "SOUTHCENTER-51133",
+      "origin_location_id": "LOC-0002",
+      "destination_location_id": "LOC-0140",
+      "departure_at": "2026-08-17T12:24:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=3ca6f1382d351851102ef3c2ae4b1d0b2895556cd8268850d2258f6bd9c56f85; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHCENTER-ENG-02",
+      "origin_node_id": "START:SOUTHCENTER-ENG-02",
+      "job_id": "SOUTHCENTER-80308",
+      "origin_location_id": "LOC-0190",
+      "destination_location_id": "LOC-0064",
+      "departure_at": "2026-08-17T10:00:00+03:00",
+      "reason": "MAPBOX_NAVIGATION_V5 HTTP 401; endpoint=https://api.mapbox.com/directions/v5/mapbox/cycling/37.6158385,55.6647568;37.6286049,55.7233901; request_sha256=3d906a796e1755b833ebe8bf986ad526c46d23965aa1a80eec46bd4320315bd2; provider_message=message=Not Authorized - Invalid Token"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHCENTER-ENG-03",
+      "origin_node_id": "START:SOUTHCENTER-ENG-03",
+      "job_id": "SOUTHCENTER-80548",
+      "origin_location_id": "LOC-0190",
+      "destination_location_id": "LOC-0128",
+      "departure_at": "2026-08-17T15:16:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/public_transport/2.0; request_sha256=3c9ab8ecf44c151f70ad799e2efb93e919d6ac67661b9f4957d0e0c836d6ff4c; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHCENTER-ENG-05",
+      "origin_node_id": "START:SOUTHCENTER-ENG-05",
+      "job_id": "SOUTHCENTER-20263",
+      "origin_location_id": "LOC-0190",
+      "destination_location_id": "LOC-0061",
+      "departure_at": "2026-08-17T09:43:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=14ec3b3b6268f4dd362791a09d31e792cb5cd39a7bde4ad32f03fa90065be489; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHCENTER-ENG-06",
+      "origin_node_id": "START:SOUTHCENTER-ENG-06",
+      "job_id": "SOUTHCENTER-35265",
+      "origin_location_id": "LOC-0190",
+      "destination_location_id": "LOC-0125",
+      "departure_at": "2026-08-17T15:44:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=c1fb773a5858153aa2b898e1a6e713e668f12bbbb58235c399bf0dd3b6a89ab5; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHCENTER-ENG-07",
+      "origin_node_id": "START:SOUTHCENTER-ENG-07",
+      "job_id": "SOUTHCENTER-93544",
+      "origin_location_id": "LOC-0190",
+      "destination_location_id": "LOC-0010",
+      "departure_at": "2026-08-17T12:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/public_transport/2.0; request_sha256=21a2fe55c9f1373f47519230781b0cefad83a4178e70e1ada6cdb54dfe334fbc; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHCENTER-ENG-08",
+      "origin_node_id": "SOUTHCENTER-23142",
+      "job_id": "SOUTHCENTER-94447",
+      "origin_location_id": "LOC-0135",
+      "destination_location_id": "LOC-0085",
+      "departure_at": "2026-08-17T11:17:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=0b03e8c740b0fdc0d79ee71a3acb778948384c1dfd2210c155d04db30345337d; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHCENTER-ENG-09",
+      "origin_node_id": "START:SOUTHCENTER-ENG-09",
+      "job_id": "SOUTHCENTER-95501",
+      "origin_location_id": "LOC-0190",
+      "destination_location_id": "LOC-0086",
+      "departure_at": "2026-08-17T19:26:00+03:00",
+      "reason": "MAPBOX_NAVIGATION_V5 HTTP 401; endpoint=https://api.mapbox.com/directions/v5/mapbox/cycling/37.6158385,55.6647568;37.6857562,55.6771232; request_sha256=ddc43f5d7f48515dd0fbbed148c0e2e47e7d020750dd3797b70f696c8ace49ec; provider_message=message=Not Authorized - Invalid Token"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHCENTER-ENG-10",
+      "origin_node_id": "START:SOUTHCENTER-ENG-10",
+      "job_id": "SOUTHCENTER-55711",
+      "origin_location_id": "LOC-0190",
+      "destination_location_id": "LOC-0145",
+      "departure_at": "2026-08-17T12:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=1b53ba9fe04c0487747ddf2ddb66c19da011a99455cfb28f872ef5802079bdee; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHCENTER-ENG-11",
+      "origin_node_id": "START:SOUTHCENTER-ENG-11",
+      "job_id": "SOUTHCENTER-5406",
+      "origin_location_id": "LOC-0190",
+      "destination_location_id": "LOC-0126",
+      "departure_at": "2026-08-17T10:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=9b90b37f26b53d966e664b57d5158cfeceb6b7a9e580177943b56c4d9c97e4c7; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-01",
+      "origin_node_id": "START:SOUTHEAST-ENG-01",
+      "job_id": "SOUTHEAST-32589",
+      "origin_location_id": "LOC-0058",
+      "destination_location_id": "LOC-0181",
+      "departure_at": "2026-08-17T10:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=d84409b1724781c0d2ffb41c150bb92d67d11a72bae487b738ad22711b453a89; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-02",
+      "origin_node_id": "START:SOUTHEAST-ENG-02",
+      "job_id": "SOUTHEAST-11899",
+      "origin_location_id": "LOC-0058",
+      "destination_location_id": "LOC-0035",
+      "departure_at": "2026-08-17T10:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=d9f7f5bde753a13e70ac872593bca6b44d1f4ccd202a610c7d4ffec4dc69cf1b; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-03",
+      "origin_node_id": "SOUTHEAST-40698",
+      "job_id": "SOUTHEAST-2245",
+      "origin_location_id": "LOC-0098",
+      "destination_location_id": "LOC-0123",
+      "departure_at": "2026-08-17T13:31:00+03:00",
+      "reason": "MAPBOX_NAVIGATION_V5 HTTP 401; endpoint=https://api.mapbox.com/directions/v5/mapbox/cycling/37.7543157,55.6180751;37.7630982,55.6369125; request_sha256=2f1297bdd8f8b510258fb633f7c1ea94493def1a1c1a4905c4e85d535e142a69; provider_message=message=Not Authorized - Invalid Token"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-04",
+      "origin_node_id": "START:SOUTHEAST-ENG-04",
+      "job_id": "SOUTHEAST-31495",
+      "origin_location_id": "LOC-0058",
+      "destination_location_id": "LOC-0187",
+      "departure_at": "2026-08-17T08:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/public_transport/2.0; request_sha256=ba2be8c774336da77a3ad24906e37ec6af7b982fd06dec1b95dd7f006a79820f; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-05",
+      "origin_node_id": "START:SOUTHEAST-ENG-05",
+      "job_id": "SOUTHEAST-20055",
+      "origin_location_id": "LOC-0058",
+      "destination_location_id": "LOC-0111",
+      "departure_at": "2026-08-17T12:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=8680b81f43b54218d9f940265331b35224ef4ca2e9f4b2112e0907a19d9b7cf5; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-06",
+      "origin_node_id": "START:SOUTHEAST-ENG-06",
+      "job_id": "SOUTHEAST-7258",
+      "origin_location_id": "LOC-0058",
+      "destination_location_id": "LOC-0200",
+      "departure_at": "2026-08-17T19:22:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=5c071b565f770a19679792e12df47b82a396035b2d3d7443c38d8782c0014f16; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-07",
+      "origin_node_id": "SOUTHEAST-1287",
+      "job_id": "SOUTHEAST-14494",
+      "origin_location_id": "LOC-0186",
+      "destination_location_id": "LOC-0069",
+      "departure_at": "2026-08-17T09:37:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=9db068557e5537897e5b1cfc705b388190db0a4eab4d6df8acb50d5ffef9b726; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-08",
+      "origin_node_id": "START:SOUTHEAST-ENG-08",
+      "job_id": "SOUTHEAST-23807",
+      "origin_location_id": "LOC-0058",
+      "destination_location_id": "LOC-0036",
+      "departure_at": "2026-08-17T09:47:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=63e8eaa9cae3278b95a300bc2f862f3b213c7cf1fb7f3e37299cc22d7c2b2556; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-09",
+      "origin_node_id": "START:SOUTHEAST-ENG-09",
+      "job_id": "SOUTHEAST-90915",
+      "origin_location_id": "LOC-0058",
+      "destination_location_id": "LOC-0179",
+      "departure_at": "2026-08-17T12:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=437526d0ad4f83fce4920f861e55a0310cb1d782d66be37f53f0aaad42ecd0fc; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-10",
+      "origin_node_id": "START:SOUTHEAST-ENG-10",
+      "job_id": "SOUTHEAST-81698",
+      "origin_location_id": "LOC-0058",
+      "destination_location_id": "LOC-0185",
+      "departure_at": "2026-08-17T10:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=ec1066fe11d12479357f4affcced69021d73b81fb636b05c296c44eca33bb962; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "origin_node_id": "START:SOUTHEAST-ENG-11",
+      "job_id": "SOUTHEAST-79144",
+      "origin_location_id": "LOC-0058",
+      "destination_location_id": "LOC-0006",
+      "departure_at": "2026-08-17T10:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/public_transport/2.0; request_sha256=35e17c4dbbb34dbfab87003a9472c7de47bbce7b7a8a6008bad4b2af10ff86fc; reason=TimeoutError: The read operation timed out"
+    },
+    {
+      "kind": "UNKNOWN",
+      "engineer_id": "SOUTHEAST-ENG-12",
+      "origin_node_id": "START:SOUTHEAST-ENG-12",
+      "job_id": "SOUTHEAST-44117",
+      "origin_location_id": "LOC-0058",
+      "destination_location_id": "LOC-0130",
+      "departure_at": "2026-08-17T10:00:00+03:00",
+      "reason": "2GIS_ROUTING_API network failure; endpoint=https://routing.api.2gis.com/routing/7.0.0/global; request_sha256=ed24a026bd9486436e1205194dc731a250f59640d806ebfb0eab6ecef11a1d98; reason=TimeoutError: The read operation timed out"
+    }
+  ],
+  "publication_allowed": false,
+  "publication_blocker": "DIAGNOSTIC_PROBE_IS_NOT_PLAN_VALIDATION",
+  "content_sha256": "19be8bca5c400a445a326c2e8bdf7370dc49a2ce41f394748136bc71770369dd"
+}

@@ -1,0 +1,28 @@
+{
+  "artifact_type": "EXACT_PLAN_MATERIALIZATION",
+  "status": "ORDER_INFEASIBLE",
+  "exact_provider_queries": 14,
+  "identity_legs": 0,
+  "failure": {
+    "engineer_id": "EAST-ENG-03",
+    "job_id": "EAST-74949",
+    "origin_location_id": "LOC-0068",
+    "destination_location_id": "LOC-0108",
+    "departure_at": "2026-08-17T11:51:00+03:00",
+    "reason": "exact arrival makes the closed service-start window impossible"
+  },
+  "plan": null,
+  "validation": null,
+  "publication_allowed": false,
+  "routing_configuration": {
+    "provider": "valhalla-local-transit",
+    "transit_index": "work\\transit\\moscow_2026-08-17.sqlite",
+    "metro_wait_assumption_seconds": 180,
+    "query_time_api_key_required": false,
+    "exact_historical_metro_timetable_proof": false
+  },
+  "result_interpretation": "Validated against frozen surface and rail schedules plus an explicit metro waiting-time model; this is not a proof against a complete historical metro departure timetable.",
+  "dataset_sha256": "c1f5f64639233d4bf65b9c4e367d6d841bf62162c4d2fbea567c30f2fd2c97da",
+  "master_solution_content_sha256": "36fc4393d730737aa8f478b87d9528ab1d58d7e231729bc1f1ac229bae84401e",
+  "content_sha256": "11bba06d172d51c1d4e1de13b945ff759090fe794ae3140f4fe799692c6d6c32"
+}

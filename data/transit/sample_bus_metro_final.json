@@ -1,0 +1,687 @@
+{
+  "origin_id": "LOC-0001",
+  "destination_id": "LOC-0003",
+  "mode": "PUBLIC_TRANSIT",
+  "departure_at": "2026-08-17T09:00:00+03:00",
+  "status": "OK",
+  "duration_seconds": 2873,
+  "duration_minutes": 48,
+  "distance_m": 11904,
+  "geometry": [
+    [
+      55.696598,
+      37.752521
+    ],
+    [
+      55.69659,
+      37.752526
+    ],
+    [
+      55.69659036,
+      37.7525273
+    ],
+    [
+      55.69343573,
+      37.75454554
+    ],
+    [
+      55.69023371,
+      37.75515065
+    ],
+    [
+      55.690228,
+      37.755294
+    ],
+    [
+      55.67449,
+      37.760995
+    ],
+    [
+      55.660114,
+      37.752622
+    ],
+    [
+      55.651296,
+      37.743716
+    ],
+    [
+      55.632344,
+      37.743383
+    ],
+    [
+      55.620317,
+      37.743106
+    ],
+    [
+      55.613529,
+      37.74561
+    ],
+    [
+      55.613605,
+      37.744055
+    ],
+    [
+      55.610814,
+      37.718552
+    ],
+    [
+      55.610821,
+      37.718529
+    ],
+    [
+      55.611008,
+      37.718697
+    ],
+    [
+      55.610941,
+      37.718246
+    ],
+    [
+      55.611065,
+      37.718187
+    ],
+    [
+      55.611164,
+      37.718139
+    ],
+    [
+      55.611169,
+      37.718096
+    ],
+    [
+      55.611258,
+      37.717912
+    ],
+    [
+      55.611064,
+      37.716746
+    ],
+    [
+      55.611289,
+      37.716633
+    ],
+    [
+      55.611282,
+      37.716583
+    ],
+    [
+      55.611083,
+      37.716681
+    ],
+    [
+      55.611004,
+      37.716719
+    ],
+    [
+      55.611,
+      37.716697
+    ],
+    [
+      55.610935,
+      37.71634
+    ],
+    [
+      55.610933,
+      37.716329
+    ],
+    [
+      55.610927,
+      37.716295
+    ],
+    [
+      55.610919,
+      37.716251
+    ],
+    [
+      55.61093,
+      37.71624
+    ],
+    [
+      55.610944,
+      37.71621
+    ],
+    [
+      55.611116,
+      37.715827
+    ],
+    [
+      55.6111,
+      37.715739
+    ],
+    [
+      55.611241,
+      37.715512
+    ],
+    [
+      55.61118,
+      37.715212
+    ],
+    [
+      55.611167,
+      37.715144
+    ],
+    [
+      55.610815,
+      37.712875
+    ]
+  ],
+  "itinerary": [
+    {
+      "sequence": 0,
+      "mode": "walking",
+      "duration_seconds": 1,
+      "distance_m": 0,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.696598,
+          37.752521
+        ],
+        [
+          55.69659,
+          37.752526
+        ]
+      ],
+      "attributes": {
+        "source": "LOCAL_VALHALLA",
+        "purpose": "station_access"
+      }
+    },
+    {
+      "sequence": 1,
+      "mode": "waiting",
+      "duration_seconds": 59,
+      "distance_m": 0,
+      "waiting_seconds": 59,
+      "geometry": [
+        [
+          55.69659036,
+          37.7525273
+        ]
+      ],
+      "attributes": {
+        "station": "Волжский бульв., 50",
+        "source": "GTFS"
+      }
+    },
+    {
+      "sequence": 2,
+      "mode": "bus",
+      "duration_seconds": 60,
+      "distance_m": 373,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.69659036,
+          37.7525273
+        ],
+        [
+          55.69343573,
+          37.75454554
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Волжский бульв., 50",
+        "to_stop": "Больница имени Демихова",
+        "line": "551",
+        "headsign": "",
+        "trip_id": "g:3219_100011485_3_5",
+        "departure_seconds": 32460,
+        "arrival_seconds": 32520,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 3,
+      "mode": "bus",
+      "duration_seconds": 120,
+      "distance_m": 359,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.69343573,
+          37.75454554
+        ],
+        [
+          55.69023371,
+          37.75515065
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Больница имени Демихова",
+        "to_stop": "Метро «Волжская»",
+        "line": "551",
+        "headsign": "",
+        "trip_id": "g:3219_100011485_3_5",
+        "departure_seconds": 32520,
+        "arrival_seconds": 32640,
+        "timetable_source": "GTFS",
+        "geometry_quality": "stop_to_stop_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 4,
+      "mode": "walking_transfer",
+      "duration_seconds": 389,
+      "distance_m": 127,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.69023371,
+          37.75515065
+        ],
+        [
+          55.690228,
+          37.755294
+        ]
+      ],
+      "attributes": {
+        "from_stop": "Метро «Волжская»",
+        "to_stop": "Волжская",
+        "source": "VALHALLA_WALK_MATRIX",
+        "measured_walk_seconds": 89,
+        "geometry_quality": "stop_to_stop_chord"
+      }
+    },
+    {
+      "sequence": 5,
+      "mode": "metro_wait_model",
+      "duration_seconds": 180,
+      "distance_m": 0,
+      "waiting_seconds": 180,
+      "geometry": [
+        [
+          55.690228,
+          37.755294
+        ]
+      ],
+      "attributes": {
+        "source": "EXPLICIT_SCENARIO_ASSUMPTION",
+        "assumed_seconds": 180,
+        "station": "Волжская"
+      }
+    },
+    {
+      "sequence": 6,
+      "mode": "metro",
+      "duration_seconds": 170,
+      "distance_m": 1787,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.690228,
+          37.755294
+        ],
+        [
+          55.67449,
+          37.760995
+        ]
+      ],
+      "attributes": {
+        "source": "MOSMETRO_SCHEMA",
+        "from_station": "Волжская",
+        "to_station": "Люблино",
+        "line_id": 10,
+        "geometry_quality": "station_to_station_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 7,
+      "mode": "metro",
+      "duration_seconds": 195,
+      "distance_m": 1683,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.67449,
+          37.760995
+        ],
+        [
+          55.660114,
+          37.752622
+        ]
+      ],
+      "attributes": {
+        "source": "MOSMETRO_SCHEMA",
+        "from_station": "Люблино",
+        "to_station": "Братиславская",
+        "line_id": 10,
+        "geometry_quality": "station_to_station_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 8,
+      "mode": "metro",
+      "duration_seconds": 105,
+      "distance_m": 1129,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.660114,
+          37.752622
+        ],
+        [
+          55.651296,
+          37.743716
+        ]
+      ],
+      "attributes": {
+        "source": "MOSMETRO_SCHEMA",
+        "from_station": "Братиславская",
+        "to_station": "Марьино",
+        "line_id": 10,
+        "geometry_quality": "station_to_station_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 9,
+      "mode": "metro",
+      "duration_seconds": 180,
+      "distance_m": 2108,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.651296,
+          37.743716
+        ],
+        [
+          55.632344,
+          37.743383
+        ]
+      ],
+      "attributes": {
+        "source": "MOSMETRO_SCHEMA",
+        "from_station": "Марьино",
+        "to_station": "Борисово",
+        "line_id": 10,
+        "geometry_quality": "station_to_station_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 10,
+      "mode": "metro",
+      "duration_seconds": 180,
+      "distance_m": 1338,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.632344,
+          37.743383
+        ],
+        [
+          55.620317,
+          37.743106
+        ]
+      ],
+      "attributes": {
+        "source": "MOSMETRO_SCHEMA",
+        "from_station": "Борисово",
+        "to_station": "Шипиловская",
+        "line_id": 10,
+        "geometry_quality": "station_to_station_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 11,
+      "mode": "metro",
+      "duration_seconds": 80,
+      "distance_m": 771,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.620317,
+          37.743106
+        ],
+        [
+          55.613529,
+          37.74561
+        ]
+      ],
+      "attributes": {
+        "source": "MOSMETRO_SCHEMA",
+        "from_station": "Шипиловская",
+        "to_station": "Зябликово",
+        "line_id": 10,
+        "geometry_quality": "station_to_station_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 12,
+      "mode": "walking_transfer",
+      "duration_seconds": 180,
+      "distance_m": 99,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.613529,
+          37.74561
+        ],
+        [
+          55.613605,
+          37.744055
+        ]
+      ],
+      "attributes": {
+        "source": "MOSMETRO_SCHEMA",
+        "from_station": "Зябликово",
+        "to_station": "Красногвардейская",
+        "line_id": 10,
+        "geometry_quality": "station_to_station_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 13,
+      "mode": "metro_wait_model",
+      "duration_seconds": 180,
+      "distance_m": 0,
+      "waiting_seconds": 180,
+      "geometry": [
+        [
+          55.613605,
+          37.744055
+        ]
+      ],
+      "attributes": {
+        "source": "EXPLICIT_SCENARIO_ASSUMPTION",
+        "assumed_seconds": 180,
+        "station": "Красногвардейская"
+      }
+    },
+    {
+      "sequence": 14,
+      "mode": "metro",
+      "duration_seconds": 138,
+      "distance_m": 1632,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.613605,
+          37.744055
+        ],
+        [
+          55.610814,
+          37.718552
+        ]
+      ],
+      "attributes": {
+        "source": "MOSMETRO_SCHEMA",
+        "from_station": "Красногвардейская",
+        "to_station": "Домодедовская",
+        "line_id": 2,
+        "geometry_quality": "station_to_station_chord",
+        "distance_quality": "geodesic_lower_bound"
+      }
+    },
+    {
+      "sequence": 15,
+      "mode": "station_exit",
+      "duration_seconds": 300,
+      "distance_m": 0,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.610814,
+          37.718552
+        ]
+      ],
+      "attributes": {
+        "source": "MOSMETRO_SCHEMA",
+        "station": "Домодедовская"
+      }
+    },
+    {
+      "sequence": 16,
+      "mode": "walking",
+      "duration_seconds": 356,
+      "distance_m": 498,
+      "waiting_seconds": 0,
+      "geometry": [
+        [
+          55.610821,
+          37.718529
+        ],
+        [
+          55.611008,
+          37.718697
+        ],
+        [
+          55.610941,
+          37.718246
+        ],
+        [
+          55.611065,
+          37.718187
+        ],
+        [
+          55.611164,
+          37.718139
+        ],
+        [
+          55.611169,
+          37.718096
+        ],
+        [
+          55.611258,
+          37.717912
+        ],
+        [
+          55.611064,
+          37.716746
+        ],
+        [
+          55.611289,
+          37.716633
+        ],
+        [
+          55.611282,
+          37.716583
+        ],
+        [
+          55.611083,
+          37.716681
+        ],
+        [
+          55.611004,
+          37.716719
+        ],
+        [
+          55.611,
+          37.716697
+        ],
+        [
+          55.610935,
+          37.71634
+        ],
+        [
+          55.610933,
+          37.716329
+        ],
+        [
+          55.610927,
+          37.716295
+        ],
+        [
+          55.610919,
+          37.716251
+        ],
+        [
+          55.61093,
+          37.71624
+        ],
+        [
+          55.610944,
+          37.71621
+        ],
+        [
+          55.611116,
+          37.715827
+        ],
+        [
+          55.6111,
+          37.715739
+        ],
+        [
+          55.611241,
+          37.715512
+        ],
+        [
+          55.61118,
+          37.715212
+        ],
+        [
+          55.611167,
+          37.715144
+        ],
+        [
+          55.610815,
+          37.712875
+        ]
+      ],
+      "attributes": {
+        "source": "LOCAL_VALHALLA",
+        "purpose": "station_egress"
+      }
+    }
+  ],
+  "provider_status": "MIXED_TIMETABLE_METRO_MODEL",
+  "provenance": {
+    "provider": "LOCAL_GTFS_RASP_VALHALLA",
+    "endpoint": "A:\\LCT2-routing\\handoff\\work\\transit\\moscow_2026-08-17.sqlite",
+    "request_sha256": "1d8d8a03820e00413bd5aea148a45c1873b388b47740db07b0d6e7372dc85e4f",
+    "response_sha256": "35524f1e7c49bf7c81f914ada471e74f72cd042794e8e37a13817236fad49c9b",
+    "fetched_at": "2026-09-16T17:14:41.221081+00:00",
+    "cache_hit": true,
+    "provider_metadata": {
+      "surface_schedule_date": "2026-08-17",
+      "rail_normal_weekday_reference_date": "2026-09-21",
+      "rail_schedule_applied_to_date": "2026-08-17",
+      "metro_departure_schedule_available": false,
+      "metro_ride_included": true,
+      "distance_quality": "lower_bound_for_transit_legs",
+      "geometry_quality": "stop_to_stop_for_transit_legs",
+      "network_completeness": "surface_gtfs_and_mcc_mcd_subset",
+      "metro_model_candidate_seconds": 3092,
+      "metro_model_wait_assumption_seconds": 180,
+      "time_quality": "MODELLED_NOT_TIMETABLE_EXACT",
+      "metro_schedule_quality": "FULL_DEPARTURE_TIMETABLE_UNAVAILABLE",
+      "metro_boarding_events": 2,
+      "metro_wait_assumption_seconds": 180,
+      "chosen_path_wait_sensitivity_seconds": {
+        "zero_wait": 2513,
+        "five_minutes_per_boarding": 3113
+      },
+      "fitness_for_exact_proof": false
+    }
+  },
+  "content_sha256": "e65f09c830eb9e1fdca4a6424b7f67d386a5757baed3a94847891c105974c3c4"
+}

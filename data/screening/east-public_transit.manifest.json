@@ -1,0 +1,22 @@
+{
+  "matrix_schema_version": "1.0.0",
+  "dataset_version": "2.1.0",
+  "provider": "LOCAL_TRANSIT_STATIC_SCREENING",
+  "purpose": "SCREENING_ONLY_NOT_AUTHORITATIVE_FOR_TIME_DEPENDENT_CONSTRAINTS",
+  "zone_id": "EAST",
+  "mode": "PUBLIC_TRANSIT",
+  "departure_at_label": "2026-08-17T07:00:00+03:00",
+  "departure_time_honored": false,
+  "estimate_policy": "STATIC_NETWORK_LOWER_BOUND_COMPARED_TO_LOCAL_VALHALLA_WALKING; no time multiplier or buffer; exact local timetable routing remains mandatory",
+  "network_time_factor": 1.0,
+  "network_time_padding_seconds": 0,
+  "transit_index_sha256": "4f0351e28bf490038a1edcb11f9d87b76bdd79a05b753b5cd5fe6e96681abd00",
+  "locations": 67,
+  "cells": 4489,
+  "status_counts": {
+    "OK": 4489
+  },
+  "matrix_file": "east-public_transit.csv",
+  "matrix_file_sha256": "6933fbff7f7cf57e221bc114066bb54e1843fcd853cc43be5563543fea343c23",
+  "matrix_content_sha256": "91870f095d4e5c3b76e3d2287de4599a5dcb5c846967dcbd3c90da3348ee8df7"
+}

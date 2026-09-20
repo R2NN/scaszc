@@ -1,0 +1,5 @@
+﻿profile_id;transport_type;day_type;router_capability;time_dependency;required_outputs;unknown_behavior;unreachable_behavior
+CAR-WD;CAR;WEEKDAY;TIME_DEPENDENT_ROAD_ROUTER;DEPARTURE_TIME_DEPENDENT;duration_min|distance_m|geometry|itinerary|provenance;BLOCK_RUN;FORBID_ARC
+TRANSIT-WD;PUBLIC_TRANSIT;WEEKDAY;TIMETABLE_AWARE_TRANSIT_ROUTER;DEPARTURE_TIME_DEPENDENT;duration_min|distance_m|geometry|itinerary|provenance;BLOCK_RUN;FORBID_ARC
+BICYCLE-WD;BICYCLE;WEEKDAY;BICYCLE_NETWORK_ROUTER;STATIC_ROUTING_GRAPH;duration_min|distance_m|geometry|itinerary|provenance;BLOCK_RUN;FORBID_ARC
+WALKING-WD;WALKING;WEEKDAY;PEDESTRIAN_NETWORK_ROUTER;STATIC_ROUTING_GRAPH;duration_min|distance_m|geometry|itinerary|provenance;BLOCK_RUN;FORBID_ARC

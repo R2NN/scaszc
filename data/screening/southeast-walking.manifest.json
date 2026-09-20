@@ -1,0 +1,18 @@
+{
+  "matrix_schema_version": "1.0.0",
+  "dataset_version": "2.1.0",
+  "provider": "LOCAL_VALHALLA_MATRIX",
+  "purpose": "SCREENING_ONLY_NOT_AUTHORITATIVE_FOR_TIME_DEPENDENT_CONSTRAINTS",
+  "zone_id": "SOUTHEAST",
+  "mode": "WALKING",
+  "departure_at_label": "2026-08-17T07:00:00+03:00",
+  "departure_time_honored": false,
+  "locations": 77,
+  "cells": 5929,
+  "status_counts": {
+    "OK": 5929
+  },
+  "matrix_file": "southeast-walking.csv",
+  "matrix_file_sha256": "8049c678e6f288714a2eafee5c657fdf5cea069a345666212dbe33e19ba91455",
+  "matrix_content_sha256": "9379e1fc3c076b90373de1f9ecdbcf0c0087776d5a23c8a6bcab3e7011045075"
+}

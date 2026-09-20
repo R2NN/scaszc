@@ -1,0 +1,2170 @@
+{
+  "artifact_type": "SCREENING_MASTER_SOLUTION",
+  "status": "SCREENING_FEASIBLE",
+  "planning_at": "2026-08-17T07:00:00+03:00",
+  "dataset_sha256": "90ed8195fdaf89781b05c5ed80d5119e952b53f2ff8b18f812cb92f3da3cee9f",
+  "screening_snapshot_sha256": "5c2e4a2dc57a946095886be9424e9f89cd45b486d0d2c686802383bc92f6afad",
+  "solver": {
+    "name": "OR-Tools CP-SAT",
+    "version": "9.15.6755",
+    "search_graph_complete": false,
+    "searched_arc_count": 20059,
+    "operationally_excluded_arcs": [
+      [
+        "EAST-ENG-10",
+        "EAST-24980",
+        "EAST-33527"
+      ]
+    ]
+  },
+  "objective_proofs": [
+    {
+      "tier": 1,
+      "metric": "unserved_urgent_jobs",
+      "value": 0,
+      "best_bound": 0,
+      "proven_optimal": true,
+      "wall_time_seconds": 10.5192023
+    },
+    {
+      "tier": 2,
+      "metric": "unserved_normal_jobs",
+      "value": 30,
+      "best_bound": 0,
+      "proven_optimal": false,
+      "wall_time_seconds": 90.0247669
+    }
+  ],
+  "summary": {
+    "used_engineers": 33,
+    "served_jobs": 175,
+    "unserved_jobs": 30
+  },
+  "routes": [
+    {
+      "engineer_id": "EAST-ENG-01",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-21367",
+          "origin_node_id": "START:EAST-ENG-01",
+          "departure_at": "2026-08-17T19:44:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 16,
+          "screening_distance_m": 2550,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-02",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-68476",
+          "origin_node_id": "START:EAST-ENG-02",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T10:30:00+03:00",
+          "screening_duration_minutes": 30,
+          "screening_distance_m": 11301,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "EAST-24076",
+          "origin_node_id": "EAST-68476",
+          "departure_at": "2026-08-17T11:00:00+03:00",
+          "service_start_at": "2026-08-17T12:00:00+03:00",
+          "screening_duration_minutes": 21,
+          "screening_distance_m": 7209,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "EAST-41912",
+          "origin_node_id": "EAST-24076",
+          "departure_at": "2026-08-17T12:30:00+03:00",
+          "service_start_at": "2026-08-17T13:04:00+03:00",
+          "screening_duration_minutes": 34,
+          "screening_distance_m": 13326,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "EAST-60720",
+          "origin_node_id": "EAST-41912",
+          "departure_at": "2026-08-17T13:34:00+03:00",
+          "service_start_at": "2026-08-17T13:51:00+03:00",
+          "screening_duration_minutes": 17,
+          "screening_distance_m": 6295,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "EAST-48238",
+          "origin_node_id": "EAST-60720",
+          "departure_at": "2026-08-17T14:21:00+03:00",
+          "service_start_at": "2026-08-17T14:28:00+03:00",
+          "screening_duration_minutes": 7,
+          "screening_distance_m": 1570,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "EAST-73572",
+          "origin_node_id": "EAST-48238",
+          "departure_at": "2026-08-17T14:58:00+03:00",
+          "service_start_at": "2026-08-17T15:09:00+03:00",
+          "screening_duration_minutes": 11,
+          "screening_distance_m": 2743,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 7,
+          "job_id": "EAST-21571",
+          "origin_node_id": "EAST-73572",
+          "departure_at": "2026-08-17T15:39:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 22,
+          "screening_distance_m": 8074,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 8,
+          "job_id": "EAST-51115",
+          "origin_node_id": "EAST-21571",
+          "departure_at": "2026-08-17T18:30:00+03:00",
+          "service_start_at": "2026-08-17T18:54:00+03:00",
+          "screening_duration_minutes": 24,
+          "screening_distance_m": 9258,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-03",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-52405",
+          "origin_node_id": "START:EAST-ENG-03",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T10:18:00+03:00",
+          "screening_duration_minutes": 18,
+          "screening_distance_m": 5667,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "EAST-69967",
+          "origin_node_id": "EAST-52405",
+          "departure_at": "2026-08-17T11:28:00+03:00",
+          "service_start_at": "2026-08-17T11:55:00+03:00",
+          "screening_duration_minutes": 27,
+          "screening_distance_m": 10005,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "EAST-23380",
+          "origin_node_id": "EAST-69967",
+          "departure_at": "2026-08-17T12:15:00+03:00",
+          "service_start_at": "2026-08-17T12:28:00+03:00",
+          "screening_duration_minutes": 13,
+          "screening_distance_m": 4763,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "EAST-67554",
+          "origin_node_id": "EAST-23380",
+          "departure_at": "2026-08-17T13:38:00+03:00",
+          "service_start_at": "2026-08-17T13:57:00+03:00",
+          "screening_duration_minutes": 19,
+          "screening_distance_m": 7137,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "EAST-35675",
+          "origin_node_id": "EAST-67554",
+          "departure_at": "2026-08-17T15:07:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 22,
+          "screening_distance_m": 8382,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "EAST-86160",
+          "origin_node_id": "EAST-35675",
+          "departure_at": "2026-08-17T17:10:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 17,
+          "screening_distance_m": 6327,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-04",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-97886",
+          "origin_node_id": "START:EAST-ENG-04",
+          "departure_at": "2026-08-17T15:47:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 13,
+          "screening_distance_m": 4720,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-05",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-98182",
+          "origin_node_id": "START:EAST-ENG-05",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T11:10:00+03:00",
+          "screening_duration_minutes": 70,
+          "screening_distance_m": 5895,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "EAST-29890",
+          "origin_node_id": "EAST-98182",
+          "departure_at": "2026-08-17T12:20:00+03:00",
+          "service_start_at": "2026-08-17T12:22:00+03:00",
+          "screening_duration_minutes": 2,
+          "screening_distance_m": 137,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "EAST-76082",
+          "origin_node_id": "EAST-29890",
+          "departure_at": "2026-08-17T13:32:00+03:00",
+          "service_start_at": "2026-08-17T13:43:00+03:00",
+          "screening_duration_minutes": 11,
+          "screening_distance_m": 904,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "EAST-82808",
+          "origin_node_id": "EAST-76082",
+          "departure_at": "2026-08-17T14:53:00+03:00",
+          "service_start_at": "2026-08-17T15:22:00+03:00",
+          "screening_duration_minutes": 29,
+          "screening_distance_m": 2452,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "EAST-10135",
+          "origin_node_id": "EAST-82808",
+          "departure_at": "2026-08-17T16:32:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 38,
+          "screening_distance_m": 3166,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "EAST-18754",
+          "origin_node_id": "EAST-10135",
+          "departure_at": "2026-08-17T19:10:00+03:00",
+          "service_start_at": "2026-08-17T19:26:00+03:00",
+          "screening_duration_minutes": 16,
+          "screening_distance_m": 1307,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 7,
+          "job_id": "EAST-31260",
+          "origin_node_id": "EAST-18754",
+          "departure_at": "2026-08-17T20:36:00+03:00",
+          "service_start_at": "2026-08-17T21:10:00+03:00",
+          "screening_duration_minutes": 34,
+          "screening_distance_m": 2802,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 8,
+          "job_id": "EAST-43506",
+          "origin_node_id": "EAST-31260",
+          "departure_at": "2026-08-17T21:30:00+03:00",
+          "service_start_at": "2026-08-17T21:30:00+03:00",
+          "screening_duration_minutes": 0,
+          "screening_distance_m": 0,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-06",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-57299",
+          "origin_node_id": "START:EAST-ENG-06",
+          "departure_at": "2026-08-17T19:56:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 4,
+          "screening_distance_m": 861,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-07",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-33527",
+          "origin_node_id": "START:EAST-ENG-07",
+          "departure_at": "2026-08-17T09:40:00+03:00",
+          "service_start_at": "2026-08-17T10:00:00+03:00",
+          "screening_duration_minutes": 20,
+          "screening_distance_m": 7373,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "EAST-34366",
+          "origin_node_id": "EAST-33527",
+          "departure_at": "2026-08-17T10:20:00+03:00",
+          "service_start_at": "2026-08-17T10:39:00+03:00",
+          "screening_duration_minutes": 19,
+          "screening_distance_m": 6751,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "EAST-77563",
+          "origin_node_id": "EAST-34366",
+          "departure_at": "2026-08-17T11:49:00+03:00",
+          "service_start_at": "2026-08-17T12:00:00+03:00",
+          "screening_duration_minutes": 11,
+          "screening_distance_m": 3214,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "EAST-10245",
+          "origin_node_id": "EAST-77563",
+          "departure_at": "2026-08-17T13:10:00+03:00",
+          "service_start_at": "2026-08-17T13:17:00+03:00",
+          "screening_duration_minutes": 7,
+          "screening_distance_m": 1347,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "EAST-30769",
+          "origin_node_id": "EAST-10245",
+          "departure_at": "2026-08-17T14:27:00+03:00",
+          "service_start_at": "2026-08-17T14:38:00+03:00",
+          "screening_duration_minutes": 11,
+          "screening_distance_m": 3191,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "EAST-41962",
+          "origin_node_id": "EAST-30769",
+          "departure_at": "2026-08-17T15:48:00+03:00",
+          "service_start_at": "2026-08-17T16:07:00+03:00",
+          "screening_duration_minutes": 19,
+          "screening_distance_m": 6874,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-08",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-74949",
+          "origin_node_id": "START:EAST-ENG-08",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T11:36:00+03:00",
+          "screening_duration_minutes": 96,
+          "screening_distance_m": 8112,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "EAST-41077",
+          "origin_node_id": "EAST-74949",
+          "departure_at": "2026-08-17T12:46:00+03:00",
+          "service_start_at": "2026-08-17T12:55:00+03:00",
+          "screening_duration_minutes": 9,
+          "screening_distance_m": 698,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "EAST-22634",
+          "origin_node_id": "EAST-41077",
+          "departure_at": "2026-08-17T14:05:00+03:00",
+          "service_start_at": "2026-08-17T14:21:00+03:00",
+          "screening_duration_minutes": 16,
+          "screening_distance_m": 1335,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "EAST-82388",
+          "origin_node_id": "EAST-22634",
+          "departure_at": "2026-08-17T14:41:00+03:00",
+          "service_start_at": "2026-08-17T14:58:00+03:00",
+          "screening_duration_minutes": 17,
+          "screening_distance_m": 1388,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "EAST-76643",
+          "origin_node_id": "EAST-82388",
+          "departure_at": "2026-08-17T16:08:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 23,
+          "screening_distance_m": 1870,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-09",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-32807",
+          "origin_node_id": "START:EAST-ENG-09",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T10:12:00+03:00",
+          "screening_duration_minutes": 12,
+          "screening_distance_m": 3185,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "EAST-50219",
+          "origin_node_id": "EAST-32807",
+          "departure_at": "2026-08-17T10:42:00+03:00",
+          "service_start_at": "2026-08-17T10:57:00+03:00",
+          "screening_duration_minutes": 15,
+          "screening_distance_m": 4141,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "EAST-54964",
+          "origin_node_id": "EAST-50219",
+          "departure_at": "2026-08-17T11:27:00+03:00",
+          "service_start_at": "2026-08-17T11:47:00+03:00",
+          "screening_duration_minutes": 20,
+          "screening_distance_m": 5476,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "EAST-48227",
+          "origin_node_id": "EAST-54964",
+          "departure_at": "2026-08-17T13:07:00+03:00",
+          "service_start_at": "2026-08-17T13:45:00+03:00",
+          "screening_duration_minutes": 38,
+          "screening_distance_m": 11076,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "EAST-17349",
+          "origin_node_id": "EAST-48227",
+          "departure_at": "2026-08-17T14:15:00+03:00",
+          "service_start_at": "2026-08-17T14:22:00+03:00",
+          "screening_duration_minutes": 7,
+          "screening_distance_m": 1657,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "EAST-15648",
+          "origin_node_id": "EAST-17349",
+          "departure_at": "2026-08-17T15:42:00+03:00",
+          "service_start_at": "2026-08-17T16:03:00+03:00",
+          "screening_duration_minutes": 21,
+          "screening_distance_m": 5732,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 7,
+          "job_id": "EAST-30243",
+          "origin_node_id": "EAST-15648",
+          "departure_at": "2026-08-17T17:23:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 24,
+          "screening_distance_m": 6675,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-10",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-24980",
+          "origin_node_id": "START:EAST-ENG-10",
+          "departure_at": "2026-08-17T09:31:00+03:00",
+          "service_start_at": "2026-08-17T10:00:00+03:00",
+          "screening_duration_minutes": 29,
+          "screening_distance_m": 9435,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "EAST-37272",
+          "origin_node_id": "EAST-24980",
+          "departure_at": "2026-08-17T11:20:00+03:00",
+          "service_start_at": "2026-08-17T11:51:00+03:00",
+          "screening_duration_minutes": 31,
+          "screening_distance_m": 5113,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "EAST-53587",
+          "origin_node_id": "EAST-37272",
+          "departure_at": "2026-08-17T13:01:00+03:00",
+          "service_start_at": "2026-08-17T13:25:00+03:00",
+          "screening_duration_minutes": 24,
+          "screening_distance_m": 5884,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "EAST-71388",
+          "origin_node_id": "EAST-53587",
+          "departure_at": "2026-08-17T14:35:00+03:00",
+          "service_start_at": "2026-08-17T14:40:00+03:00",
+          "screening_duration_minutes": 5,
+          "screening_distance_m": 156,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "EAST-61540",
+          "origin_node_id": "EAST-71388",
+          "departure_at": "2026-08-17T15:50:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 10,
+          "screening_distance_m": 2636,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-11",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-7939",
+          "origin_node_id": "START:EAST-ENG-11",
+          "departure_at": "2026-08-17T12:00:00+03:00",
+          "service_start_at": "2026-08-17T12:15:00+03:00",
+          "screening_duration_minutes": 15,
+          "screening_distance_m": 3894,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "EAST-93086",
+          "origin_node_id": "EAST-7939",
+          "departure_at": "2026-08-17T13:25:00+03:00",
+          "service_start_at": "2026-08-17T13:32:00+03:00",
+          "screening_duration_minutes": 7,
+          "screening_distance_m": 1806,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "EAST-57866",
+          "origin_node_id": "EAST-93086",
+          "departure_at": "2026-08-17T14:42:00+03:00",
+          "service_start_at": "2026-08-17T14:48:00+03:00",
+          "screening_duration_minutes": 6,
+          "screening_distance_m": 1396,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "EAST-87693",
+          "origin_node_id": "EAST-57866",
+          "departure_at": "2026-08-17T15:58:00+03:00",
+          "service_start_at": "2026-08-17T16:15:00+03:00",
+          "screening_duration_minutes": 17,
+          "screening_distance_m": 4590,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "EAST-17892",
+          "origin_node_id": "EAST-87693",
+          "departure_at": "2026-08-17T17:25:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 8,
+          "screening_distance_m": 1980,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "EAST-48174",
+          "origin_node_id": "EAST-17892",
+          "departure_at": "2026-08-17T18:30:00+03:00",
+          "service_start_at": "2026-08-17T18:39:00+03:00",
+          "screening_duration_minutes": 9,
+          "screening_distance_m": 2449,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 7,
+          "job_id": "EAST-74198",
+          "origin_node_id": "EAST-48174",
+          "departure_at": "2026-08-17T19:09:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 8,
+          "screening_distance_m": 2034,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "EAST-ENG-12",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "EAST-4893",
+          "origin_node_id": "START:EAST-ENG-12",
+          "departure_at": "2026-08-17T12:00:00+03:00",
+          "service_start_at": "2026-08-17T12:36:00+03:00",
+          "screening_duration_minutes": 36,
+          "screening_distance_m": 14661,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "EAST-94409",
+          "origin_node_id": "EAST-4893",
+          "departure_at": "2026-08-17T13:06:00+03:00",
+          "service_start_at": "2026-08-17T13:22:00+03:00",
+          "screening_duration_minutes": 16,
+          "screening_distance_m": 5127,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "EAST-47330",
+          "origin_node_id": "EAST-94409",
+          "departure_at": "2026-08-17T14:32:00+03:00",
+          "service_start_at": "2026-08-17T14:39:00+03:00",
+          "screening_duration_minutes": 7,
+          "screening_distance_m": 1793,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "EAST-26645",
+          "origin_node_id": "EAST-47330",
+          "departure_at": "2026-08-17T15:09:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 8,
+          "screening_distance_m": 2314,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "EAST-98815",
+          "origin_node_id": "EAST-26645",
+          "departure_at": "2026-08-17T16:30:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 6,
+          "screening_distance_m": 1187,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "EAST-47670",
+          "origin_node_id": "EAST-98815",
+          "departure_at": "2026-08-17T18:20:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 20,
+          "screening_distance_m": 6953,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-01",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHCENTER-12263",
+          "origin_node_id": "START:SOUTHCENTER-ENG-01",
+          "departure_at": "2026-08-17T09:49:00+03:00",
+          "service_start_at": "2026-08-17T10:00:00+03:00",
+          "screening_duration_minutes": 11,
+          "screening_distance_m": 3992,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHCENTER-16024",
+          "origin_node_id": "SOUTHCENTER-12263",
+          "departure_at": "2026-08-17T10:30:00+03:00",
+          "service_start_at": "2026-08-17T10:38:00+03:00",
+          "screening_duration_minutes": 8,
+          "screening_distance_m": 2735,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHCENTER-94447",
+          "origin_node_id": "SOUTHCENTER-16024",
+          "departure_at": "2026-08-17T11:48:00+03:00",
+          "service_start_at": "2026-08-17T11:54:00+03:00",
+          "screening_duration_minutes": 6,
+          "screening_distance_m": 1554,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHCENTER-10776",
+          "origin_node_id": "SOUTHCENTER-94447",
+          "departure_at": "2026-08-17T13:04:00+03:00",
+          "service_start_at": "2026-08-17T13:09:00+03:00",
+          "screening_duration_minutes": 5,
+          "screening_distance_m": 1578,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHCENTER-61311",
+          "origin_node_id": "SOUTHCENTER-10776",
+          "departure_at": "2026-08-17T14:19:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 17,
+          "screening_distance_m": 6334,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHCENTER-90709",
+          "origin_node_id": "SOUTHCENTER-61311",
+          "departure_at": "2026-08-17T16:30:00+03:00",
+          "service_start_at": "2026-08-17T16:51:00+03:00",
+          "screening_duration_minutes": 21,
+          "screening_distance_m": 7699,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-02",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHCENTER-24132",
+          "origin_node_id": "START:SOUTHCENTER-ENG-02",
+          "departure_at": "2026-08-17T19:43:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 17,
+          "screening_distance_m": 4576,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHCENTER-26177",
+          "origin_node_id": "SOUTHCENTER-24132",
+          "departure_at": "2026-08-17T20:30:00+03:00",
+          "service_start_at": "2026-08-17T20:55:00+03:00",
+          "screening_duration_minutes": 25,
+          "screening_distance_m": 7046,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-03",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHCENTER-76452",
+          "origin_node_id": "START:SOUTHCENTER-ENG-03",
+          "departure_at": "2026-08-17T12:00:00+03:00",
+          "service_start_at": "2026-08-17T12:12:00+03:00",
+          "screening_duration_minutes": 12,
+          "screening_distance_m": 2229,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHCENTER-90373",
+          "origin_node_id": "SOUTHCENTER-76452",
+          "departure_at": "2026-08-17T13:22:00+03:00",
+          "service_start_at": "2026-08-17T13:45:00+03:00",
+          "screening_duration_minutes": 23,
+          "screening_distance_m": 7991,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHCENTER-80548",
+          "origin_node_id": "SOUTHCENTER-90373",
+          "departure_at": "2026-08-17T14:55:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 30,
+          "screening_distance_m": 3489,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHCENTER-78540",
+          "origin_node_id": "SOUTHCENTER-80548",
+          "departure_at": "2026-08-17T17:10:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 31,
+          "screening_distance_m": 5128,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHCENTER-94575",
+          "origin_node_id": "SOUTHCENTER-78540",
+          "departure_at": "2026-08-17T19:10:00+03:00",
+          "service_start_at": "2026-08-17T19:22:00+03:00",
+          "screening_duration_minutes": 12,
+          "screening_distance_m": 1175,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-05",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHCENTER-20263",
+          "origin_node_id": "START:SOUTHCENTER-ENG-05",
+          "departure_at": "2026-08-17T09:42:00+03:00",
+          "service_start_at": "2026-08-17T10:00:00+03:00",
+          "screening_duration_minutes": 18,
+          "screening_distance_m": 1389,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHCENTER-23142",
+          "origin_node_id": "SOUTHCENTER-20263",
+          "departure_at": "2026-08-17T10:30:00+03:00",
+          "service_start_at": "2026-08-17T11:51:00+03:00",
+          "screening_duration_minutes": 81,
+          "screening_distance_m": 6744,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHCENTER-84074",
+          "origin_node_id": "SOUTHCENTER-23142",
+          "departure_at": "2026-08-17T13:01:00+03:00",
+          "service_start_at": "2026-08-17T13:10:00+03:00",
+          "screening_duration_minutes": 9,
+          "screening_distance_m": 701,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHCENTER-87819",
+          "origin_node_id": "SOUTHCENTER-84074",
+          "departure_at": "2026-08-17T13:40:00+03:00",
+          "service_start_at": "2026-08-17T15:14:00+03:00",
+          "screening_duration_minutes": 94,
+          "screening_distance_m": 13136,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHCENTER-85188",
+          "origin_node_id": "SOUTHCENTER-87819",
+          "departure_at": "2026-08-17T15:44:00+03:00",
+          "service_start_at": "2026-08-17T16:47:00+03:00",
+          "screening_duration_minutes": 63,
+          "screening_distance_m": 5141,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-06",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHCENTER-46513",
+          "origin_node_id": "START:SOUTHCENTER-ENG-06",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T10:13:00+03:00",
+          "screening_duration_minutes": 13,
+          "screening_distance_m": 4298,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHCENTER-80308",
+          "origin_node_id": "SOUTHCENTER-46513",
+          "departure_at": "2026-08-17T10:43:00+03:00",
+          "service_start_at": "2026-08-17T10:59:00+03:00",
+          "screening_duration_minutes": 16,
+          "screening_distance_m": 5632,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHCENTER-26845",
+          "origin_node_id": "SOUTHCENTER-80308",
+          "departure_at": "2026-08-17T11:29:00+03:00",
+          "service_start_at": "2026-08-17T12:00:00+03:00",
+          "screening_duration_minutes": 18,
+          "screening_distance_m": 5939,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHCENTER-51133",
+          "origin_node_id": "SOUTHCENTER-26845",
+          "departure_at": "2026-08-17T12:30:00+03:00",
+          "service_start_at": "2026-08-17T12:48:00+03:00",
+          "screening_duration_minutes": 18,
+          "screening_distance_m": 6034,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHCENTER-17896",
+          "origin_node_id": "SOUTHCENTER-51133",
+          "departure_at": "2026-08-17T13:18:00+03:00",
+          "service_start_at": "2026-08-17T14:00:00+03:00",
+          "screening_duration_minutes": 28,
+          "screening_distance_m": 10735,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHCENTER-86864",
+          "origin_node_id": "SOUTHCENTER-17896",
+          "departure_at": "2026-08-17T14:30:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 9,
+          "screening_distance_m": 2801,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 7,
+          "job_id": "SOUTHCENTER-93276",
+          "origin_node_id": "SOUTHCENTER-86864",
+          "departure_at": "2026-08-17T16:30:00+03:00",
+          "service_start_at": "2026-08-17T16:52:00+03:00",
+          "screening_duration_minutes": 22,
+          "screening_distance_m": 8771,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 8,
+          "job_id": "SOUTHCENTER-77795",
+          "origin_node_id": "SOUTHCENTER-93276",
+          "departure_at": "2026-08-17T17:22:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 13,
+          "screening_distance_m": 4438,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 9,
+          "job_id": "SOUTHCENTER-92618",
+          "origin_node_id": "SOUTHCENTER-77795",
+          "departure_at": "2026-08-17T18:30:00+03:00",
+          "service_start_at": "2026-08-17T18:38:00+03:00",
+          "screening_duration_minutes": 8,
+          "screening_distance_m": 2064,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 10,
+          "job_id": "SOUTHCENTER-99841",
+          "origin_node_id": "SOUTHCENTER-92618",
+          "departure_at": "2026-08-17T19:08:00+03:00",
+          "service_start_at": "2026-08-17T19:33:00+03:00",
+          "screening_duration_minutes": 25,
+          "screening_distance_m": 9696,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-07",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHCENTER-93544",
+          "origin_node_id": "START:SOUTHCENTER-ENG-07",
+          "departure_at": "2026-08-17T12:00:00+03:00",
+          "service_start_at": "2026-08-17T12:14:00+03:00",
+          "screening_duration_minutes": 14,
+          "screening_distance_m": 2487,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHCENTER-75881",
+          "origin_node_id": "SOUTHCENTER-93544",
+          "departure_at": "2026-08-17T13:24:00+03:00",
+          "service_start_at": "2026-08-17T14:00:00+03:00",
+          "screening_duration_minutes": 29,
+          "screening_distance_m": 4684,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHCENTER-19376",
+          "origin_node_id": "SOUTHCENTER-75881",
+          "departure_at": "2026-08-17T15:10:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 9,
+          "screening_distance_m": 467,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHCENTER-66376",
+          "origin_node_id": "SOUTHCENTER-19376",
+          "departure_at": "2026-08-17T17:10:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 27,
+          "screening_distance_m": 4888,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHCENTER-52576",
+          "origin_node_id": "SOUTHCENTER-66376",
+          "departure_at": "2026-08-17T19:10:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 31,
+          "screening_distance_m": 4816,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-08",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHCENTER-5406",
+          "origin_node_id": "START:SOUTHCENTER-ENG-08",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T10:07:00+03:00",
+          "screening_duration_minutes": 7,
+          "screening_distance_m": 1894,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHCENTER-6957",
+          "origin_node_id": "SOUTHCENTER-5406",
+          "departure_at": "2026-08-17T10:37:00+03:00",
+          "service_start_at": "2026-08-17T11:02:00+03:00",
+          "screening_duration_minutes": 25,
+          "screening_distance_m": 8939,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHCENTER-13203",
+          "origin_node_id": "SOUTHCENTER-6957",
+          "departure_at": "2026-08-17T12:12:00+03:00",
+          "service_start_at": "2026-08-17T14:00:00+03:00",
+          "screening_duration_minutes": 20,
+          "screening_distance_m": 6898,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHCENTER-86002",
+          "origin_node_id": "SOUTHCENTER-13203",
+          "departure_at": "2026-08-17T14:30:00+03:00",
+          "service_start_at": "2026-08-17T14:49:00+03:00",
+          "screening_duration_minutes": 19,
+          "screening_distance_m": 7130,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHCENTER-47560",
+          "origin_node_id": "SOUTHCENTER-86002",
+          "departure_at": "2026-08-17T15:19:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 9,
+          "screening_distance_m": 2450,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHCENTER-32840",
+          "origin_node_id": "SOUTHCENTER-47560",
+          "departure_at": "2026-08-17T17:10:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 12,
+          "screening_distance_m": 3116,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-09",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHCENTER-95501",
+          "origin_node_id": "START:SOUTHCENTER-ENG-09",
+          "departure_at": "2026-08-17T19:36:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 24,
+          "screening_distance_m": 6552,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-10",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHCENTER-19203",
+          "origin_node_id": "START:SOUTHCENTER-ENG-10",
+          "departure_at": "2026-08-17T12:00:00+03:00",
+          "service_start_at": "2026-08-17T12:11:00+03:00",
+          "screening_duration_minutes": 11,
+          "screening_distance_m": 3190,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHCENTER-55711",
+          "origin_node_id": "SOUTHCENTER-19203",
+          "departure_at": "2026-08-17T13:21:00+03:00",
+          "service_start_at": "2026-08-17T13:28:00+03:00",
+          "screening_duration_minutes": 7,
+          "screening_distance_m": 1793,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHCENTER-66315",
+          "origin_node_id": "SOUTHCENTER-55711",
+          "departure_at": "2026-08-17T14:38:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 17,
+          "screening_distance_m": 6207,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHCENTER-6185",
+          "origin_node_id": "SOUTHCENTER-66315",
+          "departure_at": "2026-08-17T17:10:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 26,
+          "screening_distance_m": 9829,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHCENTER-49105",
+          "origin_node_id": "SOUTHCENTER-6185",
+          "departure_at": "2026-08-17T19:10:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 15,
+          "screening_distance_m": 4947,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHCENTER-78036",
+          "origin_node_id": "SOUTHCENTER-49105",
+          "departure_at": "2026-08-17T20:20:00+03:00",
+          "service_start_at": "2026-08-17T20:31:00+03:00",
+          "screening_duration_minutes": 11,
+          "screening_distance_m": 3483,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-11",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHCENTER-79707",
+          "origin_node_id": "START:SOUTHCENTER-ENG-11",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T10:33:00+03:00",
+          "screening_duration_minutes": 33,
+          "screening_distance_m": 12353,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHCENTER-79719",
+          "origin_node_id": "SOUTHCENTER-79707",
+          "departure_at": "2026-08-17T11:43:00+03:00",
+          "service_start_at": "2026-08-17T12:00:00+03:00",
+          "screening_duration_minutes": 6,
+          "screening_distance_m": 1245,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHCENTER-18023",
+          "origin_node_id": "SOUTHCENTER-79719",
+          "departure_at": "2026-08-17T13:10:00+03:00",
+          "service_start_at": "2026-08-17T14:00:00+03:00",
+          "screening_duration_minutes": 23,
+          "screening_distance_m": 8351,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHCENTER-35265",
+          "origin_node_id": "SOUTHCENTER-18023",
+          "departure_at": "2026-08-17T15:20:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 9,
+          "screening_distance_m": 2634,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHCENTER-76944",
+          "origin_node_id": "SOUTHCENTER-35265",
+          "departure_at": "2026-08-17T16:30:00+03:00",
+          "service_start_at": "2026-08-17T16:36:00+03:00",
+          "screening_duration_minutes": 6,
+          "screening_distance_m": 1619,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHCENTER-27023",
+          "origin_node_id": "SOUTHCENTER-76944",
+          "departure_at": "2026-08-17T17:46:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 6,
+          "screening_distance_m": 1327,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 7,
+          "job_id": "SOUTHCENTER-23637",
+          "origin_node_id": "SOUTHCENTER-27023",
+          "departure_at": "2026-08-17T18:30:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 4,
+          "screening_distance_m": 1043,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-01",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-7258",
+          "origin_node_id": "START:SOUTHEAST-ENG-01",
+          "departure_at": "2026-08-17T19:24:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 36,
+          "screening_distance_m": 31876,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-02",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-40919",
+          "origin_node_id": "START:SOUTHEAST-ENG-02",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T10:17:00+03:00",
+          "screening_duration_minutes": 17,
+          "screening_distance_m": 7026,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHEAST-63577",
+          "origin_node_id": "SOUTHEAST-40919",
+          "departure_at": "2026-08-17T10:47:00+03:00",
+          "service_start_at": "2026-08-17T11:21:00+03:00",
+          "screening_duration_minutes": 34,
+          "screening_distance_m": 30190,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHEAST-12329",
+          "origin_node_id": "SOUTHEAST-63577",
+          "departure_at": "2026-08-17T11:51:00+03:00",
+          "service_start_at": "2026-08-17T12:22:00+03:00",
+          "screening_duration_minutes": 31,
+          "screening_distance_m": 29898,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHEAST-46199",
+          "origin_node_id": "SOUTHEAST-12329",
+          "departure_at": "2026-08-17T12:52:00+03:00",
+          "service_start_at": "2026-08-17T13:30:00+03:00",
+          "screening_duration_minutes": 38,
+          "screening_distance_m": 33040,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHEAST-11872",
+          "origin_node_id": "SOUTHEAST-46199",
+          "departure_at": "2026-08-17T14:00:00+03:00",
+          "service_start_at": "2026-08-17T14:41:00+03:00",
+          "screening_duration_minutes": 41,
+          "screening_distance_m": 34398,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHEAST-13583",
+          "origin_node_id": "SOUTHEAST-11872",
+          "departure_at": "2026-08-17T15:11:00+03:00",
+          "service_start_at": "2026-08-17T15:44:00+03:00",
+          "screening_duration_minutes": 33,
+          "screening_distance_m": 24041,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 7,
+          "job_id": "SOUTHEAST-75282",
+          "origin_node_id": "SOUTHEAST-13583",
+          "departure_at": "2026-08-17T16:14:00+03:00",
+          "service_start_at": "2026-08-17T16:42:00+03:00",
+          "screening_duration_minutes": 28,
+          "screening_distance_m": 21520,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 8,
+          "job_id": "SOUTHEAST-90989",
+          "origin_node_id": "SOUTHEAST-75282",
+          "departure_at": "2026-08-17T17:12:00+03:00",
+          "service_start_at": "2026-08-17T17:39:00+03:00",
+          "screening_duration_minutes": 27,
+          "screening_distance_m": 20444,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 9,
+          "job_id": "SOUTHEAST-33507",
+          "origin_node_id": "SOUTHEAST-90989",
+          "departure_at": "2026-08-17T18:09:00+03:00",
+          "service_start_at": "2026-08-17T18:35:00+03:00",
+          "screening_duration_minutes": 26,
+          "screening_distance_m": 20108,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 10,
+          "job_id": "SOUTHEAST-7660",
+          "origin_node_id": "SOUTHEAST-33507",
+          "departure_at": "2026-08-17T19:05:00+03:00",
+          "service_start_at": "2026-08-17T19:33:00+03:00",
+          "screening_duration_minutes": 28,
+          "screening_distance_m": 19632,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-03",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-58066",
+          "origin_node_id": "START:SOUTHEAST-ENG-03",
+          "departure_at": "2026-08-17T12:00:00+03:00",
+          "service_start_at": "2026-08-17T12:37:00+03:00",
+          "screening_duration_minutes": 37,
+          "screening_distance_m": 10482,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHEAST-78920",
+          "origin_node_id": "SOUTHEAST-58066",
+          "departure_at": "2026-08-17T13:47:00+03:00",
+          "service_start_at": "2026-08-17T13:54:00+03:00",
+          "screening_duration_minutes": 7,
+          "screening_distance_m": 1714,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHEAST-63591",
+          "origin_node_id": "SOUTHEAST-78920",
+          "departure_at": "2026-08-17T15:04:00+03:00",
+          "service_start_at": "2026-08-17T15:45:00+03:00",
+          "screening_duration_minutes": 41,
+          "screening_distance_m": 11522,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHEAST-76173",
+          "origin_node_id": "SOUTHEAST-63591",
+          "departure_at": "2026-08-17T16:55:00+03:00",
+          "service_start_at": "2026-08-17T17:05:00+03:00",
+          "screening_duration_minutes": 10,
+          "screening_distance_m": 2765,
+          "screening_source_mode": "BICYCLE",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-05",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-63894",
+          "origin_node_id": "START:SOUTHEAST-ENG-05",
+          "departure_at": "2026-08-17T12:00:00+03:00",
+          "service_start_at": "2026-08-17T13:17:00+03:00",
+          "screening_duration_minutes": 77,
+          "screening_distance_m": 6429,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHEAST-32066",
+          "origin_node_id": "SOUTHEAST-63894",
+          "departure_at": "2026-08-17T13:47:00+03:00",
+          "service_start_at": "2026-08-17T14:10:00+03:00",
+          "screening_duration_minutes": 23,
+          "screening_distance_m": 1891,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHEAST-64168",
+          "origin_node_id": "SOUTHEAST-32066",
+          "departure_at": "2026-08-17T14:40:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 24,
+          "screening_distance_m": 1982,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHEAST-51603",
+          "origin_node_id": "SOUTHEAST-64168",
+          "departure_at": "2026-08-17T16:30:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 49,
+          "screening_distance_m": 4062,
+          "screening_source_mode": "WALKING",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-06",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-32589",
+          "origin_node_id": "START:SOUTHEAST-ENG-06",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T11:29:00+03:00",
+          "screening_duration_minutes": 89,
+          "screening_distance_m": 112577,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHEAST-45243",
+          "origin_node_id": "SOUTHEAST-32589",
+          "departure_at": "2026-08-17T12:49:00+03:00",
+          "service_start_at": "2026-08-17T12:53:00+03:00",
+          "screening_duration_minutes": 4,
+          "screening_distance_m": 910,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHEAST-51774",
+          "origin_node_id": "SOUTHEAST-45243",
+          "departure_at": "2026-08-17T14:13:00+03:00",
+          "service_start_at": "2026-08-17T14:17:00+03:00",
+          "screening_duration_minutes": 4,
+          "screening_distance_m": 730,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHEAST-65034",
+          "origin_node_id": "SOUTHEAST-51774",
+          "departure_at": "2026-08-17T15:37:00+03:00",
+          "service_start_at": "2026-08-17T15:41:00+03:00",
+          "screening_duration_minutes": 4,
+          "screening_distance_m": 558,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHEAST-78673",
+          "origin_node_id": "SOUTHEAST-65034",
+          "departure_at": "2026-08-17T17:01:00+03:00",
+          "service_start_at": "2026-08-17T17:25:00+03:00",
+          "screening_duration_minutes": 24,
+          "screening_distance_m": 15781,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHEAST-81698",
+          "origin_node_id": "SOUTHEAST-78673",
+          "departure_at": "2026-08-17T18:45:00+03:00",
+          "service_start_at": "2026-08-17T19:16:00+03:00",
+          "screening_duration_minutes": 31,
+          "screening_distance_m": 20841,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-07",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-1287",
+          "origin_node_id": "START:SOUTHEAST-ENG-07",
+          "departure_at": "2026-08-17T08:00:00+03:00",
+          "service_start_at": "2026-08-17T08:07:00+03:00",
+          "screening_duration_minutes": 7,
+          "screening_distance_m": 2112,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHEAST-31495",
+          "origin_node_id": "SOUTHEAST-1287",
+          "departure_at": "2026-08-17T09:27:00+03:00",
+          "service_start_at": "2026-08-17T09:44:00+03:00",
+          "screening_duration_minutes": 17,
+          "screening_distance_m": 7289,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHEAST-23807",
+          "origin_node_id": "SOUTHEAST-31495",
+          "departure_at": "2026-08-17T11:04:00+03:00",
+          "service_start_at": "2026-08-17T11:24:00+03:00",
+          "screening_duration_minutes": 20,
+          "screening_distance_m": 8259,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHEAST-2915",
+          "origin_node_id": "SOUTHEAST-23807",
+          "departure_at": "2026-08-17T12:34:00+03:00",
+          "service_start_at": "2026-08-17T12:56:00+03:00",
+          "screening_duration_minutes": 22,
+          "screening_distance_m": 10283,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHEAST-2245",
+          "origin_node_id": "SOUTHEAST-2915",
+          "departure_at": "2026-08-17T14:06:00+03:00",
+          "service_start_at": "2026-08-17T14:18:00+03:00",
+          "screening_duration_minutes": 12,
+          "screening_distance_m": 4414,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHEAST-68359",
+          "origin_node_id": "SOUTHEAST-2245",
+          "departure_at": "2026-08-17T15:28:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 18,
+          "screening_distance_m": 6399,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-08",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-11899",
+          "origin_node_id": "START:SOUTHEAST-ENG-08",
+          "departure_at": "2026-08-17T09:46:00+03:00",
+          "service_start_at": "2026-08-17T10:00:00+03:00",
+          "screening_duration_minutes": 14,
+          "screening_distance_m": 4778,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHEAST-95692",
+          "origin_node_id": "SOUTHEAST-11899",
+          "departure_at": "2026-08-17T10:30:00+03:00",
+          "service_start_at": "2026-08-17T10:58:00+03:00",
+          "screening_duration_minutes": 28,
+          "screening_distance_m": 12075,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHEAST-14494",
+          "origin_node_id": "SOUTHEAST-95692",
+          "departure_at": "2026-08-17T11:28:00+03:00",
+          "service_start_at": "2026-08-17T11:40:00+03:00",
+          "screening_duration_minutes": 12,
+          "screening_distance_m": 3689,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHEAST-20055",
+          "origin_node_id": "SOUTHEAST-14494",
+          "departure_at": "2026-08-17T12:50:00+03:00",
+          "service_start_at": "2026-08-17T12:59:00+03:00",
+          "screening_duration_minutes": 9,
+          "screening_distance_m": 2332,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHEAST-3566",
+          "origin_node_id": "SOUTHEAST-20055",
+          "departure_at": "2026-08-17T13:29:00+03:00",
+          "service_start_at": "2026-08-17T13:39:00+03:00",
+          "screening_duration_minutes": 10,
+          "screening_distance_m": 2886,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHEAST-60886",
+          "origin_node_id": "SOUTHEAST-3566",
+          "departure_at": "2026-08-17T14:49:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 11,
+          "screening_distance_m": 4000,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 7,
+          "job_id": "SOUTHEAST-68946",
+          "origin_node_id": "SOUTHEAST-60886",
+          "departure_at": "2026-08-17T16:30:00+03:00",
+          "service_start_at": "2026-08-17T16:47:00+03:00",
+          "screening_duration_minutes": 17,
+          "screening_distance_m": 6914,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-09",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-3151",
+          "origin_node_id": "START:SOUTHEAST-ENG-09",
+          "departure_at": "2026-08-17T12:00:00+03:00",
+          "service_start_at": "2026-08-17T13:24:00+03:00",
+          "screening_duration_minutes": 84,
+          "screening_distance_m": 108004,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHEAST-45778",
+          "origin_node_id": "SOUTHEAST-3151",
+          "departure_at": "2026-08-17T13:54:00+03:00",
+          "service_start_at": "2026-08-17T14:00:00+03:00",
+          "screening_duration_minutes": 6,
+          "screening_distance_m": 707,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHEAST-65268",
+          "origin_node_id": "SOUTHEAST-45778",
+          "departure_at": "2026-08-17T14:30:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 25,
+          "screening_distance_m": 15479,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-10",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-90915",
+          "origin_node_id": "START:SOUTHEAST-ENG-10",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T11:29:00+03:00",
+          "screening_duration_minutes": 89,
+          "screening_distance_m": 112491,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHEAST-97168",
+          "origin_node_id": "SOUTHEAST-90915",
+          "departure_at": "2026-08-17T12:49:00+03:00",
+          "service_start_at": "2026-08-17T13:18:00+03:00",
+          "screening_duration_minutes": 29,
+          "screening_distance_m": 20041,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHEAST-98998",
+          "origin_node_id": "SOUTHEAST-97168",
+          "departure_at": "2026-08-17T14:38:00+03:00",
+          "service_start_at": "2026-08-17T15:06:00+03:00",
+          "screening_duration_minutes": 28,
+          "screening_distance_m": 19853,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHEAST-13404",
+          "origin_node_id": "SOUTHEAST-98998",
+          "departure_at": "2026-08-17T16:26:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 1,
+          "screening_distance_m": 183,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-11",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-65717",
+          "origin_node_id": "START:SOUTHEAST-ENG-11",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T10:27:00+03:00",
+          "screening_duration_minutes": 27,
+          "screening_distance_m": 3177,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHEAST-79144",
+          "origin_node_id": "SOUTHEAST-65717",
+          "departure_at": "2026-08-17T11:37:00+03:00",
+          "service_start_at": "2026-08-17T11:57:00+03:00",
+          "screening_duration_minutes": 20,
+          "screening_distance_m": 2789,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHEAST-40698",
+          "origin_node_id": "SOUTHEAST-79144",
+          "departure_at": "2026-08-17T13:07:00+03:00",
+          "service_start_at": "2026-08-17T13:31:00+03:00",
+          "screening_duration_minutes": 24,
+          "screening_distance_m": 3173,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHEAST-14416",
+          "origin_node_id": "SOUTHEAST-40698",
+          "departure_at": "2026-08-17T14:41:00+03:00",
+          "service_start_at": "2026-08-17T16:00:00+03:00",
+          "screening_duration_minutes": 4,
+          "screening_distance_m": 273,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHEAST-36961",
+          "origin_node_id": "SOUTHEAST-14416",
+          "departure_at": "2026-08-17T17:10:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 18,
+          "screening_distance_m": 1345,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHEAST-84466",
+          "origin_node_id": "SOUTHEAST-36961",
+          "departure_at": "2026-08-17T18:30:00+03:00",
+          "service_start_at": "2026-08-17T18:50:00+03:00",
+          "screening_duration_minutes": 20,
+          "screening_distance_m": 2212,
+          "screening_source_mode": "PUBLIC_TRANSIT",
+          "screening_is_surrogate": false
+        }
+      ]
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-12",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "SOUTHEAST-44117",
+          "origin_node_id": "START:SOUTHEAST-ENG-12",
+          "departure_at": "2026-08-17T10:00:00+03:00",
+          "service_start_at": "2026-08-17T10:11:00+03:00",
+          "screening_duration_minutes": 11,
+          "screening_distance_m": 3845,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 2,
+          "job_id": "SOUTHEAST-58129",
+          "origin_node_id": "SOUTHEAST-44117",
+          "departure_at": "2026-08-17T11:21:00+03:00",
+          "service_start_at": "2026-08-17T11:39:00+03:00",
+          "screening_duration_minutes": 18,
+          "screening_distance_m": 8344,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 3,
+          "job_id": "SOUTHEAST-19216",
+          "origin_node_id": "SOUTHEAST-58129",
+          "departure_at": "2026-08-17T12:49:00+03:00",
+          "service_start_at": "2026-08-17T13:07:00+03:00",
+          "screening_duration_minutes": 18,
+          "screening_distance_m": 7860,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 4,
+          "job_id": "SOUTHEAST-52041",
+          "origin_node_id": "SOUTHEAST-19216",
+          "departure_at": "2026-08-17T13:37:00+03:00",
+          "service_start_at": "2026-08-17T13:44:00+03:00",
+          "screening_duration_minutes": 7,
+          "screening_distance_m": 2347,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 5,
+          "job_id": "SOUTHEAST-60484",
+          "origin_node_id": "SOUTHEAST-52041",
+          "departure_at": "2026-08-17T14:54:00+03:00",
+          "service_start_at": "2026-08-17T15:08:00+03:00",
+          "screening_duration_minutes": 14,
+          "screening_distance_m": 5624,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 6,
+          "job_id": "SOUTHEAST-54422",
+          "origin_node_id": "SOUTHEAST-60484",
+          "departure_at": "2026-08-17T16:18:00+03:00",
+          "service_start_at": "2026-08-17T16:28:00+03:00",
+          "screening_duration_minutes": 10,
+          "screening_distance_m": 4011,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 7,
+          "job_id": "SOUTHEAST-2427",
+          "origin_node_id": "SOUTHEAST-54422",
+          "departure_at": "2026-08-17T16:58:00+03:00",
+          "service_start_at": "2026-08-17T18:00:00+03:00",
+          "screening_duration_minutes": 8,
+          "screening_distance_m": 2119,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 8,
+          "job_id": "SOUTHEAST-4724",
+          "origin_node_id": "SOUTHEAST-2427",
+          "departure_at": "2026-08-17T18:20:00+03:00",
+          "service_start_at": "2026-08-17T18:34:00+03:00",
+          "screening_duration_minutes": 14,
+          "screening_distance_m": 3653,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 9,
+          "job_id": "SOUTHEAST-7610",
+          "origin_node_id": "SOUTHEAST-4724",
+          "departure_at": "2026-08-17T19:04:00+03:00",
+          "service_start_at": "2026-08-17T19:15:00+03:00",
+          "screening_duration_minutes": 11,
+          "screening_distance_m": 3017,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        },
+        {
+          "sequence": 10,
+          "job_id": "SOUTHEAST-24482",
+          "origin_node_id": "SOUTHEAST-7610",
+          "departure_at": "2026-08-17T19:45:00+03:00",
+          "service_start_at": "2026-08-17T20:00:00+03:00",
+          "screening_duration_minutes": 5,
+          "screening_distance_m": 646,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    }
+  ],
+  "unserved_job_ids": [
+    "EAST-46393",
+    "EAST-50104",
+    "EAST-76678",
+    "EAST-84627",
+    "EAST-92031",
+    "SOUTHCENTER-26896",
+    "SOUTHCENTER-94431",
+    "SOUTHCENTER-97770",
+    "SOUTHEAST-20362",
+    "SOUTHEAST-23094",
+    "SOUTHEAST-33880",
+    "SOUTHEAST-35057",
+    "SOUTHEAST-37590",
+    "SOUTHEAST-40111",
+    "SOUTHEAST-53552",
+    "SOUTHEAST-55454",
+    "SOUTHEAST-57353",
+    "SOUTHEAST-60141",
+    "SOUTHEAST-62011",
+    "SOUTHEAST-66944",
+    "SOUTHEAST-67472",
+    "SOUTHEAST-72476",
+    "SOUTHEAST-75745",
+    "SOUTHEAST-78876",
+    "SOUTHEAST-79450",
+    "SOUTHEAST-876",
+    "SOUTHEAST-88209",
+    "SOUTHEAST-89067",
+    "SOUTHEAST-89696",
+    "SOUTHEAST-93798"
+  ],
+  "publication_allowed": false,
+  "publication_blocker": "EXACT_ROUTE_MATERIALIZATION_AND_INDEPENDENT_VALIDATION_REQUIRED",
+  "content_sha256": "ae831769f1e15dbfdbaf1e3c44b159a9a6f51f6564e654a1c00f003bc8f6a878"
+}

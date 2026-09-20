@@ -1,0 +1,205 @@
+{
+  "dataset_version": "2.1.0",
+  "validated_at": "2026-09-15",
+  "checks_total": 39,
+  "checks_passed": 39,
+  "checks_failed": 0,
+  "status": "PASS",
+  "results": [
+    {
+      "check": "Обязательные файлы",
+      "status": "PASS",
+      "details": "Отсутствуют: нет"
+    },
+    {
+      "check": "Версия набора",
+      "status": "PASS",
+      "details": "dataset=2.1.0; schema=2.1.0"
+    },
+    {
+      "check": "Начальный момент планирования",
+      "status": "PASS",
+      "details": "2026-08-17T07:00:00+03:00"
+    },
+    {
+      "check": "Семантика окна и зоны",
+      "status": "PASS",
+      "details": "SERVICE_START_WITHIN_WINDOW; interval=CLOSED; completion=ALLOWED_IF_WITHIN_SHIFT; zone=HARD"
+    },
+    {
+      "check": "Лексикографическая цель без смягчения жёстких ограничений",
+      "status": "PASS",
+      "details": "initial=['unserved_urgent_jobs', 'unserved_normal_jobs', 'used_engineers', 'total_distance_m', 'total_travel_minutes', 'total_waiting_minutes', 'workload_imbalance_minutes', 'deterministic_tie_break']; replanning=['unserved_urgent_jobs', 'unserved_normal_jobs', 'changed_not_started_assignments', 'preserved_job_start_shift_minutes', 'used_engineers', 'total_distance_m', 'total_travel_minutes', 'workload_imbalance_minutes', 'deterministic_tie_break']"
+    },
+    {
+      "check": "Обязательные метрики персонала и пробега",
+      "status": "PASS",
+      "details": "['distance_m_by_engineer', 'total_distance_m', 'total_travel_minutes', 'travel_minutes_by_engineer', 'used_engineers']"
+    },
+    {
+      "check": "Однозначное резервирование расходников",
+      "status": "PASS",
+      "details": "{\"event_jobs_use_remaining_stock\": true, \"in_progress_reservations_on_replan\": \"KEEP_RESERVED\", \"not_started_reservations_on_replan\": \"RELEASE_AND_REALLOCATE\", \"replenishment_during_day\": false, \"shared_consumables_decrement\": \"ON_JOB_COMPLETION_FROM_RESERVED_QUANTITY\", \"shared_consumables_reservation\": \"RESERVE_FOR_ASSIGNED_JOBS_AT_PLAN_PUBLICATION\", \"shortage_behavior\": \"JOB_MUST_REMAIN_UNSERVED_WITH_EXPLICIT_REASON\", \"toolkits_reusable\": true}"
+    },
+    {
+      "check": "Начало активности и состояния перепланирования",
+      "status": "PASS",
+      "details": "{\"activity_start\": \"DEPARTURE_TO_JOB\", \"cancel_not_started\": \"CANCELED_AND_RESERVATION_RELEASED\", \"cancel_started\": \"REJECTED_ALREADY_STARTED\", \"completed_jobs\": \"FROZEN\", \"consumed_inventory\": \"NOT_RESTORED\", \"elapsed_travel_and_service\": \"ACCOUNTED\", \"engineer_unavailable\": \"EFFECTIVE_AFTER_CURRENT_STARTED_ACTIVITY\", \"in_service_jobs\": \"FROZEN\", \"in_transit_to_job\": \"FROZEN\", \"not_started_jobs\": \"REOPTIMIZABLE\"}"
+    },
+    {
+      "check": "UNKNOWN и UNREACHABLE разделены",
+      "status": "PASS",
+      "details": "UNKNOWN=BLOCK_RUN_WITH_ROUTING_INCOMPLETE; UNREACHABLE=FORBID_ARC"
+    },
+    {
+      "check": "CSV UTF-8 BOM",
+      "status": "PASS",
+      "details": "Без BOM: нет"
+    },
+    {
+      "check": "CORE: число заявок",
+      "status": "PASS",
+      "details": "206 / 206"
+    },
+    {
+      "check": "CORE: уникальность job_id",
+      "status": "PASS",
+      "details": "206 записей"
+    },
+    {
+      "check": "STRESS: число заявок",
+      "status": "PASS",
+      "details": "207 / 207"
+    },
+    {
+      "check": "STRESS: уникальность job_id",
+      "status": "PASS",
+      "details": "207 записей"
+    },
+    {
+      "check": "Исходные заявки по зонам",
+      "status": "PASS",
+      "details": "{'EAST': 66, 'SOUTHEAST': 83, 'SOUTHCENTER': 56}"
+    },
+    {
+      "check": "Одинаковые исходные заявки CORE/STRESS",
+      "status": "PASS",
+      "details": "205 ID"
+    },
+    {
+      "check": "Уникальность локаций",
+      "status": "PASS",
+      "details": "200 локаций"
+    },
+    {
+      "check": "Координаты и происхождение",
+      "status": "PASS",
+      "details": "Ошибки: 0"
+    },
+    {
+      "check": "Явная аномалия Дубининской",
+      "status": "PASS",
+      "details": "[('LOC-0082', 'Город Москва, ул.Дубининская, д. 59 к 2')]"
+    },
+    {
+      "check": "Связь заявок/офисов с locations",
+      "status": "PASS",
+      "details": "Расхождения: 0"
+    },
+    {
+      "check": "Аудит геокодирования полон",
+      "status": "PASS",
+      "details": "200 записей"
+    },
+    {
+      "check": "Адреса синтетических офисов исправлены",
+      "status": "PASS",
+      "details": "{'OFFICE-EAST': 'Город Москва, ул.Юных Ленинцев, д. 83 к 4', 'OFFICE-SOUTHEAST': 'Город Москва, ул.Бирюлёвская, д. 1 к 1', 'OFFICE-SOUTHCENTER': 'г. Москва, Симферопольский проезд, д. 7'}"
+    },
+    {
+      "check": "max_route_minutes согласован со сменой",
+      "status": "PASS",
+      "details": "Ошибки: 0"
+    },
+    {
+      "check": "Ссылочная целостность",
+      "status": "PASS",
+      "details": "Ошибки: 0"
+    },
+    {
+      "check": "Минимум 2 статических кандидата на CORE-заявку",
+      "status": "PASS",
+      "details": "Минимум=3; ошибки=[]"
+    },
+    {
+      "check": "Все required_skill определены",
+      "status": "PASS",
+      "details": "Допустимые: ['EMERGENCY', 'INSTALL', 'LOCAL']"
+    },
+    {
+      "check": "Все типы работ имеют правило",
+      "status": "PASS",
+      "details": "18 правил"
+    },
+    {
+      "check": "Временная целостность заявок",
+      "status": "PASS",
+      "details": "Ошибки: 0"
+    },
+    {
+      "check": "Адреса срочных заявок новые",
+      "status": "PASS",
+      "details": "['Город Москва, ул.Зеленодольская, д. 32 к 1', 'Домодедово, Каширское шоссе, д. 7']"
+    },
+    {
+      "check": "Порядок stress-событий",
+      "status": "PASS",
+      "details": "[('2026-08-17T13:30:00+03:00', 1), ('2026-08-17T14:00:00+03:00', 2), ('2026-08-17T14:10:00+03:00', 3), ('2026-08-17T15:00:00+03:00', 4)]"
+    },
+    {
+      "check": "Ссылки событий",
+      "status": "PASS",
+      "details": "Ошибки: 0"
+    },
+    {
+      "check": "Контрольное назначение делает недоступность значимой",
+      "status": "PASS",
+      "details": "[{'commitment_id': 'STRESS-COMMIT-001', 'job_id': 'SOUTHEAST-84466', 'engineer_id': 'SOUTHEAST-ENG-01', 'constraint_type': 'HARD_ASSIGNMENT', 'effective_from': '2026-08-17T07:00:00+03:00', 'release_event_id': 'STRESS-EVT-002', 'reason': 'Контрольное предварительное назначение: гарантирует проверку перепланирования при недоступности инженера.'}]"
+    },
+    {
+      "check": "CORE: инвентарь покрывает спрос",
+      "status": "PASS",
+      "details": "{}"
+    },
+    {
+      "check": "STRESS: единственный дефицит ONT=1",
+      "status": "PASS",
+      "details": "{('SOUTHEAST', 'ONT_GIGABIT'): 1}"
+    },
+    {
+      "check": "Все 4 типа транспорта",
+      "status": "PASS",
+      "details": "['BICYCLE', 'CAR', 'PUBLIC_TRANSIT', 'WALKING']"
+    },
+    {
+      "check": "Нет синтетических коэффициентов трафика",
+      "status": "PASS",
+      "details": "Поля: ['day_type', 'profile_id', 'required_outputs', 'router_capability', 'time_dependency', 'transport_type', 'unknown_behavior', 'unreachable_behavior']"
+    },
+    {
+      "check": "Маршрутные профили полны и проверяемы",
+      "status": "PASS",
+      "details": "Профили=4; ошибки=0"
+    },
+    {
+      "check": "Точное совпадение CSV/JSON",
+      "status": "PASS",
+      "details": "Расхождения: 0"
+    },
+    {
+      "check": "Целостность SHA-256",
+      "status": "PASS",
+      "details": "Расхождения: 0"
+    }
+  ]
+}

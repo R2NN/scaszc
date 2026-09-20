@@ -1,0 +1,31 @@
+{
+  "scenario_date": "2026-08-17",
+  "rail_reference_date": "2026-09-21",
+  "active_gtfs_services": 604,
+  "active_gtfs_trips": 65551,
+  "surface_stops": 17896,
+  "surface_connections": 1649396,
+  "invalid_surface_connections_skipped": 0,
+  "rail_stops": 164,
+  "official_mcc_stations": 31,
+  "mapped_mcc_stations": 31,
+  "official_mcd_stations": 139,
+  "mapped_mcd_stations": 139,
+  "unmapped_rail_stations": [],
+  "rail_trips": 8996,
+  "rail_connections": 49654,
+  "invalid_rail_connections_skipped": 109,
+  "official_network_transfers": 342,
+  "metro_stations": 278,
+  "metro_model_paths": 77006,
+  "metro_wait_assumption_seconds": 180,
+  "gtfs_sha256": {
+    "calendar.txt": "644a6c41fdecb198fd4174f0ff9b0ade9a82edc7586684ba744ead3b5eab8a5e",
+    "routes.txt": "9fac715e99396d56433c7db9b32f7f3bfaa93ceadaa37fd1064c3d4ad531c4b5",
+    "trips.txt": "c867ca801fa1755684d404527a5f6cb29a3f0350b6f44b91f4edf64ec3e5be12",
+    "stops.txt": "e02908c2e7d897bb611ab12b20995662f46f6ef4c744d6cd2d5e3fcfac34c960",
+    "stop_times.txt": "c1f22ffc72c3f076e817fb96438c3d8161fe60a5cb6be4a8d9a05059760e1282"
+  },
+  "rail_schedule_sha256": "ec0929a9967bf59e4c4212247ce8bec5702c2e1eba79fe896e5611e35fde3525",
+  "metro_schema_sha256": "86050a167627d045372373cc12959368e7ba28bffbd5d67446af1396002642c1"
+}
