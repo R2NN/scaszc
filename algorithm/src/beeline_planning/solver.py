@@ -49,6 +49,7 @@ class SolverConfig:
     objective_policy: ObjectivePolicy = ObjectivePolicy.COMPACT_TEAM
     require_full_coverage: bool = True
     stop_after_full_coverage: bool = False
+    stop_after_coverage: bool = False
     full_coverage_seconds: float = 300.0
     allow_partial_after_proven_infeasible: bool = False
     fixed_unserved_by_priority: tuple[int, int] | None = None
@@ -1101,6 +1102,9 @@ def solve_screening_master(
                 operationally_excluded_arcs=config.excluded_arcs,
             )
 
+    if config.stop_after_coverage and not config.require_full_coverage:
+        objective_tiers = objective_tiers[:2]
+
     for tier, (metric, expression) in enumerate(
         objective_tiers,
         start=starting_tier,
@@ -1176,9 +1180,12 @@ def solve_screening_master(
 
     if last_solver is None:
         raise RuntimeError('Model has no objective tiers')
-    if config.fixed_unserved_by_priority is not None:
-        # The polishing run proves nothing about better coverage because its
-        # incumbent coverage is deliberately fixed by the caller.
+    if (
+        config.fixed_unserved_by_priority is not None
+        or (config.stop_after_coverage and not config.require_full_coverage)
+    ):
+        # Fixed-coverage polishing and early coverage search do not optimize
+        # every objective tier, so neither may claim a complete optimum.
         final_status = MasterSolveStatus.SCREENING_FEASIBLE
     elif built.search_graph_complete:
         final_status = MasterSolveStatus.SCREENING_OPTIMAL

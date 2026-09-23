@@ -1,0 +1,6 @@
+# Dataset checksums include the original line endings. Keep exact bytes on
+# every platform, including the files that intentionally use CRLF.
+data/dataset/** -text
+data/screening/** -text
+source_materials/prepared_dataset/** -text
+algorithm/work/dataset_v21/** -text

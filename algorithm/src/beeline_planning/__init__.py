@@ -79,6 +79,7 @@ from .solver import (
     SolverConfig,
     solve_screening_master,
 )
+from .screening_validator import validate_screening_solution
 from .team_compaction import (
     RouteEvaluation,
     TeamEliminationCandidate,
@@ -185,4 +186,5 @@ __all__ = [
     'screening_solution_quality',
     'validate_initial_plan',
     'validate_replanned_plan',
+    'validate_screening_solution',
 ]

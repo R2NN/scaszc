@@ -47,6 +47,32 @@ Pipeline добавляет ревизию дорожных тайлов к кл
 Для внешнего endpoint либо нестандартного способа запуска можно передать
 `--skip-valhalla-autostart`.
 
+## Быстрый расчёт распределения без exact routing
+
+Если для нужного дня уже есть полный каталог screening-матриц, распределение
+можно посчитать и проверить без Valhalla:
+
+```powershell
+$env:PYTHONPATH = 'src'
+python tools\solve_screening_zones.py --dataset D:\data\new-day --scenario core `
+  --screening-root D:\data\new-day-screening --output D:\runs\screening.json `
+  --seconds-per-tier 10 --coverage-first-only
+python tools\validate_screening_solution.py --dataset D:\data\new-day `
+  --scenario core --screening-root D:\data\new-day-screening `
+  --candidate D:\runs\screening.json
+```
+
+При холодном старте поиск до 10 секунд на район сначала пытается уменьшить
+число бригад при полном покрытии. Если полный план не получен, обычный
+coverage-first поиск получает до 60 секунд. Оба лимита настраиваются через
+`--cold-start-improve-seconds` и `--cold-start-seed-seconds`; `0` отключает
+соответствующую фазу. CP-SAT отдельно проверяет найденный маршрутный порядок.
+Проверка `validate_screening_solution.py` независимо сверяет покрытие,
+допустимость назначений, окна, смены, время, дуги и общий запас оборудования.
+Это проверка по screening-временам; `publication_allowed` остаётся `false`
+до точной маршрутизации и независимой exact-валидации. Дата, районы, ID и
+количество заявок в поиске не зашиты.
+
 ## Новая дата
 
 Нужен GTFS, календарь которого активен на новую дату. Также требуются снимок железнодорожного расписания и схема метро. В пакет вложены исходники текущего эталонного запуска как пример:

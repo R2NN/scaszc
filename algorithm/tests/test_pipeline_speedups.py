@@ -16,15 +16,29 @@ sys.path.insert(0, str(Path(__file__).parents[1] / 'tools'))
 
 from beeline_routing.models import Coordinate
 from beeline_routing.screening_cache import ScreeningCache
+from beeline_planning import load_planning_dataset
 from tools.build_valhalla_screening_matrices import missing_matrix_requests
 from tools import build_valhalla_screening_matrices as matrix_builder
 from tools.run_new_dataset_pipeline import (
     _is_publishable_exact,
     _is_publishable_full_coverage,
 )
+from tools.solve_screening_zones import _read_warm_orders
 
 
 class ScreeningSpeedupTests(unittest.TestCase):
+    def test_exact_warm_start_is_protected_only_in_its_valid_scenario(self) -> None:
+        root = Path(__file__).parents[2]
+        dataset_root = root / 'data' / 'dataset'
+        exact = (
+            root / 'algorithm' / 'artifacts' / 'current'
+            / 'exact-205-of-205-28-teams-clean-automatic.json'
+        )
+        core = load_planning_dataset(dataset_root, 'core')
+        stress = load_planning_dataset(dataset_root, 'stress')
+        self.assertTrue(_read_warm_orders(exact, core)[1])
+        self.assertEqual(_read_warm_orders(exact, stress), ({}, False))
+
     def test_bulk_cache_reuses_coordinates_when_ids_change(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             cache = ScreeningCache(Path(directory) / 'screening.sqlite3')
