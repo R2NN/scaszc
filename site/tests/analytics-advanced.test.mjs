@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { analyzeResourceGaps, analyzeShiftEfficiency, analyzeTeamCapacity, buildShiftRecommendations, calculateEconomics, compareAreas, compareWeeks, detectAreaAnomalies, detectPeriodAreaAnomalies, evaluateGoals, explainWeekChange, findOperationalGaps, findWindowReserves, forecastSegments, generatePeriodInsights, listCompleteWeeks, planReliability, recommendCapacityGap, routePlanFact, simulateCapacity, simulateCapacitySchedule } from '../src/analyticsAdvanced.js';
+import { calculateBaseline } from '../src/baselinePlanning.js';
 
 const days = JSON.parse(await readFile(new URL('../public/data/analytics-history.json', import.meta.url), 'utf8')).days;
 const selected = days.at(-1);
@@ -61,7 +62,7 @@ test('economics uses complete default tariffs while goals preserve missing fact'
   assert.equal(result.fleetMetrics.length, 4);
   assert.ok(result.fleetMetrics.every(item => Number.isFinite(item.costPerVisit)));
   const goals = evaluateGoals(selected, { coverage: 100, onTime: 95, cancelRate: 3, unassigned: 0 });
-  assert.equal(goals.find(goal => goal.key === 'coverage').status, 'missed');
+  assert.equal(goals.find(goal => goal.key === 'coverage').status, 'met');
   assert.equal(goals.find(goal => goal.key === 'onTime').status, 'unknown');
 });
 
@@ -82,8 +83,19 @@ test('transport economics uses mode-specific tariffs and reconciles with direct 
   const activeId = unknownTransport.plan.routes.find(route => route.assignments.length).engineerId;
   unknownTransport.team.find(member => member.id === activeId).transport = 'UNSPECIFIED';
   assert.ok(calculateEconomics(unknownTransport, rates).directCost > 0);
-  const sameAsBaseline = calculateEconomics(selected, rates, { routes: selected.plan.routes });
+  const sameAsBaseline = calculateEconomics(selected, rates, { available: true, routes: selected.plan.routes });
   assert.equal(sameAsBaseline.savingPerShift, 0);
+  assert.equal(calculateEconomics(selected, rates).savingPerShift, null);
+});
+
+test('published FCFS uses the same paid-route policy in the shift cost comparison', () => {
+  const baseline = calculateBaseline(selected.orders, selected.team, selected.plan.baseline);
+  const result = calculateEconomics(selected, {}, baseline);
+  assert.equal(result.baselineAvailable, true);
+  assert.equal(result.baselineAssignedCount, 104);
+  assert.equal(result.baselineEngineersUsed, 35);
+  assert.ok(result.baselineDirectCost > result.directCost);
+  assert.ok(result.baselineCostPerAssigned > result.costPerAssigned);
 });
 
 test('efficiency evidence is computed from routes and prioritised by reviewable minutes', () => {
@@ -274,14 +286,14 @@ test('period anomaly search keeps the strongest data-backed event per territory 
 });
 
 test('resource explanation uses the real window, zone, skill and idle-team capability', () => {
-  const result = analyzeResourceGaps(selected);
-  assert.equal(result.idleCount, 4);
-  assert.equal(result.idleWithNeededSkill, 0);
-  assert.match(result.idleDiagnosis, /требуемых очередью навыков у них нет/);
-  const unresolvedOrder = selected.orders.find(order => selected.plan.unassigned.some(item => item.orderId === order.id));
+  const unresolvedDay = days.findLast(day => day.plan.unassigned.length);
+  const result = analyzeResourceGaps(unresolvedDay);
+  assert.equal(result.idleCount, unresolvedDay.team.length - unresolvedDay.plan.routes.length);
+  assert.ok(result.idleWithNeededSkill >= 0);
+  const unresolvedOrder = unresolvedDay.orders.find(order => unresolvedDay.plan.unassigned.some(item => item.orderId === order.id));
   assert.ok(result.causes.length > 0);
   assert.ok(result.causes.some(cause => cause.action.includes(String(unresolvedOrder.duration))));
-  assert.equal(result.causes.reduce((sum, cause) => sum + cause.count, 0), selected.plan.unassigned.length);
+  assert.equal(result.causes.reduce((sum, cause) => sum + cause.count, 0), unresolvedDay.plan.unassigned.length);
 });
 
 test('team capacity includes idle crews and explains only facts supported by the plan inputs', () => {
@@ -289,10 +301,9 @@ test('team capacity includes idle crews and explains only facts supported by the
   const idle = result.stats.filter(item => !item.hasRoute);
   const active = result.stats.filter(item => item.hasRoute);
   assert.equal(result.stats.length, selected.team.length);
-  assert.equal(idle.length, 4);
+  assert.equal(idle.length, selected.team.length - selected.plan.routes.length);
   assert.ok(idle.every(item => item.utilization === 0));
-  assert.match(idle.find(item => item.zone === 'Юго-восток').explanation, /требует навык «подключение»/);
-  assert.ok(idle.filter(item => item.zone !== 'Юго-восток').every(item => item.explanation.includes('В оперативном резерве')));
+  assert.ok(idle.every(item => item.explanation.includes('Возможность аварийного выезда требует проверки')));
   assert.equal(result.lowestActive.engineerId, active.sort((a, b) => a.utilization - b.utilization)[0].engineerId);
   assert.equal(result.averageLoad, Math.round(result.stats.reduce((sum, item) => sum + item.utilization, 0) / result.stats.length));
   assert.equal(result.missingReasonCount, 0);

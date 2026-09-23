@@ -29,6 +29,7 @@ def build_full_coverage_routing_seed(
     random_seed: int = 20260918,
     forbidden_job_arcs: tuple[tuple[str, str], ...] = (),
     allow_intermediate_omissions: bool = True,
+    stop_at_full_coverage: bool = True,
 ) -> MasterSolution:
     """Build a mandatory-coverage VRPTW seed for the exact CP-SAT model.
 
@@ -210,6 +211,16 @@ def build_full_coverage_routing_seed(
     parameters.time_limit.seconds = max_seconds
     parameters.log_search = False
     parameters.sat_parameters.random_seed = random_seed
+    if stop_at_full_coverage and allow_intermediate_omissions:
+        job_indices = tuple(
+            manager.NodeToIndex(node) for node in job_node.values()
+        )
+
+        def stop_after_first_full_solution() -> None:
+            if all(routing.ActiveVar(index).Value() == 1 for index in job_indices):
+                routing.solver().FinishCurrentSearch()
+
+        routing.AddAtSolutionCallback(stop_after_first_full_solution)
     assignment = routing.SolveWithParameters(parameters)
     if assignment is None:
         return MasterSolution(

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import os
+import time
 from pathlib import Path
 
 from aiohttp import web
@@ -9,22 +12,32 @@ from aiohttp import web
 
 CLI = Path('/tmp/valhalla_route_cli')
 CONFIG = Path('/tmp/valhalla-generated.json')
-RUNTIME_REVISION = 'valhalla-3.8.3-runtime-schema-v1'
-# ExactRoutingOracle times out its HTTP request after 30 seconds. Keep the
-# bridge timeout below that limit so a wedged worker cannot hold the single
-# serialized worker and make all following requests time out as well.
+RUNTIME_REVISION = 'valhalla-3.8.3-runtime-schema-v2'
+BRIDGE_REVISION = 'worker-pool-v2'
 ROUTE_TIMEOUT_SECONDS = 25
+QUEUE_TIMEOUT_SECONDS = 3
 
 
-class ValhallaBridge:
+def tile_revision() -> str:
+    """Identify the mounted tile snapshot without hashing a large archive."""
+    config = json.loads(CONFIG.read_text(encoding='utf-8'))
+    tile_path = Path(config['mjolnir']['tile_extract'])
+    metadata = tile_path.stat()
+    config_hash = hashlib.sha256(CONFIG.read_bytes()).hexdigest()
+    identity = f'{tile_path}:{metadata.st_size}:{metadata.st_mtime_ns}:{config_hash}'
+    return hashlib.sha256(identity.encode('utf-8')).hexdigest()
+
+
+class ValhallaWorker:
+    """One persistent actor; only one request may use its stdio at a time."""
+
     def __init__(self) -> None:
-        self._process: asyncio.subprocess.Process | None = None
-        self._lock = asyncio.Lock()
+        self.process: asyncio.subprocess.Process | None = None
 
     async def start(self) -> None:
-        if self._process is not None and self._process.returncode is None:
+        if self.process is not None and self.process.returncode is None:
             return
-        self._process = await asyncio.create_subprocess_exec(
+        self.process = await asyncio.create_subprocess_exec(
             str(CLI),
             str(CONFIG),
             stdin=asyncio.subprocess.PIPE,
@@ -34,102 +47,133 @@ class ValhallaBridge:
         )
 
     async def close(self) -> None:
-        if self._process is None:
-            return
-        self._process.terminate()
-        await self._process.wait()
-        self._process = None
+        process = self.process
+        self.process = None
+        if process is not None and process.returncode is None:
+            process.terminate()
+            await process.wait()
 
-    async def _restart(self) -> None:
-        """Replace a dead worker before retrying one real routing request."""
-        if self._process is not None and self._process.returncode is None:
-            self._process.terminate()
-            await self._process.wait()
-        self._process = None
+    async def restart(self) -> None:
+        await self.close()
         await self.start()
 
+    async def query(self, line: bytes) -> bytes:
+        for attempt in range(2):
+            if self.process is None or self.process.returncode is not None:
+                await self.start()
+            process = self.process
+            assert process is not None
+            assert process.stdin is not None
+            assert process.stdout is not None
+            try:
+                process.stdin.write(line)
+                await process.stdin.drain()
+                deadline = asyncio.get_running_loop().time() + ROUTE_TIMEOUT_SECONDS
+                while asyncio.get_running_loop().time() < deadline:
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    response = await asyncio.wait_for(
+                        process.stdout.readline(), timeout=remaining
+                    )
+                    if not response:
+                        break
+                    try:
+                        parsed = json.loads(response)
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        # The local CLI may print startup diagnostics first.
+                        continue
+                    if isinstance(parsed, dict):
+                        return response
+            except (BrokenPipeError, ConnectionError, asyncio.TimeoutError):
+                pass
+            if attempt == 0:
+                await self.restart()
+        raise web.HTTPServiceUnavailable(
+            text='Valhalla worker returned no JSON response after restart'
+        )
+
+
+class ValhallaBridge:
+    """Route independent requests to an explicitly bounded pool of actors."""
+
+    def __init__(self, workers: int) -> None:
+        if workers < 1:
+            raise ValueError('Valhalla worker count must be positive')
+        self.workers = [ValhallaWorker() for _ in range(workers)]
+        self.available: asyncio.Queue[ValhallaWorker] = asyncio.Queue()
+        self.requests_total = 0
+        self.failed_requests = 0
+        self.queue_wait_seconds = 0.0
+        self.execution_seconds = 0.0
+
+    async def start(self) -> None:
+        try:
+            for worker in self.workers:
+                await worker.start()
+                self.available.put_nowait(worker)
+        except OSError:
+            await self.close()
+            raise
+
+    async def close(self) -> None:
+        await asyncio.gather(*(worker.close() for worker in self.workers))
+
     async def healthy(self) -> bool:
-        """Return whether the bridge has a live Valhalla worker."""
-        async with self._lock:
-            if self._process is None or self._process.returncode is not None:
-                try:
-                    await self.start()
-                except OSError:
-                    return False
-            return self._process is not None and self._process.returncode is None
+        return any(
+            worker.process is not None and worker.process.returncode is None
+            for worker in self.workers
+        )
 
     async def route(self, request: web.Request) -> web.Response:
         payload = await request.json()
         line = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode() + b'\n'
-        async with self._lock:
-            response_line = b''
-            for attempt in range(2):
-                if self._process is None or self._process.returncode is not None:
-                    await self.start()
-                process = self._process
-                assert process is not None
-                assert process.stdin is not None
-                assert process.stdout is not None
-                try:
-                    process.stdin.write(line)
-                    await process.stdin.drain()
-                    deadline = asyncio.get_running_loop().time() + ROUTE_TIMEOUT_SECONDS
-                    candidate = b''
-                    # The local Valhalla CLI emits startup diagnostics on stdout
-                    # before its first JSON response. Consume only those lines;
-                    # no route is invented if no JSON response arrives.
-                    while asyncio.get_running_loop().time() < deadline:
-                        remaining = deadline - asyncio.get_running_loop().time()
-                        response = await asyncio.wait_for(
-                            process.stdout.readline(),
-                            timeout=remaining,
-                        )
-                        if not response:
-                            break
-                        try:
-                            parsed = json.loads(response)
-                        except (UnicodeDecodeError, json.JSONDecodeError):
-                            continue
-                        if isinstance(parsed, dict):
-                            candidate = response
-                            break
-                except (BrokenPipeError, ConnectionError, asyncio.TimeoutError):
-                    if attempt == 0:
-                        await self._restart()
-                        continue
-                    raise web.HTTPServiceUnavailable(
-                        text='Valhalla worker is unavailable after restart'
-                    )
-                if not candidate:
-                    if attempt == 0:
-                        await self._restart()
-                        continue
-                    raise web.HTTPBadGateway(
-                        text='Valhalla worker returned no response after restart'
-                    )
-                response_line = candidate
-                break
-        if not response_line:
-            raise web.HTTPBadGateway(text='Valhalla worker returned no JSON response')
+        self.requests_total += 1
+        queued_at = time.perf_counter()
+        try:
+            worker = await asyncio.wait_for(
+                self.available.get(), timeout=QUEUE_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError as error:
+            self.failed_requests += 1
+            raise web.HTTPServiceUnavailable(text='Valhalla worker pool is busy') from error
+        self.queue_wait_seconds += time.perf_counter() - queued_at
+        execution_started = time.perf_counter()
+        try:
+            response_line = await worker.query(line)
+        except Exception:
+            self.failed_requests += 1
+            raise
+        finally:
+            self.execution_seconds += time.perf_counter() - execution_started
+            self.available.put_nowait(worker)
         return web.Response(body=response_line, content_type='application/json')
 
 
 async def status(request: web.Request) -> web.Response:
     bridge: ValhallaBridge = request.app['bridge']
     if not await bridge.healthy():
-        raise web.HTTPServiceUnavailable(text='Valhalla worker is not running')
+        raise web.HTTPServiceUnavailable(text='Valhalla workers are not running')
     return web.json_response({
         'status': 'ok',
         'runtime_revision': RUNTIME_REVISION,
+        'bridge_revision': BRIDGE_REVISION,
+        'tile_revision': tile_revision(),
+        'worker_count': len(bridge.workers),
+        'available_workers': bridge.available.qsize(),
+        'requests_total': bridge.requests_total,
+        'failed_requests': bridge.failed_requests,
+        'queue_wait_seconds': round(bridge.queue_wait_seconds, 3),
+        'execution_seconds': round(bridge.execution_seconds, 3),
     })
 
 
 async def create_app() -> web.Application:
-    bridge = ValhallaBridge()
+    worker_count = int(os.environ.get('VALHALLA_BRIDGE_WORKERS', '3'))
+    bridge = ValhallaBridge(worker_count)
     await bridge.start()
     app = web.Application(client_max_size=2 * 1024 * 1024)
     app['bridge'] = bridge
     app.router.add_post('/route', bridge.route)
+    app.router.add_post('/sources_to_targets', bridge.route)
     app.router.add_get('/status', status)
 
     async def cleanup(_: web.Application) -> None:

@@ -1,0 +1,18 @@
+{
+  "matrix_schema_version": "1.0.0",
+  "dataset_version": "2.1.0",
+  "provider": "LOCAL_VALHALLA_MATRIX",
+  "purpose": "SCREENING_ONLY_NOT_AUTHORITATIVE_FOR_TIME_DEPENDENT_CONSTRAINTS",
+  "zone_id": "SOUTHCENTER",
+  "mode": "CAR",
+  "departure_at_label": "2026-08-17T07:00:00+03:00",
+  "departure_time_honored": false,
+  "locations": 44,
+  "cells": 1936,
+  "status_counts": {
+    "OK": 1936
+  },
+  "matrix_file": "southcenter-car.csv",
+  "matrix_file_sha256": "6875a9bcf931368697f6b55946736b024a73c04d5336b380620b3919c0adc84e",
+  "matrix_content_sha256": "43ffc5ac4a601700025640a0061214c5eedaab47e3b8724afd41ffba4e20f2c3"
+}

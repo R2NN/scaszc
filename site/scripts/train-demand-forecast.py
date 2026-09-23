@@ -21,6 +21,7 @@ from catboost import CatBoostRegressor
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / 'public' / 'data' / 'ml-demand-forecast.json'
 TRAINING_OUTPUT = ROOT / 'public' / 'data' / 'ml-demand-training.csv'
+MODEL_OUTPUT = ROOT / 'models' / 'demand-forecast-catboost.cbm'
 SEED = 20260918
 TRAIN_START = date(2024, 8, 19)
 HISTORY_END = date(2026, 8, 17)
@@ -162,6 +163,8 @@ def main() -> None:
     train = [row for row in prepared if date.fromisoformat(str(row['date'])) < cutoff]
     test = [row for row in prepared if cutoff <= date.fromisoformat(str(row['date'])) <= HISTORY_END]
     point = fit_model(train)
+    MODEL_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    point.save_model(MODEL_OUTPUT, format='cbm')
     actual = np.array([float(row['count']) for row in test])
     predicted = np.maximum(0, point.predict(feature_rows(test)))
     daily_actual: dict[str, float] = defaultdict(float)
@@ -201,6 +204,7 @@ def main() -> None:
     artifact = {
         'schemaVersion': 1,
         'model': 'CatBoostRegressor',
+        'modelArtifact': 'models/demand-forecast-catboost.cbm',
         'targetDate': FORECAST_DATE.isoformat(),
         'training': {
             'generatedRows': len(prepared), 'historyStart': TRAIN_START.isoformat(), 'historyEnd': HISTORY_END.isoformat(),
@@ -214,6 +218,7 @@ def main() -> None:
     OUTPUT.write_text(json.dumps(artifact, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
     print(f'CatBoost forecast: {artifact["targetDate"]}, {len(prepared)} generated rows, WAPE {artifact["training"]["wapePercent"]}%, {OUTPUT}')
     print(f'Training data: {TRAINING_OUTPUT}')
+    print(f'Trained model: {MODEL_OUTPUT}')
 
 
 if __name__ == '__main__':

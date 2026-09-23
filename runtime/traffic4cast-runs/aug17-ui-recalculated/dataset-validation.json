@@ -1,0 +1,57 @@
+{
+  "artifact_type": "GENERIC_PLANNING_DATASET_VALIDATION",
+  "status": "VALID",
+  "dataset_root": "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+  "dataset_sha256": "129ec3ffd8cf6671ef1f2fc61757c4965d06258088fc35f0497e49d07ef4b61c",
+  "schema_version": "2.1.0",
+  "scenario_summaries": [
+    {
+      "scenario": "core",
+      "planning_date": "2026-08-17",
+      "initial_planning_at": "2026-08-17T07:00:00+03:00",
+      "timezone": "Europe/Moscow",
+      "zones": [
+        "NEW"
+      ],
+      "engineers": 1,
+      "available_engineers": 1,
+      "jobs_total": 1,
+      "jobs_active_initially": 1,
+      "urgent_jobs_active_initially": 0,
+      "events": 0,
+      "commitments": 0,
+      "locations": 2,
+      "static_candidate_count": {
+        "minimum": 1,
+        "maximum": 1,
+        "jobs_without_candidate": 0
+      },
+      "event_order": []
+    },
+    {
+      "scenario": "stress",
+      "planning_date": "2026-08-17",
+      "initial_planning_at": "2026-08-17T07:00:00+03:00",
+      "timezone": "Europe/Moscow",
+      "zones": [
+        "NEW"
+      ],
+      "engineers": 1,
+      "available_engineers": 1,
+      "jobs_total": 1,
+      "jobs_active_initially": 1,
+      "urgent_jobs_active_initially": 0,
+      "events": 0,
+      "commitments": 0,
+      "locations": 2,
+      "static_candidate_count": {
+        "minimum": 1,
+        "maximum": 1,
+        "jobs_without_candidate": 0
+      },
+      "event_order": []
+    }
+  ],
+  "canonical_dataset_assumptions_used": false,
+  "content_sha256": "cce4685b0aff67bccd64b0de65821908d615ca84a91a11b1ce1979acd5bb8839"
+}

@@ -9,6 +9,7 @@ from pathlib import Path
 from beeline_planning import (
     build_explanation_bundle,
     build_candidate_index,
+    find_exact_lns_coverage_move,
     load_planning_dataset,
     load_screening_matrices,
     materialize_exact_initial_plan,
@@ -24,7 +25,10 @@ from beeline_routing.oracle import ExactRoutingOracle
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description='Repair exact coverage using within-zone relocations and ejection chains.'
+        description=(
+            'Repair exact coverage using ejection chains and exact-aware '
+            'large-neighbourhood search.'
+        )
     )
     parser.add_argument('--dataset', type=Path, required=True)
     parser.add_argument('--scenario', choices=('core', 'stress'), required=True)
@@ -52,6 +56,13 @@ def main() -> int:
         help='Comma-separated exact-check limits for direct, relocation and chain phases.',
     )
     parser.add_argument('--max-passes', type=int, default=10)
+    parser.add_argument('--lns-route-checks', type=int, default=2500)
+    parser.add_argument('--lns-beam-width', type=int, default=48)
+    parser.add_argument('--lns-max-destroyed-jobs', type=int, default=12)
+    parser.add_argument('--lns-max-engineers', type=int, default=4)
+    parser.add_argument('--lns-window-padding-minutes', type=int, default=120)
+    parser.add_argument('--lns-neighbour-radius', type=int, default=1)
+    parser.add_argument('--skip-exact-lns', action='store_true')
     parser.add_argument('--timeout-seconds', type=float, default=30)
     parser.add_argument('--max-attempts', type=int, default=2)
     parser.add_argument('--metro-wait-seconds', type=int, default=180)
@@ -68,6 +79,15 @@ def main() -> int:
         parser.error('Output must be a new file, distinct from the input plan')
     if args.max_passes < 1:
         parser.error('--max-passes must be positive')
+    if min(
+        args.lns_route_checks,
+        args.lns_beam_width,
+        args.lns_max_destroyed_jobs,
+        args.lns_max_engineers,
+    ) < 1:
+        parser.error('Exact LNS budgets must be positive')
+    if args.lns_window_padding_minutes < 0 or args.lns_neighbour_radius < 0:
+        parser.error('Exact LNS neighbourhood limits must be non-negative')
     checks_by_depth = None
     if args.checks_by_depth:
         try:
@@ -214,6 +234,7 @@ def main() -> int:
 
     accepted: list[dict[str, object]] = []
     reports: list[dict[str, object]] = []
+    lns_reports: list[dict[str, object]] = []
     current = initial
     for pass_number in range(1, args.max_passes + 1):
         if not unserved:
@@ -238,16 +259,63 @@ def main() -> int:
             'budget_exhausted': report.budget_exhausted,
             'move_found': report.move is not None,
         })
-        if report.move is None:
+        move_routes = report.move.routes if report.move is not None else None
+        inserted_job_id = (
+            report.move.inserted_job_id if report.move is not None else None
+        )
+        accepted_kind = report.move.kind if report.move is not None else None
+        accepted_details: dict[str, object] = {
+            'displaced_job_ids': (
+                list(report.move.displaced_job_ids) if report.move is not None else []
+            ),
+        }
+        lns_report = None
+        if report.move is None and not args.skip_exact_lns:
+            lns_report = find_exact_lns_coverage_move(
+                dataset,
+                routes,
+                unserved,
+                candidates,
+                exact_route_valid,
+                max_route_checks=args.lns_route_checks,
+                beam_width=args.lns_beam_width,
+                max_destroyed_jobs=args.lns_max_destroyed_jobs,
+                max_engineers=args.lns_max_engineers,
+                window_padding_minutes=args.lns_window_padding_minutes,
+                neighbour_radius=args.lns_neighbour_radius,
+            )
+            lns_reports.append({
+                'pass': pass_number,
+                'route_checks': lns_report.route_checks,
+                'expanded_states': lns_report.expanded_states,
+                'zero_travel_rejections': lns_report.zero_travel_rejections,
+                'neighbourhoods_tried': lns_report.neighbourhoods_tried,
+                'complete_states_checked': lns_report.complete_states_checked,
+                'budget_exhausted': lns_report.budget_exhausted,
+                'move_found': lns_report.move is not None,
+            })
+            if lns_report.move is not None:
+                move_routes = lns_report.move.routes
+                inserted_job_id = lns_report.move.inserted_job_id
+                accepted_kind = 'EXACT_AWARE_LNS'
+                accepted_details = {
+                    'destroyed_job_ids': list(lns_report.move.destroyed_job_ids),
+                    'neighbourhood_engineer_ids': list(
+                        lns_report.move.neighbourhood_engineer_ids
+                    ),
+                }
+
+        if move_routes is None or inserted_job_id is None or accepted_kind is None:
             print(
-                f'Pass {pass_number}: no move, {report.route_checks} exact route checks; '
-                f'budget exhausted={report.budget_exhausted}',
+                f'Pass {pass_number}: no coverage move; chain checks='
+                f'{report.route_checks}, LNS checks='
+                f'{lns_report.route_checks if lns_report is not None else 0}',
                 flush=True,
             )
             break
         trial_routes = dict(routes)
-        trial_routes.update(report.move.routes)
-        trial_unserved = unserved - {report.move.inserted_job_id}
+        trial_routes.update(move_routes)
+        trial_unserved = unserved - {inserted_job_id}
         trial = materialize_exact_initial_plan(
             dataset,
             master_from_orders(dataset, trial_routes, trial_unserved),
@@ -263,14 +331,14 @@ def main() -> int:
         current = trial
         accepted.append({
             'pass': pass_number,
-            'job_id': report.move.inserted_job_id,
-            'kind': report.move.kind,
-            'displaced_job_ids': list(report.move.displaced_job_ids),
-            'changed_engineer_ids': sorted(report.move.routes),
+            'job_id': inserted_job_id,
+            'kind': accepted_kind,
+            **accepted_details,
+            'changed_engineer_ids': sorted(move_routes),
         })
         print(
-            f'Pass {pass_number}: {report.move.kind} added '
-            f'{report.move.inserted_job_id}; {len(unserved)} unserved remain',
+            f'Pass {pass_number}: {accepted_kind} added '
+            f'{inserted_job_id}; {len(unserved)} unserved remain',
             flush=True,
         )
 
@@ -282,6 +350,7 @@ def main() -> int:
     payload['source_plan'] = str(args.input_plan)
     payload['accepted_moves'] = accepted
     payload['search_reports'] = reports
+    payload['exact_lns_reports'] = lns_reports
     payload['search_configuration'] = {
         'max_route_checks_per_pass': args.max_route_checks,
         'max_displacements': args.max_displacements,
@@ -292,6 +361,15 @@ def main() -> int:
         ),
         'screening_route_rejections': screening_rejections,
         'max_passes': args.max_passes,
+        'exact_lns': {
+            'enabled': not args.skip_exact_lns,
+            'max_route_checks_per_pass': args.lns_route_checks,
+            'beam_width': args.lns_beam_width,
+            'max_destroyed_jobs': args.lns_max_destroyed_jobs,
+            'max_engineers': args.lns_max_engineers,
+            'window_padding_minutes': args.lns_window_padding_minutes,
+            'neighbour_radius': args.lns_neighbour_radius,
+        },
         'provider': 'valhalla-local-transit',
         'transit_index': str(args.transit_index),
         'metro_wait_assumption_seconds': args.metro_wait_seconds,
@@ -305,8 +383,13 @@ def main() -> int:
             current.validation,
             search_budget_exhausted=any(
                 bool(report['budget_exhausted']) for report in reports
+            ) or any(
+                bool(report['budget_exhausted']) for report in lns_reports
             ),
-            exact_route_checks=sum(int(report['route_checks']) for report in reports),
+            exact_route_checks=(
+                sum(int(report['route_checks']) for report in reports)
+                + sum(int(report['route_checks']) for report in lns_reports)
+            ),
             exact_provider_queries=current.exact_provider_queries,
             global_optimality_proven=False,
         )

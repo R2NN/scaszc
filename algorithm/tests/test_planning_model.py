@@ -440,6 +440,39 @@ class CpSatMasterTests(unittest.TestCase):
         )
         self.assertEqual(impossible_reduction.routes, ())
 
+        forbidden = solve_screening_master(
+            dataset,
+            master,
+            SolverConfig(
+                max_seconds_per_tier=2,
+                require_full_coverage=False,
+                forbidden_assignments=(('E1', 'J_URGENT'),),
+            ),
+        )
+        self.assertEqual(forbidden.unserved_job_ids, ('J_URGENT',))
+        self.assertEqual(
+            [
+                visit.job_id
+                for route in forbidden.routes
+                for visit in route.visits
+            ],
+            ['J_NORMAL'],
+        )
+        with self.assertRaisesRegex(ValueError, 'cannot be empty'):
+            SolverConfig(forbidden_arc_groups=((),))
+        with self.assertRaisesRegex(ValueError, 'cannot be empty'):
+            SolverConfig(forbidden_assignment_groups=((),))
+        with self.assertRaisesRegex(ValueError, 'Required arc is absent'):
+            solve_screening_master(
+                dataset,
+                master,
+                SolverConfig(
+                    max_seconds_per_tier=2,
+                    require_full_coverage=False,
+                    required_arcs=(('E1', 'J_NORMAL', 'MISSING'),),
+                ),
+            )
+
 
 class ExactMaterializationTests(unittest.TestCase):
     def test_master_values_are_replaced_by_exact_route_evidence(self) -> None:

@@ -22,6 +22,16 @@ def main() -> int:
     parser.add_argument('--seconds', type=int, default=120)
     parser.add_argument('--random-seed', type=int, default=20260918)
     parser.add_argument(
+        '--force-assignment',
+        action='append',
+        default=[],
+        metavar='ENGINEER,JOB',
+        help=(
+            'Require JOB to be assigned to ENGINEER. Repeat the option to '
+            'force several assignments.'
+        ),
+    )
+    parser.add_argument(
         '--mandatory-coverage',
         action='store_true',
         help='Keep every job mandatory even during construction of the first solution.',
@@ -62,6 +72,30 @@ def main() -> int:
     )
     screening = load_screening_matrices(args.screening_root, source)
     master = build_master_model_input(dataset, screening)
+    forced_assignments: list[tuple[str, str]] = []
+    for raw in args.force_assignment:
+        parts = tuple(part.strip() for part in raw.split(','))
+        if len(parts) != 2 or not all(parts):
+            parser.error('--force-assignment requires ENGINEER,JOB')
+        engineer_id, job_id = parts
+        if engineer_id not in dataset.engineers:
+            parser.error(f'Forced engineer is outside zone {zone}: {engineer_id}')
+        if job_id not in dataset.jobs:
+            parser.error(f'Forced job is outside zone {zone}: {job_id}')
+        if engineer_id not in master.candidate_index.eligible_engineers_by_job[job_id]:
+            parser.error(
+                f'Forced assignment is statically ineligible: {engineer_id},{job_id}'
+            )
+        forced_assignments.append((engineer_id, job_id))
+    if len({job_id for _, job_id in forced_assignments}) != len(forced_assignments):
+        parser.error('Each forced job must have exactly one engineer')
+    if forced_assignments:
+        master = replace(
+            master,
+            hard_assignments=tuple(sorted(
+                set(master.hard_assignments) | set(forced_assignments)
+            )),
+        )
     overrides: dict[tuple[str, str, str], int] = {}
     for path in args.override_arcs_json:
         artifact = json.loads(path.read_text(encoding='utf-8'))
@@ -126,6 +160,10 @@ def main() -> int:
     payload = master_solution_dict(solution)
     payload['seed_kind'] = 'MANDATORY_COVERAGE_VRPTW'
     payload['zone_id'] = zone
+    payload['forced_assignments'] = [
+        {'engineer_id': engineer_id, 'job_id': job_id}
+        for engineer_id, job_id in forced_assignments
+    ]
     payload['content_sha256'] = payload_sha256(payload)
     write_json_atomic(args.output, payload)
     print(json.dumps({'status': solution.status.value, **payload['summary'], 'output': str(args.output)}, ensure_ascii=False))

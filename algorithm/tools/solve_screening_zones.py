@@ -17,6 +17,7 @@ from beeline_planning import (
     ObjectiveProof,
     SolverConfig,
     build_master_model_input,
+    build_full_coverage_routing_seed,
     load_planning_dataset,
     load_screening_matrices,
     screening_solution_quality,
@@ -245,12 +246,33 @@ def main() -> int:
     parser.add_argument('--zone-workers', type=int, default=3)
     parser.add_argument('--adaptive-predecessors', default='8,16,0')
     parser.add_argument(
+        '--cold-start-seed-seconds',
+        type=int,
+        default=60,
+        help=(
+            'Per-zone budget for a generic VRPTW coverage seed when no warm '
+            'start is supplied. Set 0 to disable.'
+        ),
+    )
+    parser.add_argument(
+        '--coverage-first-only',
+        action='store_true',
+        help=(
+            'Return immediately after CP-SAT validates full coverage and '
+            'defer team minimization to exact team compaction.'
+        ),
+    )
+    parser.add_argument(
         '--objective-policy',
         choices=('service-quality', 'compact-team'),
         default='compact-team',
     )
     args = parser.parse_args()
-    if args.zone_workers < 1 or args.search_workers < 1:
+    if (
+        args.zone_workers < 1
+        or args.search_workers < 1
+        or args.cold_start_seed_seconds < 0
+    ):
         parser.error('Worker counts must be positive')
     if (
         args.seconds_per_tier <= 0
@@ -300,10 +322,29 @@ def main() -> int:
     ) -> tuple[str, MasterSolution, list[int], dict[str, object]]:
         dataset = _zone_dataset(source, zone)
         master = build_master_model_input(dataset, screening)
+        active_job_ids = set(master.candidate_index.active_job_ids)
+        cold_seed = None
         hint = (
             _project_hint(dataset, master, warm_orders, screening.snapshot_sha256)
             if warm_orders else None
         )
+        if hint is None and args.cold_start_seed_seconds > 0:
+            cold_seed = build_full_coverage_routing_seed(
+                dataset,
+                master,
+                screening,
+                max_seconds=args.cold_start_seed_seconds,
+            )
+            cold_seed_represents_all = (
+                {
+                    visit.job_id
+                    for route in cold_seed.routes
+                    for visit in route.visits
+                }
+                | set(cold_seed.unserved_job_ids)
+            ) == active_job_ids
+            if cold_seed_represents_all:
+                hint = cold_seed
         attempts: list[int] = []
         best_solution = (
             hint
@@ -311,10 +352,12 @@ def main() -> int:
             else _project_hint(dataset, master, {}, screening.snapshot_sha256)
         )
         found_solution = hint is not None and protected_exact_incumbent
-        active_job_ids = set(master.candidate_index.active_job_ids)
 
         for size in graph_sizes:
             attempts.append(size)
+            validate_full_seed = (
+                hint is not None and not hint.unserved_job_ids
+            )
             candidate = solve_screening_master(
                 dataset,
                 master,
@@ -322,7 +365,11 @@ def main() -> int:
                     max_seconds_per_tier=args.seconds_per_tier,
                     num_search_workers=args.search_workers,
                     max_predecessors_per_destination=size or None,
-                    require_full_coverage=False,
+                    require_full_coverage=validate_full_seed,
+                    stop_after_full_coverage=(
+                        args.coverage_first_only and validate_full_seed
+                    ),
+                    full_coverage_seconds=args.seconds_per_tier,
                     objective_policy=(
                         ObjectivePolicy.SERVICE_QUALITY
                         if args.objective_policy == 'service-quality'
@@ -349,14 +396,29 @@ def main() -> int:
                 break
 
         polish: dict[str, object] = {
+            'cold_start_seed': (
+                {
+                    'attempted': True,
+                    'served_jobs': sum(
+                        len(route.visits) for route in cold_seed.routes
+                    ),
+                    'unserved_jobs': len(cold_seed.unserved_job_ids),
+                    'used_engineers': len(cold_seed.routes),
+                }
+                if cold_seed is not None
+                else {'attempted': False}
+            ),
             'enabled': (
-                args.polish_seconds_per_tier > 0
-                or args.full_graph_polish_seconds > 0
+                not args.coverage_first_only
+                and (
+                    args.polish_seconds_per_tier > 0
+                    or args.full_graph_polish_seconds > 0
+                )
             ),
             'attempted': False,
             'applied': False,
         }
-        if found_solution and (
+        if not args.coverage_first_only and found_solution and (
             args.polish_seconds_per_tier > 0
             or args.full_graph_polish_seconds > 0
         ):

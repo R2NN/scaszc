@@ -2,25 +2,23 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
-import { DEPARTURE_BUFFER_MINUTES, normalizeRouteDepartures } from './normalize-plan-timing.mjs';
 
 const repositoryRoot = process.cwd();
-const defaultHandoffRoot = path.join(
-  repositoryRoot,
-  '.codex-work',
-  'algorithm-handoff-20260917',
-  'LCT2_ALGORITHM_UI_HANDOFF',
-);
+const defaultHandoffRoot = repositoryRoot;
 const handoffRoot = path.resolve(process.env.BEEGO_ALGORITHM_HOME || defaultHandoffRoot);
-const datasetRoot = path.join(handoffRoot, 'work', 'dataset_v21', 'beeline_synthetic_dataset_v2_1');
-const planningRoot = path.join(handoffRoot, 'work', 'planning');
+const datasetRoot = path.join(handoffRoot, 'data', 'dataset');
+const planningRoot = path.join(handoffRoot, 'algorithm', 'artifacts', 'current');
 const initialPlanPath = path.resolve(
   process.env.BEEGO_INITIAL_PLAN
-    || path.join(planningRoot, 'normatives-exact-improved-explained-v2.json'),
+    || path.join(planningRoot, 'exact-205-of-205-28-teams-clean-automatic.json'),
 );
 const eventPlanPath = path.resolve(
   process.env.BEEGO_EVENT_PLAN
-    || path.join(planningRoot, 'normatives-event-001-explained-v2.json'),
+    || path.join(planningRoot, 'event-exact-206-of-206-28-teams.json'),
+);
+const baselinePlanPath = path.resolve(
+  process.env.BEEGO_BASELINE_PLAN
+    || path.join(planningRoot, 'baseline-fcfs-exact.json'),
 );
 const outputPath = path.join(repositoryRoot, 'public', 'data', 'beego-exact-plans.json');
 const integrationDataPath = path.join(repositoryRoot, 'public', 'test-data', 'beego-algorithm-integration.json');
@@ -129,8 +127,12 @@ const compactPlan = async (planPath, scenario) => {
         geometry: Array.isArray(visit.travel?.geometry) ? visit.travel.geometry : [],
       };
     });
-    const timing = normalizeRouteDepartures(rawAssignments, shiftStart);
-    const assignments = timing.assignments;
+    const assignments = rawAssignments;
+    const waitingMinutes = assignments.reduce((sum, assignment) => {
+      const arrivalMinutes = Number(assignment.arrival.slice(0, 2)) * 60 + Number(assignment.arrival.slice(3, 5));
+      const startAtMinutes = Number(assignment.plannedStart.slice(0, 2)) * 60 + Number(assignment.plannedStart.slice(3, 5));
+      return sum + Math.max(0, startAtMinutes - arrivalMinutes);
+    }, 0);
     const shiftEnd = clock(engineer.shift_end || '18:00');
     const final = assignments.at(-1);
     const startMinutes = Number(shiftStart.slice(0, 2)) * 60 + Number(shiftStart.slice(3, 5));
@@ -144,8 +146,8 @@ const compactPlan = async (planPath, scenario) => {
       workloadMinutes: Math.max(0, finishMinutes - startMinutes),
       distanceKm: Math.round(assignments.reduce((sum, item) => sum + item.distanceM, 0) / 100) / 10,
       travelMinutes: assignments.reduce((sum, item) => sum + item.travelMinutes, 0),
-      waitingMinutes: timing.waitingMinutes,
-      delayedDepartures: timing.delayedDepartures,
+      waitingMinutes,
+      delayedDepartures: 0,
     };
   });
   const unassigned = source.plan.unserved_job_ids.map((sourceOrderId) => {
@@ -158,6 +160,8 @@ const compactPlan = async (planPath, scenario) => {
     };
   });
   const metrics = source.validation.metrics;
+  const assigned = Number(metrics.served_urgent_jobs || 0) + Number(metrics.served_normal_jobs || 0);
+  const unassignedCount = Number(metrics.unserved_urgent_jobs || 0) + Number(metrics.unserved_normal_jobs || 0);
   return {
     scenario,
     artifactType: source.artifact_type,
@@ -170,9 +174,9 @@ const compactPlan = async (planPath, scenario) => {
     routes,
     unassigned,
     metrics: {
-      total: (source.explanations?.jobs || []).length,
-      assigned: Number(metrics.served_urgent_jobs || 0) + Number(metrics.served_normal_jobs || 0),
-      unassigned: Number(metrics.unserved_urgent_jobs || 0) + Number(metrics.unserved_normal_jobs || 0),
+      total: assigned + unassignedCount,
+      assigned,
+      unassigned: unassignedCount,
       activeEngineers: Number(metrics.used_engineers || 0),
       urgentAssigned: Number(metrics.served_urgent_jobs || 0),
       distanceKm: Math.round(Number(metrics.total_distance_m || 0) / 100) / 10,
@@ -180,21 +184,50 @@ const compactPlan = async (planPath, scenario) => {
       waitingMinutes: routes.reduce((sum, route) => sum + route.waitingMinutes, 0),
     },
     event: source.explanations?.event || null,
+    baselinePolicy: source.baseline_policy || null,
+    routingConfiguration: source.routing_configuration || null,
     sourceFileSha256: sha256(sourceText),
   };
 };
 
 const initial = await compactPlan(initialPlanPath, 'initial');
 const event = await compactPlan(eventPlanPath, 'event');
+const baseline = await compactPlan(baselinePlanPath, 'baseline');
 const artifact = {
   version: 1,
-  algorithm: 'beeline-planning-ortools-exact-v2.1+latest-safe-departure',
+  algorithm: 'beeline-planning-ortools-exact-v2.1-full-coverage-28-teams',
   provider: 'LOCAL_GTFS_RASP_VALHALLA',
-  schedulePostprocessing: { kind: 'LATEST_SAFE_DEPARTURE', bufferMinutes: DEPARTURE_BUFFER_MINUTES },
   canonical: {
     initialJobIds: jobs.filter((job) => job.is_event_job !== 'true').map((job) => job.job_id).sort(),
     eventJobIds: jobs.map((job) => job.job_id).sort(),
     engineerIds: engineers.map((engineer) => engineer.engineer_id).sort(),
+    jobModels: Object.fromEntries(jobs.map(job => [job.job_id, {
+      zone_id: job.zone_id,
+      window_start: job.window_start,
+      window_end: job.window_end,
+      service_duration_min: job.service_duration_min,
+      priority: job.priority,
+      required_skill: job.required_skill,
+      required_transport: job.required_transport,
+      required_equipment: job.required_equipment,
+      latitude: job.latitude,
+      longitude: job.longitude,
+    }])),
+    engineerModels: Object.fromEntries(engineers.map(engineer => {
+      const office = officeById.get(engineer.start_office_id);
+      const location = locationById.get(office?.location_id);
+      return [engineer.engineer_id, {
+        zone_id: engineer.zone_id,
+        shift_start: engineer.shift_start,
+        shift_end: engineer.shift_end,
+        transport_type: engineer.transport_type,
+        start_office_id: engineer.start_office_id,
+        skills: [...(skillsByEngineer.get(engineer.engineer_id) || [])].sort(),
+        equipment: [...(equipmentByEngineer.get(engineer.engineer_id) || [])].sort(),
+        latitude: location?.latitude,
+        longitude: location?.longitude,
+      }];
+    })),
     eventOrder: (() => {
       const job = jobs.find((item) => item.job_id === 'EAST-EVENT-001');
       return job ? {
@@ -224,7 +257,7 @@ const artifact = {
       } : null;
     })(),
   },
-  plans: { initial, event },
+  plans: { initial, event, baseline },
 };
 
 const integrationEngineers = engineers.map((engineer) => {
@@ -261,11 +294,12 @@ console.log(JSON.stringify({
   sourcePlans: {
     initial: initialPlanPath,
     event: eventPlanPath,
+    baseline: baselinePlanPath,
   },
   plans: Object.fromEntries(Object.entries(artifact.plans).map(([key, plan]) => [key, {
     assigned: plan.metrics.assigned,
     unassigned: plan.metrics.unassigned,
-    routes: plan.routes.length,
+    routes: plan.routes.filter(route => route.assignments.length).length,
     contentSha256: plan.contentSha256,
   }])),
 }, null, 2));

@@ -15,7 +15,8 @@ ROOT = Path(__file__).parents[2]
 BRIDGE = ROOT / 'runtime' / 'valhalla_bridge.py'
 PREPARE_RUNTIME = ROOT / 'runtime' / 'prepare_valhalla_runtime.py'
 WSL_DISTRIBUTION = 'docker-desktop'
-RUNTIME_REVISION = 'valhalla-3.8.3-runtime-schema-v1'
+RUNTIME_REVISION = 'valhalla-3.8.3-runtime-schema-v2'
+BRIDGE_REVISION = 'worker-pool-v2'
 
 
 def _health_url(endpoint: str) -> str:
@@ -120,7 +121,11 @@ def main() -> int:
     if args.startup_timeout_seconds <= 0 or args.health_timeout_seconds <= 0:
         parser.error('Timeouts must be positive')
     current_status = _bridge_status(args.endpoint, args.health_timeout_seconds)
-    if current_status is not None and current_status.get('runtime_revision') == RUNTIME_REVISION:
+    if (
+        current_status is not None
+        and current_status.get('runtime_revision') == RUNTIME_REVISION
+        and current_status.get('bridge_revision') == BRIDGE_REVISION
+    ):
         print(json.dumps({
             'status': 'READY',
             'endpoint': args.endpoint,
@@ -136,7 +141,11 @@ def main() -> int:
     deadline = time.monotonic() + args.startup_timeout_seconds
     while time.monotonic() < deadline:
         ready_status = _bridge_status(args.endpoint, args.health_timeout_seconds)
-        if ready_status is not None and ready_status.get('runtime_revision') == RUNTIME_REVISION:
+        if (
+            ready_status is not None
+            and ready_status.get('runtime_revision') == RUNTIME_REVISION
+            and ready_status.get('bridge_revision') == BRIDGE_REVISION
+        ):
             print(json.dumps({
                 'status': 'READY',
                 'endpoint': args.endpoint,

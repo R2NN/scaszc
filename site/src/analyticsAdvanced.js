@@ -342,12 +342,12 @@ export function analyzeTeamCapacity(record) {
       } else if (firstOpen && !shiftCanReach) {
         explanation = `Не назначен: не успевает к началу окна заявки #${firstOpenId} на выбранном транспорте.`;
       } else if (!zoneBacklog.length) {
-        explanation = 'В оперативном резерве: все плановые заявки зоны закрыты. На линии под срочные аварии.';
+        explanation = 'Без маршрута: все плановые заявки зоны закрыты. Возможность аварийного выезда требует проверки.';
       } else if (unresolved.length && !matchingBacklog.length) {
         explanation = `В открытой очереди есть заявки, но для этой бригады не подтверждено допустимое назначение.`;
         evidence = 'missing_reason';
       } else if (!matchingDemand.length) {
-        explanation = 'В оперативном резерве: все плановые заявки зоны закрыты. На линии под срочные аварии.';
+        explanation = 'Без маршрута: все плановые заявки зоны закрыты. Возможность аварийного выезда требует проверки.';
       } else if (!matchingBacklog.length) {
         explanation = `Подходящих заявок в зоне: ${matchingDemand.length}; все они распределены в другие маршруты. Причина выбора другой бригады не передана планировщиком.`;
         evidence = 'missing_reason';
@@ -711,7 +711,13 @@ const transportKey = value => {
   return 'unknown';
 };
 
-const routeDistance = route => numeric(route?.distanceKm) || (route?.assignments || []).reduce((sum, assignment) => sum + numeric(assignment.distanceM) / 1000, 0);
+const routeDistance = route => {
+  const assignments = route?.assignments || [];
+  if (assignments.length && assignments.every(item => item.distanceM != null && Number.isFinite(Number(item.distanceM)))) {
+    return assignments.reduce((sum, item) => sum + Number(item.distanceM), 0) / 1000;
+  }
+  return numeric(route?.distanceKm);
+};
 const routeWaiting = route => {
   if (route?.waitingMinutes != null && Number.isFinite(Number(route.waitingMinutes))) return Math.max(0, Number(route.waitingMinutes));
   return (route?.assignments || []).reduce((sum, assignment) => {
@@ -930,10 +936,11 @@ export function calculateEconomics(record, rates = {}, baseline = null) {
   }));
   const orders = new Map((record?.orders || []).map(order => [String(order.id), order]));
   const optimized = planEconomics(record?.plan?.routes || [], record?.team || [], values, orders);
-  const baselinePlan = baseline?.routes?.length
+  const baselineAvailable = Boolean(baseline?.available);
+  const baselinePlan = baselineAvailable
     ? planEconomics(baseline.routes, record?.team || [], values, orders)
-    : optimized;
-  const savingPerShift = baselinePlan.directCost - optimized.directCost;
+    : null;
+  const savingPerShift = baselinePlan ? baselinePlan.directCost - optimized.directCost : null;
   const directCost = optimized.directCost;
   const costPerAssigned = optimized.visits ? directCost / optimized.visits : 0;
   const laborShare = directCost ? optimized.laborAmount / directCost * 100 : 0;
@@ -953,9 +960,13 @@ export function calculateEconomics(record, rates = {}, baseline = null) {
     rates: values,
     directCost,
     costPerAssigned,
+    baselineAvailable,
     savingPerShift,
-    monthlySaving: savingPerShift * 30,
-    baselineDirectCost: baselinePlan.directCost,
+    monthlySaving: savingPerShift == null ? null : savingPerShift * 30,
+    baselineDirectCost: baselinePlan?.directCost ?? null,
+    baselineAssignedCount: baselinePlan?.visits ?? null,
+    baselineEngineersUsed: baselinePlan?.rows.length ?? null,
+    baselineCostPerAssigned: baselinePlan?.visits ? baselinePlan.directCost / baselinePlan.visits : null,
     laborHours: optimized.laborHours,
     laborAmount: optimized.laborAmount,
     transportAmount: optimized.transportAmount,

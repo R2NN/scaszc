@@ -16,6 +16,22 @@ test('history ends on the date present in source jobs and has five consecutive w
     assert.equal(current - previous, 86400000);
   }
   assert.equal(history.days.at(-1).date, history.period.end);
+  const current = history.days.at(-1);
+  assert.equal(current.plan.metrics.total, 205);
+  assert.equal(current.plan.metrics.assigned, 205);
+  assert.equal(current.plan.metrics.unassigned, 0);
+  assert.equal(current.plan.metrics.activeEngineers, 28);
+  assert.equal(current.plan.contentSha256, artifact.plans.initial.contentSha256);
+  assert.equal(current.plan.baseline.status, 'EXACT_VALID');
+  assert.equal(current.plan.baseline.validationStatus, 'VALID');
+  assert.equal(current.plan.baseline.methodology, 'EXACT_FCFS_SAME_ROUTING_AND_VALIDATOR');
+  assert.equal(current.plan.baseline.metrics.assigned, 104);
+  assert.equal(current.plan.baseline.metrics.unassigned, 101);
+  assert.equal(current.plan.baseline.metrics.activeEngineers, 35);
+  assert.equal(current.plan.baseline.metrics.distanceKm, 1069.535);
+  assert.equal(current.plan.metrics.distanceKm, 1636.204);
+  const sourceRoute = artifact.plans.baseline.routes.find(route => route.engineerId === current.plan.baseline.routes[0].engineerId);
+  assert.equal(current.plan.baseline.routes[0].workloadMinutes, sourceRoute.workloadMinutes);
 });
 
 test('every daily plan and actual visit references an existing order and engineer', () => {
@@ -37,8 +53,15 @@ test('every daily plan and actual visit references an existing order and enginee
     assert.ok(day.plan.unassigned.every(item => orderIds.has(item.orderId) && !assignedIds.has(item.orderId)));
     if (day.date === history.period.end) {
       assert.equal(day.actual, null);
+      const baselineIds = [
+        ...day.plan.baseline.routes.flatMap(route => route.assignments.map(item => item.orderId)),
+        ...day.plan.baseline.unassigned.map(item => item.orderId),
+      ];
+      assert.equal(baselineIds.length, day.orders.length);
+      assert.equal(new Set(baselineIds).size, day.orders.length);
     } else {
       assert.equal(day.actual.visits.length, assigned.length);
+      assert.equal(day.plan.baseline, null);
       assert.ok(day.actual.visits.every(visit => assignedIds.has(visit.orderId)));
     }
   }
@@ -47,10 +70,10 @@ test('every daily plan and actual visit references an existing order and enginee
 test('current route history keeps delayed departures and the arrival buffer from the plan artifact', () => {
   const history = generateHistory({ fixture, artifact });
   const current = history.days.at(-1);
-  const route = current.plan.routes.find(item => item.engineerId === 'SOUTHCENTER-ENG-02');
-  const visit = route.assignments.find(item => item.orderId.endsWith('SOUTHCENTER-93276'));
-  assert.equal(visit.departureAt, '15:22');
-  assert.equal(visit.arrival, '15:45');
+  const route = current.plan.routes.find(item => item.engineerId === 'EAST-ENG-01');
+  const visit = route.assignments.find(item => item.orderId.endsWith('EAST-26645'));
+  assert.equal(visit.departureAt, '15:06');
+  assert.equal(visit.arrival, '15:25');
   assert.equal(visit.plannedStart, '16:00');
 });
 

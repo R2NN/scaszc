@@ -1,0 +1,18 @@
+{
+  "matrix_schema_version": "1.0.0",
+  "dataset_version": "2.1.0",
+  "provider": "LOCAL_VALHALLA_MATRIX",
+  "purpose": "SCREENING_ONLY_NOT_AUTHORITATIVE_FOR_TIME_DEPENDENT_CONSTRAINTS",
+  "zone_id": "NEW",
+  "mode": "CAR",
+  "departure_at_label": "2026-08-17T07:00:00+03:00",
+  "departure_time_honored": false,
+  "locations": 2,
+  "cells": 4,
+  "status_counts": {
+    "OK": 4
+  },
+  "matrix_file": "new-car.csv",
+  "matrix_file_sha256": "b2ec3b7b9096ae6224cb6bca193c95f16b65974d076d023a93706dccbd458d19",
+  "matrix_content_sha256": "6897685178955dff4715a66f9fcc330ed215bf0104e534e27f251988c4ba1c04"
+}

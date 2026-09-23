@@ -1,0 +1,31 @@
+{
+  "format": "traffic4cast-2021-hourly-v1",
+  "city": "MOSCOW",
+  "source_year": 2019,
+  "source_days": 180,
+  "source_dates": [
+    "2019-01-02",
+    "2019-06-30"
+  ],
+  "source": "HERE / IARAI Traffic4cast 2021 MOSCOW dynamic 8-channel HDF5",
+  "bounds": {
+    "south": 55.506,
+    "north": 55.942,
+    "west": 37.358,
+    "east": 37.853
+  },
+  "rotated": true,
+  "height": 165,
+  "width": 146,
+  "cell_block": 3,
+  "temporal_resolution": "hour-of-week, Europe/Moscow",
+  "heading_order": [
+    "NE",
+    "SE",
+    "SW",
+    "NW"
+  ],
+  "speed_reference": "cell-and-direction 90th percentile of observed weekly-hour means",
+  "measured_share": 0.7621181235051098,
+  "sha256": "b312101476bb15f73d363b1c0bdbca0f414fa37dd18ecd170e00c01feecb06af"
+}

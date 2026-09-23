@@ -1,0 +1,34 @@
+﻿hd_type;equipment_id;quantity;condition
+Конвергенция абонента;DIAG_SET;1;ALWAYS
+Конвергенция абонента;INSTALL_SET;1;ALWAYS
+Конвергенция абонента;CABLE_PACK;1;ALWAYS
+Заявка на подключение;DIAG_SET;1;ALWAYS
+Заявка на подключение;INSTALL_SET;1;ALWAYS
+Заявка на подключение;CABLE_PACK;1;ALWAYS
+Заказ подключения/Дозаказ оборудования;DIAG_SET;1;ALWAYS
+Заказ подключения/Дозаказ оборудования;INSTALL_SET;1;ALWAYS
+Заказ подключения/Дозаказ оборудования;CABLE_PACK;1;ALWAYS
+Дозаказ оборудования;DIAG_SET;1;ALWAYS
+Дозаказ оборудования;INSTALL_SET;1;ALWAYS
+Нет линка;DIAG_SET;1;ALWAYS
+Переключение на Гбит/с;DIAG_SET;1;ALWAYS
+Переключение на Гбит/с;INSTALL_SET;1;ALWAYS
+Мониторинг;DIAG_SET;1;ALWAYS
+Разрывы;DIAG_SET;1;ALWAYS
+Работа с кабелем;DIAG_SET;1;ALWAYS
+Работа с кабелем;CABLE_SET;1;ALWAYS
+Работа с кабелем;CABLE_PACK;1;ALWAYS
+Роутер. Замена техническим специалистом;DIAG_SET;1;ALWAYS
+Роутер. Замена техническим специалистом;ROUTER;1;ALWAYS
+TVE/ENT. Другие ошибки;DIAG_SET;1;ALWAYS
+TVE/ENT. Замена приставки техником;DIAG_SET;1;ALWAYS
+TVE/ENT. Замена приставки техником;TV_BOX;1;ALWAYS
+ТВ. Замена приставки техником;DIAG_SET;1;ALWAYS
+ТВ. Замена приставки техником;TV_BOX;1;ALWAYS
+Авария;DIAG_SET;1;ALWAYS
+Авария;CABLE_SET;1;ALWAYS
+Авария;CABLE_PACK;1;ALWAYS
+Низкая скорость;DIAG_SET;1;ALWAYS
+Рост ошибок на порту;DIAG_SET;1;ALWAYS
+IP-адрес 169...;DIAG_SET;1;ALWAYS
+Любая работа;ONT_GIGABIT;1;gigabit_required == Да

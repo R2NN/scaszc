@@ -1,0 +1,392 @@
+{
+  "artifact_type": "NEW_DATASET_PIPELINE_PLAN",
+  "dataset": "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+  "scenario": "core",
+  "planning_date": "2026-08-17",
+  "run_dir": "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated",
+  "transit_index": "C:\\Users\\р\\Desktop\\gl\\review\\data\\transit\\moscow_2026-08-17.sqlite",
+  "screening_root": "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\screening",
+  "screening_snapshot_reused": false,
+  "shared_cache_dir": "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-shared-cache",
+  "warm_start": null,
+  "warm_start_disabled": false,
+  "warm_start_auto_discovered": false,
+  "rebuild_transit_index": false,
+  "commands": [
+    {
+      "stage": "ensure_local_valhalla",
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "C:\\Users\\р\\Desktop\\gl\\review\\algorithm\\tools\\ensure_local_valhalla.py",
+        "--endpoint",
+        "http://127.0.0.1:8002"
+      ]
+    },
+    {
+      "stage": "validate_dataset",
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "C:\\Users\\р\\Desktop\\gl\\review\\algorithm\\tools\\validate_planning_dataset_generic.py",
+        "--dataset",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+        "--output",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\dataset-validation.json"
+      ]
+    },
+    {
+      "stage": "routing_preflight",
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "-m",
+        "beeline_routing.cli",
+        "preflight",
+        "--dataset",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+        "--scenario",
+        "core",
+        "--transit-index",
+        "C:\\Users\\р\\Desktop\\gl\\review\\data\\transit\\moscow_2026-08-17.sqlite"
+      ]
+    },
+    {
+      "stage": "build_surface_matrices",
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "C:\\Users\\р\\Desktop\\gl\\review\\algorithm\\tools\\build_valhalla_screening_matrices.py",
+        "--dataset",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+        "--output",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\screening",
+        "--endpoint",
+        "http://127.0.0.1:8002/sources_to_targets",
+        "--route-endpoint",
+        "http://127.0.0.1:8002/route",
+        "--cache",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-shared-cache\\screening-cache.sqlite3"
+      ]
+    },
+    {
+      "stage": "build_transit_matrices",
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "C:\\Users\\р\\Desktop\\gl\\review\\algorithm\\tools\\build_local_transit_screening_matrix.py",
+        "--dataset",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+        "--transit-index",
+        "C:\\Users\\р\\Desktop\\gl\\review\\data\\transit\\moscow_2026-08-17.sqlite",
+        "--walking-screening-root",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\screening",
+        "--output",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\screening",
+        "--cache",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-shared-cache\\screening-cache.sqlite3"
+      ]
+    },
+    {
+      "stage": "solve_screening_master",
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "C:\\Users\\р\\Desktop\\gl\\review\\algorithm\\tools\\solve_screening_zones.py",
+        "--dataset",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+        "--scenario",
+        "core",
+        "--screening-root",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\screening",
+        "--output",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-screening-master.json",
+        "--seconds-per-tier",
+        "45",
+        "--polish-seconds-per-tier",
+        "10",
+        "--full-graph-polish-seconds",
+        "30",
+        "--search-workers",
+        "1",
+        "--zone-workers",
+        "3",
+        "--adaptive-predecessors",
+        "8,16,0",
+        "--cold-start-seed-seconds",
+        "60",
+        "--coverage-first-only"
+      ]
+    },
+    {
+      "stage": "refine_materialize_validate",
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "C:\\Users\\р\\Desktop\\gl\\review\\algorithm\\tools\\refine_screening_exact.py",
+        "--dataset",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+        "--scenario",
+        "core",
+        "--screening-root",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\screening",
+        "--input-candidate",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-screening-master.json",
+        "--cache",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-shared-cache\\routing-cache.sqlite3",
+        "--transit-index",
+        "C:\\Users\\р\\Desktop\\gl\\review\\data\\transit\\moscow_2026-08-17.sqlite",
+        "--output",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact.json",
+        "--metro-wait-seconds",
+        "180",
+        "--max-exact-queries",
+        "3000",
+        "--max-iterations",
+        "20",
+        "--seconds-per-tier",
+        "45",
+        "--search-workers",
+        "1",
+        "--zone-workers",
+        "3",
+        "--adaptive-predecessors",
+        "8,16,0",
+        "--route-workers",
+        "3",
+        "--execute",
+        "--route-conflict-cut-on-schedule-failure"
+      ]
+    },
+    {
+      "stage": "exact_direct_insertion_improvement",
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "C:\\Users\\р\\Desktop\\gl\\review\\algorithm\\tools\\improve_exact_plan.py",
+        "--dataset",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+        "--scenario",
+        "core",
+        "--input-plan",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact.json",
+        "--cache",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-shared-cache\\routing-cache.sqlite3",
+        "--transit-index",
+        "C:\\Users\\р\\Desktop\\gl\\review\\data\\transit\\moscow_2026-08-17.sqlite",
+        "--output",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact-improved.json",
+        "--metro-wait-seconds",
+        "180",
+        "--execute"
+      ]
+    },
+    {
+      "stage": "exact_chain_and_lns_repair",
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "C:\\Users\\р\\Desktop\\gl\\review\\algorithm\\tools\\repair_exact_plan.py",
+        "--dataset",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+        "--scenario",
+        "core",
+        "--input-plan",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact-improved.json",
+        "--cache",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-shared-cache\\routing-cache.sqlite3",
+        "--transit-index",
+        "C:\\Users\\р\\Desktop\\gl\\review\\data\\transit\\moscow_2026-08-17.sqlite",
+        "--output",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact-repaired.json",
+        "--screening-root",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\screening",
+        "--max-route-checks",
+        "5000",
+        "--max-displacements",
+        "4",
+        "--max-passes",
+        "10",
+        "--lns-route-checks",
+        "2500",
+        "--lns-beam-width",
+        "48",
+        "--lns-max-destroyed-jobs",
+        "12",
+        "--lns-max-engineers",
+        "4",
+        "--metro-wait-seconds",
+        "180",
+        "--trust-input-validation",
+        "--execute"
+      ]
+    },
+    {
+      "stage": "exact_team_compaction",
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "C:\\Users\\р\\Desktop\\gl\\review\\algorithm\\tools\\compact_exact_plan.py",
+        "--dataset",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-runs\\2719f7a0-0af0-4d91-94c0-d63561817ef5\\dataset",
+        "--scenario",
+        "core",
+        "--input-plan",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact-repaired.json",
+        "--screening-root",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\screening",
+        "--cache",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\ui-shared-cache\\routing-cache.sqlite3",
+        "--transit-index",
+        "C:\\Users\\р\\Desktop\\gl\\review\\data\\transit\\moscow_2026-08-17.sqlite",
+        "--output",
+        "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact-compacted.json",
+        "--max-screening-candidates",
+        "12",
+        "--max-candidates-per-engineer",
+        "2",
+        "--max-screening-states",
+        "100000",
+        "--metro-wait-seconds",
+        "180",
+        "--trust-input-validation",
+        "--execute"
+      ]
+    }
+  ],
+  "expected_final_plan": "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact-compacted.json",
+  "status": "COMPLETE",
+  "started_at": "2026-09-22T21:28:38.742478+00:00",
+  "completed_at": "2026-09-22T21:29:08.927712+00:00",
+  "completed_stages": [
+    "ensure_local_valhalla",
+    "validate_dataset",
+    "routing_preflight",
+    "build_surface_matrices",
+    "build_transit_matrices",
+    "solve_screening_master",
+    "refine_materialize_validate",
+    "exact_direct_insertion_improvement",
+    "exact_chain_and_lns_repair",
+    "exact_team_compaction"
+  ],
+  "stage_timings": [
+    {
+      "stage": "ensure_local_valhalla",
+      "started_at": "2026-09-22T21:28:38.742549+00:00",
+      "duration_seconds": 0.267
+    },
+    {
+      "stage": "validate_dataset",
+      "started_at": "2026-09-22T21:28:39.010120+00:00",
+      "duration_seconds": 1.423
+    },
+    {
+      "stage": "routing_preflight",
+      "started_at": "2026-09-22T21:28:40.433230+00:00",
+      "duration_seconds": 0.349
+    },
+    {
+      "stage": "build_surface_matrices",
+      "started_at": "2026-09-22T21:28:40.782731+00:00",
+      "duration_seconds": 1.446
+    },
+    {
+      "stage": "build_transit_matrices",
+      "started_at": "2026-09-22T21:28:42.228749+00:00",
+      "duration_seconds": 10.548
+    },
+    {
+      "stage": "solve_screening_master",
+      "started_at": "2026-09-22T21:28:52.776708+00:00",
+      "duration_seconds": 1.551
+    },
+    {
+      "stage": "refine_materialize_validate",
+      "started_at": "2026-09-22T21:28:54.327422+00:00",
+      "duration_seconds": 6.44
+    },
+    {
+      "stage": "exact_direct_insertion_improvement",
+      "started_at": "2026-09-22T21:29:00.767571+00:00",
+      "duration_seconds": 2.782
+    },
+    {
+      "stage": "exact_chain_and_lns_repair",
+      "started_at": "2026-09-22T21:29:03.550137+00:00",
+      "duration_seconds": 2.7
+    },
+    {
+      "stage": "exact_team_compaction",
+      "started_at": "2026-09-22T21:29:06.250744+00:00",
+      "duration_seconds": 2.592
+    }
+  ],
+  "output_files": [
+    {
+      "path": "core-exact-compacted.json",
+      "size_bytes": 19213,
+      "sha256": "fd90b844633ef0e0ff4a31c5cedd6fef2e50c981c83c5afb1210c48458f63302"
+    },
+    {
+      "path": "core-exact-improved.json",
+      "size_bytes": 18146,
+      "sha256": "735d46912d9666249061498b577fd119af9fa2e5d2479fdd66c6a5bce7ab8624"
+    },
+    {
+      "path": "core-exact-repaired.json",
+      "size_bytes": 19106,
+      "sha256": "15b623801f0c4bb529823a3f3d5883752b43d982b9f75d3a74d2d1e41cc01d13"
+    },
+    {
+      "path": "core-exact.json",
+      "size_bytes": 18925,
+      "sha256": "6db48c44abf7c2ce0feac32186715d0cf2bc7f7b0505f3e0787e88c6ce1b0c95"
+    },
+    {
+      "path": "core-screening-master.json",
+      "size_bytes": 2870,
+      "sha256": "db5afae36924d1543e11192a16bd0ea82cf6d2c58e963f6045fa9eadb0c66e4c"
+    },
+    {
+      "path": "dataset-validation.json",
+      "size_bytes": 1690,
+      "sha256": "862f36f3127c0c27f0649929cdddfeeecfa6736fe050792d84b299211db7ce03"
+    },
+    {
+      "path": "screening/new-bicycle.csv",
+      "size_bytes": 1224,
+      "sha256": "2e63ed726d2cb461225958e2489e9bcd3f574a439cd75f89d08fa731c9c236e1"
+    },
+    {
+      "path": "screening/new-bicycle.manifest.json",
+      "size_bytes": 628,
+      "sha256": "5e826ade91f713b1a58b497e594f9a4ab9f44d62d0f1f1244e22382531c90776"
+    },
+    {
+      "path": "screening/new-car.csv",
+      "size_bytes": 1208,
+      "sha256": "b2ec3b7b9096ae6224cb6bca193c95f16b65974d076d023a93706dccbd458d19"
+    },
+    {
+      "path": "screening/new-car.manifest.json",
+      "size_bytes": 620,
+      "sha256": "dc0cb92118ad11fe9cf2420986720c663b1e0d4210c7c9c1c03a9c0ee0d0ee33"
+    },
+    {
+      "path": "screening/new-public_transit.csv",
+      "size_bytes": 1302,
+      "sha256": "f85aef72be07cfc1227200a76d957db67938ef33533951cd277106184ada0b0e"
+    },
+    {
+      "path": "screening/new-public_transit.manifest.json",
+      "size_bytes": 981,
+      "sha256": "1f73da3dc110d5addc0d2baa334e7e83ea85257a1a3ae1513f12de9c119ce660"
+    },
+    {
+      "path": "screening/new-walking.csv",
+      "size_bytes": 1222,
+      "sha256": "e5f347c8e3a88053abeebec137206f8c303c6319eba50cb4352b40580e743e8a"
+    },
+    {
+      "path": "screening/new-walking.manifest.json",
+      "size_bytes": 628,
+      "sha256": "37ba6d59a5ff65df01ea336444b5b41d8e0db7f9a0ad96042c0546a4f499b3c9"
+    }
+  ],
+  "coverage_complete": true,
+  "unserved_job_ids": [],
+  "publishable_final_plan": "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact-compacted.json",
+  "candidate_plan": "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact-compacted.json",
+  "content_sha256": "e54e00d41bbbb43db0fbfee91c57793b0b6966af8f6aeefb46dfa2b937dec955"
+}

@@ -1,0 +1,103 @@
+{
+  "artifact_type": "SCREENING_MASTER_SOLUTION",
+  "status": "SCREENING_FEASIBLE",
+  "planning_at": "2026-08-17T07:00:00+03:00",
+  "dataset_sha256": "129ec3ffd8cf6671ef1f2fc61757c4965d06258088fc35f0497e49d07ef4b61c",
+  "screening_snapshot_sha256": "58c2ee9a3cb0004e951ae4cc4aedc94a18317004b359dab291c0989b87175272",
+  "solver": {
+    "name": "OR-Tools CP-SAT",
+    "version": "9.15.6755",
+    "search_graph_complete": true,
+    "searched_arc_count": 1,
+    "operationally_excluded_arcs": []
+  },
+  "objective_proofs": [
+    {
+      "tier": 1,
+      "metric": "unserved_urgent_jobs",
+      "value": 0,
+      "best_bound": 0,
+      "proven_optimal": true,
+      "wall_time_seconds": 0.0015187
+    },
+    {
+      "tier": 2,
+      "metric": "unserved_normal_jobs",
+      "value": 0,
+      "best_bound": 0,
+      "proven_optimal": true,
+      "wall_time_seconds": 0.0015187
+    }
+  ],
+  "summary": {
+    "used_engineers": 1,
+    "served_jobs": 1,
+    "unserved_jobs": 0
+  },
+  "routes": [
+    {
+      "engineer_id": "ENG-1",
+      "visits": [
+        {
+          "sequence": 1,
+          "job_id": "JOB-1",
+          "origin_node_id": "START:ENG-1",
+          "departure_at": "2026-08-17T08:00:00+03:00",
+          "service_start_at": "2026-08-17T14:00:00+03:00",
+          "screening_duration_minutes": 5,
+          "screening_distance_m": 1032,
+          "screening_source_mode": "CAR",
+          "screening_is_surrogate": false
+        }
+      ]
+    }
+  ],
+  "unserved_job_ids": [],
+  "publication_allowed": false,
+  "publication_blocker": "EXACT_ROUTE_MATERIALIZATION_AND_INDEPENDENT_VALIDATION_REQUIRED",
+  "decomposition": {
+    "independent_zones": true,
+    "parallel_workers": 1,
+    "adaptive_graph_attempts": {
+      "NEW": [
+        8
+      ]
+    },
+    "coverage_preserving_polish": {
+      "NEW": {
+        "cold_start_seed": {
+          "attempted": true,
+          "served_jobs": 1,
+          "unserved_jobs": 0,
+          "used_engineers": 1
+        },
+        "enabled": false,
+        "attempted": false,
+        "applied": false
+      }
+    },
+    "warm_start": null,
+    "protected_exact_incumbent": false,
+    "protected_incumbent_quality": null,
+    "incumbent_fallback_used": false,
+    "final_quality": {
+      "unserved_urgent_jobs": 0,
+      "unserved_normal_jobs": 0,
+      "used_engineers": 1,
+      "urgent_response_minutes": 0,
+      "screening_total_distance_m": 1032,
+      "screening_total_travel_minutes": 5,
+      "screening_total_waiting_minutes": 355,
+      "screening_workload_imbalance_minutes": 0,
+      "deterministic_route_signature": [
+        [
+          "ENG-1",
+          [
+            "JOB-1"
+          ]
+        ]
+      ]
+    }
+  },
+  "content_sha256": "0f584d95f560fc40ff8b4c4a1a68bb97f2007620e33832a3d8afa8ad594e0aa7"
+}

@@ -17,7 +17,9 @@ int main(int argc, char** argv) {
   std::string request;
   while (std::getline(std::cin, request)) {
     try {
-      std::cout << actor.route(request) << '\n';
+      const bool is_matrix = request.find("\"sources\"") != std::string::npos &&
+                             request.find("\"targets\"") != std::string::npos;
+      std::cout << (is_matrix ? actor.matrix(request) : actor.route(request)) << '\n';
     } catch (const std::exception& error) {
       std::cout << "{\"error\":\"" << error.what() << "\"}" << '\n';
     }

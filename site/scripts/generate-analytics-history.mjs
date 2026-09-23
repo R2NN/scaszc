@@ -11,7 +11,6 @@ const minutes = value => {
 };
 const clock = value => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
 const timeFromIso = value => String(value || '').match(/T(\d{2}:\d{2})/)?.[1] || '';
-const round = value => Math.round(value * 10) / 10;
 const dateKey = date => date.toISOString().slice(0, 10);
 const dayIndex = value => new Date(`${value}T12:00:00Z`).getUTCDay();
 
@@ -79,7 +78,65 @@ function actualVisit(assignment, order, date) {
   };
 }
 
-function makeDay(date, endDate, jobs, engineers, sourcePlan) {
+function normalizeBaseline(sourceBaseline, orderBySourceId) {
+  if (!sourceBaseline || sourceBaseline.status !== 'EXACT_VALID' || sourceBaseline.validationStatus !== 'VALID') return null;
+  const sourceAssignments = sourceBaseline.routes.flatMap(route => route.assignments);
+  if (sourceBaseline.metrics.total !== orderBySourceId.size
+    || sourceAssignments.some(item => !orderBySourceId.has(item.sourceOrderId))) {
+    throw new Error('Точный FCFS-бейзлайн не совпадает с текущим набором заявок');
+  }
+  const routes = sourceBaseline.routes.map(route => ({
+    engineerId: route.engineerId,
+    engineerName: route.engineerName,
+    shiftStart: route.shiftStart,
+    shiftEnd: route.shiftEnd,
+    workloadMinutes: Number(route.workloadMinutes) || 0,
+    distanceKm: route.assignments.reduce((sum, item) => sum + (Number(item.distanceM) || 0), 0) / 1000,
+    travelMinutes: Number(route.travelMinutes) || 0,
+    waitingMinutes: Number(route.waitingMinutes) || 0,
+    assignments: route.assignments.map(item => {
+      const order = orderBySourceId.get(item.sourceOrderId);
+      return order ? {
+        orderId: order.id,
+        engineerId: route.engineerId,
+        position: item.position,
+        departureAt: item.departureAt,
+        arrival: item.arrival,
+        plannedStart: item.plannedStart,
+        plannedFinish: item.plannedFinish,
+        travelMinutes: Number(item.travelMinutes) || 0,
+        distanceM: Number(item.distanceM) || 0,
+      } : null;
+    }).filter(Boolean),
+  })).filter(route => route.assignments.length);
+  const assigned = routes.flatMap(route => route.assignments);
+  const assignedIds = new Set(assigned.map(item => item.orderId));
+  const unassigned = [...orderBySourceId.values()].filter(order => !assignedIds.has(order.id)).map(order => ({ orderId: order.id }));
+  if (assigned.length !== sourceBaseline.metrics.assigned
+    || unassigned.length !== sourceBaseline.metrics.unassigned
+    || assignedIds.size !== assigned.length) {
+    throw new Error('Потеря назначений при публикации точного FCFS-бейзлайна');
+  }
+  return {
+    status: sourceBaseline.status,
+    validationStatus: sourceBaseline.validationStatus,
+    publicationAllowed: sourceBaseline.publicationAllowed,
+    methodology: 'EXACT_FCFS_SAME_ROUTING_AND_VALIDATOR',
+    policy: sourceBaseline.baselinePolicy,
+    routes,
+    unassigned,
+    metrics: {
+      total: orderBySourceId.size,
+      assigned: assigned.length,
+      unassigned: unassigned.length,
+      activeEngineers: routes.length,
+      distanceKm: assigned.reduce((sum, item) => sum + item.distanceM, 0) / 1000,
+      travelMinutes: assigned.reduce((sum, item) => sum + item.travelMinutes, 0),
+    },
+  };
+}
+
+function makeDay(date, endDate, jobs, engineers, sourcePlan, sourceBaseline) {
   const isCurrent = date === endDate;
   const weekday = dayIndex(date);
   const dayOfYear = Math.floor((new Date(`${date}T12:00:00Z`).getTime() - new Date(`${date.slice(0, 4)}-01-01T12:00:00Z`).getTime()) / 86400000);
@@ -129,7 +186,7 @@ function makeDay(date, endDate, jobs, engineers, sourcePlan) {
       shiftEnd: route.shiftEnd,
       assignments,
       workloadMinutes: Math.max(0, minutes(last.plannedFinish) - minutes(route.shiftStart)),
-      distanceKm: round(assignments.reduce((sum, item) => sum + item.distanceM, 0) / 1000),
+      distanceKm: assignments.reduce((sum, item) => sum + item.distanceM, 0) / 1000,
       travelMinutes: assignments.reduce((sum, item) => sum + item.travelMinutes, 0),
     };
   }).filter(Boolean);
@@ -152,6 +209,7 @@ function makeDay(date, endDate, jobs, engineers, sourcePlan) {
     plan: {
       status: isCurrent ? sourcePlan.status : 'HISTORICAL',
       validationStatus: isCurrent ? sourcePlan.validationStatus : null,
+      contentSha256: isCurrent ? sourcePlan.contentSha256 : null,
       routes,
       unassigned,
       metrics: {
@@ -160,10 +218,11 @@ function makeDay(date, endDate, jobs, engineers, sourcePlan) {
         unassigned: unassigned.length,
         activeEngineers: routes.length,
         urgentAssigned: assignments.filter(item => orderById.get(item.orderId)?.priority === 'Авария').length,
-        distanceKm: round(assignments.reduce((sum, item) => sum + item.distanceM, 0) / 1000),
+        distanceKm: assignments.reduce((sum, item) => sum + item.distanceM, 0) / 1000,
         travelMinutes: assignments.reduce((sum, item) => sum + item.travelMinutes, 0),
         waitingMinutes: isCurrent ? Number(sourcePlan.metrics.waitingMinutes) : waitingMinutes,
       },
+      baseline: isCurrent ? normalizeBaseline(sourceBaseline, orderBySourceId) : null,
     },
     actual: isCurrent ? null : { visits: actual },
   };
@@ -178,7 +237,8 @@ export function generateHistory({ fixture, artifact, endDate, days = DEFAULT_DAY
   const jobs = fixture?.jobs || [];
   const engineers = fixture?.engineers || [];
   const sourcePlan = artifact?.plans?.initial;
-  if (!jobs.length || !engineers.length || !sourcePlan?.routes?.length) throw new Error('Для истории нужны заявки, инженеры и исходный план');
+  const sourceBaseline = artifact?.plans?.baseline;
+  if (!jobs.length || !engineers.length || !sourcePlan?.routes?.length || !sourceBaseline?.routes?.length) throw new Error('Для истории нужны заявки, инженеры, исходный план и точный FCFS-бейзлайн');
   const end = new Date(`${anchorDate}T12:00:00Z`);
   if (Number.isNaN(end.getTime()) || dateKey(end) !== anchorDate) throw new Error('Недопустимая дата окончания');
   return {
@@ -186,7 +246,7 @@ export function generateHistory({ fixture, artifact, endDate, days = DEFAULT_DAY
     period: { start: dateKey(new Date(end.getTime() - (days - 1) * 86400000)), end: anchorDate },
     days: Array.from({ length: days }, (_, index) => {
       const date = dateKey(new Date(end.getTime() - (days - index - 1) * 86400000));
-      return makeDay(date, anchorDate, jobs, engineers, sourcePlan);
+      return makeDay(date, anchorDate, jobs, engineers, sourcePlan, sourceBaseline);
     }),
   };
 }

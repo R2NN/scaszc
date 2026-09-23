@@ -3,16 +3,19 @@ from __future__ import annotations
 import math
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
-from .errors import InvalidRoutingInput, ProviderResponseError
+from .errors import InvalidRoutingInput, ProviderResponseError, RoutingIncomplete
 from .http import JsonHttpClient, JsonResponse
 from .models import Coordinate, DetailedRoute, Provenance, RouteStatus, RouteStep, TransportMode
+from .traffic4cast import MOSCOW_TIMEZONE, Traffic4castProfile
 
 
 PROVIDER = 'LOCAL_VALHALLA'
 DEFAULT_ENDPOINT = 'http://127.0.0.1:8002/route'
-DEFAULT_RUNTIME_REVISION = 'valhalla-3.8.3-runtime-schema-v1'
+DEFAULT_RUNTIME_REVISION = 'valhalla-3.8.3-runtime-schema-v2'
+DEFAULT_TRAFFIC_PROFILE = Path(__file__).parents[3] / 'data' / 'traffic4cast' / 'moscow-2019.json'
 _COSTING = {
     TransportMode.CAR: 'auto',
     TransportMode.BICYCLE: 'bicycle',
@@ -31,6 +34,11 @@ class ValhallaRoutingClient:
         ).strip() or DEFAULT_RUNTIME_REVISION
         if not self.endpoint.startswith(('http://', 'https://')):
             raise InvalidRoutingInput('VALHALLA_ROUTE_ENDPOINT must be an HTTP(S) URL')
+        configured_profile = os.environ.get('TRAFFIC4CAST_PROFILE', '').strip()
+        profile_path = Path(configured_profile) if configured_profile else DEFAULT_TRAFFIC_PROFILE
+        self.traffic_profile = Traffic4castProfile(profile_path) if (
+            configured_profile or profile_path.is_file()
+        ) else None
 
     def route(
         self,
@@ -43,10 +51,19 @@ class ValhallaRoutingClient:
     ) -> DetailedRoute:
         if mode not in _COSTING:
             raise InvalidRoutingInput('Local Valhalla is not used for public-transit routing')
+        if mode == TransportMode.CAR and self.traffic_profile is None:
+            raise RoutingIncomplete(
+                f'Traffic4cast 2021 profile is required for car routing: {DEFAULT_TRAFFIC_PROFILE}'
+            )
         if departure_at.tzinfo is None or departure_at.utcoffset() is None:
             raise InvalidRoutingInput('departure_at must include a timezone')
         if departure_at.microsecond != 0:
             raise InvalidRoutingInput('departure_at must use whole seconds')
+        local_departure = (
+            departure_at.astimezone(MOSCOW_TIMEZONE)
+            if self.traffic_profile and self.traffic_profile.covers(origin.latitude, origin.longitude)
+            else departure_at
+        )
         body = {
             'locations': [
                 {'lat': origin.latitude, 'lon': origin.longitude},
@@ -56,6 +73,11 @@ class ValhallaRoutingClient:
             'units': 'kilometers',
             'alternates': 0,
         }
+        if mode == TransportMode.CAR:
+            body['date_time'] = {
+                'type': 1,
+                'value': local_departure.strftime('%Y-%m-%dT%H:%M'),
+            }
         response = self.http.post_json(
             # The tile/runtime format affects the response. Keep prior runtime
             # failures out of a cache created before a compatible upgrade.
@@ -67,7 +89,10 @@ class ValhallaRoutingClient:
             validate_payload=self._validate_payload,
             refresh=refresh,
         )
-        return self._parse(response, origin, destination, mode, departure_at)
+        route = self._parse(response, origin, destination, mode, departure_at)
+        if self.traffic_profile is not None:
+            route = self.traffic_profile.adjust(route)
+        return route
 
     @staticmethod
     def _validate_payload(payload: Any, request_sha256: str) -> None:

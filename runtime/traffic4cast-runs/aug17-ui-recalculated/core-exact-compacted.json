@@ -1,0 +1,594 @@
+{
+  "artifact_type": "EXACT_PLAN_TEAM_COMPACTION",
+  "status": "EXACT_VALID",
+  "exact_provider_queries": 1,
+  "identity_legs": 0,
+  "dropped_job_ids": [],
+  "failure": null,
+  "plan": {
+    "planning_at": "2026-08-17T07:00:00+03:00",
+    "engineer_plans": [
+      {
+        "engineer_id": "ENG-1",
+        "visits": [
+          {
+            "job_id": "JOB-1",
+            "departure_at": "2026-08-17T08:00:00+03:00",
+            "service_start_at": "2026-08-17T10:00:00+03:00",
+            "travel": {
+              "type": "PROVIDER_ROUTE",
+              "origin_id": "LOC-OFFICE-UI-1",
+              "destination_id": "LOC-JOB-UI-1",
+              "mode": "CAR",
+              "departure_at": "2026-08-17T08:00:00+03:00",
+              "status": "OK",
+              "duration_seconds": 692,
+              "duration_minutes": 12,
+              "distance_m": 1032,
+              "geometry": [
+                [
+                  55.702211,
+                  37.773246
+                ],
+                [
+                  55.702262,
+                  37.772876
+                ],
+                [
+                  55.702598,
+                  37.773016
+                ],
+                [
+                  55.702588,
+                  37.77309
+                ],
+                [
+                  55.702886,
+                  37.773215
+                ],
+                [
+                  55.703277,
+                  37.77338
+                ],
+                [
+                  55.703398,
+                  37.773734
+                ],
+                [
+                  55.703552,
+                  37.773803
+                ],
+                [
+                  55.703583,
+                  37.773937
+                ],
+                [
+                  55.703628,
+                  37.773907
+                ],
+                [
+                  55.703932,
+                  37.774044
+                ],
+                [
+                  55.703965,
+                  37.774059
+                ],
+                [
+                  55.703892,
+                  37.774592
+                ],
+                [
+                  55.703813,
+                  37.77523
+                ],
+                [
+                  55.703648,
+                  37.776547
+                ],
+                [
+                  55.703568,
+                  37.777193
+                ],
+                [
+                  55.703562,
+                  37.777242
+                ],
+                [
+                  55.703479,
+                  37.777909
+                ],
+                [
+                  55.703465,
+                  37.778019
+                ],
+                [
+                  55.703395,
+                  37.778582
+                ],
+                [
+                  55.703271,
+                  37.779557
+                ],
+                [
+                  55.703224,
+                  37.77988
+                ],
+                [
+                  55.703193,
+                  37.780109
+                ],
+                [
+                  55.703079,
+                  37.780979
+                ],
+                [
+                  55.702842,
+                  37.78281
+                ],
+                [
+                  55.70135,
+                  37.78218
+                ],
+                [
+                  55.700876,
+                  37.781988
+                ]
+              ],
+              "itinerary": [
+                {
+                  "sequence": 0,
+                  "mode": "auto",
+                  "duration_seconds": 15.850359712230219,
+                  "distance_m": 24.0,
+                  "waiting_seconds": 0,
+                  "geometry": [
+                    [
+                      55.702211,
+                      37.773246
+                    ],
+                    [
+                      55.702262,
+                      37.772876
+                    ]
+                  ],
+                  "attributes": {
+                    "instruction": "Drive west.",
+                    "type": 1
+                  }
+                },
+                {
+                  "sequence": 1,
+                  "mode": "auto",
+                  "duration_seconds": 27.463210227272725,
+                  "distance_m": 38.0,
+                  "waiting_seconds": 0,
+                  "geometry": [
+                    [
+                      55.702262,
+                      37.772876
+                    ],
+                    [
+                      55.702598,
+                      37.773016
+                    ]
+                  ],
+                  "attributes": {
+                    "instruction": "Turn right.",
+                    "type": 10
+                  }
+                },
+                {
+                  "sequence": 2,
+                  "mode": "auto",
+                  "duration_seconds": 29.118571428571425,
+                  "distance_m": 5.0,
+                  "waiting_seconds": 0,
+                  "geometry": [
+                    [
+                      55.702598,
+                      37.773016
+                    ],
+                    [
+                      55.702588,
+                      37.77309
+                    ]
+                  ],
+                  "attributes": {
+                    "instruction": "Turn right.",
+                    "type": 10
+                  }
+                },
+                {
+                  "sequence": 3,
+                  "mode": "auto",
+                  "duration_seconds": 57.84153409090908,
+                  "distance_m": 105.0,
+                  "waiting_seconds": 0,
+                  "geometry": [
+                    [
+                      55.702588,
+                      37.77309
+                    ],
+                    [
+                      55.702886,
+                      37.773215
+                    ],
+                    [
+                      55.703277,
+                      37.77338
+                    ],
+                    [
+                      55.703398,
+                      37.773734
+                    ]
+                  ],
+                  "attributes": {
+                    "instruction": "Turn left.",
+                    "type": 15
+                  }
+                },
+                {
+                  "sequence": 4,
+                  "mode": "auto",
+                  "duration_seconds": 9.590028409090909,
+                  "distance_m": 18.0,
+                  "waiting_seconds": 0,
+                  "geometry": [
+                    [
+                      55.703398,
+                      37.773734
+                    ],
+                    [
+                      55.703552,
+                      37.773803
+                    ]
+                  ],
+                  "attributes": {
+                    "instruction": "Turn left.",
+                    "type": 15
+                  }
+                },
+                {
+                  "sequence": 5,
+                  "mode": "auto",
+                  "duration_seconds": 6.164914772727273,
+                  "distance_m": 9.0,
+                  "waiting_seconds": 0,
+                  "geometry": [
+                    [
+                      55.703552,
+                      37.773803
+                    ],
+                    [
+                      55.703583,
+                      37.773937
+                    ]
+                  ],
+                  "attributes": {
+                    "instruction": "Turn right.",
+                    "type": 10
+                  }
+                },
+                {
+                  "sequence": 6,
+                  "mode": "auto",
+                  "duration_seconds": 24.57892703930395,
+                  "distance_m": 44.0,
+                  "waiting_seconds": 0,
+                  "geometry": [
+                    [
+                      55.703583,
+                      37.773937
+                    ],
+                    [
+                      55.703628,
+                      37.773907
+                    ],
+                    [
+                      55.703932,
+                      37.774044
+                    ],
+                    [
+                      55.703965,
+                      37.774059
+                    ]
+                  ],
+                  "attributes": {
+                    "instruction": "Turn left.",
+                    "type": 15
+                  }
+                },
+                {
+                  "sequence": 7,
+                  "mode": "auto",
+                  "duration_seconds": 410.7347750900525,
+                  "distance_m": 564.0,
+                  "waiting_seconds": 0,
+                  "geometry": [
+                    [
+                      55.703965,
+                      37.774059
+                    ],
+                    [
+                      55.703892,
+                      37.774592
+                    ],
+                    [
+                      55.703813,
+                      37.77523
+                    ],
+                    [
+                      55.703648,
+                      37.776547
+                    ],
+                    [
+                      55.703568,
+                      37.777193
+                    ],
+                    [
+                      55.703562,
+                      37.777242
+                    ],
+                    [
+                      55.703479,
+                      37.777909
+                    ],
+                    [
+                      55.703465,
+                      37.778019
+                    ],
+                    [
+                      55.703395,
+                      37.778582
+                    ],
+                    [
+                      55.703271,
+                      37.779557
+                    ],
+                    [
+                      55.703224,
+                      37.77988
+                    ],
+                    [
+                      55.703193,
+                      37.780109
+                    ],
+                    [
+                      55.703079,
+                      37.780979
+                    ],
+                    [
+                      55.702842,
+                      37.78281
+                    ]
+                  ],
+                  "attributes": {
+                    "instruction": "Turn right onto Волгоградский проспект (дублёр).",
+                    "type": 10
+                  }
+                },
+                {
+                  "sequence": 8,
+                  "mode": "auto",
+                  "duration_seconds": 109.77177546060973,
+                  "distance_m": 225.0,
+                  "waiting_seconds": 0,
+                  "geometry": [
+                    [
+                      55.702842,
+                      37.78281
+                    ],
+                    [
+                      55.70135,
+                      37.78218
+                    ],
+                    [
+                      55.700876,
+                      37.781988
+                    ]
+                  ],
+                  "attributes": {
+                    "instruction": "Turn right.",
+                    "type": 10
+                  }
+                },
+                {
+                  "sequence": 9,
+                  "mode": "auto",
+                  "duration_seconds": 0.0,
+                  "distance_m": 0.0,
+                  "waiting_seconds": 0,
+                  "geometry": [
+                    [
+                      55.700876,
+                      37.781988
+                    ]
+                  ],
+                  "attributes": {
+                    "instruction": "Your destination is on the left.",
+                    "type": 6
+                  }
+                }
+              ],
+              "provider_status": "OK",
+              "provenance": {
+                "provider": "LOCAL_VALHALLA",
+                "endpoint": "http://127.0.0.1:8002/route",
+                "request_sha256": "99b29c3a46f6dc3330b67710b9ecbf63097ba93fc54d7aaa0cec0b6f72cf5b5f",
+                "response_sha256": "d0a56eb378d550a90423b27fb4bd8d932fde75a42e679b58855e8a0d2c09a6b4",
+                "fetched_at": "2026-09-22T21:28:59.441372+00:00",
+                "cache_hit": true,
+                "provider_metadata": {
+                  "costing": "auto",
+                  "local_service": true,
+                  "runtime_revision": "valhalla-3.8.3-runtime-schema-v2",
+                  "traffic_source": "Traffic4cast 2021 Moscow 2019 observations",
+                  "traffic_profile_sha256": "b312101476bb15f73d363b1c0bdbca0f414fa37dd18ecd170e00c01feecb06af",
+                  "traffic_source_days": 180,
+                  "traffic_measured_segments": 26,
+                  "traffic_total_segments": 26,
+                  "traffic_coverage_percent": 100.0,
+                  "base_duration_seconds": 292
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "unserved_job_ids": []
+  },
+  "validation": {
+    "status": "VALID",
+    "violations": [],
+    "metrics": {
+      "served_urgent_jobs": 0,
+      "served_normal_jobs": 1,
+      "unserved_urgent_jobs": 0,
+      "unserved_normal_jobs": 0,
+      "used_engineers": 1,
+      "distance_m_by_engineer": {
+        "ENG-1": 1032
+      },
+      "total_distance_m": 1032,
+      "travel_minutes_by_engineer": {
+        "ENG-1": 12
+      },
+      "total_travel_minutes": 12,
+      "waiting_minutes_by_engineer": {
+        "ENG-1": 108
+      },
+      "total_waiting_minutes": 108,
+      "route_minutes_by_engineer": {
+        "ENG-1": 180
+      }
+    }
+  },
+  "publication_allowed": true,
+  "source_plan": "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\traffic4cast-runs\\aug17-ui-recalculated\\core-exact-repaired.json",
+  "inserted_jobs": [],
+  "unserved_insertion_diagnostics": {},
+  "exact_route_checks": 0,
+  "exact_provider_queries_total": 1,
+  "explanations": {
+    "schema_version": "1.0.0",
+    "language": "ru",
+    "generated_from_structured_facts": true,
+    "free_form_model_used": false,
+    "event": null,
+    "jobs": [
+      {
+        "job_id": "JOB-1",
+        "priority": "NORMAL",
+        "zone_id": "NEW",
+        "required_skill": "INSTALL",
+        "required_transport": "ANY",
+        "static_eligible_engineers": 1,
+        "static_rejection_counts": {},
+        "status": "ASSIGNED",
+        "decision_kind": "EXACT_VALID_ASSIGNMENT",
+        "summary_ru": "Заявка JOB-1 назначена ENG-1 на 10:00; район, навык, транспорт, оборудование, окно и смена проверены.",
+        "claim_level": "EXACT_VALIDATED",
+        "optimality": "BEST_CHECKED_NOT_GLOBAL_OPTIMUM",
+        "engineer_id": "ENG-1",
+        "sequence": 1,
+        "departure_at": "2026-08-17T08:00:00+03:00",
+        "service_start_at": "2026-08-17T10:00:00+03:00",
+        "service_end_at": "2026-08-17T11:00:00+03:00",
+        "response_minutes": 180,
+        "constraint_checks": {
+          "zone": "PASS",
+          "skill": "PASS",
+          "transport": "PASS",
+          "personal_equipment": "PASS",
+          "time_window": "PASS",
+          "shift": "PASS",
+          "route_evidence": "PASS"
+        },
+        "travel": {
+          "duration_minutes": 12,
+          "distance_m": 1032,
+          "origin_location_id": "LOC-OFFICE-UI-1",
+          "destination_location_id": "LOC-JOB-UI-1",
+          "evidence_type": "PROVIDER_ROUTE"
+        },
+        "change_from_previous_plan": {
+          "frozen_started_activity": false,
+          "assignment_changed": false,
+          "time_changed": false,
+          "previous_engineer_id": null,
+          "previous_service_start_at": null
+        },
+        "checked_alternatives": [],
+        "selection_rationale": null
+      }
+    ],
+    "run_certificate": {
+      "dataset_sha256": "129ec3ffd8cf6671ef1f2fc61757c4965d06258088fc35f0497e49d07ef4b61c",
+      "validation_status": "VALID",
+      "validation_violations": 0,
+      "publication_allowed": true,
+      "coverage_complete": true,
+      "served_jobs": 1,
+      "unserved_jobs": 0,
+      "global_optimality_proven": false,
+      "search_budget_exhausted": false,
+      "exact_route_checks": 0,
+      "exact_provider_queries": 1,
+      "urgency_policy": {},
+      "claim_legend": {
+        "EXACT_FACT": "Факт напрямую следует из входных данных.",
+        "EXACT_VALIDATED": "План, включая явный список неназначенных заявок, прошёл независимую проверку.",
+        "BEST_CHECKED": "Лучший из сохранённых проверенных вариантов.",
+        "LOCAL_IMPOSSIBILITY": "Нет решения в проверенном локальном поиске.",
+        "PROVEN_INFEASIBLE": "Невозможность доказана решателем.",
+        "SEARCH_LIMIT_REACHED": "Поиск остановлен по лимиту.",
+        "ROUTING_UNVERIFIED": "Маршрутные данные не подтверждены."
+      }
+    }
+  },
+  "routing_configuration": {
+    "provider": "valhalla-local-transit",
+    "transit_index": "C:\\Users\\р\\Desktop\\gl\\review\\data\\transit\\moscow_2026-08-17.sqlite",
+    "metro_wait_assumption_seconds": 180,
+    "query_time_api_key_required": false,
+    "exact_historical_metro_timetable_proof": false
+  },
+  "dataset_sha256": "129ec3ffd8cf6671ef1f2fc61757c4965d06258088fc35f0497e49d07ef4b61c",
+  "accepted_moves": [],
+  "search_reports": [
+    {
+      "pass": 1,
+      "screening_candidates": 0,
+      "evaluated_route_orders": 0,
+      "expanded_states": 0,
+      "budget_exhausted": false
+    }
+  ],
+  "exact_lns_reports": [],
+  "search_configuration": {
+    "beam_width": 64,
+    "max_screening_candidates_per_pass": 12,
+    "max_candidates_per_engineer": 2,
+    "max_screening_states_per_pass": 100000,
+    "max_exact_route_checks": 12,
+    "exact_query_budget_exhausted": false,
+    "max_passes": 3,
+    "focus_engineer": null,
+    "targets_limited_to_already_used_engineers": true,
+    "coverage_by_priority_fixed": [
+      0,
+      0
+    ],
+    "provider": "valhalla-local-transit",
+    "transit_index": "C:\\Users\\р\\Desktop\\gl\\review\\data\\transit\\moscow_2026-08-17.sqlite",
+    "metro_wait_assumption_seconds": 180,
+    "global_optimality_proven": false,
+    "input_exact_validation_repeated": false
+  },
+  "accepted_eliminations": [],
+  "elimination_attempts": [],
+  "compaction_exact_provider_queries": 0,
+  "content_sha256": "f6c944d664dfdb30e1335723a8c52c7db1f8ac3ac6f572764c4abd098e10f435"
+}

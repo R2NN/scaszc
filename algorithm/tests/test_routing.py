@@ -137,6 +137,7 @@ class ValhallaParsingTests(unittest.TestCase):
             },
         }])
         client = ValhallaRoutingClient(JsonHttpClient(cache=self.cache, opener=opener))
+        client.traffic_profile = None
         route = client.route(
             origin=self.origin, destination=self.destination, mode=TransportMode.WALKING,
             departure_at=self.departure,
@@ -145,6 +146,16 @@ class ValhallaParsingTests(unittest.TestCase):
         self.assertEqual((route.duration_seconds, route.duration_minutes, route.distance_m), (91, 2, 1234))
         self.assertEqual(route.geometry, ((0.0, 0.0), (0.000001, 0.000001)))
         self.assertIn('"costing":"pedestrian"', opener.requests[0].data.decode('utf-8'))
+        request_body = json.loads(opener.requests[0].data)
+        self.assertNotIn('date_time', request_body)
+        later = client.route(
+            origin=self.origin, destination=self.destination,
+            mode=TransportMode.WALKING,
+            departure_at=self.departure + timedelta(days=1),
+        )
+        self.assertEqual(len(opener.requests), 1)
+        self.assertEqual(later.departure_at, self.departure + timedelta(days=1))
+        self.assertTrue(later.provenance.cache_hit)
 
     def test_local_valhalla_error_is_an_actual_unreachable_route(self) -> None:
         opener = SequencedOpener([{'error': 'No pedestrian path'}])

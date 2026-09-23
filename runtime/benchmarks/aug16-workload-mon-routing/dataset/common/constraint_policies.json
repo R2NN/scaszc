@@ -1,0 +1,174 @@
+{
+  "policy_version": "2.1.0",
+  "hard_constraints": {
+    "assignment": "Каждая выполненная заявка назначается ровно одному инженеру.",
+    "zone_policy": "HARD",
+    "skills": "required_skill должен входить в engineer_skills.",
+    "transport": "required_transport=CAR разрешает только CAR; ANY разрешает любой тип.",
+    "time_window_semantics": "SERVICE_START_WITHIN_WINDOW",
+    "time_window_interval": "CLOSED",
+    "service_completion_after_window_end": "ALLOWED_IF_WITHIN_SHIFT",
+    "shift": "Выезд, начало и завершение работы находятся внутри смены.",
+    "max_jobs": "Число выполненных заявок не превышает max_jobs.",
+    "max_route_minutes": "Путевое время = поездки + ожидание + работы от выезда из офиса до окончания последней работы; оно не превышает max_route_minutes.",
+    "equipment": "Личные комплекты должны быть у инженера; зональные расходники резервируются по правилам inventory_semantics.",
+    "commitments": "Записи stress/commitments.csv являются абсолютными жёсткими ограничениями до release_event_id."
+  },
+  "route_semantics": {
+    "start": "start_office_id",
+    "return_to_office": false,
+    "travel_time_rounding": "CEILING_TO_INTEGER_MINUTE",
+    "time_dependent_query_uses": "DEPARTURE_TIME_FROM_PREVIOUS_NODE",
+    "required_outputs": [
+      "duration_min",
+      "distance_m",
+      "geometry",
+      "itinerary",
+      "provenance"
+    ],
+    "unknown_route": "BLOCK_RUN_WITH_ROUTING_INCOMPLETE",
+    "unreachable_route": "FORBID_ARC"
+  },
+  "inventory_semantics": {
+    "toolkits_reusable": true,
+    "shared_consumables_reservation": "RESERVE_FOR_ASSIGNED_JOBS_AT_PLAN_PUBLICATION",
+    "shared_consumables_decrement": "ON_JOB_COMPLETION_FROM_RESERVED_QUANTITY",
+    "in_progress_reservations_on_replan": "KEEP_RESERVED",
+    "not_started_reservations_on_replan": "RELEASE_AND_REALLOCATE",
+    "replenishment_during_day": false,
+    "event_jobs_use_remaining_stock": true,
+    "shortage_behavior": "JOB_MUST_REMAIN_UNSERVED_WITH_EXPLICIT_REASON"
+  },
+  "replanning_semantics": {
+    "completed_jobs": "FROZEN",
+    "in_service_jobs": "FROZEN",
+    "in_transit_to_job": "FROZEN",
+    "not_started_jobs": "REOPTIMIZABLE",
+    "activity_start": "DEPARTURE_TO_JOB",
+    "cancel_not_started": "CANCELED_AND_RESERVATION_RELEASED",
+    "cancel_started": "REJECTED_ALREADY_STARTED",
+    "engineer_unavailable": "EFFECTIVE_AFTER_CURRENT_STARTED_ACTIVITY",
+    "consumed_inventory": "NOT_RESTORED",
+    "elapsed_travel_and_service": "ACCOUNTED"
+  },
+  "objective_contract": {
+    "method": "LEXICOGRAPHIC_SEQUENTIAL_FIXING",
+    "initial_planning": [
+      {
+        "tier": 1,
+        "sense": "MIN",
+        "metric": "unserved_urgent_jobs"
+      },
+      {
+        "tier": 2,
+        "sense": "MIN",
+        "metric": "unserved_normal_jobs"
+      },
+      {
+        "tier": 3,
+        "sense": "MIN",
+        "metric": "used_engineers"
+      },
+      {
+        "tier": 4,
+        "sense": "MIN",
+        "metric": "total_distance_m"
+      },
+      {
+        "tier": 5,
+        "sense": "MIN",
+        "metric": "total_travel_minutes"
+      },
+      {
+        "tier": 6,
+        "sense": "MIN",
+        "metric": "total_waiting_minutes"
+      },
+      {
+        "tier": 7,
+        "sense": "MIN",
+        "metric": "workload_imbalance_minutes"
+      },
+      {
+        "tier": 8,
+        "sense": "MIN",
+        "metric": "deterministic_tie_break"
+      }
+    ],
+    "replanning": [
+      {
+        "tier": 1,
+        "sense": "MIN",
+        "metric": "unserved_urgent_jobs"
+      },
+      {
+        "tier": 2,
+        "sense": "MIN",
+        "metric": "unserved_normal_jobs"
+      },
+      {
+        "tier": 3,
+        "sense": "MIN",
+        "metric": "changed_not_started_assignments"
+      },
+      {
+        "tier": 4,
+        "sense": "MIN",
+        "metric": "preserved_job_start_shift_minutes"
+      },
+      {
+        "tier": 5,
+        "sense": "MIN",
+        "metric": "used_engineers"
+      },
+      {
+        "tier": 6,
+        "sense": "MIN",
+        "metric": "total_distance_m"
+      },
+      {
+        "tier": 7,
+        "sense": "MIN",
+        "metric": "total_travel_minutes"
+      },
+      {
+        "tier": 8,
+        "sense": "MIN",
+        "metric": "workload_imbalance_minutes"
+      },
+      {
+        "tier": 9,
+        "sense": "MIN",
+        "metric": "deterministic_tie_break"
+      }
+    ],
+    "forbidden_soft_metrics": [
+      "hard_commitment_violations",
+      "total_lateness_minutes"
+    ]
+  },
+  "required_report_metrics": [
+    "used_engineers",
+    "distance_m_by_engineer",
+    "total_distance_m",
+    "travel_minutes_by_engineer",
+    "total_travel_minutes"
+  ],
+  "forbidden_approximations": [
+    "coordinates 0,0",
+    "Euclidean distance used as travel time",
+    "constant speed used instead of a routing graph",
+    "silent violation of a hard constraint",
+    "implicit default for an unknown required field",
+    "synthetic traffic multiplier applied to routed duration",
+    "UNKNOWN route treated as UNREACHABLE"
+  ],
+  "service_duration_semantics": {
+    "source": "Нормативы.xlsx",
+    "arrival_and_service_start": "WITHIN_CLOSED_CUSTOMER_WINDOW",
+    "service_completion_after_window_end": "ALLOWED_IF_WITHIN_SHIFT",
+    "road_reference_minutes": 20,
+    "road_reference_usage": "NOT_ADDED; REPLACED_BY_ROUTER_TRAVEL_TIME",
+    "service_duration": "technical_minutes + document_minutes"
+  }
+}

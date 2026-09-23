@@ -6,11 +6,9 @@ from dataclasses import replace
 from pathlib import Path
 
 from beeline_planning import (
-    EngineerPlan,
     MaterializationStatus,
     MaterializationResult,
     Priority,
-    ProposedPlan,
     build_candidate_index,
     build_explanation_bundle,
     build_screening_route_evaluator,
@@ -18,6 +16,7 @@ from beeline_planning import (
     load_planning_dataset,
     load_screening_matrices,
     materialize_exact_initial_plan,
+    merge_exact_compaction_delta,
     validate_initial_plan,
 )
 from beeline_planning.exact_repair import master_from_orders
@@ -216,15 +215,15 @@ def main() -> int:
             if result.plan is None or result.status != MaterializationStatus.EXACT_VALID:
                 raise RuntimeError('Cannot merge a route that lacks an exact proof')
             updated_plans[engineer_id] = result.plan.engineer_plans[0]
-        merged_routes: list[EngineerPlan] = []
-        for route in source_plan.engineer_plans:
-            if route.engineer_id == eliminated_engineer_id:
-                continue
-            merged_routes.append(updated_plans.get(route.engineer_id, route))
-        plan = ProposedPlan(
-            planning_at=source_plan.planning_at,
-            engineer_plans=tuple(merged_routes),
-            unserved_job_ids=source_plan.unserved_job_ids,
+        base_plan = (
+            current.plan
+            if current is not None and current.plan is not None
+            else source_plan
+        )
+        plan = merge_exact_compaction_delta(
+            base_plan,
+            eliminated_engineer_id,
+            updated_plans,
         )
         validation = validate_initial_plan(dataset, plan)
         status = (

@@ -209,10 +209,57 @@ const sourceOrderId = (order = {}) => String(
   || "",
 ).trim();
 
+const sourceEngineerId = (engineer = {}) => String(
+  engineer.sourceId
+  || engineer.sourceData?.engineer_id
+  || engineer.sourceData?.ENGINEER_ID
+  || engineer.id
+  || "",
+).trim();
+
 const sameIdSet = (actual, expected) => {
   if (actual.length !== expected.length) return false;
   const actualIds = new Set(actual);
   return expected.every((id) => actualIds.has(id));
+};
+
+const planningClock = value => String(value || '').match(/T(\d{2}:\d{2})/)?.[1] || String(value || '').slice(0, 5);
+const planningSkill = value => ({ 'Локальные работы': 'LOCAL', 'Подключение': 'INSTALL', 'Аварийные работы': 'EMERGENCY', 'Дозаказ': 'UPSELL' })[String(value || '').trim()] || String(value || '').trim().toUpperCase();
+const planningTransport = value => ({ 'Автомобиль': 'CAR', 'Общественный транспорт': 'PUBLIC_TRANSIT', 'Пешком': 'WALKING', 'Велосипед': 'BICYCLE' })[String(value || '').trim()] || String(value || '').trim().toUpperCase();
+const planningEquipment = value => String(value || '').split(/\s*[|;,·]\s*/).filter(Boolean).map(item => ({ 'Диагностический комплект': 'DIAG_SET', 'Монтажный комплект': 'INSTALL_SET', 'Кабельный комплект': 'CABLE_SET', 'Кабель': 'CABLE_PACK', 'Роутер': 'ROUTER', 'ONT': 'ONT_GIGABIT', 'ТВ-приставка': 'TV_BOX' })[item] || item).sort().join('|');
+const sameCoordinates = (point, model) => Array.isArray(point) && point.length === 2 && Math.abs(Number(point[0]) - Number(model.latitude)) < 0.000001 && Math.abs(Number(point[1]) - Number(model.longitude)) < 0.000001;
+const differsFromSealedModel = (orders, engineers, canonical) => {
+  const jobs = canonical.jobModels || {};
+  const crew = canonical.engineerModels || {};
+  for (const order of orders) {
+    const model = jobs[sourceOrderId(order)];
+    if (!model) return true;
+    const source = order.sourceData || {};
+    if (Object.keys(model).some(key => source[key] !== undefined && String(source[key]) !== String(model[key]))) return true;
+    if (order.start && planningClock(order.start) !== planningClock(model.window_start)) return true;
+    if (order.end && planningClock(order.end) !== planningClock(model.window_end)) return true;
+    if (order.duration && Number(order.duration) !== Number(model.service_duration_min)) return true;
+    if (order.skill && planningSkill(order.skill) !== model.required_skill) return true;
+    if (order.zoneId && String(order.zoneId) !== model.zone_id) return true;
+    if (order.coords && !sameCoordinates(order.coords, model)) return true;
+    if (order.equipment && planningEquipment(order.equipment) !== planningEquipment(model.required_equipment)) return true;
+  }
+  for (const engineer of engineers) {
+    const model = crew[sourceEngineerId(engineer)];
+    if (!model) return true;
+    const source = engineer.sourceData || {};
+    for (const [key, value] of Object.entries({ zone_id: model.zone_id, shift_start: model.shift_start, shift_end: model.shift_end, transport_type: model.transport_type, start_office_id: model.start_office_id })) {
+      if (source[key] !== undefined && String(source[key]) !== String(value)) return true;
+    }
+    if (engineer.shiftStart && planningClock(engineer.shiftStart) !== planningClock(model.shift_start)) return true;
+    if (engineer.shiftEnd && planningClock(engineer.shiftEnd) !== planningClock(model.shift_end)) return true;
+    if (engineer.transport && planningTransport(engineer.transport) !== model.transport_type) return true;
+    if (engineer.zoneId && String(engineer.zoneId) !== model.zone_id) return true;
+    if (engineer.startCoords && !sameCoordinates(engineer.startCoords, model)) return true;
+    if (Array.isArray(engineer.skills) && engineer.skills.map(planningSkill).sort().join('|') !== model.skills.join('|')) return true;
+    if (engineer.equipment && planningEquipment(engineer.equipment) !== model.equipment.join('|')) return true;
+  }
+  return false;
 };
 
 function buildExactPlan(payload = {}, artifact) {
@@ -233,14 +280,29 @@ function buildExactPlan(payload = {}, artifact) {
     error.code = "UNSEALED_DATASET";
     throw error;
   }
+  if (differsFromSealedModel(orders, engineers, artifact.canonical)) {
+    const error = new Error('Загруженные поля отличаются от опубликованного точного набора; нужен новый exact-расчёт.');
+    error.code = 'UNSEALED_DATASET';
+    throw error;
+  }
   const source = artifact.plans[planKey];
+  if (payload.planningDate && String(payload.planningDate).slice(0, 10) !== String(source.planningAt || '').slice(0, 10)) {
+    const error = new Error('Дата отличается от проверенного точного набора; нужен новый exact-расчёт.');
+    error.code = 'UNSEALED_DATASET';
+    throw error;
+  }
+  if (Array.isArray(payload.sharedInventory) && payload.sharedInventory.length) {
+    const error = new Error('Остатки отличаются от проверенного точного набора; нужен новый exact-расчёт.');
+    error.code = 'UNSEALED_DATASET';
+    throw error;
+  }
   if (source.status !== "EXACT_VALID" || source.publicationAllowed !== true || source.validationStatus !== "VALID") {
     const error = new Error("Алгоритм вернул план, который не прошёл независимую проверку");
     error.code = "PLAN_NOT_PUBLISHABLE";
     throw error;
   }
   const orderBySourceId = new Map(orders.map((order) => [sourceOrderId(order), order]));
-  const engineerById = new Map(engineers.map((engineer) => [String(engineer.id), engineer]));
+  const engineerById = new Map(engineers.map((engineer) => [sourceEngineerId(engineer), engineer]));
   const missingEngineers = [...new Set(source.routes.filter((route) => route.assignments.length).map((route) => route.engineerId))]
     .filter((engineerId) => !engineerById.has(String(engineerId)));
   if (missingEngineers.length) {
@@ -252,10 +314,12 @@ function buildExactPlan(payload = {}, artifact) {
     const engineer = engineerById.get(String(route.engineerId));
     return {
       ...route,
+      engineerId: engineer?.id ?? route.engineerId,
       engineerName: engineer?.name || route.engineerName,
       assignments: route.assignments.map((assignment) => ({
         ...assignment,
         orderId: orderBySourceId.get(String(assignment.sourceOrderId))?.id,
+        engineerId: engineer?.id ?? route.engineerId,
       })).filter((assignment) => assignment.orderId !== undefined),
     };
   });
@@ -305,9 +369,27 @@ async function api(request, env = {}) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,POST,OPTIONS", "access-control-allow-headers": "content-type" } });
   if (url.pathname === "/api/health" && request.method === "GET") {
-    return json({ status: "ok", service: "beego-planning-adapter", algorithm: "beeline-planning-ortools-exact", version: 2 });
+    return json({
+      status: "ok",
+      service: "beego-planning-adapter",
+      algorithm: "beeline-planning-ortools-exact-v2.1-full-coverage-28-teams",
+      dynamicReplanning: env.EXACT_PLANNER_URL ? "connected" : "requires_exact_backend",
+      version: 3,
+    });
   }
   if (url.pathname === "/api/plan" && request.method === "POST") {
+    if (env.EXACT_PLANNER_URL) {
+      const endpoint = new URL('/api/plan', env.EXACT_PLANNER_URL);
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: await request.text(),
+      });
+      return new Response(response.body, {
+        status: response.status,
+        headers: { 'content-type': response.headers.get('content-type') || 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+      });
+    }
     const payload = await request.json().catch(() => ({}));
     try {
       return json(buildExactPlan(payload, await planningArtifact(request, env)));
@@ -327,14 +409,23 @@ async function api(request, env = {}) {
     if (result.code === "GEOAPIFY_NOT_CONFIGURED") return json(result, { status: 503 });
     return json(result);
   }
-  if (url.pathname === "/api/reassign" && request.method === "POST") {
-    const payload = await request.json().catch(() => ({}));
-    if (!payload.orderId || !payload.engineerId) return json({ error: "orderId and engineerId are required" }, { status: 400 });
-    return json({
-      error: "Ручное назначение должно пройти повторный точный расчёт и валидацию",
-      code: "REPLAN_REQUIRED",
-      ...payload,
-    }, { status: 409 });
+  if (url.pathname === "/api/replan" && request.method === "POST") {
+    if (!env.EXACT_PLANNER_URL) {
+      return json({
+        error: "Точный backend перепланирования не настроен. Публикация приближённого плана запрещена.",
+        code: "EXACT_REPLANNER_UNAVAILABLE",
+      }, { status: 503 });
+    }
+    const endpoint = new URL("/api/replan", env.EXACT_PLANNER_URL);
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: await request.text(),
+    });
+    return new Response(response.body, {
+      status: response.status,
+      headers: { "content-type": response.headers.get("content-type") || "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
   }
   return null;
 }
@@ -346,6 +437,7 @@ export default {
     if (new URL(request.url).pathname.startsWith("/api/")) {
       const apiResponse = await api(request, env);
       if (apiResponse) return apiResponse;
+      return json({ error: "API endpoint not found", code: "API_NOT_FOUND" }, { status: 404 });
     }
     const response = await env.ASSETS.fetch(request);
     const acceptsHtml = request.headers.get("accept")?.includes("text/html");

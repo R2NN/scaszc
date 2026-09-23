@@ -1,0 +1,18 @@
+{
+  "matrix_schema_version": "1.0.0",
+  "dataset_version": "2.1.0",
+  "provider": "LOCAL_VALHALLA_MATRIX",
+  "purpose": "SCREENING_ONLY_NOT_AUTHORITATIVE_FOR_TIME_DEPENDENT_CONSTRAINTS",
+  "zone_id": "EAST",
+  "mode": "CAR",
+  "departure_at_label": "2026-08-17T07:00:00+03:00",
+  "departure_time_honored": false,
+  "locations": 40,
+  "cells": 1600,
+  "status_counts": {
+    "OK": 1600
+  },
+  "matrix_file": "east-car.csv",
+  "matrix_file_sha256": "16884fd47293dfab7dac32c8410bde8d39ba0e9494c5f2a6b0733539fa83caf8",
+  "matrix_content_sha256": "17f5ebfb72c9905a08bf8be242f9a0bbb1f846ed4ffe0e23daeb40dc06fa0cc8"
+}

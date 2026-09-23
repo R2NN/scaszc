@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from beeline_planning import (
@@ -14,6 +14,8 @@ from beeline_planning import (
     ExactRefinementReport,
     RefinementFailureKind,
     apply_refinement_report,
+    apply_schedule_failure_assignment_cuts,
+    apply_schedule_failure_route_conflicts,
     build_candidate_index,
     inspect_exact_candidate,
     load_planning_dataset,
@@ -234,6 +236,119 @@ class RefinementActionTests(unittest.TestCase):
         )
         self.assertTrue(action.blocked_unknown)
         self.assertNotIn(unknown_arc, cuts)
+
+    def test_schedule_failure_creates_generic_assignment_cut(self) -> None:
+        _, report = self.report(RefinementFailureKind.WINDOW, observation=True)
+        cuts: set[tuple[str, str]] = set()
+        action = apply_schedule_failure_assignment_cuts(
+            report,
+            assignment_cuts=cuts,
+        )
+        self.assertEqual(action.new_cuts, (('E1', 'J1'),))
+        self.assertEqual(action.changed_zones, frozenset({'EAST'}))
+        self.assertIn(('E1', 'J1'), cuts)
+        resumed = apply_schedule_failure_assignment_cuts(
+            report,
+            assignment_cuts=cuts,
+        )
+        self.assertFalse(resumed.new_cuts)
+        self.assertEqual(resumed.changed_zones, frozenset({'EAST'}))
+
+    def test_forced_assignment_is_never_cut(self) -> None:
+        _, report = self.report(RefinementFailureKind.SHIFT, observation=False)
+        cuts: set[tuple[str, str]] = set()
+        action = apply_schedule_failure_assignment_cuts(
+            report,
+            assignment_cuts=cuts,
+            protected_assignments=frozenset({('E1', 'J1')}),
+        )
+        self.assertFalse(action.new_cuts)
+        self.assertEqual(action.protected_failures, report.failures)
+        self.assertFalse(cuts)
+
+    def test_schedule_failure_forbids_only_failed_route_prefix(self) -> None:
+        _, report = self.report(RefinementFailureKind.WINDOW, observation=True)
+        moment = datetime.fromisoformat('2026-08-17T10:00:00+03:00')
+        candidate = MasterSolution(
+            MasterSolveStatus.SCREENING_FEASIBLE,
+            moment,
+            (
+                MasterEngineerRoute(
+                    'E1',
+                    (
+                        MasterVisit(1, 'J0', 'START:E1', moment, moment, 0, 0, 'WALKING', False),
+                        MasterVisit(2, 'J1', 'J0', moment, moment, 0, 0, 'WALKING', False),
+                    ),
+                ),
+            ),
+            (),
+            (),
+            'd' * 64,
+            's' * 64,
+            'test',
+            False,
+            0,
+            (),
+        )
+        groups: set[tuple[tuple[str, str, str], ...]] = set()
+        assignment_groups: set[tuple[tuple[str, str], ...]] = set()
+        action = apply_schedule_failure_route_conflicts(
+            report,
+            candidate,
+            conflict_groups=groups,
+            assignment_conflict_groups=assignment_groups,
+        )
+        expected = (
+            ('E1', 'START:E1', 'J0'),
+            ('E1', 'J0', 'J1'),
+        )
+        self.assertEqual(action.new_groups, (expected,))
+        self.assertEqual(groups, {expected})
+        self.assertFalse(action.new_assignment_groups)
+
+        reverse_failure = ExactRefinementFailure(
+            RefinementFailureKind.WINDOW,
+            'E1',
+            'EAST',
+            'J1',
+            'J0',
+            moment.isoformat(),
+            'test',
+        )
+        reverse_report = ExactRefinementReport(
+            (), (reverse_failure,), (), 1, 0
+        )
+        reverse_candidate = MasterSolution(
+            MasterSolveStatus.SCREENING_FEASIBLE,
+            moment,
+            (
+                MasterEngineerRoute(
+                    'E1',
+                    (
+                        MasterVisit(1, 'J1', 'START:E1', moment, moment, 0, 0, 'WALKING', False),
+                        MasterVisit(2, 'J0', 'J1', moment, moment, 0, 0, 'WALKING', False),
+                    ),
+                ),
+            ),
+            (),
+            (),
+            'd' * 64,
+            's' * 64,
+            'test',
+            False,
+            0,
+            (),
+        )
+        reverse_action = apply_schedule_failure_route_conflicts(
+            reverse_report,
+            reverse_candidate,
+            conflict_groups=groups,
+            assignment_conflict_groups=assignment_groups,
+        )
+        self.assertEqual(
+            reverse_action.new_assignment_groups,
+            ((('E1', 'J0'), ('E1', 'J1')),),
+        )
 
 
 if __name__ == '__main__':

@@ -1,0 +1,30 @@
+{
+  "dataset_version": "2.1.0",
+  "schema_version": "2.1.0",
+  "generated_at": "2026-09-15",
+  "planning_date": "2026-08-17",
+  "initial_planning_at": "2026-08-17T07:00:00+03:00",
+  "timezone": "Europe/Moscow",
+  "deterministic_seed": 20260915,
+  "csv_encoding": "UTF-8 with BOM",
+  "csv_delimiter": ";",
+  "list_delimiter_inside_fields": "|",
+  "source_job_counts": {
+    "EAST": 40,
+    "SOUTHEAST": 67,
+    "SOUTHCENTER": 43
+  },
+  "scenario_counts": {
+    "core_jobs_total": 150,
+    "stress_jobs_total": 150,
+    "engineers": 35
+  },
+  "coordinate_reference_system": "WGS84 (EPSG:4326)",
+  "coordinate_policy": "Каждая локация имеет проверенный адресный объект, точность, провайдер, ID объекта и URL. Нулевые и неподтверждённые координаты запрещены.",
+  "constraint_policy_file": "common/constraint_policies.json",
+  "planning_context_file": "common/planning_context.json",
+  "routing_profile_file": "common/traffic_profiles.csv",
+  "algorithm_contract_file": "ALGORITHM_SPEC.md",
+  "validation_command": "python validate_dataset.py .",
+  "stress_expected_result": "Not applicable to workload benchmark"
+}

@@ -10,12 +10,16 @@ from threading import Lock, local
 from types import MappingProxyType
 
 from beeline_planning import (
+    ExactRefinementFailure,
+    ExactRefinementReport,
     MasterSolution,
     MasterSolveStatus,
     ObjectivePolicy,
-    ExactRefinementReport,
     SolverConfig,
     apply_refinement_report,
+    apply_schedule_failure_assignment_cuts,
+    apply_schedule_failure_route_conflicts,
+    build_candidate_index,
     build_explanation_bundle,
     build_master_model_input,
     inspect_exact_candidate,
@@ -96,9 +100,67 @@ def _solve_refined_zone(
     graph_sizes: tuple[int, ...],
     seconds_per_tier: float,
     search_workers: int,
+    forced_assignments: tuple[tuple[str, str], ...] = (),
+    strict_full_coverage: bool = False,
+    full_coverage_seconds: float = 300.0,
+    forbidden_assignments: tuple[tuple[str, str], ...] = (),
+    forbidden_arc_groups: tuple[tuple[ArcKey, ...], ...] = (),
+    forbidden_assignment_groups: tuple[
+        tuple[tuple[str, str], ...], ...
+    ] = (),
+    mutable_job_ids: frozenset[str] | None = None,
 ) -> tuple[str, MasterSolution, list[int]]:
     dataset = _zone_dataset(source, zone)
     master = build_master_model_input(dataset, screening)
+    if mutable_job_ids is not None:
+        current_owner = {
+            visit.job_id: route.engineer_id
+            for route in candidate.routes
+            if route.engineer_id in dataset.engineers
+            for visit in route.visits
+            if visit.job_id in dataset.jobs
+        }
+        locked_assignments = {
+            (engineer_id, job_id)
+            for job_id, engineer_id in current_owner.items()
+            if job_id not in mutable_job_ids
+        }
+        master = replace(
+            master,
+            hard_assignments=tuple(sorted(
+                set(master.hard_assignments) | locked_assignments
+            )),
+        )
+    required_arcs: set[ArcKey] = set()
+    if mutable_job_ids is not None:
+        for route in candidate.routes:
+            if route.engineer_id not in dataset.engineers:
+                continue
+            previous_job_id: str | None = None
+            for visit in route.visits:
+                if (
+                    previous_job_id is not None
+                    and previous_job_id not in mutable_job_ids
+                    and visit.job_id not in mutable_job_ids
+                ):
+                    required_arcs.add((
+                        route.engineer_id,
+                        previous_job_id,
+                        visit.job_id,
+                    ))
+                previous_job_id = visit.job_id
+    zone_forced_assignments = tuple(
+        assignment
+        for assignment in forced_assignments
+        if assignment[0] in dataset.engineers
+    )
+    if zone_forced_assignments:
+        master = replace(
+            master,
+            hard_assignments=tuple(sorted(
+                set(master.hard_assignments) | set(zone_forced_assignments)
+            )),
+        )
     found_override_keys: set[ArcKey] = set()
     adjusted_arcs = []
     for arc in master.arcs:
@@ -126,6 +188,21 @@ def _solve_refined_zone(
     attempts: list[int] = []
     expected = set(master.candidate_index.active_job_ids)
     zone_cuts = tuple(sorted(key for key in cuts if key[0] in dataset.engineers))
+    zone_forbidden_assignments = tuple(sorted(
+        assignment
+        for assignment in forbidden_assignments
+        if assignment[0] in dataset.engineers
+    ))
+    zone_forbidden_arc_groups = tuple(
+        group
+        for group in forbidden_arc_groups
+        if group and group[0][0] in dataset.engineers
+    )
+    zone_forbidden_assignment_groups = tuple(
+        group
+        for group in forbidden_assignment_groups
+        if group and group[0][0] in dataset.engineers
+    )
     for size in graph_sizes:
         attempts.append(size)
         solution = solve_screening_master(
@@ -136,7 +213,12 @@ def _solve_refined_zone(
                 num_search_workers=search_workers,
                 max_predecessors_per_destination=size or None,
                 excluded_arcs=zone_cuts,
-                require_full_coverage=False,
+                required_arcs=tuple(sorted(required_arcs)),
+                forbidden_arc_groups=zone_forbidden_arc_groups,
+                forbidden_assignments=zone_forbidden_assignments,
+                forbidden_assignment_groups=zone_forbidden_assignment_groups,
+                require_full_coverage=strict_full_coverage,
+                full_coverage_seconds=full_coverage_seconds,
                 objective_policy=ObjectivePolicy.COMPACT_TEAM,
             ),
             hint_solution=hint,
@@ -156,6 +238,30 @@ def _solve_refined_zone(
         if best is not None and not best.unserved_job_ids:
             break
     if best is None:
+        if mutable_job_ids is not None:
+            fallback_zone, fallback_solution, fallback_attempts = _solve_refined_zone(
+                source,
+                screening,
+                candidate,
+                zone,
+                cuts,
+                overrides,
+                graph_sizes,
+                seconds_per_tier,
+                search_workers,
+                forced_assignments,
+                strict_full_coverage,
+                full_coverage_seconds,
+                forbidden_assignments,
+                forbidden_arc_groups,
+                forbidden_assignment_groups,
+                None,
+            )
+            return (
+                fallback_zone,
+                fallback_solution,
+                attempts + fallback_attempts,
+            )
         raise RuntimeError(f'No refined screening solution found for zone {zone}')
     return zone, best, attempts
 
@@ -217,6 +323,57 @@ def _failure_dict(failure) -> dict[str, object]:
     }
 
 
+def _mutable_jobs_for_conflicts(
+    dataset,
+    zone: str,
+    assignment_conflict_groups: set[tuple[tuple[str, str], ...]],
+    current_failures: tuple[ExactRefinementFailure, ...] = (),
+) -> frozenset[str] | None:
+    """Build a bounded neighbourhood around the current exact failures.
+
+    Route-prefix no-goods are deliberately local facts.  Re-solving an entire
+    zone after learning one of them discards a nearly complete incumbent and
+    gives CP-SAT a much harder problem than necessary.  The failed destination,
+    its predecessor and jobs with nearby windows form the first neighbourhood;
+    ``_solve_refined_zone`` still falls back to the unrestricted zone when this
+    neighbourhood is too small.
+    """
+    seed_ids = {
+        job_id
+        for group in assignment_conflict_groups
+        for engineer_id, job_id in group
+        if dataset.engineers[engineer_id].zone_id == zone
+    }
+    for failure in current_failures:
+        if failure.zone_id != zone:
+            continue
+        if failure.destination_job_id in dataset.jobs:
+            seed_ids.add(failure.destination_job_id)
+        if failure.origin_node_id in dataset.jobs:
+            seed_ids.add(failure.origin_node_id)
+    if not seed_ids:
+        return None
+    seed_jobs = [dataset.jobs[job_id] for job_id in seed_ids]
+    start = min(job.window_start for job in seed_jobs)
+    end = max(job.window_end for job in seed_jobs)
+    max_window = max(job.window_end - job.window_start for job in seed_jobs)
+    neighbourhood_start = start - max_window
+    neighbourhood_end = end + max_window
+    return frozenset(
+        job_id
+        for job_id, job in dataset.jobs.items()
+        if job.zone_id == zone
+        and (
+            job_id in seed_ids
+            or (
+                job.window_end - job.window_start <= max_window * 2
+                and job.window_start <= neighbourhood_end
+                and neighbourhood_start <= job.window_end
+            )
+        )
+    )
+
+
 def _inspect_parallel(
     dataset,
     candidate: MasterSolution,
@@ -273,6 +430,9 @@ def _checkpoint(
     iterations: list[dict[str, object]],
     cuts: set[ArcKey],
     overrides: dict[ArcKey, int],
+    assignment_cuts: set[tuple[str, str]],
+    route_conflict_groups: set[tuple[ArcKey, ...]],
+    assignment_conflict_groups: set[tuple[tuple[str, str], ...]],
     status: str,
 ) -> None:
     payload = {
@@ -285,6 +445,21 @@ def _checkpoint(
         'duration_overrides': [
             {'arc': list(key), 'duration_minutes': value}
             for key, value in sorted(overrides.items())
+        ],
+        'assignment_cuts': [
+            {'engineer_id': engineer_id, 'job_id': job_id}
+            for engineer_id, job_id in sorted(assignment_cuts)
+        ],
+        'route_conflict_groups': [
+            [list(key) for key in group]
+            for group in sorted(route_conflict_groups)
+        ],
+        'assignment_conflict_groups': [
+            [
+                {'engineer_id': engineer_id, 'job_id': job_id}
+                for engineer_id, job_id in group
+            ]
+            for group in sorted(assignment_conflict_groups)
         ],
         'latest_candidate': master_solution_dict(candidate),
     }
@@ -303,10 +478,84 @@ def main() -> int:
     parser.add_argument('--cache', type=Path, required=True)
     parser.add_argument('--transit-index', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--max-iterations', type=int, default=6)
+    parser.add_argument(
+        '--initial-refinement-state',
+        type=Path,
+        help=(
+            'Resume learned cuts from an earlier checksummed refinement '
+            'checkpoint while using --input-candidate as the latest candidate.'
+        ),
+    )
+    parser.add_argument('--max-iterations', type=int, default=20)
     parser.add_argument('--max-exact-queries', type=int, default=3000)
     parser.add_argument('--max-unknown-retries', type=int, default=2)
     parser.add_argument('--seconds-per-tier', type=float, default=15)
+    parser.add_argument(
+        '--strict-full-coverage',
+        action='store_true',
+        help='Reject every refined candidate that leaves any job unassigned.',
+    )
+    parser.add_argument(
+        '--full-coverage-seconds',
+        type=float,
+        default=300,
+        help='Feasibility budget for each strict full-coverage re-solve.',
+    )
+    parser.add_argument(
+        '--force-assignment',
+        action='append',
+        default=[],
+        metavar='ENGINEER,JOB',
+        help=(
+            'Keep JOB assigned to ENGINEER through every refinement iteration. '
+            'Repeat the option to force several assignments.'
+        ),
+    )
+    parser.add_argument(
+        '--assignment-cut-on-schedule-failure',
+        action='store_true',
+        help=(
+            'On an exact WINDOW, SHIFT or ROUTE_LIMIT failure, learn a '
+            'run-local engineer/job exclusion instead of hard-coding IDs or '
+            'turning one departure-time observation into a timeless arc cost.'
+        ),
+    )
+    parser.add_argument(
+        '--max-assignment-cuts',
+        type=int,
+        default=50,
+        help='Maximum run-local engineer/job exclusions learned from exact failures.',
+    )
+    parser.add_argument(
+        '--alternative-owner-probes',
+        type=int,
+        default=3,
+        help=(
+            'After an assignment-cut re-solve times out, try this many '
+            'automatically ranked eligible owners for the failed job.'
+        ),
+    )
+    parser.add_argument(
+        '--route-conflict-cut-on-schedule-failure',
+        action='store_true',
+        help=(
+            'Learn a run-local no-good for the exact route prefix that missed '
+            'a window, shift or route limit. This preserves assignment and '
+            'reordering alternatives and contains no dataset-specific IDs.'
+        ),
+    )
+    parser.add_argument(
+        '--max-route-conflict-cuts',
+        type=int,
+        default=100,
+        help='Maximum exact route-prefix no-goods learned in one run.',
+    )
+    parser.add_argument(
+        '--max-assignment-conflict-cuts',
+        type=int,
+        default=50,
+        help='Maximum proven zero-travel assignment overload cuts in one run.',
+    )
     parser.add_argument('--search-workers', type=int, default=1)
     parser.add_argument('--zone-workers', type=int, default=3)
     parser.add_argument('--route-workers', type=int, default=3)
@@ -325,8 +574,14 @@ def main() -> int:
         args.search_workers,
         args.zone_workers,
         args.route_workers,
+        args.max_assignment_cuts,
+        args.alternative_owner_probes,
+        args.max_route_conflict_cuts,
+        args.max_assignment_conflict_cuts,
     ) < 1:
         parser.error('Budgets and worker counts must be positive')
+    if args.full_coverage_seconds <= 0:
+        parser.error('--full-coverage-seconds must be positive')
     graph_sizes = tuple(
         int(value.strip()) for value in args.adaptive_predecessors.split(',')
     )
@@ -340,6 +595,41 @@ def main() -> int:
     candidate = load_master_solution(args.input_candidate)
     if candidate.dataset_sha256 != dataset.dataset_sha256:
         raise ValueError('Candidate belongs to another dataset')
+    candidate_index = build_candidate_index(dataset)
+    forced_assignments: list[tuple[str, str]] = []
+    for raw in args.force_assignment:
+        parts = tuple(part.strip() for part in raw.split(','))
+        if len(parts) != 2 or not all(parts):
+            parser.error('--force-assignment requires ENGINEER,JOB')
+        engineer_id, job_id = parts
+        if engineer_id not in dataset.engineers:
+            parser.error(f'Unknown forced engineer: {engineer_id}')
+        if job_id not in dataset.jobs:
+            parser.error(f'Unknown forced job: {job_id}')
+        if engineer_id not in candidate_index.eligible_engineers_by_job[job_id]:
+            parser.error(
+                f'Forced assignment is statically ineligible: {engineer_id},{job_id}'
+            )
+        forced_assignments.append((engineer_id, job_id))
+    if len({job_id for _, job_id in forced_assignments}) != len(forced_assignments):
+        parser.error('Each forced job must have exactly one engineer')
+    protected_assignments = frozenset(forced_assignments) | frozenset(
+        (engineer_id, job_id)
+        for engineer_id, job_id in build_master_model_input(
+            dataset,
+            screening,
+        ).hard_assignments
+    )
+    require_full_coverage = (
+        args.strict_full_coverage
+        or (
+            (
+                args.assignment_cut_on_schedule_failure
+                or args.route_conflict_cut_on_schedule_failure
+            )
+            and not candidate.unserved_job_ids
+        )
+    )
 
     def make_oracle() -> ExactRoutingOracle:
         return ExactRoutingOracle(create_route_client(
@@ -354,6 +644,38 @@ def main() -> int:
     oracle = make_oracle()
     cuts: set[ArcKey] = set(candidate.operationally_excluded_arcs)
     overrides: dict[ArcKey, int] = {}
+    assignment_cuts: set[tuple[str, str]] = set()
+    route_conflict_groups: set[tuple[ArcKey, ...]] = set()
+    assignment_conflict_groups: set[tuple[tuple[str, str], ...]] = set()
+    if args.initial_refinement_state is not None:
+        state_payload = json.loads(
+            args.initial_refinement_state.read_text(encoding='utf-8')
+        )
+        unsigned_state = dict(state_payload)
+        expected_hash = unsigned_state.pop('content_sha256', None)
+        if expected_hash != payload_sha256(unsigned_state):
+            parser.error('Initial refinement state checksum mismatch')
+        if state_payload.get('artifact_type') != 'EXACT_REFINEMENT_LOOP_CHECKPOINT':
+            parser.error('Initial refinement state is not a refinement checkpoint')
+        if state_payload.get('dataset_sha256') != dataset.dataset_sha256:
+            parser.error('Initial refinement state belongs to another dataset')
+        cuts.update(tuple(item) for item in state_payload.get('cuts', ()))
+        overrides.update({
+            tuple(item['arc']): int(item['duration_minutes'])
+            for item in state_payload.get('duration_overrides', ())
+        })
+        assignment_cuts.update(
+            (item['engineer_id'], item['job_id'])
+            for item in state_payload.get('assignment_cuts', ())
+        )
+        route_conflict_groups.update(
+            tuple(tuple(key) for key in group)
+            for group in state_payload.get('route_conflict_groups', ())
+        )
+        assignment_conflict_groups.update(
+            tuple((item['engineer_id'], item['job_id']) for item in group)
+            for group in state_payload.get('assignment_conflict_groups', ())
+        )
     failure_counts: Counter[tuple[str, ArcKey]] = Counter()
     iterations: list[dict[str, object]] = []
     exact_queries = 0
@@ -381,6 +703,9 @@ def main() -> int:
                 'failures': [_failure_dict(item) for item in failures],
                 'duration_updates': [],
                 'new_cuts': [],
+                'new_assignment_cuts': [],
+                'new_route_conflict_groups': [],
+                'new_assignment_conflict_groups': [],
                 'resolved_zones': [],
             }
             iterations.append(record)
@@ -402,14 +727,120 @@ def main() -> int:
                 )
                 break
 
+            traditional_report = report
+            assignment_actions = None
+            route_conflict_actions = None
+            if args.route_conflict_cut_on_schedule_failure:
+                route_conflict_actions = apply_schedule_failure_route_conflicts(
+                    report,
+                    candidate,
+                    conflict_groups=route_conflict_groups,
+                    assignment_conflict_groups=assignment_conflict_groups,
+                )
+                record['new_route_conflict_groups'] = [
+                    [list(key) for key in group]
+                    for group in route_conflict_actions.new_groups
+                ]
+                record['new_assignment_conflict_groups'] = [
+                    [
+                        {'engineer_id': engineer_id, 'job_id': job_id}
+                        for engineer_id, job_id in group
+                    ]
+                    for group in route_conflict_actions.new_assignment_groups
+                ]
+                if route_conflict_actions.unmatched_failures:
+                    record['unmatched_route_conflict_failures'] = [
+                        _failure_dict(item)
+                        for item in route_conflict_actions.unmatched_failures
+                    ]
+                if len(route_conflict_groups) > args.max_route_conflict_cuts:
+                    stop_status = 'REFINEMENT_ROUTE_CONFLICT_LIMIT_REACHED'
+                    break
+                if (
+                    len(assignment_conflict_groups)
+                    > args.max_assignment_conflict_cuts
+                ):
+                    stop_status = 'REFINEMENT_ASSIGNMENT_CONFLICT_LIMIT_REACHED'
+                    break
+            if args.assignment_cut_on_schedule_failure:
+                assignment_actions = apply_schedule_failure_assignment_cuts(
+                    report,
+                    assignment_cuts=assignment_cuts,
+                    protected_assignments=protected_assignments,
+                )
+                schedule_zones = {
+                    failure.zone_id
+                    for failure in report.failures
+                    if failure.kind.value in {'WINDOW', 'SHIFT', 'ROUTE_LIMIT'}
+                }
+                traditional_report = replace(
+                    report,
+                    observations=tuple(
+                        item
+                        for item in report.observations
+                        if item.zone_id not in schedule_zones
+                    ),
+                    failures=tuple(
+                        failure
+                        for failure in report.failures
+                        if failure.kind.value
+                        not in {'WINDOW', 'SHIFT', 'ROUTE_LIMIT'}
+                    ),
+                )
+                record['new_assignment_cuts'] = [
+                    {
+                        'engineer_id': engineer_id,
+                        'job_id': job_id,
+                    }
+                    for engineer_id, job_id in assignment_actions.new_cuts
+                ]
+                if assignment_actions.protected_failures:
+                    record['protected_assignment_failures'] = [
+                        _failure_dict(item)
+                        for item in assignment_actions.protected_failures
+                    ]
+                    stop_status = 'REFINEMENT_PROTECTED_ASSIGNMENT_FAILED'
+                    break
+                if len(assignment_cuts) > args.max_assignment_cuts:
+                    stop_status = 'REFINEMENT_ASSIGNMENT_CUT_LIMIT_REACHED'
+                    break
+
+            if (
+                args.route_conflict_cut_on_schedule_failure
+                and not args.assignment_cut_on_schedule_failure
+            ):
+                schedule_zones = {
+                    failure.zone_id
+                    for failure in report.failures
+                    if failure.kind.value in {'WINDOW', 'SHIFT', 'ROUTE_LIMIT'}
+                }
+                traditional_report = replace(
+                    report,
+                    observations=tuple(
+                        item
+                        for item in report.observations
+                        if item.zone_id not in schedule_zones
+                    ),
+                    failures=tuple(
+                        failure
+                        for failure in report.failures
+                        if failure.kind.value
+                        not in {'WINDOW', 'SHIFT', 'ROUTE_LIMIT'}
+                    ),
+                )
+
             actions = apply_refinement_report(
-                report,
+                traditional_report,
                 duration_overrides=overrides,
                 cuts=cuts,
                 failure_counts=failure_counts,
                 max_unknown_retries=args.max_unknown_retries,
             )
             changed_zones = set(actions.changed_zones)
+            if assignment_actions is not None:
+                changed_zones.update(assignment_actions.changed_zones)
+            if route_conflict_actions is not None:
+                changed_zones.update(route_conflict_actions.changed_zones)
             record['duration_updates'] = [
                 {
                     'arc': [
@@ -435,27 +866,159 @@ def main() -> int:
                     iterations,
                     cuts,
                     overrides,
+                    assignment_cuts,
+                    route_conflict_groups,
+                    assignment_conflict_groups,
                     'REFINEMENT_RETRYING_UNKNOWN',
                 )
                 continue
 
-            with ThreadPoolExecutor(
-                max_workers=min(args.zone_workers, len(changed_zones))
-            ) as executor:
-                results = list(executor.map(
-                    lambda zone: _solve_refined_zone(
-                        dataset,
-                        screening,
+            mutable_jobs_by_zone = {
+                zone: _mutable_jobs_for_conflicts(
+                    dataset,
+                    zone,
+                    assignment_conflict_groups,
+                    report.failures,
+                )
+                for zone in changed_zones
+            }
+            record['mutable_jobs_by_zone'] = {
+                zone: len(job_ids) if job_ids is not None else None
+                for zone, job_ids in mutable_jobs_by_zone.items()
+            }
+
+            try:
+                with ThreadPoolExecutor(
+                    max_workers=min(args.zone_workers, len(changed_zones))
+                ) as executor:
+                    results = list(executor.map(
+                        lambda zone: _solve_refined_zone(
+                            dataset,
+                            screening,
+                            candidate,
+                            zone,
+                            cuts,
+                            overrides,
+                            graph_sizes,
+                            args.seconds_per_tier,
+                            args.search_workers,
+                            tuple(forced_assignments),
+                            require_full_coverage,
+                            args.full_coverage_seconds,
+                            tuple(sorted(assignment_cuts)),
+                            tuple(sorted(route_conflict_groups)),
+                            tuple(sorted(assignment_conflict_groups)),
+                            mutable_jobs_by_zone[zone],
+                        ),
+                        sorted(changed_zones),
+                    ))
+            except RuntimeError as error:
+                results = []
+                alternative_probes: list[dict[str, object]] = []
+                if args.assignment_cut_on_schedule_failure:
+                    route_jobs = {
+                        route.engineer_id: tuple(
+                            visit.job_id for visit in route.visits
+                        )
+                        for route in candidate.routes
+                    }
+                    for zone in sorted(changed_zones):
+                        zone_result = None
+                        failed_job_ids = tuple(dict.fromkeys(
+                            failure.destination_job_id
+                            for failure in report.failures
+                            if failure.zone_id == zone
+                            and failure.kind.value
+                            in {'WINDOW', 'SHIFT', 'ROUTE_LIMIT'}
+                        ))
+                        for job_id in failed_job_ids:
+                            job = dataset.jobs[job_id]
+
+                            def owner_rank(engineer_id: str) -> tuple[object, ...]:
+                                overlap_load = sum(
+                                    dataset.jobs[assigned_job_id].service_duration_min
+                                    for assigned_job_id in route_jobs.get(
+                                        engineer_id, ()
+                                    )
+                                    if (
+                                        dataset.jobs[assigned_job_id].window_start
+                                        < job.window_end
+                                        and job.window_start
+                                        < dataset.jobs[assigned_job_id].window_end
+                                    )
+                                )
+                                return (
+                                    overlap_load,
+                                    len(route_jobs.get(engineer_id, ())),
+                                    engineer_id,
+                                )
+
+                            owners = sorted(
+                                (
+                                    engineer_id
+                                    for engineer_id in candidate_index.eligible_engineers_by_job[
+                                        job_id
+                                    ]
+                                    if (engineer_id, job_id) not in assignment_cuts
+                                ),
+                                key=owner_rank,
+                            )[:args.alternative_owner_probes]
+                            for engineer_id in owners:
+                                probe = {
+                                    'zone_id': zone,
+                                    'job_id': job_id,
+                                    'engineer_id': engineer_id,
+                                    'overlap_load_minutes': owner_rank(engineer_id)[0],
+                                }
+                                alternative_probes.append(probe)
+                                try:
+                                    zone_result = _solve_refined_zone(
+                                        dataset,
+                                        screening,
+                                        candidate,
+                                        zone,
+                                        cuts,
+                                        overrides,
+                                        graph_sizes,
+                                        args.seconds_per_tier,
+                                        args.search_workers,
+                                        tuple(forced_assignments)
+                                        + ((engineer_id, job_id),),
+                                        require_full_coverage,
+                                        args.full_coverage_seconds,
+                                        tuple(sorted(assignment_cuts)),
+                                        tuple(sorted(route_conflict_groups)),
+                                        tuple(sorted(assignment_conflict_groups)),
+                                        None,
+                                    )
+                                except RuntimeError:
+                                    probe['status'] = 'NO_SOLUTION_WITHIN_LIMIT'
+                                    continue
+                                probe['status'] = 'SCREENING_FEASIBLE'
+                                break
+                            if zone_result is not None:
+                                break
+                        if zone_result is None:
+                            results = []
+                            break
+                        results.append(zone_result)
+                record['alternative_owner_probes'] = alternative_probes
+                if not results:
+                    record['resolve_error'] = str(error)
+                    stop_status = 'REFINEMENT_NO_FULL_COVERAGE_WITHIN_LIMIT'
+                    _checkpoint(
+                        args.output,
+                        dataset.dataset_sha256,
                         candidate,
-                        zone,
+                        iterations,
                         cuts,
                         overrides,
-                        graph_sizes,
-                        args.seconds_per_tier,
-                        args.search_workers,
-                    ),
-                    sorted(changed_zones),
-                ))
+                        assignment_cuts,
+                        route_conflict_groups,
+                        assignment_conflict_groups,
+                        stop_status,
+                    )
+                    break
             candidate = _merge_zones(
                 dataset,
                 candidate,
@@ -476,6 +1039,9 @@ def main() -> int:
                 iterations,
                 cuts,
                 overrides,
+                assignment_cuts,
+                route_conflict_groups,
+                assignment_conflict_groups,
                 'REFINEMENT_RUNNING',
             )
     finally:
@@ -494,6 +1060,32 @@ def main() -> int:
             {'arc': list(key), 'duration_minutes': value}
             for key, value in sorted(overrides.items())
         ]
+        payload['refinement_assignment_cuts'] = [
+            {'engineer_id': engineer_id, 'job_id': job_id}
+            for engineer_id, job_id in sorted(assignment_cuts)
+        ]
+        payload['refinement_route_conflict_groups'] = [
+            [list(key) for key in group]
+            for group in sorted(route_conflict_groups)
+        ]
+        payload['refinement_assignment_conflict_groups'] = [
+            [
+                {'engineer_id': engineer_id, 'job_id': job_id}
+                for engineer_id, job_id in group
+            ]
+            for group in sorted(assignment_conflict_groups)
+        ]
+        payload['forced_assignments'] = [
+            {'engineer_id': engineer_id, 'job_id': job_id}
+            for engineer_id, job_id in forced_assignments
+        ]
+        payload['strict_full_coverage'] = require_full_coverage
+        payload['assignment_cut_on_schedule_failure'] = (
+            args.assignment_cut_on_schedule_failure
+        )
+        payload['route_conflict_cut_on_schedule_failure'] = (
+            args.route_conflict_cut_on_schedule_failure
+        )
         payload['dataset_sha256'] = dataset.dataset_sha256
         if (
             final_result.plan is not None
@@ -520,6 +1112,9 @@ def main() -> int:
             iterations,
             cuts,
             overrides,
+            assignment_cuts,
+            route_conflict_groups,
+            assignment_conflict_groups,
             stop_status,
         )
         payload = json.loads(args.output.read_text(encoding='utf-8'))
@@ -530,6 +1125,9 @@ def main() -> int:
         'exact_provider_queries': exact_queries,
         'cuts': len(cuts),
         'duration_overrides': len(overrides),
+        'assignment_cuts': len(assignment_cuts),
+        'route_conflict_cuts': len(route_conflict_groups),
+        'assignment_conflict_cuts': len(assignment_conflict_groups),
         'output': str(args.output),
     }, ensure_ascii=False), flush=True)
     return 0 if payload.get('publication_allowed') else 2

@@ -1,74 +1,5 @@
-const ROAD_DISTANCE_FACTOR = 1.25;
-
-const TRANSPORT_SPEED_KMH = {
-  CAR: 30,
-  PUBLIC_TRANSIT: 18,
-  BICYCLE: 14,
-  WALK: 4.5,
-};
-
-const minutesFromTime = value => {
-  const [hours, minutes] = String(value || '00:00').slice(-5).split(':').map(Number);
-  return (Number(hours) || 0) * 60 + (Number(minutes) || 0);
-};
-
-const timeFromMinutes = value => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(Math.round(value) % 60).padStart(2, '0')}`;
-
-const normalizedText = value => String(value || '').trim().toLocaleLowerCase('ru-RU');
-
-const zoneOf = item => normalizedText(item?.cluster || item?.clusterName || item?.zone || item?.zoneName || item?.zoneId || item?.regionName);
-
-const skillCode = value => {
-  const normalized = normalizedText(value);
-  if (/emergency|авар/.test(normalized)) return 'EMERGENCY';
-  if (/install|connect|подключ|монтаж/.test(normalized)) return 'INSTALL';
-  if (/local|локал|ремонт|диагност/.test(normalized)) return 'LOCAL';
-  if (/upsell|дозаказ/.test(normalized)) return 'UPSELL';
-  return normalized.toUpperCase();
-};
-
-const transportCode = value => {
-  const normalized = normalizedText(value);
-  if (!normalized || /any|любой|неважно/.test(normalized)) return 'ANY';
-  if (/car|auto|авто|машин/.test(normalized)) return 'CAR';
-  if (/public|transit|bus|обществен/.test(normalized)) return 'PUBLIC_TRANSIT';
-  if (/bike|bicycle|вело/.test(normalized)) return 'BICYCLE';
-  if (/walk|foot|пеш/.test(normalized)) return 'WALK';
-  return normalized.toUpperCase();
-};
-
-const coordinatesOf = value => Array.isArray(value) && value.length === 2 && value.every(Number.isFinite) ? value : null;
-
-const radians = degrees => degrees * Math.PI / 180;
-
-const roadDistanceKm = (from, to) => {
-  if (!from || !to) return null;
-  const latitudeDelta = radians(to[0] - from[0]);
-  const longitudeDelta = radians(to[1] - from[1]);
-  const firstLatitude = radians(from[0]);
-  const secondLatitude = radians(to[0]);
-  const chord = Math.sin(latitudeDelta / 2) ** 2 + Math.cos(firstLatitude) * Math.cos(secondLatitude) * Math.sin(longitudeDelta / 2) ** 2;
-  const straightDistance = 6371 * 2 * Math.atan2(Math.sqrt(chord), Math.sqrt(1 - chord));
-  return straightDistance * ROAD_DISTANCE_FACTOR;
-};
-
-const requiredTransportOf = order => order?.requiredTransport
-  || order?.transportRequirement
-  || order?.transport
-  || order?.sourceData?.required_transport
-  || order?.sourceData?.transport_requirement
-  || '';
-
-const sameTerritory = (engineer, order) => {
-  const engineerZone = zoneOf(engineer);
-  const orderZone = zoneOf(order);
-  if (engineerZone || orderZone) return Boolean(engineerZone && orderZone && engineerZone === orderZone);
-  return Boolean(engineer?.regionId && order?.regionId && String(engineer.regionId) === String(order.regionId));
-};
-
 /**
  * Дополняет координатами заявки и стартовые точки инженеров во всех днях истории.
- * Это позволяет автоматически рассчитывать FCFS-бейзлайн для любой выбранной даты.
  */
 export function hydrateBaselineInputs(payload, source) {
   if (!payload?.days || !Array.isArray(source?.jobs) || !Array.isArray(source?.engineers)) return payload;
@@ -99,67 +30,113 @@ export function hydrateBaselineInputs(payload, source) {
   };
 }
 
+const unavailableBaseline = reason => ({
+  available: false,
+  exact: false,
+  reason,
+  methodology: 'EXACT_ARTIFACT_REQUIRED',
+  baselineAssignedCount: null,
+  baselineEngineersUsed: null,
+  baselineTotalDistanceKm: null,
+  baselineAvgKmPerOrder: null,
+  baselineUnassignedCount: null,
+  routes: [],
+  unassigned: [],
+});
+
 /**
- * Рассчитывает базовый FCFS-план без перестановки заявок и оптимизации маршрутов.
- * Заявки и инженеры рассматриваются строго в исходном порядке массивов.
+ * Возвращает только опубликованный EXACT_VALID FCFS-бейзлайн.
+ * Браузер не подменяет дорожную матрицу прямой и фиксированной скоростью.
  */
-export function calculateBaseline(orders = [], engineers = []) {
-  const states = engineers.map(engineer => ({
-    engineer,
-    availableAt: minutesFromTime(engineer.shiftStart || '08:00'),
-    shiftEnd: minutesFromTime(engineer.shiftEnd || '18:00'),
-    location: coordinatesOf(engineer.startCoords),
-    assignments: [],
-    distanceKm: 0,
-  }));
-  const unassigned = [];
-
-  for (const order of orders) {
-    let assigned = false;
-    for (const state of states) {
-      const { engineer } = state;
-      if (!sameTerritory(engineer, order)) continue;
-      const requiredSkill = skillCode(order.skill || order.requiredSkill || order.workType || order.sourceData?.required_skill);
-      if (!(engineer.skills || []).map(skillCode).includes(requiredSkill)) continue;
-      const requiredTransport = transportCode(requiredTransportOf(order));
-      const engineerTransport = transportCode(engineer.transport);
-      if (requiredTransport !== 'ANY' && requiredTransport !== engineerTransport) continue;
-      const destination = coordinatesOf(order.coords);
-      const distanceKm = roadDistanceKm(state.location, destination);
-      if (distanceKm == null) continue;
-      const speed = TRANSPORT_SPEED_KMH[engineerTransport] || TRANSPORT_SPEED_KMH.PUBLIC_TRANSIT;
-      const travelMinutes = distanceKm < 0.05 ? 0 : Math.max(1, Math.ceil(distanceKm / speed * 60));
-      const arrivalAt = state.availableAt + travelMinutes;
-      const plannedStart = Math.max(arrivalAt, minutesFromTime(order.start));
-      const plannedFinish = plannedStart + Math.max(1, Number(order.duration) || 60);
-      if (plannedStart > minutesFromTime(order.end) || plannedFinish > state.shiftEnd) continue;
-
-      state.assignments.push({
-        orderId: order.id,
-        plannedStart: timeFromMinutes(plannedStart),
-        plannedFinish: timeFromMinutes(plannedFinish),
-        travelMinutes,
-        distanceKm,
-      });
-      state.availableAt = plannedFinish;
-      state.location = destination;
-      state.distanceKm += distanceKm;
-      assigned = true;
-      break;
-    }
-    if (!assigned) unassigned.push({ orderId: order.id });
+export function calculateBaseline(orders = [], engineers = [], exactBaseline = null) {
+  if (exactBaseline?.status !== 'EXACT_VALID' || exactBaseline?.validationStatus !== 'VALID' || exactBaseline?.publicationAllowed !== true || !Array.isArray(exactBaseline.routes)) {
+    return unavailableBaseline('Точный FCFS-артефакт для этой даты не опубликован');
   }
-
-  const used = states.filter(state => state.assignments.length);
-  const baselineAssignedCount = used.reduce((sum, state) => sum + state.assignments.length, 0);
-  const baselineTotalDistanceKm = used.reduce((sum, state) => sum + state.distanceKm, 0);
+  const orderIds = new Set(orders.map(order => String(order.id)));
+  const engineerIds = new Set(engineers.map(engineer => String(engineer.id)));
+  const assignments = exactBaseline.routes.flatMap(route => route.assignments || []);
+  const unassigned = exactBaseline.unassigned || [];
+  const coveredIds = [...assignments.map(item => String(item.orderId)), ...unassigned.map(item => String(item.orderId))];
+  if (exactBaseline.routes.some(route => !engineerIds.has(String(route.engineerId)))
+    || coveredIds.some(id => !orderIds.has(id))
+    || coveredIds.length !== orderIds.size
+    || new Set(coveredIds).size !== orderIds.size
+    || (exactBaseline.metrics && (exactBaseline.metrics.assigned !== assignments.length
+      || exactBaseline.metrics.unassigned !== unassigned.length
+      || exactBaseline.metrics.total !== orders.length))) {
+    return unavailableBaseline('Точный FCFS-артефакт не совпадает с выбранным набором данных');
+  }
+  const totalDistanceKm = assignments.reduce((sum, item) => sum + (Number(item.distanceM) || 0), 0) / 1000;
   return {
-    baselineAssignedCount,
-    baselineEngineersUsed: used.length,
-    baselineTotalDistanceKm,
-    baselineAvgKmPerOrder: baselineAssignedCount ? baselineTotalDistanceKm / baselineAssignedCount : 0,
+    available: true,
+    exact: true,
+    methodology: exactBaseline.methodology || 'EXACT_FCFS_SAME_ROUTING_AND_VALIDATOR',
+    validationStatus: exactBaseline.validationStatus,
+    policy: exactBaseline.policy || null,
+    baselineAssignedCount: assignments.length,
+    baselineEngineersUsed: exactBaseline.routes.filter(route => route.assignments?.length).length,
+    baselineTotalDistanceKm: totalDistanceKm,
+    baselineAvgKmPerOrder: assignments.length ? totalDistanceKm / assignments.length : 0,
     baselineUnassignedCount: unassigned.length,
-    routes: used.map(state => ({ engineerId: state.engineer.id, assignments: state.assignments, distanceKm: state.distanceKm })),
+    routes: exactBaseline.routes,
     unassigned,
+  };
+}
+
+/** Project a globally validated FCFS plan onto a selected territory. */
+export function filterExactBaseline(baseline, orderIds, engineerIds) {
+  if (!baseline) return null;
+  const routes = baseline.routes.filter(route => engineerIds.has(String(route.engineerId))).map(route => ({
+    ...route,
+    assignments: route.assignments.filter(item => orderIds.has(String(item.orderId))),
+  })).filter(route => route.assignments.length);
+  const unassigned = baseline.unassigned.filter(item => orderIds.has(String(item.orderId)));
+  const assignments = routes.flatMap(route => route.assignments);
+  return {
+    ...baseline,
+    methodology: 'EXACT_FCFS_TERRITORY_VIEW_OF_VALIDATED_PLAN',
+    routes,
+    unassigned,
+    metrics: {
+      total: orderIds.size,
+      assigned: assignments.length,
+      unassigned: unassigned.length,
+      activeEngineers: routes.length,
+      distanceKm: assignments.reduce((sum, item) => sum + (Number(item.distanceM) || 0), 0) / 1000,
+      travelMinutes: assignments.reduce((sum, item) => sum + (Number(item.travelMinutes) || 0), 0),
+    },
+  };
+}
+
+/** Match a live copy of the canonical plan to its published exact FCFS artifact. */
+export function attachExactBaseline(liveRecord, canonicalRecord) {
+  const livePlan = liveRecord?.plan;
+  const canonicalPlan = canonicalRecord?.plan;
+  const baseline = canonicalPlan?.baseline;
+  if (!baseline || !livePlan?.contentSha256
+    || livePlan.contentSha256 !== canonicalPlan.contentSha256
+    || liveRecord.date !== canonicalRecord.date) return liveRecord;
+
+  const canonicalOrders = new Map(canonicalRecord.orders.map(order => [String(order.id), String(order.sourceId)]));
+  const liveOrders = new Map((liveRecord.orders || []).map(order => [String(order.sourceId || order.sourceData?.job_id || order.id), String(order.id)]));
+  const liveEngineers = new Map((liveRecord.team || []).map(engineer => [String(engineer.sourceId || engineer.sourceData?.engineer_id || engineer.id), String(engineer.id)]));
+  if (liveOrders.size !== canonicalOrders.size || liveEngineers.size !== canonicalRecord.team.length
+    || [...canonicalOrders.values()].some(sourceId => !liveOrders.has(sourceId))
+    || canonicalRecord.team.some(engineer => !liveEngineers.has(String(engineer.id)))) return liveRecord;
+
+  const mapOrderId = orderId => liveOrders.get(canonicalOrders.get(String(orderId)));
+  const routes = baseline.routes.map(route => ({
+    ...route,
+    engineerId: liveEngineers.get(String(route.engineerId)),
+    assignments: route.assignments.map(item => ({
+      ...item,
+      orderId: mapOrderId(item.orderId),
+      engineerId: liveEngineers.get(String(item.engineerId)),
+    })),
+  }));
+  const unassigned = baseline.unassigned.map(item => ({ ...item, orderId: mapOrderId(item.orderId) }));
+  return {
+    ...liveRecord,
+    plan: { ...livePlan, baseline: { ...baseline, routes, unassigned } },
   };
 }

@@ -4,9 +4,9 @@ import './business-select.css';
 
 /**
  * Единый выпадающий список BeeGo с управлением мышью и клавиатурой.
- * @param {{value: string, options: Array<{value: string, label: string, hint?: string, priority?: boolean, disabled?: boolean}>, onChange: (value: string) => void, ariaLabel: string, className?: string}} props
+ * @param {{value: string, options: Array<{value: string, label: string, hint?: string, priority?: boolean, disabled?: boolean}>, onChange: (value: string) => void, ariaLabel: string, className?: string, disabled?: boolean}} props
  */
-export function BusinessSelect({ value, options, onChange, ariaLabel, className = '' }) {
+export function BusinessSelect({ value, options, onChange, ariaLabel, className = '', disabled = false }) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef(null);
@@ -28,6 +28,7 @@ export function BusinessSelect({ value, options, onChange, ariaLabel, className 
   }, [open]);
 
   const show = () => {
+    if (disabled) return;
     setActiveIndex(options[selectedIndex]?.disabled ? (enabledIndexes[0] ?? 0) : selectedIndex);
     setOpen(true);
   };
@@ -44,6 +45,7 @@ export function BusinessSelect({ value, options, onChange, ariaLabel, className 
     setActiveIndex(enabledIndexes[(next + enabledIndexes.length) % enabledIndexes.length]);
   };
   const onKeyDown = event => {
+    if (disabled) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (!open) show();
@@ -61,8 +63,8 @@ export function BusinessSelect({ value, options, onChange, ariaLabel, className 
     }
   };
 
-  return <div className={`business-select ${open ? 'open' : ''} ${className}`.trim()} ref={rootRef} onKeyDown={onKeyDown}>
-    <button type="button" className="business-select-trigger" onClick={() => open ? setOpen(false) : show()} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open}>
+  return <div className={`business-select ${open ? 'open' : ''} ${disabled ? 'disabled' : ''} ${className}`.trim()} ref={rootRef} onKeyDown={onKeyDown}>
+    <button type="button" className="business-select-trigger" disabled={disabled} onClick={() => open ? setOpen(false) : show()} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open}>
       <span>{selected?.label || 'Выберите значение'}</span><ChevronDown/>
     </button>
     {open ? <div className="business-select-menu" role="listbox" aria-label={ariaLabel}>

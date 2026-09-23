@@ -6,6 +6,7 @@ import json
 import sqlite3
 import zlib
 from pathlib import Path
+from collections.abc import Iterable, Sequence
 
 from .models import Coordinate
 
@@ -73,6 +74,71 @@ class ScreeningCache:
         finally:
             connection.close()
         return None if row is None else (int(row[0]), int(row[1]))
+
+    def get_surfaces(
+        self,
+        namespace: str,
+        mode: str,
+        locations: Sequence[Coordinate],
+    ) -> dict[tuple[int, int], tuple[int, int]]:
+        """Read reusable cells for one dataset with bounded SQLite queries."""
+        keys = [_point_key(location) for location in locations]
+        unique_keys = list(dict.fromkeys(keys))
+        rows: dict[tuple[str, str], tuple[int, int]] = {}
+        connection = self._connect()
+        try:
+            for source_start in range(0, len(unique_keys), 200):
+                sources = unique_keys[source_start:source_start + 200]
+                for target_start in range(0, len(unique_keys), 200):
+                    targets = unique_keys[target_start:target_start + 200]
+                    placeholders_sources = ','.join('?' for _ in sources)
+                    placeholders_targets = ','.join('?' for _ in targets)
+                    query = (
+                        'SELECT origin_key, destination_key, duration_seconds, distance_m '
+                        'FROM surface_cells WHERE namespace=? AND mode=? '
+                        f'AND origin_key IN ({placeholders_sources}) '
+                        f'AND destination_key IN ({placeholders_targets})'
+                    )
+                    for origin, destination, seconds, meters in connection.execute(
+                        query, (namespace, mode, *sources, *targets)
+                    ):
+                        rows[(origin, destination)] = (int(seconds), int(meters))
+        finally:
+            connection.close()
+        return {
+            (origin_index, destination_index): cached
+            for origin_index, origin_key in enumerate(keys)
+            for destination_index, destination_key in enumerate(keys)
+            if (cached := rows.get((origin_key, destination_key))) is not None
+        }
+
+    def put_surfaces(
+        self,
+        namespace: str,
+        mode: str,
+        cells: Iterable[tuple[Coordinate, Coordinate, int, int]],
+    ) -> None:
+        """Persist a matrix response in one transaction instead of per cell."""
+        rows = [
+            (namespace, mode, _point_key(origin), _point_key(destination), seconds, meters)
+            for origin, destination, seconds, meters in cells
+        ]
+        if not rows:
+            return
+        connection = self._connect()
+        try:
+            connection.executemany(
+                '''
+                INSERT INTO surface_cells VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(namespace, mode, origin_key, destination_key) DO UPDATE SET
+                    duration_seconds=excluded.duration_seconds,
+                    distance_m=excluded.distance_m
+                ''',
+                rows,
+            )
+            connection.commit()
+        finally:
+            connection.close()
 
     def put_surface(
         self,

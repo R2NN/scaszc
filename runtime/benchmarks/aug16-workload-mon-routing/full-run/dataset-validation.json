@@ -1,0 +1,61 @@
+{
+  "artifact_type": "GENERIC_PLANNING_DATASET_VALIDATION",
+  "status": "VALID",
+  "dataset_root": "C:\\Users\\р\\Desktop\\gl\\review\\runtime\\benchmarks\\aug16-workload-mon-routing\\dataset-v2",
+  "dataset_sha256": "f2e8dff66938c8c1c4473c269712fd945dbebc114a6066a0acc09085f932b541",
+  "schema_version": "2.1.0",
+  "scenario_summaries": [
+    {
+      "scenario": "core",
+      "planning_date": "2026-08-17",
+      "initial_planning_at": "2026-08-17T07:00:00+03:00",
+      "timezone": "Europe/Moscow",
+      "zones": [
+        "EAST",
+        "SOUTHCENTER",
+        "SOUTHEAST"
+      ],
+      "engineers": 35,
+      "available_engineers": 34,
+      "jobs_total": 150,
+      "jobs_active_initially": 150,
+      "urgent_jobs_active_initially": 11,
+      "events": 0,
+      "commitments": 0,
+      "locations": 200,
+      "static_candidate_count": {
+        "minimum": 2,
+        "maximum": 8,
+        "jobs_without_candidate": 0
+      },
+      "event_order": []
+    },
+    {
+      "scenario": "stress",
+      "planning_date": "2026-08-17",
+      "initial_planning_at": "2026-08-17T07:00:00+03:00",
+      "timezone": "Europe/Moscow",
+      "zones": [
+        "EAST",
+        "SOUTHCENTER",
+        "SOUTHEAST"
+      ],
+      "engineers": 35,
+      "available_engineers": 34,
+      "jobs_total": 150,
+      "jobs_active_initially": 150,
+      "urgent_jobs_active_initially": 11,
+      "events": 0,
+      "commitments": 0,
+      "locations": 200,
+      "static_candidate_count": {
+        "minimum": 2,
+        "maximum": 8,
+        "jobs_without_candidate": 0
+      },
+      "event_order": []
+    }
+  ],
+  "canonical_dataset_assumptions_used": false,
+  "content_sha256": "8cc816ae5cd0f81b21586e58b78511d69969dd529d09962383151087328c5915"
+}
