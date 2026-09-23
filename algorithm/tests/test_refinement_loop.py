@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from beeline_planning import (
     MasterEngineerRoute,
+    MasterArc,
+    MasterModelInput,
     MasterSolution,
     MasterSolveStatus,
     MasterVisit,
@@ -27,6 +31,7 @@ from beeline_routing.models import (
     RouteStep,
 )
 from beeline_routing.oracle import ExactRoutingOracle
+from tools import refine_screening_exact as refinement_tool
 
 
 DATASET = Path(__file__).parents[1] / 'work/dataset_v21/beeline_synthetic_dataset_v2_1'
@@ -153,6 +158,97 @@ class ExactRefinementInspectionTests(unittest.TestCase):
             report.failures[0].kind,
             {RefinementFailureKind.WINDOW, RefinementFailureKind.SHIFT},
         )
+
+    def test_reuses_only_identical_route_reports(self) -> None:
+        calls = []
+
+        def make_oracle():
+            calls.append(1)
+            return ExactRoutingOracle(_Client(RouteStatus.OK, 7))
+
+        cache = {}
+        candidate = self.candidate()
+        first = refinement_tool._inspect_parallel(
+            self.dataset, candidate, make_oracle, 1,
+            route_report_cache=cache,
+        )
+        stats = {}
+        second = refinement_tool._inspect_parallel(
+            self.dataset, candidate, make_oracle, 1,
+            route_report_cache=cache, stats=stats,
+        )
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(second.observations, first.observations)
+        self.assertEqual(second.complete_engineer_ids, first.complete_engineer_ids)
+        self.assertEqual(second.exact_provider_queries, 0)
+        self.assertEqual(stats, {'reused_routes': 1, 'checked_routes': 0})
+
+        route = candidate.routes[0]
+        changed = replace(candidate, routes=(replace(
+            route,
+            visits=(replace(route.visits[0], screening_duration_minutes=3),),
+        ),))
+        third = refinement_tool._inspect_parallel(
+            self.dataset, changed, make_oracle, 1,
+            route_report_cache=cache,
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(third.observations[0].screening_duration_minutes, 3)
+
+    def test_unknown_route_is_rechecked(self) -> None:
+        calls = []
+
+        def make_oracle():
+            calls.append(1)
+            return ExactRoutingOracle(_Client(RouteStatus.UNKNOWN))
+
+        cache = {}
+        for _ in range(2):
+            report = refinement_tool._inspect_parallel(
+                self.dataset, self.candidate(), make_oracle, 1,
+                route_report_cache=cache,
+            )
+            self.assertEqual(report.failures[0].kind, RefinementFailureKind.ROUTING_UNKNOWN)
+        self.assertEqual(len(calls), 2)
+        self.assertFalse(cache)
+
+    def test_zone_master_cache_patches_only_exact_duration_arcs(self) -> None:
+        engineer = self.engineer
+        job = self.job
+        arc = MasterArc(
+            engineer.engineer_id,
+            f'START:{engineer.engineer_id}',
+            self.dataset.offices[engineer.start_office_id].location_id,
+            job.job_id,
+            job.location_id,
+            2,
+            50,
+            engineer.transport_mode,
+            True,
+        )
+        master = MasterModelInput(
+            self.dataset.initial_planning_at,
+            build_candidate_index(self.dataset),
+            (arc,),
+            (),
+            's' * 64,
+        )
+        with patch.object(
+            refinement_tool, 'build_master_model_input', return_value=master,
+        ) as builder:
+            cache = refinement_tool._ZoneMasterCache(self.dataset, object())
+            context = cache.get(job.zone_id)
+            self.assertIs(cache.get(job.zone_id), context)
+            self.assertIs(context.with_overrides({}), master)
+            key = (engineer.engineer_id, arc.origin_node_id, job.job_id)
+            adjusted = context.with_overrides({key: 9})
+            self.assertEqual(adjusted.arcs[0].screening_duration_minutes, 9)
+            self.assertFalse(adjusted.arcs[0].screening_is_surrogate)
+            self.assertEqual(master.arcs[0].screening_duration_minutes, 2)
+            self.assertIsNot(adjusted, master)
+            with self.assertRaisesRegex(ValueError, 'absent from zone graph'):
+                context.with_overrides({(engineer.engineer_id, 'missing', job.job_id): 9})
+            self.assertEqual(builder.call_count, 1)
 
 
 class RefinementActionTests(unittest.TestCase):

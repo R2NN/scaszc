@@ -4,17 +4,20 @@ import argparse
 import json
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from threading import Lock, local
 from types import MappingProxyType
+from typing import Mapping
 
 from beeline_planning import (
     ExactRefinementFailure,
     ExactRefinementReport,
+    MasterModelInput,
     MasterSolution,
     MasterSolveStatus,
     ObjectivePolicy,
+    RefinementFailureKind,
     SolverConfig,
     apply_refinement_report,
     apply_schedule_failure_assignment_cuts,
@@ -29,6 +32,7 @@ from beeline_planning import (
     screening_solution_quality,
     solve_screening_master,
 )
+from beeline_planning.domain import PlanningDataset
 from beeline_planning.export import (
     load_master_solution,
     master_solution_dict,
@@ -42,6 +46,73 @@ from beeline_routing.oracle import ExactRoutingOracle
 
 
 ArcKey = tuple[str, str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class _ZoneMasterContext:
+    dataset: PlanningDataset
+    master: MasterModelInput
+    arc_positions: Mapping[ArcKey, int]
+
+    def with_overrides(self, overrides: dict[ArcKey, int]) -> MasterModelInput:
+        zone_overrides = {
+            key: duration
+            for key, duration in overrides.items()
+            if key[0] in self.dataset.engineers
+        }
+        missing = zone_overrides.keys() - self.arc_positions.keys()
+        if missing:
+            raise ValueError(
+                f'Exact duration overrides are absent from zone graph: {sorted(missing)}'
+            )
+        if not zone_overrides:
+            return self.master
+        arcs = list(self.master.arcs)
+        for key, duration in zone_overrides.items():
+            index = self.arc_positions[key]
+            arc = arcs[index]
+            arcs[index] = replace(
+                arc,
+                screening_duration_minutes=max(
+                    arc.screening_duration_minutes,
+                    duration,
+                ),
+                screening_is_surrogate=False,
+            )
+        return replace(self.master, arcs=tuple(arcs))
+
+
+class _ZoneMasterCache:
+    """Keep immutable zone graphs across parallel refinement iterations."""
+
+    def __init__(self, source, screening) -> None:
+        self._source = source
+        self._screening = screening
+        self._contexts: dict[str, _ZoneMasterContext] = {}
+        self._lock = Lock()
+        self._zone_locks: dict[str, Lock] = {}
+
+    def get(self, zone: str) -> _ZoneMasterContext:
+        with self._lock:
+            context = self._contexts.get(zone)
+            if context is not None:
+                return context
+            zone_lock = self._zone_locks.setdefault(zone, Lock())
+        with zone_lock:
+            with self._lock:
+                context = self._contexts.get(zone)
+            if context is not None:
+                return context
+            dataset = _zone_dataset(self._source, zone)
+            master = build_master_model_input(dataset, self._screening)
+            positions = MappingProxyType({
+                (arc.engineer_id, arc.origin_node_id, arc.destination_job_id): index
+                for index, arc in enumerate(master.arcs)
+            })
+            context = _ZoneMasterContext(dataset, master, positions)
+            with self._lock:
+                self._contexts[zone] = context
+            return context
 
 
 def _zone_dataset(source, zone: str):
@@ -109,9 +180,15 @@ def _solve_refined_zone(
         tuple[tuple[str, str], ...], ...
     ] = (),
     mutable_job_ids: frozenset[str] | None = None,
+    zone_cache: _ZoneMasterCache | None = None,
 ) -> tuple[str, MasterSolution, list[int]]:
-    dataset = _zone_dataset(source, zone)
-    master = build_master_model_input(dataset, screening)
+    context = (
+        zone_cache.get(zone)
+        if zone_cache is not None
+        else _ZoneMasterCache(source, screening).get(zone)
+    )
+    dataset = context.dataset
+    master = context.with_overrides(overrides)
     if mutable_job_ids is not None:
         current_owner = {
             visit.job_id: route.engineer_id
@@ -161,28 +238,6 @@ def _solve_refined_zone(
                 set(master.hard_assignments) | set(zone_forced_assignments)
             )),
         )
-    found_override_keys: set[ArcKey] = set()
-    adjusted_arcs = []
-    for arc in master.arcs:
-        key = (arc.engineer_id, arc.origin_node_id, arc.destination_job_id)
-        if key in overrides:
-            found_override_keys.add(key)
-            adjusted_arcs.append(replace(
-                arc,
-                screening_duration_minutes=max(
-                    arc.screening_duration_minutes,
-                    overrides[key],
-                ),
-                screening_is_surrogate=False,
-            ))
-        else:
-            adjusted_arcs.append(arc)
-    missing = {
-        key for key in overrides if key[0] in dataset.engineers
-    } - found_override_keys
-    if missing:
-        raise ValueError(f'Exact duration overrides are absent from zone graph: {sorted(missing)}')
-    master = replace(master, arcs=tuple(adjusted_arcs))
     hint = _zone_hint(candidate, dataset)
     best: MasterSolution | None = None
     attempts: list[int] = []
@@ -256,6 +311,7 @@ def _solve_refined_zone(
                 forbidden_arc_groups,
                 forbidden_assignment_groups,
                 None,
+                zone_cache,
             )
             return (
                 fallback_zone,
@@ -379,11 +435,28 @@ def _inspect_parallel(
     candidate: MasterSolution,
     oracle_factory,
     max_workers: int,
+    *,
+    route_report_cache: dict[tuple[object, ...], ExactRefinementReport] | None = None,
+    stats: dict[str, int] | None = None,
 ) -> ExactRefinementReport:
-    """Inspect independent engineer routes concurrently with thread-local clients."""
+    """Inspect changed routes and reuse exact proofs for identical route inputs."""
     state = local()
     clients: list[ExactRoutingOracle] = []
     clients_lock = Lock()
+
+    def route_key(route) -> tuple[object, ...]:
+        # Exact departures are recomputed from this order and the sealed dataset.
+        # Screening times are included because they appear in observations.
+        return (
+            candidate.dataset_sha256,
+            candidate.screening_snapshot_sha256,
+            candidate.planning_at,
+            route.engineer_id,
+            tuple(
+                (visit.job_id, visit.origin_node_id, visit.screening_duration_minutes)
+                for visit in route.visits
+            ),
+        )
 
     def inspect_route(route):
         oracle = getattr(state, 'oracle', None)
@@ -400,26 +473,58 @@ def _inspect_parallel(
         )
         return inspect_exact_candidate(dataset, partial, oracle)
 
+    reports: list[ExactRefinementReport | None] = [None] * len(candidate.routes)
+    missing: list[tuple[int, object, tuple[object, ...]]] = []
+    reused_routes = 0
+    for index, route in enumerate(candidate.routes):
+        key = route_key(route)
+        cached = route_report_cache.get(key) if route_report_cache is not None else None
+        if cached is None:
+            missing.append((index, route, key))
+        else:
+            reports[index] = replace(
+                cached,
+                exact_provider_queries=0,
+                identity_legs=0,
+            )
+            reused_routes += 1
     try:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            reports = list(executor.map(inspect_route, candidate.routes))
+        if missing:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                fresh = list(executor.map(
+                    inspect_route,
+                    (route for _, route, _ in missing),
+                ))
+            for (index, _, key), report in zip(missing, fresh):
+                reports[index] = report
+                if route_report_cache is not None and not any(
+                    failure.kind == RefinementFailureKind.ROUTING_UNKNOWN
+                    for failure in report.failures
+                ):
+                    route_report_cache[key] = report
     finally:
         for oracle in clients:
             close = getattr(oracle.client, 'close', None)
             if close is not None:
                 close()
+    if stats is not None:
+        stats['reused_routes'] = reused_routes
+        stats['checked_routes'] = len(missing)
+    complete_reports = [report for report in reports if report is not None]
+    if len(complete_reports) != len(candidate.routes):
+        raise RuntimeError('Exact route inspection did not return every engineer report')
     return ExactRefinementReport(
         observations=tuple(
-            item for report in reports for item in report.observations
+            item for report in complete_reports for item in report.observations
         ),
-        failures=tuple(item for report in reports for item in report.failures),
+        failures=tuple(item for report in complete_reports for item in report.failures),
         complete_engineer_ids=tuple(
             engineer_id
-            for report in reports
+            for report in complete_reports
             for engineer_id in report.complete_engineer_ids
         ),
-        exact_provider_queries=sum(report.exact_provider_queries for report in reports),
-        identity_legs=sum(report.identity_legs for report in reports),
+        exact_provider_queries=sum(report.exact_provider_queries for report in complete_reports),
+        identity_legs=sum(report.identity_legs for report in complete_reports),
     )
 
 
@@ -681,13 +786,18 @@ def main() -> int:
     exact_queries = 0
     stop_status = 'REFINEMENT_LIMIT_REACHED'
     final_result = None
+    route_report_cache: dict[tuple[object, ...], ExactRefinementReport] = {}
+    zone_master_cache = _ZoneMasterCache(dataset, screening)
     try:
         for iteration in range(1, args.max_iterations + 1):
+            inspection_stats: dict[str, int] = {}
             report = _inspect_parallel(
                 dataset,
                 candidate,
                 make_oracle,
                 args.route_workers,
+                route_report_cache=route_report_cache,
+                stats=inspection_stats,
             )
             exact_queries += report.exact_provider_queries
             failures = list(report.failures)
@@ -700,6 +810,8 @@ def main() -> int:
                     candidate,
                 ).as_dict(),
                 'exact_provider_queries': report.exact_provider_queries,
+                'exact_routes_reused': inspection_stats['reused_routes'],
+                'exact_routes_checked': inspection_stats['checked_routes'],
                 'failures': [_failure_dict(item) for item in failures],
                 'duration_updates': [],
                 'new_cuts': [],
@@ -909,6 +1021,7 @@ def main() -> int:
                             tuple(sorted(route_conflict_groups)),
                             tuple(sorted(assignment_conflict_groups)),
                             mutable_jobs_by_zone[zone],
+                            zone_master_cache,
                         ),
                         sorted(changed_zones),
                     ))
@@ -990,6 +1103,7 @@ def main() -> int:
                                         tuple(sorted(route_conflict_groups)),
                                         tuple(sorted(assignment_conflict_groups)),
                                         None,
+                                        zone_master_cache,
                                     )
                                 except RuntimeError:
                                     probe['status'] = 'NO_SOLUTION_WITHIN_LIMIT'
