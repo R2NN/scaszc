@@ -49,6 +49,7 @@ class SolverConfig:
     objective_policy: ObjectivePolicy = ObjectivePolicy.COMPACT_TEAM
     require_full_coverage: bool = True
     stop_after_full_coverage: bool = False
+    stop_at_first_full_coverage_solution: bool = False
     stop_after_coverage: bool = False
     full_coverage_seconds: float = 300.0
     allow_partial_after_proven_infeasible: bool = False
@@ -1032,7 +1033,16 @@ def solve_screening_master(
             config,
             max_seconds=config.full_coverage_seconds,
         )
-        coverage_status = coverage_solver.solve(built.model)
+        if config.stop_at_first_full_coverage_solution:
+            class FirstCoverageSolution(cp_model.CpSolverSolutionCallback):
+                def on_solution_callback(self) -> None:
+                    self.stop_search()
+
+            coverage_status = coverage_solver.solve(
+                built.model, FirstCoverageSolution()
+            )
+        else:
+            coverage_status = coverage_solver.solve(built.model)
         if stability_objective is not None:
             built.model.clear_objective()
         if coverage_status in {cp_model.OPTIMAL, cp_model.FEASIBLE}:

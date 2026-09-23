@@ -370,6 +370,48 @@ class CpSatMasterTests(unittest.TestCase):
         )
         self.assertEqual(strict_solution.routes, ())
 
+        one_job_dataset = replace(
+            dataset,
+            jobs=MappingProxyType({'J_URGENT': jobs['J_URGENT']}),
+        )
+        one_job_candidates = replace(
+            candidates,
+            active_job_ids=('J_URGENT',),
+            eligible_engineers_by_job=MappingProxyType({'J_URGENT': ('E1',)}),
+        )
+        one_job_master = replace(
+            master,
+            candidate_index=one_job_candidates,
+            arcs=tuple(arc for arc in arcs if arc.destination_job_id == 'J_URGENT'
+                       and arc.origin_node_id == 'START:E1'),
+        )
+        coverage_hint = solve_screening_master(
+            one_job_dataset,
+            one_job_master,
+            SolverConfig(
+                max_seconds_per_tier=2,
+                full_coverage_seconds=2,
+                stop_after_full_coverage=True,
+            ),
+        )
+        quick_refinement = solve_screening_master(
+            one_job_dataset,
+            one_job_master,
+            SolverConfig(
+                max_seconds_per_tier=2,
+                full_coverage_seconds=2,
+                stop_at_first_full_coverage_solution=True,
+            ),
+            hint_solution=coverage_hint,
+        )
+        self.assertEqual(quick_refinement.unserved_job_ids, ())
+        self.assertEqual(
+            validate_screening_solution(
+                one_job_dataset, one_job_master, quick_refinement
+            ),
+            (),
+        )
+
         solution = solve_screening_master(
             dataset,
             master,

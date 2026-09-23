@@ -16,7 +16,7 @@ BRIDGE = ROOT / 'runtime' / 'valhalla_bridge.py'
 PREPARE_RUNTIME = ROOT / 'runtime' / 'prepare_valhalla_runtime.py'
 WSL_DISTRIBUTION = 'docker-desktop'
 RUNTIME_REVISION = 'valhalla-3.8.3-runtime-schema-v2'
-BRIDGE_REVISION = 'worker-pool-v2'
+BRIDGE_REVISION = 'worker-pool-v8'
 
 
 def _health_url(endpoint: str) -> str:
@@ -84,8 +84,8 @@ def _start_bridge() -> None:
     """Start the actual WSL Valhalla bridge detached from the pipeline process."""
     if not BRIDGE.is_file():
         raise RuntimeError(f'Valhalla bridge is missing: {BRIDGE}')
-    _prepare_wsl_runtime()
     _stop_wsl_bridge()
+    _prepare_wsl_runtime()
     time.sleep(0.5)
     log_path = ROOT / 'runtime' / 'valhalla-bridge.log'
     command = [

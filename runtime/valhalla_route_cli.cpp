@@ -13,10 +13,12 @@ int main(int argc, char** argv) {
   }
   boost::property_tree::ptree config;
   boost::property_tree::read_json(argv[1], config);
-  valhalla::tyr::actor_t actor(config, false);
   std::string request;
   while (std::getline(std::cin, request)) {
     try {
+      // Valhalla's actor keeps request-local state. Recreate it for each
+      // request so a failed matrix cannot corrupt the next one.
+      valhalla::tyr::actor_t actor(config, false);
       const bool is_matrix = request.find("\"sources\"") != std::string::npos &&
                              request.find("\"targets\"") != std::string::npos;
       std::cout << (is_matrix ? actor.matrix(request) : actor.route(request)) << '\n';

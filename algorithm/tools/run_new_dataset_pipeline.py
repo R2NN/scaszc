@@ -51,6 +51,33 @@ def _is_publishable_full_coverage(path: Path) -> bool:
     )
 
 
+def _refinement_fallback_candidate(
+    checkpoint: Path,
+    master: Path,
+    output: Path,
+    dataset_sha256: str,
+) -> Path:
+    """Resume from a verified checkpoint, or use the original screening plan."""
+    if not checkpoint.is_file():
+        return master
+    payload = json.loads(checkpoint.read_text(encoding='utf-8'))
+    unsigned = dict(payload)
+    if unsigned.pop('content_sha256', None) != payload_sha256(unsigned):
+        raise ValueError('Exact refinement checkpoint checksum mismatch')
+    candidate = payload.get('latest_candidate')
+    if (
+        payload.get('artifact_type') != 'EXACT_REFINEMENT_LOOP_CHECKPOINT'
+        or payload.get('dataset_sha256') != dataset_sha256
+        or not isinstance(candidate, dict)
+        or candidate.get('dataset_sha256') != dataset_sha256
+    ):
+        return master
+    candidate = dict(candidate)
+    candidate['content_sha256'] = payload_sha256(candidate)
+    write_json_atomic(output, candidate)
+    return output
+
+
 def _configure_valhalla_snapshot(environment: dict[str, str], base_url: str) -> None:
     """Bind every reusable route response to the active road-tile snapshot."""
     with urllib.request.urlopen(f'{base_url.rstrip("/")}/status', timeout=5) as response:
@@ -162,6 +189,11 @@ def main() -> int:
     parser.add_argument('--search-workers', type=int, default=1)
     parser.add_argument('--zone-workers', type=int, default=3)
     parser.add_argument('--route-workers', type=int, default=3)
+    parser.add_argument(
+        '--matrix-batch-size', type=int, default=25,
+        help='Locations per side of a Valhalla screening matrix request.',
+    )
+    parser.add_argument('--matrix-workers', type=int, default=6)
     parser.add_argument('--adaptive-predecessors', default='8,16,0')
     parser.add_argument(
         '--cold-start-seed-seconds',
@@ -190,6 +222,13 @@ def main() -> int:
     )
     parser.add_argument('--max-refinement-iterations', type=int, default=20)
     parser.add_argument('--refinement-query-budget', type=int, default=3000)
+    parser.add_argument(
+        '--refinement-wall-seconds', type=float, default=600,
+        help=(
+            'Time allowed for exact CP-SAT refinement before a validated '
+            'partial plan is built and passed to exact insertion and repair.'
+        ),
+    )
     parser.add_argument(
         '--skip-route-conflict-refinement',
         action='store_true',
@@ -248,9 +287,12 @@ def main() -> int:
         args.search_workers < 1
         or args.zone_workers < 1
         or args.route_workers < 1
+        or args.matrix_batch_size < 1
+        or args.matrix_workers < 1
         or args.cold_start_seed_seconds < 0
         or args.max_refinement_iterations < 1
         or args.refinement_query_budget < 1
+        or args.refinement_wall_seconds <= 0
         or args.lns_route_checks < 1
         or args.lns_beam_width < 1
         or args.lns_max_destroyed_jobs < 1
@@ -342,6 +384,8 @@ def main() -> int:
             '--endpoint', f'{args.valhalla_base_url}/sources_to_targets',
             '--route-endpoint', f'{args.valhalla_base_url}/route',
             '--cache', screening_cache,
+            '--batch-size', args.matrix_batch_size,
+            '--matrix-workers', args.matrix_workers,
             )),
             ('build_transit_matrices', _command(
                 python, ROOT / 'tools' / 'build_local_transit_screening_matrix.py',
@@ -506,11 +550,53 @@ def main() -> int:
         print(json.dumps({'event': 'STAGE_START', 'stage': stage}, ensure_ascii=False), flush=True)
         stage_started_at = datetime.now(UTC)
         stage_started = time.perf_counter()
+        fallback_reason = None
         try:
-            subprocess.run(command, cwd=ROOT, env=environment, check=True)
-        except subprocess.CalledProcessError:
-            if (
-                stage not in {
+            subprocess.run(
+                command, cwd=ROOT, env=environment, check=True,
+                timeout=(
+                    args.refinement_wall_seconds
+                    if stage == 'refine_materialize_validate'
+                    else None
+                ),
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            if stage == 'refine_materialize_validate':
+                fallback_reason = (
+                    'time_limit' if isinstance(error, subprocess.TimeoutExpired)
+                    else 'refinement_not_publishable'
+                )
+                fallback_candidate = _refinement_fallback_candidate(
+                    exact,
+                    master,
+                    run_dir / f'{args.scenario}-refinement-fallback-candidate.json',
+                    loaded_dataset.dataset_sha256,
+                )
+                fallback_output = run_dir / f'{args.scenario}-exact-fallback.json'
+                subprocess.run(_command(
+                    python, ROOT / 'tools' / 'materialize_exact_plan.py',
+                    '--dataset', dataset, '--scenario', args.scenario,
+                    '--master-solution', fallback_candidate,
+                    '--cache', cache, '--transit-index', transit_index,
+                    '--output', fallback_output,
+                    '--provider', 'valhalla-local-transit',
+                    '--metro-wait-seconds', args.metro_wait_seconds,
+                    '--route-workers', args.route_workers,
+                    '--drop-order-infeasible', '--execute',
+                ), cwd=ROOT, env=environment, check=True)
+                if not _is_publishable_exact(fallback_output):
+                    raise RuntimeError('Exact refinement fallback failed validation')
+                planning_stages[stage] = fallback_output
+                degraded_stages.append(stage)
+                print(json.dumps({
+                    'event': 'REFINEMENT_FALLBACK',
+                    'reason': fallback_reason,
+                    'candidate': str(fallback_candidate),
+                    'validated_plan': str(fallback_output),
+                }, ensure_ascii=False), flush=True)
+            elif (
+                not isinstance(error, subprocess.CalledProcessError)
+                or stage not in {
                     'exact_direct_insertion_improvement',
                     'exact_chain_and_lns_repair',
                     'exact_team_compaction',
@@ -519,19 +605,20 @@ def main() -> int:
                 or not _is_publishable_exact(current_plan)
             ):
                 raise
-            degraded_stages.append(stage)
-            stage_timings.append({
-                'stage': stage,
-                'duration_seconds': round(time.perf_counter() - stage_started, 3),
-                'failed': True,
-                'fallback_plan': str(current_plan),
-            })
-            print(json.dumps({
-                'event': 'OPTIMIZATION_FAILED_FALLBACK',
-                'stage': stage,
-                'fallback_plan': str(current_plan),
-            }, ensure_ascii=False), flush=True)
-            continue
+            else:
+                degraded_stages.append(stage)
+                stage_timings.append({
+                    'stage': stage,
+                    'duration_seconds': round(time.perf_counter() - stage_started, 3),
+                    'failed': True,
+                    'fallback_plan': str(current_plan),
+                })
+                print(json.dumps({
+                    'event': 'OPTIMIZATION_FAILED_FALLBACK',
+                    'stage': stage,
+                    'fallback_plan': str(current_plan),
+                }, ensure_ascii=False), flush=True)
+                continue
         if stage == 'ensure_local_valhalla':
             _configure_valhalla_snapshot(environment, args.valhalla_base_url)
             valhalla_snapshot_configured = True
@@ -541,6 +628,7 @@ def main() -> int:
             'stage': stage,
             'started_at': stage_started_at.isoformat(),
             'duration_seconds': round(duration_seconds, 3),
+            **({'fallback_reason': fallback_reason} if fallback_reason else {}),
         })
         if stage in planning_stages:
             current_plan = planning_stages[stage]

@@ -252,6 +252,23 @@ class ExactRefinementInspectionTests(unittest.TestCase):
 
 
 class RefinementActionTests(unittest.TestCase):
+    def test_schedule_cuts_are_added_incrementally_per_zone(self) -> None:
+        first = ExactRefinementFailure(
+            RefinementFailureKind.WINDOW, 'E1', 'EAST', 'J0', 'J1',
+            '2026-08-17T10:00:00+03:00', 'first',
+        )
+        second = replace(first, destination_job_id='J2', reason='second')
+        other_zone = replace(first, engineer_id='E2', zone_id='SOUTHEAST')
+        routing_error = replace(
+            second, kind=RefinementFailureKind.ROUTING_UNKNOWN,
+        )
+        self.assertEqual(
+            refinement_tool._bounded_conflict_failures(
+                (first, second, other_zone, routing_error)
+            ),
+            (first, other_zone, routing_error),
+        )
+
     def report(self, kind: RefinementFailureKind, *, observation: bool):
         arc = ('E1', 'J0', 'J1')
         observations = (

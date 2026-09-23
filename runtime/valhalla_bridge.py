@@ -13,9 +13,10 @@ from aiohttp import web
 CLI = Path('/tmp/valhalla_route_cli')
 CONFIG = Path('/tmp/valhalla-generated.json')
 RUNTIME_REVISION = 'valhalla-3.8.3-runtime-schema-v2'
-BRIDGE_REVISION = 'worker-pool-v2'
+BRIDGE_REVISION = 'worker-pool-v8'
 ROUTE_TIMEOUT_SECONDS = 25
-QUEUE_TIMEOUT_SECONDS = 3
+MATRIX_TIMEOUT_SECONDS = 60
+QUEUE_TIMEOUT_SECONDS = 10
 
 
 def tile_revision() -> str:
@@ -57,7 +58,7 @@ class ValhallaWorker:
         await self.close()
         await self.start()
 
-    async def query(self, line: bytes) -> bytes:
+    async def query(self, line: bytes, *, timeout_seconds: float = ROUTE_TIMEOUT_SECONDS) -> bytes:
         for attempt in range(2):
             if self.process is None or self.process.returncode is not None:
                 await self.start()
@@ -68,7 +69,7 @@ class ValhallaWorker:
             try:
                 process.stdin.write(line)
                 await process.stdin.drain()
-                deadline = asyncio.get_running_loop().time() + ROUTE_TIMEOUT_SECONDS
+                deadline = asyncio.get_running_loop().time() + timeout_seconds
                 while asyncio.get_running_loop().time() < deadline:
                     remaining = deadline - asyncio.get_running_loop().time()
                     response = await asyncio.wait_for(
@@ -138,7 +139,12 @@ class ValhallaBridge:
         self.queue_wait_seconds += time.perf_counter() - queued_at
         execution_started = time.perf_counter()
         try:
-            response_line = await worker.query(line)
+            timeout_seconds = (
+                MATRIX_TIMEOUT_SECONDS
+                if request.path == '/sources_to_targets'
+                else ROUTE_TIMEOUT_SECONDS
+            )
+            response_line = await worker.query(line, timeout_seconds=timeout_seconds)
         except Exception:
             self.failed_requests += 1
             raise
@@ -167,7 +173,7 @@ async def status(request: web.Request) -> web.Response:
 
 
 async def create_app() -> web.Application:
-    worker_count = int(os.environ.get('VALHALLA_BRIDGE_WORKERS', '3'))
+    worker_count = int(os.environ.get('VALHALLA_BRIDGE_WORKERS', '6'))
     bridge = ValhallaBridge(worker_count)
     await bridge.start()
     app = web.Application(client_max_size=2 * 1024 * 1024)

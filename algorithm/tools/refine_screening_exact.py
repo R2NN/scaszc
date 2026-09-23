@@ -48,6 +48,26 @@ from beeline_routing.oracle import ExactRoutingOracle
 ArcKey = tuple[str, str, str]
 
 
+def _bounded_conflict_failures(
+    failures: tuple[ExactRefinementFailure, ...],
+) -> tuple[ExactRefinementFailure, ...]:
+    """Learn one schedule no-good per zone before widening the search."""
+    schedule_kinds = {
+        RefinementFailureKind.WINDOW,
+        RefinementFailureKind.SHIFT,
+        RefinementFailureKind.ROUTE_LIMIT,
+    }
+    selected_zones: set[str] = set()
+    selected = []
+    for failure in failures:
+        if failure.kind not in schedule_kinds:
+            selected.append(failure)
+        elif failure.zone_id not in selected_zones:
+            selected.append(failure)
+            selected_zones.add(failure.zone_id)
+    return tuple(selected)
+
+
 @dataclass(frozen=True, slots=True)
 class _ZoneMasterContext:
     dataset: PlanningDataset
@@ -260,6 +280,11 @@ def _solve_refined_zone(
     )
     for size in graph_sizes:
         attempts.append(size)
+        coverage_budget = (
+            min(full_coverage_seconds, max(30.0, 3 * seconds_per_tier))
+            if size
+            else full_coverage_seconds
+        )
         solution = solve_screening_master(
             dataset,
             master,
@@ -273,7 +298,8 @@ def _solve_refined_zone(
                 forbidden_assignments=zone_forbidden_assignments,
                 forbidden_assignment_groups=zone_forbidden_assignment_groups,
                 require_full_coverage=strict_full_coverage,
-                full_coverage_seconds=full_coverage_seconds,
+                full_coverage_seconds=coverage_budget,
+                stop_at_first_full_coverage_solution=strict_full_coverage,
                 objective_policy=ObjectivePolicy.COMPACT_TEAM,
             ),
             hint_solution=hint,
@@ -842,9 +868,14 @@ def main() -> int:
             traditional_report = report
             assignment_actions = None
             route_conflict_actions = None
+            bounded_failures = (
+                _bounded_conflict_failures(report.failures)
+                if args.route_conflict_cut_on_schedule_failure
+                else report.failures
+            )
             if args.route_conflict_cut_on_schedule_failure:
                 route_conflict_actions = apply_schedule_failure_route_conflicts(
-                    report,
+                    replace(report, failures=bounded_failures),
                     candidate,
                     conflict_groups=route_conflict_groups,
                     assignment_conflict_groups=assignment_conflict_groups,
@@ -990,7 +1021,7 @@ def main() -> int:
                     dataset,
                     zone,
                     assignment_conflict_groups,
-                    report.failures,
+                    bounded_failures,
                 )
                 for zone in changed_zones
             }
