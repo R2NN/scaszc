@@ -249,6 +249,11 @@ def main() -> int:
         help='Maximum time for each exact insertion, repair and team compaction stage.',
     )
     parser.add_argument(
+        '--departure-timing-wall-seconds', type=float, default=90,
+        help='Time limit for bounded exact rerouting of early arrivals.',
+    )
+    parser.add_argument('--skip-departure-timing', action='store_true')
+    parser.add_argument(
         '--skip-route-conflict-refinement',
         action='store_true',
         help=(
@@ -331,6 +336,7 @@ def main() -> int:
         or args.refinement_query_budget < 1
         or args.refinement_wall_seconds <= 0
         or args.optimization_wall_seconds <= 0
+        or args.departure_timing_wall_seconds <= 0
         or args.lns_route_checks < 1
         or args.lns_beam_width < 1
         or args.lns_max_destroyed_jobs < 1
@@ -368,6 +374,7 @@ def main() -> int:
     improved = run_dir / f'{args.scenario}-exact-improved.json'
     repaired = run_dir / f'{args.scenario}-exact-repaired.json'
     compacted = run_dir / f'{args.scenario}-exact-compacted.json'
+    retimed = run_dir / f'{args.scenario}-exact-retimed.json'
     shared_cache_dir = (
         args.shared_cache_dir.resolve()
         if args.shared_cache_dir is not None
@@ -544,6 +551,16 @@ def main() -> int:
             '--trust-input-validation', '--execute',
         )))
         last_plan = compacted
+    if not args.skip_departure_timing:
+        commands.append(('exact_departure_timing', _command(
+            python, ROOT / 'tools' / 'retime_exact_plan.py',
+            '--dataset', dataset, '--scenario', args.scenario,
+            '--input-plan', last_plan, '--cache', cache,
+            '--transit-index', transit_index, '--output', retimed,
+            '--metro-wait-seconds', args.metro_wait_seconds,
+            '--execute',
+        )))
+        last_plan = retimed
 
     plan = {
         'artifact_type': 'NEW_DATASET_PIPELINE_PLAN',
@@ -597,6 +614,7 @@ def main() -> int:
         'exact_direct_insertion_improvement': improved,
         'exact_chain_and_lns_repair': repaired,
         'exact_team_compaction': compacted,
+        'exact_departure_timing': retimed,
     }
     for stage, command in commands:
         if (
@@ -706,6 +724,8 @@ def main() -> int:
                         'exact_chain_and_lns_repair',
                         'exact_team_compaction',
                     }
+                    else args.departure_timing_wall_seconds
+                    if stage == 'exact_departure_timing'
                     else None
                 ),
             )
@@ -761,6 +781,7 @@ def main() -> int:
                     'exact_direct_insertion_improvement',
                     'exact_chain_and_lns_repair',
                     'exact_team_compaction',
+                    'exact_departure_timing',
                 }
                 or current_plan is None
                 or not _is_publishable_exact(current_plan)

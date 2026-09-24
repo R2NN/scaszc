@@ -189,6 +189,12 @@ def main() -> int:
             'budget_exhausted': result.budget_exhausted,
             'unserved_reasons': dict(result.unserved_reasons),
             'changes': changes,
+            'departure_timing': {
+                'method': 'EXACT_REROUTE_AND_FULL_VALIDATION',
+                'changed_legs': result.departure_timing_changes,
+                'additional_exact_queries': result.departure_timing_queries,
+                'arrival_buffer_minutes': 15,
+            },
             'explanations': explanations,
             'replanning_state': {
                 'applied_event_ids': list(result.state.applied_event_ids),
@@ -220,6 +226,8 @@ def main() -> int:
         if result.state is not None else None,
         'exact_route_checks': result.exact_route_checks,
         'budget_exhausted': result.budget_exhausted,
+        'departure_timing_changes': result.departure_timing_changes,
+        'departure_timing_queries': result.departure_timing_queries,
         'output': str(args.output),
     }, ensure_ascii=False), flush=True)
     return 0 if payload['publication_allowed'] else 2

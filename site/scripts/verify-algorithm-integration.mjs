@@ -4,6 +4,8 @@ import { buildExactPlan } from '../worker/index.js';
 
 const root = new URL('../', import.meta.url);
 const artifact = JSON.parse(await readFile(new URL('public/data/beego-exact-plans.json', root), 'utf8'));
+assert.equal(artifact.schedulePostprocessing, undefined);
+assert.equal(artifact.plans.event.sourcePlanContentSha256, artifact.plans.initial.contentSha256);
 const fixture = JSON.parse(await readFile(new URL('public/test-data/beego-algorithm-integration.json', root), 'utf8'));
 const engineers = fixture.engineers.map((engineer) => ({
   id: engineer.engineer_id,
@@ -51,12 +53,12 @@ const result = {
   initial: verify('initial', initialJobs, {
     assigned: 205,
     unassigned: 0,
-    contentSha256: 'e98ef12c4aa75fca484f465b79f7c86022fc1c61f6d115a569aa7ea86bf9c825',
+    contentSha256: '2089fec94974a5858ac4f7bbbb1fe6598fe9cf1b4cba5161f79f277f4a0f3dd4',
   }),
   event: verify('event', fixture.jobs, {
     assigned: 206,
     unassigned: 0,
-    contentSha256: 'c0a2964354be2bf72b46041742b536775f598029d164700ac3cbc44a0a6fcd4c',
+    contentSha256: '60d4f8a98aa69ceeacf7ee86b0d46ae89d58e739876bff03923c52ab99c9a882',
   }),
 };
 

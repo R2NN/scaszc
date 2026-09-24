@@ -18,6 +18,7 @@ from beeline_routing.models import RouteStatus, TransportMode
 from beeline_routing.oracle import ExactRoutingOracle, OracleQuery
 
 from .domain import Event, EventType, PlanningDataset, Priority, RequiredTransport
+from .departure_timing import retime_replanned_departures
 from .eligibility import build_candidate_index
 from .errors import InvalidPlanningData
 from .plan import EngineerPlan, IdentityTravel, PlannedVisit, ProposedPlan
@@ -73,6 +74,8 @@ class ReplanningResult:
     candidate_evaluations: Mapping[str, tuple[CandidateEvaluation, ...]] = field(
         default_factory=dict
     )
+    departure_timing_queries: int = 0
+    departure_timing_changes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -860,6 +863,21 @@ def replan_after_event(
             'Replanning produced an invalid plan: '
             + ', '.join(f'{item.code.value}:{item.subject_id}' for item in validation.violations)
         )
+    timing = retime_replanned_departures(
+        dataset, plan, state.plan, oracle,
+        event_time=event.event_time,
+        applied_event_ids=frozenset(new_applied),
+        canceled_job_ids=frozenset(canceled),
+        unavailable_until_by_engineer=unavailable,
+    )
+    plan = timing.plan
+    validation = validate_replanned_plan(
+        dataset, plan, state.plan,
+        event_time=event.event_time,
+        applied_event_ids=frozenset(new_applied),
+        canceled_job_ids=frozenset(canceled),
+        unavailable_until_by_engineer=unavailable,
+    )
     next_state = ReplanningState(
         plan=plan,
         applied_event_ids=new_applied,
@@ -871,4 +889,6 @@ def replan_after_event(
         ReplanningStatus.EXACT_VALID, next_state, validation,
         event.event_id, exact_checks, budget_exhausted, reasons,
         candidate_evaluations=candidate_evaluations,
+        departure_timing_queries=timing.exact_queries,
+        departure_timing_changes=timing.changed_legs,
     )

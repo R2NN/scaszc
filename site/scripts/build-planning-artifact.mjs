@@ -1,20 +1,24 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
 const repositoryRoot = process.cwd();
-const defaultHandoffRoot = repositoryRoot;
+const parentRoot = path.resolve(repositoryRoot, '..');
+const defaultHandoffRoot = existsSync(path.join(repositoryRoot, 'algorithm'))
+  ? repositoryRoot
+  : parentRoot;
 const handoffRoot = path.resolve(process.env.BEEGO_ALGORITHM_HOME || defaultHandoffRoot);
 const datasetRoot = path.join(handoffRoot, 'data', 'dataset');
 const planningRoot = path.join(handoffRoot, 'algorithm', 'artifacts', 'current');
 const initialPlanPath = path.resolve(
   process.env.BEEGO_INITIAL_PLAN
-    || path.join(planningRoot, 'exact-205-of-205-28-teams-clean-automatic.json'),
+    || path.join(planningRoot, 'initial-exact-205-of-205-retimed.json'),
 );
 const eventPlanPath = path.resolve(
   process.env.BEEGO_EVENT_PLAN
-    || path.join(planningRoot, 'event-exact-206-of-206-28-teams.json'),
+    || path.join(planningRoot, 'event-exact-206-of-206-retimed.json'),
 );
 const baselinePlanPath = path.resolve(
   process.env.BEEGO_BASELINE_PLAN
@@ -170,6 +174,7 @@ const compactPlan = async (planPath, scenario) => {
     validationStatus: source.validation.status,
     datasetSha256: source.dataset_sha256,
     contentSha256: source.content_sha256,
+    sourcePlanContentSha256: source.source_plan_content_sha256 || null,
     planningAt: source.plan.planning_at,
     routes,
     unassigned,
@@ -193,9 +198,12 @@ const compactPlan = async (planPath, scenario) => {
 const initial = await compactPlan(initialPlanPath, 'initial');
 const event = await compactPlan(eventPlanPath, 'event');
 const baseline = await compactPlan(baselinePlanPath, 'baseline');
+if (event.sourcePlanContentSha256 !== initial.contentSha256) {
+  throw new Error('Event plan was not replanned from the published initial plan');
+}
 const artifact = {
   version: 1,
-  algorithm: 'beeline-planning-ortools-exact-v2.1-full-coverage-28-teams',
+  algorithm: 'beeline-planning-ortools-exact-v2.1-validated-departure-timing',
   provider: 'LOCAL_GTFS_RASP_VALHALLA',
   canonical: {
     initialJobIds: jobs.filter((job) => job.is_event_job !== 'true').map((job) => job.job_id).sort(),

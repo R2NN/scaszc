@@ -27,7 +27,7 @@ import { ZONE_LABELS, normalizeTerritoryKey, zoneBoundaryName, zoneCode } from '
 import { captureMapCamera, restoredCameraOptions } from './locationPrivacy.js';
 import { resolveImportedDate } from './importDate.js';
 import { parseSharedStockCsv, sharedStockRequirements, SHARED_STOCK_LABELS, stockOverrides } from './sharedInventory.js';
-import sharedStockCsv from '../data/dataset/core/shared_inventory.csv?raw';
+import sharedStockCsv from '../../data/dataset/core/shared_inventory.csv?raw';
 import { DEFAULT_REGION, regionCatalog } from './regions.js';
 import depotMarkerPurple from './assets/depot-marker-purple.png';
 import { MAP_SCALE, MAP_UI, groupGeographicMarkers, routeModeForCount, shouldClusterOrders, shouldShowRouteNumbers, stableRouteColor } from './mapDesign.js';
