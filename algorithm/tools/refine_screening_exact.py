@@ -242,6 +242,7 @@ def _solve_refined_zone(
                 local_forbidden_assignments.update(
                     (route.engineer_id, job_id)
                     for job_id in mutable_job_ids
+                    if job_id in master.candidate_index.eligible_engineers_by_job
                     if route.engineer_id
                     in master.candidate_index.eligible_engineers_by_job[job_id]
                 )

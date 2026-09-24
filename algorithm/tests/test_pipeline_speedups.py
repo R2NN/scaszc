@@ -105,7 +105,7 @@ class ScreeningSpeedupTests(unittest.TestCase):
         ) as solve:
             exact_refiner._solve_refined_zone(
                 dataset, None, candidate, 'Z', set(), {}, (8,), 1, 1,
-                mutable_job_ids=frozenset({'A'}),
+                mutable_job_ids=frozenset({'A', 'FUTURE'}),
                 zone_cache=SimpleNamespace(get=lambda _zone: context),
             )
         configured_master = solve.call_args.args[1]
