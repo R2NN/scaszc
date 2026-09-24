@@ -29,6 +29,26 @@ test('new UI rows become a strictly loadable checksummed exact dataset', async (
   }
 });
 
+test('public transit engineers are accepted on a different planning date', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'beego-ui-transit-date-'));
+  try {
+    const payload = {
+      ...samplePayload,
+      planningDate: '2026-08-16',
+      engineers: [{ ...samplePayload.engineers[0], transport: 'PUBLIC_TRANSIT' }],
+    };
+    const dataset = path.join(directory, 'dataset');
+    const prepared = spawnSync(python, [path.join(repositoryRoot, 'algorithm', 'tools', 'prepare_ui_dataset.py'), dataset], { cwd: repositoryRoot, env: { ...process.env, PYTHONUTF8: '1' }, input: JSON.stringify(payload), encoding: 'utf8' });
+    assert.equal(prepared.status, 0, prepared.stdout || prepared.stderr);
+    const manifest = JSON.parse(await readFile(path.join(dataset, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.planning_date, '2026-08-16');
+    assert.equal(manifest.requires_public_transit, true);
+    assert.match(await readFile(path.join(dataset, 'common', 'engineers.csv'), 'utf8'), /PUBLIC_TRANSIT/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('UI import preserves four transport requirements and excludes mismatched engineers', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'beego-ui-transport-'));
   try {

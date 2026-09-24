@@ -3,6 +3,7 @@ import { readFile, readdir, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { ensureTransitIndex } from './transit-index.mjs';
 
 const clock = value => String(value || '').match(/T(\d{2}:\d{2})/)?.[1] || String(value || '').slice(0, 5);
 
@@ -233,11 +234,19 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd()) {
     }
     if (!matched) throw new Error('Исходный точный план не найден; перестройте план перед назначением');
   }
+  const datasetManifest = JSON.parse(await readFile(path.join(dataset, 'manifest.json'), 'utf8'));
+  const requiresTransit = typeof datasetManifest.requires_public_transit === 'boolean'
+    ? datasetManifest.requires_public_transit
+    : (await readFile(path.join(dataset, 'common', 'engineers.csv'), 'utf8')).includes('PUBLIC_TRANSIT');
+  const transitIndex = await ensureTransitIndex(
+    requiresTransit ? datasetManifest.planning_date : '2026-08-17',
+    repositoryRoot,
+  );
   const args = [
     '--dataset', dataset,
     '--input-plan', inputPlan,
     '--cache', cache,
-    '--transit-index', path.join(repositoryRoot, 'data', 'transit', 'moscow_2026-08-17.sqlite'),
+    '--transit-index', transitIndex,
     '--output', output,
   ];
   try {

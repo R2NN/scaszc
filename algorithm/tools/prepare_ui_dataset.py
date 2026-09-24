@@ -128,7 +128,6 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         planning_date = date.fromisoformat(raw_date)
     except ValueError as error:
         raise ValueError('Укажите дату планирования в данных заявок') from error
-    transit_meta = json.loads((ROOT / 'data' / 'transit' / 'moscow_2026-08-17.manifest.json').read_text(encoding='utf-8'))
     planning_at = f'{planning_date}T07:00:00+03:00'
     (destination / 'common').mkdir(parents=True)
     (destination / 'core').mkdir()
@@ -186,8 +185,6 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
                 continue
             engineer_equipment.append({'engineer_id': engineer_id, 'equipment_id': code, 'quantity': 1})
         engineers.append({'engineer_id': engineer_id, 'engineer_name': item.get('name') or engineer_id, 'zone_id': zone_id, 'shift_start': start, 'shift_end': end, 'start_office_id': office_by_key[office_key], 'transport_type': mode, 'is_available': 'false' if str(item.get('status') or '').casefold() in {'недоступен', 'unavailable'} else 'true', 'max_jobs': int(item.get('sourceData', {}).get('max_jobs') or 10), 'max_route_minutes': int(item.get('sourceData', {}).get('max_route_minutes') or 720)})
-    if any(engineer['transport_type'] == 'PUBLIC_TRANSIT' for engineer in engineers) and planning_date.isoformat() != transit_meta['scenario_date']:
-        raise ValueError(f'Для общественного транспорта на {planning_date} нужен маршрутный индекс с расписанием на эту дату')
     jobs = []
     rules = []
     matrix = []
@@ -266,7 +263,7 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
     for scenario in ('core', 'stress'):
         write_csv(destination / scenario / 'events.csv', ['apply_order', 'event_id', 'event_time', 'event_type', 'target_id', 'zone_id', 'unavailable_until', 'payload_json'], [])
         write_csv(destination / scenario / 'shared_inventory.csv', ['scenario', 'zone_id', 'equipment_id', 'quantity_available', 'reservation_policy', 'replenishment_during_day'], [{**row, 'scenario': scenario.upper()} for row in inventory])
-    manifest = {'dataset_version': '2.1.0', 'schema_version': '2.1.0', 'planning_date': planning_date.isoformat(), 'initial_planning_at': planning_at, 'timezone': 'Europe/Moscow', 'source': 'reviewed_ui_import'}
+    manifest = {'dataset_version': '2.1.0', 'schema_version': '2.1.0', 'planning_date': planning_date.isoformat(), 'initial_planning_at': planning_at, 'timezone': 'Europe/Moscow', 'source': 'reviewed_ui_import', 'requires_public_transit': any(engineer['transport_type'] == 'PUBLIC_TRANSIT' and engineer['is_available'] == 'true' for engineer in engineers)}
     (destination / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False), encoding='utf-8')
     lines = []
     for path in sorted(destination.rglob('*')):

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { compactExactReplan } from './exact-replan-runner.mjs';
+import { ensureTransitIndex } from './transit-index.mjs';
 
 const run = (python, args, input, repositoryRoot) => new Promise((resolve, reject) => {
   const child = spawn(python, args, {
@@ -36,12 +37,14 @@ export async function runExactPlan(payload, repositoryRoot = process.cwd()) {
   await mkdir(runRoot, { recursive: true });
   const python = process.env.BEEGO_PYTHON || 'python';
   await run(python, [path.join(repositoryRoot, 'algorithm', 'tools', 'prepare_ui_dataset.py'), dataset], payload, repositoryRoot);
+  const manifest = JSON.parse(await readFile(path.join(dataset, 'manifest.json'), 'utf8'));
+  const transitIndex = await ensureTransitIndex(manifest.requires_public_transit ? manifest.planning_date : '2026-08-17', repositoryRoot);
   const pipeline = await run(python, [
     path.join(repositoryRoot, 'algorithm', 'tools', 'run_new_dataset_pipeline.py'),
     '--dataset', dataset,
     '--scenario', 'core',
     '--run-dir', results,
-    '--transit-index', path.join(repositoryRoot, 'data', 'transit', 'moscow_2026-08-17.sqlite'),
+    '--transit-index', transitIndex,
     '--shared-cache-dir', path.join(repositoryRoot, 'runtime', 'ui-shared-cache'),
     '--execute',
   ], undefined, repositoryRoot);

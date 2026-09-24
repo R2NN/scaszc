@@ -30,6 +30,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 Для просмотра сайта Python и Docker не нужны. Для пересчёта новых наборов установите Python 3.12+ и прочитайте `AGENT_STARTUP_RU.md`, `algorithm/NEW_DATA_RUNBOOK.md` и `algorithm/routing_README.md`. Папка `valhalla-data` уже содержит совместимые офлайн-данные Valhalla 3.8.3.
 
+Если в новом наборе есть бригады на общественном транспорте, сайт автоматически строит индекс расписания для даты набора и сохраняет его в `runtime/ui-shared-cache/transit`. Для этого нужны исходники `offline-assets/transit-sources/gtfs`, `offline-assets/transit-sources/rail` и `offline-assets/transit-sources/metro/schema.json`. Их расположение можно задать переменными `BEEGO_GTFS_DIR`, `BEEGO_RAIL_DIR` и `BEEGO_METRO_SCHEMA`. На другие дни недели, кроме понедельника, доступное эталонное железнодорожное расписание не переносится: индекс содержит рейсы из GTFS и отдельно обозначенную модель метро. Если GTFS не содержит рейсов на выбранную дату, расчёт останавливается с ошибкой.
+
 ## Контроль целостности
 
 Внутри архива находится `PACKAGE_MANIFEST_SHA256.tsv`. Рядом с ZIP лежит файл `<имя>.zip.sha256` для проверки самого архива.

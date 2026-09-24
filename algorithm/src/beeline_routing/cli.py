@@ -163,6 +163,7 @@ def command_preflight(args: argparse.Namespace) -> int:
         key=lambda mode: mode.value,
     )
     blockers: list[dict[str, str]] = []
+    index_metadata: dict[str, object] = {}
     index_path = args.transit_index.resolve()
     transit_manifest = index_path.with_suffix('.manifest.json')
     if not index_path.is_file() or not transit_manifest.is_file():
@@ -198,7 +199,10 @@ def command_preflight(args: argparse.Namespace) -> int:
     payload = {
         'status': 'READY_FOR_LOCAL_ROUTING' if not blockers else 'BLOCKED',
         'providers': {
-            'surface_mcc_mcd_timetable': 'LOCAL_GTFS_AND_FROZEN_RASP',
+            'surface_mcc_mcd_timetable': (
+                'LOCAL_GTFS_AND_FROZEN_RASP'
+                if index_metadata.get('rail_schedule_available', True) else 'LOCAL_GTFS_ONLY_RAIL_UNAVAILABLE'
+            ) if index_metadata else 'UNAVAILABLE',
             'metro_model': 'MOSMETRO_SCHEMA_WITH_EXPLICIT_WAIT_ASSUMPTION',
             'car_walking_and_bicycle': 'LOCAL_VALHALLA',
         },

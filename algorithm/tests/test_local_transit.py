@@ -108,6 +108,25 @@ class LocalTransitMixedModeTests(unittest.TestCase):
         self.assertEqual(route.status, RouteStatus.UNKNOWN)
         self.assertIsNone(route.duration_seconds)
 
+    def test_no_rail_reference_is_labelled_without_rail_claim(self) -> None:
+        db = sqlite3.connect(self.database)
+        try:
+            db.execute('INSERT INTO metadata VALUES (?,?)', ('rail_schedule_available', json.dumps(False)))
+            db.commit()
+        finally:
+            db.close()
+        client = LocalTransitRoutingClient(self.database, FakeWalkingClient())  # type: ignore[arg-type]
+        self.clients.append(client)
+        route = client.route(
+            origin=Coordinate('origin', 55.7000, 37.6000),
+            destination=Coordinate('destination', 55.7301, 37.6301),
+            mode=TransportMode.PUBLIC_TRANSIT,
+            departure_at=datetime.fromisoformat('2026-08-17T09:00:00+03:00'),
+        )
+        self.assertEqual(route.status, RouteStatus.OK)
+        self.assertEqual(route.provenance.provider, 'LOCAL_GTFS_VALHALLA')
+        self.assertIsNone(route.provenance.provider_metadata['rail_schedule_applied_to_date'])
+
 
 if __name__ == '__main__':
     unittest.main()

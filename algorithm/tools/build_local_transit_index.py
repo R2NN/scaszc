@@ -1,8 +1,9 @@
 """Build a local, date-specific timetable index from real Moscow transit data.
 
-The GTFS feed is evaluated on the unchanged scenario date. Railway entries
-come from a frozen normal-Monday Yandex Rasp response; their clock times are
-used as an explicitly labelled reference, never presented as 17 August facts.
+The GTFS feed is evaluated on the requested date. Railway entries come from a
+frozen normal-Monday Yandex Rasp response and are included only on Mondays.
+Other weekdays retain GTFS surface routes and the explicit metro model without
+inventing railway departures.
 """
 
 from __future__ import annotations
@@ -55,8 +56,7 @@ def build(
     if metro_wait_seconds < 0:
         raise ValueError('Metro wait time must be non-negative')
     reference = date.fromisoformat(json.loads((rail / 'manifest.json').read_text(encoding='utf-8'))['normal_weekday_reference_date'])
-    if scenario.weekday() != reference.weekday():
-        raise ValueError('Railway reference weekday differs from the scenario weekday')
+    rail_schedule_available = scenario.weekday() == reference.weekday()
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix('.tmp.sqlite')
     temporary.unlink(missing_ok=True)
@@ -98,6 +98,10 @@ def build(
             continue
         kind = {'0': 'tram', '3': 'bus', '5': 'cable_tram'}.get(route['route_type'], 'surface_transit')
         active_trips[row['trip_id']] = (route['route_short_name'], row['trip_headsign'], kind)
+    if not active_trips:
+        db.close()
+        temporary.unlink(missing_ok=True)
+        raise ValueError(f'В GTFS нет действующих рейсов на {scenario}')
     db.executemany('INSERT INTO trips VALUES (?,?,?,?)',
                    (('g:' + key, *value) for key, value in active_trips.items()))
     stop_count = 0
@@ -175,7 +179,7 @@ def build(
                    (stop_id, item['name'], station['location']['lat'], station['location']['lon'], item['kind']))
         network_station_ids[item['metro_id']] = stop_id
         db.execute('INSERT OR REPLACE INTO network_station_ids VALUES (?,?)', (item['metro_id'], stop_id))
-    rail_data = json.loads((rail / 'rail_schedule.json').read_text(encoding='utf-8'))
+    rail_data = json.loads((rail / 'rail_schedule.json').read_text(encoding='utf-8')) if rail_schedule_available else {}
     by_uid = defaultdict(list)
     for code, schedule in rail_data.items():
         if code not in code_to_station:
@@ -299,7 +303,8 @@ def build(
     official_transfer_count = db.execute('SELECT COUNT(*) FROM transfers').fetchone()[0]
     report = {
         'scenario_date': scenario.isoformat(),
-        'rail_reference_date': reference.isoformat(),
+        'rail_reference_date': reference.isoformat() if rail_schedule_available else None,
+        'rail_schedule_available': rail_schedule_available,
         'active_gtfs_services': len(active_services),
         'active_gtfs_trips': len(active_trips),
         'surface_stops': stop_count,
