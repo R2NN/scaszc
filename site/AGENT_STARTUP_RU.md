@@ -106,4 +106,4 @@ python -m pytest .\algorithm\tests -q
 python .\scripts\build-portable-archive.py --output "$env:USERPROFILE\Desktop\BeeGo_FULL_TRANSFER_2026-09-22.zip"
 ```
 
-Скрипт исключает `.git`, `node_modules`, кэши и `.dev.vars`, включает офлайн-Valhalla и создаёт проверяемый SHA-256.
+Скрипт исключает `.git`, `node_modules`, кэши и `.dev.vars`, включает офлайн-Valhalla, исходные GTFS, железнодорожный снимок и схему метро, затем создаёт проверяемый SHA-256. При отсутствии источников в локальных путях задайте `--gtfs-dir`, `--rail-dir`, `--metro-schema` и `--valhalla-dir`. На компьютере получателя исходные транспортные файлы уже находятся внутри архива.
