@@ -1,3 +1,5 @@
+import { normalizePlanningPriority } from '../src/planningPriority.js';
+
 const json = (data, init = {}) => new Response(JSON.stringify(data), {
   ...init,
   headers: {
@@ -240,6 +242,7 @@ const differsFromSealedModel = (orders, engineers, canonical) => {
     if (order.end && planningClock(order.end) !== planningClock(model.window_end)) return true;
     if (order.duration && Number(order.duration) !== Number(model.service_duration_min)) return true;
     if (order.skill && planningSkill(order.skill) !== model.required_skill) return true;
+    if (normalizePlanningPriority(order.priority ?? source.priority ?? model.priority) !== model.priority) return true;
     if (order.zoneId && String(order.zoneId) !== model.zone_id) return true;
     if (order.coords && !sameCoordinates(order.coords, model)) return true;
     if (order.equipment && planningEquipment(order.equipment) !== planningEquipment(model.required_equipment)) return true;

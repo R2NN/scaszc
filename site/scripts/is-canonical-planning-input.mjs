@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { normalizePlanningPriority } from '../src/planningPriority.js';
 
 const normalize = value => String(value ?? '').trim();
 const clock = value => normalize(value).match(/T(\d{2}:\d{2})/)?.[1] || normalize(value).slice(0, 5);
@@ -40,11 +41,12 @@ export function isCanonicalPlanningInput(payload, artifact, repositoryRoot = pro
     const source = jobs.get(id(item));
     const imported = item.sourceData;
     if (!source || normalize(imported?.job_id) !== source.job_id) return true;
-    if (!['window_start', 'window_end', 'service_duration_min', 'required_skill', 'required_transport', 'required_equipment', 'zone_id', 'latitude', 'longitude'].every(key => normalize(imported[key]) === normalize(source[key]))) return true;
+    if (!['window_start', 'window_end', 'service_duration_min', 'priority', 'required_skill', 'required_transport', 'required_equipment', 'zone_id', 'latitude', 'longitude'].every(key => normalize(imported[key]) === normalize(source[key]))) return true;
     return clock(item.start) !== clock(source.window_start)
       || clock(item.end) !== clock(source.window_end)
       || Number(item.duration) !== Number(source.service_duration_min)
       || skill(item.skill) !== source.required_skill
+      || normalizePlanningPriority(item.priority ?? imported.priority ?? source.priority) !== source.priority
       || transport(item.transport || source.required_transport) !== source.required_transport
       || normalize(item.zoneId || imported.zone_id) !== source.zone_id
       || !samePoint(item.coords, source.latitude, source.longitude)

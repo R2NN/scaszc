@@ -15,10 +15,13 @@ const payload = {
 test('sealed plan is used only for matching model inputs', () => {
   assert.equal(isCanonicalPlanningInput(payload, artifact), true);
   assert.equal(isCanonicalPlanningInput({ ...payload, orders: [{ ...payload.orders[0], duration: 80 }, ...payload.orders.slice(1)] }, artifact), false);
+  assert.equal(isCanonicalPlanningInput({ ...payload, orders: [{ ...payload.orders[0], priority: 'Срочная' }, ...payload.orders.slice(1)] }, artifact), false);
+  assert.equal(isCanonicalPlanningInput({ ...payload, orders: [{ ...payload.orders[0], sourceData: { ...payload.orders[0].sourceData, priority: 'URGENT' } }, ...payload.orders.slice(1)] }, artifact), false);
   assert.equal(isCanonicalPlanningInput({ ...payload, orders: [{ ...payload.orders[0], transport: payload.orders[0].sourceData.required_transport === 'CAR' ? 'BICYCLE' : 'CAR' }, ...payload.orders.slice(1)] }, artifact), false);
   assert.equal(isCanonicalPlanningInput({ ...payload, engineers: [{ ...payload.engineers[0], shiftStart: '09:00' }, ...payload.engineers.slice(1)] }, artifact), false);
   assert.equal(isCanonicalPlanningInput({ ...payload, planningDate: '2026-09-22' }, artifact), false);
   assert.equal(isCanonicalPlanningInput({ ...payload, sharedInventory: [{ zoneId: 'EAST', equipmentId: 'ONT_GIGABIT', quantity: 0 }] }, artifact), false);
   assert.throws(() => buildExactPlan({ ...payload, orders: [{ ...payload.orders[0], duration: 80 }, ...payload.orders.slice(1)] }, artifact), /новый exact-расчёт/);
+  assert.throws(() => buildExactPlan({ ...payload, orders: [{ ...payload.orders[0], priority: 'Срочная' }, ...payload.orders.slice(1)] }, artifact), /новый exact-расчёт/);
   assert.throws(() => buildExactPlan({ ...payload, planningDate: '2026-09-22' }, artifact), /новый exact-расчёт/);
 });

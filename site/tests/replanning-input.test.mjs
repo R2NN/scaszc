@@ -26,6 +26,17 @@ test('replanning CSV keeps all supported transport requirements', () => {
   );
 });
 
+test('replanning CSV preserves urgent priority aliases', () => {
+  for (const input of ['HIGH', 'URGENT', 'EMERGENCY', 'Срочная']) {
+    const [request] = parseReplanningCsv(`id,address,priority\n42,Москва,${input}`);
+    assert.equal(request.priority, 'Срочная');
+  }
+  assert.throws(
+    () => parseReplanningCsv('id,address,priority\n42,Москва,UNKNOWN'),
+    /Неизвестный приоритет заявки/,
+  );
+});
+
 test('global region selection overrides a conflicting region from CSV', () => {
   const [request] = parseReplanningCsv('id,address,region\n42,"Москва, ул. Тверская, 1",Югоцентр', 'Юго-восток');
   assert.equal(request.zone, 'Юго-восток');
@@ -35,4 +46,3 @@ test('global region selection overrides a conflicting region from CSV', () => {
 test('replanning CSV rejects files without address column', () => {
   assert.throws(() => parseReplanningCsv('id,name\n1,Клиент'), /«Адрес»/);
 });
-

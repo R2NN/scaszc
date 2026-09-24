@@ -33,7 +33,7 @@ const ordersHeaders = [
 
 const ordersExamples = [
   ['JOB-0001', 'CRM-10482', 'Иван Петров', 'Москва, ул. Тверская, 12', 55.765922, 37.605461, 'MSK-CENTRE', 'Москва · Центр', 'Тверской', '2026-09-17 09:00', '2026-09-17 12:00', 90, 'INSTALL', 'GPON', 'Монтаж', 'NORMAL', 'CAR', 'ONT|INSTALL_SET', '+7 999 100-10-01', 'client1@example.ru', 'Связаться за 30 минут'],
-  ['JOB-0002', 'CRM-10483', 'ООО Альфа', 'Москва, Ленинградский проспект, 62', 55.800861, 37.530803, 'MSK-NORTH', 'Москва · Север', 'Аэропорт', '2026-09-17 13:00', '2026-09-17 16:00', 60, 'REPAIR', 'DIAGNOSTICS', 'Диагностика', 'HIGH', 'ANY', 'ROUTER', '+7 999 100-10-02', 'office@example.ru', 'Проверить линию и оборудование'],
+  ['JOB-0002', 'CRM-10483', 'ООО Альфа', 'Москва, Ленинградский проспект, 62', 55.800861, 37.530803, 'MSK-NORTH', 'Москва · Север', 'Аэропорт', '2026-09-17 13:00', '2026-09-17 16:00', 60, 'REPAIR', 'DIAGNOSTICS', 'Диагностика', 'URGENT', 'ANY', 'ROUTER', '+7 999 100-10-02', 'office@example.ru', 'Проверить линию и оборудование'],
 ];
 
 const ordersGuide = [
@@ -45,7 +45,7 @@ const ordersGuide = [
   ['service_duration_min', 'Да', 'Норматив работы в минутах', 'Целое число 1–1440', '90'],
   ['bk_type / hd_type', 'Желательно', 'Тип и операция работ', 'Текст или код', 'INSTALL / GPON'],
   ['required_skill', 'Желательно', 'Навык исполнителя', 'Текст', 'Монтаж'],
-  ['priority', 'Нет', 'Приоритет', 'NORMAL / HIGH / EMERGENCY', 'NORMAL'],
+  ['priority', 'Нет', 'Приоритет', 'NORMAL / URGENT', 'NORMAL'],
   ['required_transport', 'Нет', 'Требование к транспорту', 'ANY / CAR / PUBLIC_TRANSIT / WALKING / BICYCLE', 'CAR'],
   ['required_equipment', 'Нет', 'Необходимое оборудование', 'Значения через |', 'ONT|INSTALL_SET'],
   ['phone / email', 'Нет', 'Контакты клиента', 'Текст', '+7 999 100-10-01'],
@@ -157,7 +157,7 @@ function buildOrdersWorkbook() {
     ['L:L', 19], ['M:Q', 20], ['R:R', 27], ['S:T', 22], ['U:U', 32],
   ]);
   sheet.getRange('L2:L5000').dataValidation = { rule: { type: 'whole', operator: 'between', formula1: 1, formula2: 1440 } };
-  sheet.getRange('P2:P5000').dataValidation = { rule: { type: 'list', values: ['NORMAL', 'HIGH', 'EMERGENCY'] } };
+  sheet.getRange('P2:P5000').dataValidation = { rule: { type: 'list', values: ['NORMAL', 'URGENT'] } };
   sheet.getRange('Q2:Q5000').dataValidation = { rule: { type: 'list', values: ['ANY', 'CAR', 'PUBLIC_TRANSIT', 'WALKING', 'BICYCLE'] } };
   addGuide(workbook, 'Шаблон импорта заявок BeeGo!', ordersGuide, 'Не меняйте названия столбцов. Удалите примеры, добавьте свои заявки и загрузите файл в разделе «Заявки». Для каждой строки нужен адрес либо пара latitude/longitude.');
   workbook.recalculate();

@@ -54,6 +54,38 @@ test('UI import preserves four transport requirements and excludes mismatched en
   }
 });
 
+test('UI dataset preserves priority aliases for the planner', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'beego-ui-priority-'));
+  try {
+    const aliases = ['NORMAL', 'HIGH', 'URGENT', 'EMERGENCY', 'Срочная', 'Высокий', 'Авария'];
+    const payload = {
+      ...samplePayload,
+      orders: [
+        ...aliases.map((priority, index) => ({
+          ...samplePayload.orders[0], id: `JOB-${index}`, sourceId: `JOB-${index}`, priority,
+        })),
+        { ...samplePayload.orders[0], id: 'JOB-source', sourceId: 'JOB-source', sourceData: { priority: 'HIGH' } },
+      ],
+    };
+    const dataset = path.join(directory, 'dataset');
+    const prepared = spawnSync(python, [path.join(repositoryRoot, 'algorithm', 'tools', 'prepare_ui_dataset.py'), dataset], { cwd: repositoryRoot, env: { ...process.env, PYTHONUTF8: '1' }, input: JSON.stringify(payload), encoding: 'utf8' });
+    assert.equal(prepared.status, 0, prepared.stdout || prepared.stderr);
+    const csv = await readFile(path.join(dataset, 'core', 'jobs.csv'), 'utf8');
+    const lines = csv.trim().split(/\r?\n/);
+    const columns = lines[0].split(';');
+    const priorityColumn = columns.indexOf('priority');
+    assert.notEqual(priorityColumn, -1);
+    assert.deepEqual(lines.slice(1).map(line => line.split(';')[priorityColumn]), [
+      'NORMAL', 'URGENT', 'URGENT', 'URGENT', 'URGENT', 'URGENT', 'URGENT', 'URGENT',
+    ]);
+    const invalid = spawnSync(python, [path.join(repositoryRoot, 'algorithm', 'tools', 'prepare_ui_dataset.py'), path.join(directory, 'invalid')], { cwd: repositoryRoot, env: { ...process.env, PYTHONUTF8: '1' }, input: JSON.stringify({ ...samplePayload, orders: [{ ...samplePayload.orders[0], priority: 'UNKNOWN' }] }), encoding: 'utf8' });
+    assert.notEqual(invalid.status, 0);
+    assert.match(invalid.stdout, /Неизвестный приоритет заявки/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('new area uses explicitly entered shared stock, including zero', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'beego-ui-stock-'));
   try {

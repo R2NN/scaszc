@@ -7,6 +7,7 @@ import {
 import { useDropdownPresence } from './useDropdownPresence.js';
 import { regionForCity, resolveImportedCity } from './regions.js';
 import { pushImportHistory, redoImportHistory, undoImportHistory } from './importHistory.js';
+import { displayPlanningPriority, normalizePlanningPriority } from './planningPriority.js';
 
 const ORDER_FIELD_GROUPS = [
   {
@@ -400,13 +401,6 @@ const fieldMatchesProfile = (fieldId, profile) => {
   return (FIELD_VALUE_TYPES[fieldId] || ['text']).includes(profile.type);
 };
 
-const translatePriority = value => {
-  const text = normalize(value);
-  if (/urgent|emergency|critical|авар/.test(text)) return 'Авария';
-  if (/high|высок/.test(text)) return 'Высокий';
-  return 'Обычная';
-};
-
 const translateSkill = (skill, workType) => {
   const text = normalize(skill || workType);
   if (/emerg|авар/.test(text)) return 'Аварийные работы';
@@ -623,7 +617,7 @@ export function buildOrders(headers, rows, mappings, region) {
       start: asTime(valueFor(row, 'windowStart')),
       end: asTime(valueFor(row, 'windowEnd')),
       duration: asNumber(valueFor(row, 'duration')),
-      priority: translatePriority(valueFor(row, 'priority')),
+      priority: displayPlanningPriority(valueFor(row, 'priority')),
       workType,
       skill: translateSkill(skill, workType || serviceType),
       equipment: translateEquipment(valueFor(row, 'equipment')),
@@ -780,6 +774,8 @@ function validateRows(rows, mappings, entityType = 'orders') {
     ['windowStart', 'windowEnd', 'duration'].forEach(field => markBlank(row, rowIndex, field));
     const durationColumn = mappedColumn('duration');
     if (Number.isInteger(durationColumn) && (asNumber(row[durationColumn]) ?? 0) <= 0) invalid.add(`${rowIndex}:${durationColumn}`);
+    const priorityColumn = mappedColumn('priority');
+    if (Number.isInteger(priorityColumn) && !normalizePlanningPriority(row[priorityColumn])) invalid.add(`${rowIndex}:${priorityColumn}`);
   });
   return invalid;
 }

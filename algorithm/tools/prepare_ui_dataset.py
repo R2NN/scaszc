@@ -57,6 +57,18 @@ def skill(value: Any) -> str:
     return result
 
 
+def priority(value: Any) -> str:
+    raw = str('NORMAL' if value is None else value).strip().casefold()
+    if raw in {'', 'normal', 'обычная', 'обычный'}:
+        return 'NORMAL'
+    if raw in {
+        'urgent', 'high', 'emergency', 'critical', 'срочная', 'срочный',
+        'срочно', 'высокий', 'высокая', 'авария', 'аварийная', 'аварийный',
+    }:
+        return 'URGENT'
+    raise ValueError(f'Неизвестный приоритет заявки: {value}')
+
+
 def equipment(value: Any) -> list[str]:
     if isinstance(value, list):
         pieces = value
@@ -215,9 +227,9 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         raw_transport = TRANSPORT.get(transport_value.casefold(), transport_value.upper())
         if raw_transport not in {'ANY', 'CAR', 'PUBLIC_TRANSIT', 'BICYCLE', 'WALKING'}:
             raise ValueError(f'Неизвестное требование к транспорту заявки {job_id}: {transport_value}')
-        raw_priority = str(item.get('priority') or '').casefold()
-        priority = 'URGENT' if raw_priority in {'urgent', 'авария', 'срочная'} else 'NORMAL'
-        jobs.append({'scenario': 'CORE', 'job_id': job_id, 'source_job_id': job_id, 'zone_id': zone_id, 'location_id': location_id, 'bk_type': bk_type, 'hd_type': hd_type, 'window_start': f'{planning_date}T{start}:00+03:00', 'window_end': f'{planning_date}T{end}:00+03:00', 'created_at': planning_at, 'service_duration_min': duration, 'priority': priority, 'required_skill': required_skill, 'required_transport': raw_transport, 'required_equipment': '|'.join(codes), 'gigabit_required': 'Нет', 'is_event_job': 'false', 'status': 'PENDING'})
+        priority_value = item['priority'] if 'priority' in item else item.get('sourceData', {}).get('priority')
+        job_priority = priority(priority_value)
+        jobs.append({'scenario': 'CORE', 'job_id': job_id, 'source_job_id': job_id, 'zone_id': zone_id, 'location_id': location_id, 'bk_type': bk_type, 'hd_type': hd_type, 'window_start': f'{planning_date}T{start}:00+03:00', 'window_end': f'{planning_date}T{end}:00+03:00', 'created_at': planning_at, 'service_duration_min': duration, 'priority': job_priority, 'required_skill': required_skill, 'required_transport': raw_transport, 'required_equipment': '|'.join(codes), 'gigabit_required': 'Нет', 'is_event_job': 'false', 'status': 'PENDING'})
     stock_source = {(row['zone_id'], row['equipment_id']): int(row['quantity_available']) for row in reference_csv('core/shared_inventory.csv')}
     overrides = payload.get('sharedInventory', [])
     if not isinstance(overrides, list):

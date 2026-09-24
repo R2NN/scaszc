@@ -1,3 +1,5 @@
+import { normalizePlanningPriority } from './planningPriority.js';
+
 const normalizeHeader = value => String(value || '')
   .trim()
   .toLocaleLowerCase('ru-RU')
@@ -33,6 +35,12 @@ const skillValue = value => {
   if (/upsell|дозаказ/.test(normalized)) return 'UPSELL';
   if (/local|локал|ремонт|диагност/.test(normalized)) return 'LOCAL';
   return 'INSTALL';
+};
+
+const priorityValue = value => {
+  const code = normalizePlanningPriority(value);
+  if (!code) throw new Error(`Неизвестный приоритет заявки: ${value}`);
+  return code === 'URGENT' ? 'Срочная' : 'Обычная';
 };
 
 const transportValue = value => {
@@ -98,7 +106,7 @@ export function parseReplanningCsv(text, lockedZone = '') {
       start: timeValue(valueFor(row, 'start')) || '09:00',
       end: timeValue(valueFor(row, 'end')) || '11:00',
       duration: String(Math.max(1, Number(valueFor(row, 'duration')) || 60)),
-      priority: /urgent|emergency|авар|срочн/.test(normalizeHeader(valueFor(row, 'priority'))) ? 'Срочная' : 'Обычная',
+      priority: priorityValue(valueFor(row, 'priority')),
       requiredTransport: transportValue(valueFor(row, 'requiredTransport')),
       eventTime: timeValue(valueFor(row, 'eventTime')),
       latitude: hasCoordinates ? String(latitude) : '',
