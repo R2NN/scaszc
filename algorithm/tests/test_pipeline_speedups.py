@@ -17,11 +17,11 @@ from urllib.error import HTTPError
 
 sys.path.insert(0, str(Path(__file__).parents[1] / 'tools'))
 
-from beeline_routing.models import Coordinate
+from beeline_routing.models import Coordinate, TransportMode
 from beeline_routing.screening_cache import ScreeningCache
 from beeline_planning import load_planning_dataset
 from beeline_planning.eligibility import CandidateIndex
-from beeline_planning.master import MasterModelInput
+from beeline_planning.master import MasterArc, MasterModelInput
 from beeline_planning.solver import (
     MasterEngineerRoute,
     MasterSolution,
@@ -35,11 +35,37 @@ from tools.run_new_dataset_pipeline import (
     _is_publishable_full_coverage,
     _refinement_fallback_candidate,
 )
-from tools.solve_screening_zones import _read_warm_orders
+from tools.solve_screening_zones import _read_warm_orders, _with_travel_buffers
 from tools import refine_screening_exact as exact_refiner
 
 
 class ScreeningSpeedupTests(unittest.TestCase):
+    def test_travel_buffers_affect_only_moving_car_and_transit_arcs(self) -> None:
+        moment = datetime(2026, 8, 17, 7, tzinfo=UTC)
+        arcs = tuple(
+            MasterArc('E', 'START:E', 'O', f'J{i}', f'L{i}', duration, 1000,
+                      mode, False)
+            for i, (duration, mode) in enumerate((
+                (20, TransportMode.CAR),
+                (0, TransportMode.CAR),
+                (30, TransportMode.PUBLIC_TRANSIT),
+                (15, TransportMode.WALKING),
+            ))
+        )
+        master = MasterModelInput(moment, None, arcs, (), 'screening')
+
+        buffered = _with_travel_buffers(master, 6, 12)
+
+        self.assertEqual(
+            [arc.screening_duration_minutes for arc in buffered.arcs],
+            [26, 0, 42, 15],
+        )
+        self.assertEqual(
+            [arc.screening_is_surrogate for arc in buffered.arcs],
+            [True, False, True, False],
+        )
+        self.assertEqual(master.arcs[0].screening_duration_minutes, 20)
+
     def test_exact_neighbourhood_uses_current_failure_and_is_bounded(self) -> None:
         moment = datetime(2026, 8, 15, 8, tzinfo=UTC)
         dataset = SimpleNamespace(

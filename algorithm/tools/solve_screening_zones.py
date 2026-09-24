@@ -26,6 +26,7 @@ from beeline_planning import (
     validate_screening_solution,
 )
 from beeline_planning.export import load_exact_plan_artifact, master_solution_dict
+from beeline_routing.models import TransportMode
 from beeline_routing.export import payload_sha256, write_json_atomic
 
 
@@ -56,6 +57,32 @@ def _zone_dataset(source, zone: str):
             item
             for item in source.commitments
             if item.job_id in jobs and item.engineer_id in engineers
+        ),
+    )
+
+
+def _with_travel_buffers(master, car_minutes: int, transit_minutes: int):
+    """Reserve travel slack during screening; exact routing remains authoritative."""
+    buffers = {
+        TransportMode.CAR: car_minutes,
+        TransportMode.PUBLIC_TRANSIT: transit_minutes,
+    }
+    if not any(buffers.values()):
+        return master
+    return replace(
+        master,
+        arcs=tuple(
+            replace(
+                arc,
+                screening_duration_minutes=(
+                    arc.screening_duration_minutes + buffers[arc.screening_source_mode]
+                ),
+                screening_is_surrogate=True,
+            )
+            if arc.screening_duration_minutes > 0
+            and buffers.get(arc.screening_source_mode, 0) > 0
+            else arc
+            for arc in master.arcs
         ),
     )
 
@@ -254,6 +281,14 @@ def main() -> int:
     parser.add_argument('--zone-workers', type=int, default=3)
     parser.add_argument('--adaptive-predecessors', default='8,16,0')
     parser.add_argument(
+        '--car-travel-buffer-minutes', type=int, default=0,
+        help='Conservative per-leg screening buffer for car trips.',
+    )
+    parser.add_argument(
+        '--transit-travel-buffer-minutes', type=int, default=0,
+        help='Conservative per-leg screening buffer for public transit trips.',
+    )
+    parser.add_argument(
         '--cold-start-seed-seconds',
         type=int,
         default=60,
@@ -290,6 +325,8 @@ def main() -> int:
         or args.search_workers < 1
         or args.cold_start_seed_seconds < 0
         or args.cold_start_improve_seconds < 0
+        or args.car_travel_buffer_minutes < 0
+        or args.transit_travel_buffer_minutes < 0
     ):
         parser.error('Worker counts must be positive')
     if (
@@ -324,7 +361,11 @@ def main() -> int:
         projected_zones = []
         for zone in zones:
             zone_dataset = _zone_dataset(source, zone)
-            zone_master = build_master_model_input(zone_dataset, screening)
+            zone_master = _with_travel_buffers(
+                build_master_model_input(zone_dataset, screening),
+                args.car_travel_buffer_minutes,
+                args.transit_travel_buffer_minutes,
+            )
             projected_zones.append(_project_hint(
                 zone_dataset,
                 zone_master,
@@ -338,7 +379,11 @@ def main() -> int:
         zone: str,
     ) -> tuple[str, MasterSolution, list[int], dict[str, object]]:
         dataset = _zone_dataset(source, zone)
-        master = build_master_model_input(dataset, screening)
+        master = _with_travel_buffers(
+            build_master_model_input(dataset, screening),
+            args.car_travel_buffer_minutes,
+            args.transit_travel_buffer_minutes,
+        )
         active_job_ids = set(master.candidate_index.active_job_ids)
         cold_seed = None
         improved_seed = None
@@ -406,6 +451,12 @@ def main() -> int:
                     cold_seed = improved_seed
             if cold_seed is not None:
                 hint = cold_seed
+        buffered_seed_incomplete = bool(
+            (args.car_travel_buffer_minutes or args.transit_travel_buffer_minutes)
+            and cold_seed is not None
+            and cold_seed.unserved_job_ids
+        )
+        search_graph_sizes = graph_sizes[:1] if buffered_seed_incomplete else graph_sizes
         attempts: list[int] = []
         best_solution = (
             hint
@@ -413,9 +464,13 @@ def main() -> int:
             else _project_hint(dataset, master, {}, screening.snapshot_sha256)
         )
         found_solution = hint is not None and protected_exact_incumbent
-        retry_with_coverage_seed = cold_seed is not None and cold_seed is improved_seed
+        retry_with_coverage_seed = (
+            not buffered_seed_incomplete
+            and cold_seed is not None
+            and cold_seed is improved_seed
+        )
         for seed_round in range(2):
-            for size in graph_sizes:
+            for size in search_graph_sizes:
                 attempts.append(size)
                 validate_full_seed = (
                     hint is not None and not hint.unserved_job_ids
@@ -490,6 +545,7 @@ def main() -> int:
             hint = fallback_seed
 
         polish: dict[str, object] = {
+            'buffered_seed_incomplete': buffered_seed_incomplete,
             'cold_start_seed': (
                 {
                     'attempted': True,
@@ -653,7 +709,11 @@ def main() -> int:
     if not incumbent_fallback_used:
         violations = validate_screening_solution(
             source,
-            build_master_model_input(source, screening),
+            _with_travel_buffers(
+                build_master_model_input(source, screening),
+                args.car_travel_buffer_minutes,
+                args.transit_travel_buffer_minutes,
+            ),
             merged,
         )
         if violations:
@@ -678,6 +738,10 @@ def main() -> int:
         ),
         'incumbent_fallback_used': incumbent_fallback_used,
         'final_quality': final_quality.as_dict(),
+        'travel_buffers_minutes': {
+            'CAR': args.car_travel_buffer_minutes,
+            'PUBLIC_TRANSIT': args.transit_travel_buffer_minutes,
+        },
     }
     payload['content_sha256'] = payload_sha256(payload)
     write_json_atomic(args.output, payload)

@@ -201,6 +201,21 @@ def main() -> int:
         default=60,
         help='Per-zone VRPTW seed budget used only when no warm plan is available.',
     )
+    parser.add_argument(
+        '--skip-robust-first-pass', action='store_true',
+        help='Start with the nominal screening model instead of a buffered fast pass.',
+    )
+    parser.add_argument('--robust-car-buffer-minutes', type=int, default=6)
+    parser.add_argument('--robust-transit-buffer-minutes', type=int, default=12)
+    parser.add_argument('--robust-seconds-per-tier', type=float, default=15)
+    parser.add_argument(
+        '--robust-screening-wall-seconds', type=float, default=120,
+        help='Maximum time spent on the buffered first-pass screening solve.',
+    )
+    parser.add_argument(
+        '--robust-materialization-wall-seconds', type=float, default=180,
+        help='Cold exact-routing limit for the buffered first pass.',
+    )
     warm_start_group = parser.add_mutually_exclusive_group()
     warm_start_group.add_argument(
         '--warm-start',
@@ -307,6 +322,11 @@ def main() -> int:
         or args.matrix_batch_size < 1
         or args.matrix_workers < 1
         or args.cold_start_seed_seconds < 0
+        or args.robust_car_buffer_minutes < 0
+        or args.robust_transit_buffer_minutes < 0
+        or args.robust_seconds_per_tier <= 0
+        or args.robust_screening_wall_seconds <= 0
+        or args.robust_materialization_wall_seconds <= 0
         or args.max_refinement_iterations < 1
         or args.refinement_query_budget < 1
         or args.refinement_wall_seconds <= 0
@@ -342,6 +362,8 @@ def main() -> int:
     if args.screening_root is not None and not screening.is_dir():
         parser.error(f'Prebuilt screening root does not exist: {screening}')
     master = run_dir / f'{args.scenario}-screening-master.json'
+    robust_master = run_dir / f'{args.scenario}-robust-screening-master.json'
+    robust_exact = run_dir / f'{args.scenario}-robust-exact.json'
     exact = run_dir / f'{args.scenario}-exact.json'
     improved = run_dir / f'{args.scenario}-exact-improved.json'
     repaired = run_dir / f'{args.scenario}-exact-repaired.json'
@@ -354,6 +376,7 @@ def main() -> int:
     cache = shared_cache_dir / 'routing-cache.sqlite3'
     screening_cache = shared_cache_dir / 'screening-cache.sqlite3'
     python = sys.executable
+    robust_first_pass = warm_start is None and not args.skip_robust_first_pass
     commands: list[tuple[str, list[str]]] = []
 
     if not args.skip_valhalla_autostart and args.valhalla_base_url.rstrip('/') in {
@@ -410,6 +433,34 @@ def main() -> int:
                 '--dataset', dataset, '--transit-index', transit_index,
                 '--walking-screening-root', screening, '--output', screening,
                 '--cache', screening_cache,
+            )),
+        ))
+    if robust_first_pass:
+        commands.extend((
+            ('solve_robust_screening_master', _command(
+                python, ROOT / 'tools' / 'solve_screening_zones.py',
+                '--dataset', dataset, '--scenario', args.scenario,
+                '--screening-root', screening, '--output', robust_master,
+                '--seconds-per-tier', args.robust_seconds_per_tier,
+                '--search-workers', args.search_workers,
+                '--zone-workers', args.zone_workers,
+                '--adaptive-predecessors', args.adaptive_predecessors,
+                '--cold-start-seed-seconds', 10,
+                '--cold-start-improve-seconds', 0,
+                '--coverage-first-only',
+                '--car-travel-buffer-minutes', args.robust_car_buffer_minutes,
+                '--transit-travel-buffer-minutes', args.robust_transit_buffer_minutes,
+            )),
+            ('materialize_robust_exact', _command(
+                python, ROOT / 'tools' / 'materialize_exact_plan.py',
+                '--dataset', dataset, '--scenario', args.scenario,
+                '--master-solution', robust_master,
+                '--cache', cache, '--transit-index', transit_index,
+                '--output', robust_exact,
+                '--provider', 'valhalla-local-transit',
+                '--metro-wait-seconds', args.metro_wait_seconds,
+                '--route-workers', args.route_workers,
+                '--drop-order-infeasible', '--execute',
             )),
         ))
     commands.extend((
@@ -511,6 +562,11 @@ def main() -> int:
             and args.warm_start is None
             and warm_start is not None
         ),
+        'robust_first_pass': robust_first_pass,
+        'robust_travel_buffers_minutes': {
+            'CAR': args.robust_car_buffer_minutes,
+            'PUBLIC_TRANSIT': args.robust_transit_buffer_minutes,
+        } if robust_first_pass else None,
         'rebuild_transit_index': args.rebuild_transit_index,
         'commands': [
             {'stage': stage, 'argv': command} for stage, command in commands
@@ -536,12 +592,40 @@ def main() -> int:
     pipeline_started = time.perf_counter()
     valhalla_snapshot_configured = False
     planning_stages = {
+        'materialize_robust_exact': robust_exact,
         'refine_materialize_validate': exact,
         'exact_direct_insertion_improvement': improved,
         'exact_chain_and_lns_repair': repaired,
         'exact_team_compaction': compacted,
     }
     for stage, command in commands:
+        if (
+            stage in {'solve_screening_master', 'refine_materialize_validate'}
+            and current_plan is not None
+            and _is_publishable_full_coverage(current_plan)
+        ):
+            stage_timings.append({
+                'stage': stage,
+                'duration_seconds': 0,
+                'skipped': 'robust_exact_full_coverage',
+            })
+            print(json.dumps({
+                'event': 'STAGE_SKIPPED',
+                'stage': stage,
+                'reason': 'robust_exact_full_coverage',
+            }, ensure_ascii=False), flush=True)
+            continue
+        if stage == 'materialize_robust_exact' and (
+            not robust_master.is_file()
+            or json.loads(robust_master.read_text(encoding='utf-8'))
+            ['summary']['unserved_jobs'] > 0
+        ):
+            stage_timings.append({
+                'stage': stage,
+                'duration_seconds': 0,
+                'skipped': 'robust_screening_incomplete',
+            })
+            continue
         if (
             stage == 'exact_team_compaction'
             and current_plan is not None
@@ -559,8 +643,27 @@ def main() -> int:
             }, ensure_ascii=False), flush=True)
             continue
         if (
+            stage == 'exact_team_compaction'
+            and current_plan == robust_exact
+            and _is_publishable_full_coverage(current_plan)
+        ):
+            stage_timings.append({
+                'stage': stage,
+                'duration_seconds': 0,
+                'skipped': 'robust_exact_full_coverage',
+            })
+            print(json.dumps({
+                'event': 'STAGE_SKIPPED',
+                'stage': stage,
+                'reason': 'robust_exact_full_coverage',
+            }, ensure_ascii=False), flush=True)
+            continue
+        if (
             not valhalla_snapshot_configured
-            and stage in {'build_surface_matrices', 'refine_materialize_validate'}
+            and stage in {
+                'build_surface_matrices', 'materialize_robust_exact',
+                'refine_materialize_validate',
+            }
         ):
             _configure_valhalla_snapshot(environment, args.valhalla_base_url)
             valhalla_snapshot_configured = True
@@ -593,6 +696,10 @@ def main() -> int:
                 timeout=(
                     args.refinement_wall_seconds
                     if stage == 'refine_materialize_validate'
+                    else args.robust_screening_wall_seconds
+                    if stage == 'solve_robust_screening_master'
+                    else args.robust_materialization_wall_seconds
+                    if stage == 'materialize_robust_exact'
                     else args.optimization_wall_seconds
                     if stage in {
                         'exact_direct_insertion_improvement',
@@ -603,6 +710,19 @@ def main() -> int:
                 ),
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            if stage in {'solve_robust_screening_master', 'materialize_robust_exact'}:
+                degraded_stages.append(stage)
+                stage_timings.append({
+                    'stage': stage,
+                    'duration_seconds': round(time.perf_counter() - stage_started, 3),
+                    'failed': True,
+                    'fallback': 'nominal_screening',
+                })
+                print(json.dumps({
+                    'event': 'ROBUST_FIRST_PASS_FALLBACK',
+                    'stage': stage,
+                }, ensure_ascii=False), flush=True)
+                continue
             if stage == 'refine_materialize_validate':
                 fallback_reason = (
                     'time_limit' if isinstance(error, subprocess.TimeoutExpired)
@@ -698,23 +818,27 @@ def main() -> int:
             **({'fallback_reason': fallback_reason} if fallback_reason else {}),
         })
         if stage in planning_stages:
-            current_plan = planning_stages[stage]
-            payload = json.loads(current_plan.read_text(encoding='utf-8'))
-            if (
-                first_valid_plan is None
-                and payload.get('status') == 'EXACT_VALID'
-                and payload.get('publication_allowed') is True
+            candidate_plan = planning_stages[stage]
+            if stage != 'materialize_robust_exact' or _is_publishable_full_coverage(
+                candidate_plan
             ):
-                first_valid_plan = current_plan
-                first_valid_elapsed_seconds = round(
-                    time.perf_counter() - pipeline_started, 3
-                )
-                print(json.dumps({
-                    'event': 'FIRST_VALID_PLAN',
-                    'path': str(first_valid_plan),
-                    'coverage_complete': not payload['plan']['unserved_job_ids'],
-                    'elapsed_seconds': first_valid_elapsed_seconds,
-                }, ensure_ascii=False), flush=True)
+                current_plan = candidate_plan
+                payload = json.loads(current_plan.read_text(encoding='utf-8'))
+                if (
+                    first_valid_plan is None
+                    and payload.get('status') == 'EXACT_VALID'
+                    and payload.get('publication_allowed') is True
+                ):
+                    first_valid_plan = current_plan
+                    first_valid_elapsed_seconds = round(
+                        time.perf_counter() - pipeline_started, 3
+                    )
+                    print(json.dumps({
+                        'event': 'FIRST_VALID_PLAN',
+                        'path': str(first_valid_plan),
+                        'coverage_complete': not payload['plan']['unserved_job_ids'],
+                        'elapsed_seconds': first_valid_elapsed_seconds,
+                    }, ensure_ascii=False), flush=True)
         print(json.dumps({
             'event': 'STAGE_COMPLETE',
             'stage': stage,
