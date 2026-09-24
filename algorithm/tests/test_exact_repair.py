@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 from zoneinfo import ZoneInfo
+from unittest.mock import patch
 
 from beeline_planning.domain import (
     Engineer, Equipment, EquipmentNeed, Job, JobStatus, Office,
@@ -79,6 +80,20 @@ class ExactCoverageRepairTests(unittest.TestCase):
             eligible_engineers_by_job=MappingProxyType(mapping),
             rejection_codes=MappingProxyType({}),
         )
+
+    def test_search_time_budget_returns_without_claiming_infeasibility(self) -> None:
+        with patch('beeline_planning.exact_repair.monotonic', side_effect=(0.0, 1.0)):
+            report = find_coverage_move(
+                self.dataset,
+                {'E1': (), 'E2': ()},
+                {'J'},
+                self._candidates({'J': ('E1',)}),
+                lambda _engineer_id, _order: self.fail('route check after deadline'),
+                max_seconds=0.1,
+            )
+        self.assertIsNone(report.move)
+        self.assertTrue(report.budget_exhausted)
+        self.assertEqual(report.route_checks, 0)
 
     def test_relocates_one_job_to_cover_an_unserved_job(self) -> None:
         routes = {'E1': ('A',), 'E2': ()}

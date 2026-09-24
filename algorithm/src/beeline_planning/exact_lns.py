@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from time import monotonic
 from typing import Callable, Mapping
 
 from .domain import PlanningDataset, Priority
@@ -212,6 +213,7 @@ def find_exact_lns_coverage_move(
     max_engineers: int = 4,
     window_padding_minutes: int = 120,
     neighbour_radius: int = 1,
+    max_seconds: float | None = None,
 ) -> ExactLnsSearchReport:
     """Rebuild a time-window cluster and verify every changed route exactly.
 
@@ -229,6 +231,8 @@ def find_exact_lns_coverage_move(
         raise ValueError('Exact LNS budgets must be positive')
     if window_padding_minutes < 0 or neighbour_radius < 0:
         raise ValueError('Exact LNS neighbourhood limits must be non-negative')
+    if max_seconds is not None and max_seconds <= 0:
+        raise ValueError('Exact LNS time budget must be positive')
     if not unserved_job_ids:
         return ExactLnsSearchReport(None, 0, 0, 0, 0, 0, False)
 
@@ -263,11 +267,19 @@ def find_exact_lns_coverage_move(
     neighbourhoods_tried = 0
     complete_states_checked = 0
     budget_exhausted = False
+    deadline = monotonic() + max_seconds if max_seconds is not None else None
+
+    def check_time() -> None:
+        nonlocal budget_exhausted
+        if deadline is not None and monotonic() >= deadline:
+            budget_exhausted = True
+            raise _RouteBudgetReached
 
     zero_checked: dict[tuple[str, tuple[str, ...]], bool] = {}
 
     def partial_valid(engineer_id: str, order: tuple[str, ...]) -> bool:
         nonlocal zero_rejections
+        check_time()
         key = (engineer_id, order)
         if key in zero_checked:
             return zero_checked[key]
@@ -387,6 +399,7 @@ def find_exact_lns_coverage_move(
     )
     try:
         for target_job_id in targets:
+            check_time()
             target_engineers = tuple(sorted(
                 candidates.eligible_engineers_by_job[target_job_id],
                 key=lambda engineer_id: (
@@ -400,6 +413,7 @@ def find_exact_lns_coverage_move(
                 ),
             ))
             for anchor_engineer_id in target_engineers:
+                check_time()
                 neighbourhoods_tried += 1
                 engineer_ids = _neighbourhood_engineers(
                     dataset,
@@ -442,6 +456,7 @@ def find_exact_lns_coverage_move(
                 )]
                 states: list[dict[str, tuple[str, ...]]] = [base_routes]
                 while pending:
+                    check_time()
                     if target_job_id in pending:
                         pending_job_id = target_job_id
                     else:
@@ -465,6 +480,7 @@ def find_exact_lns_coverage_move(
                         dict[str, tuple[str, ...]],
                     ] = {}
                     for state in states:
+                        check_time()
                         for engineer_id in engineer_ids:
                             if (
                                 engineer_id
@@ -490,6 +506,7 @@ def find_exact_lns_coverage_move(
                         break
                     states = prune_diverse(next_states, target_job_id)
                 for state in sorted(states, key=state_score):
+                    check_time()
                     complete_states_checked += 1
                     if not all(
                         exact_valid(engineer_id, order)

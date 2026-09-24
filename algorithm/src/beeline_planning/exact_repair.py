@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from datetime import timedelta
+from time import monotonic
 from typing import Callable, Mapping
 
 from .domain import PlanningDataset, Priority
@@ -134,6 +135,7 @@ def find_coverage_move(
     max_displacements: int = 2,
     max_checks_by_depth: tuple[int, ...] | None = None,
     reorder_affected_routes: bool = False,
+    max_seconds: float | None = None,
 ) -> RepairSearchReport:
     """Find a direct insert or a bounded exact ejection chain.
 
@@ -143,6 +145,8 @@ def find_coverage_move(
     """
     if max_route_checks < 1:
         raise ValueError('max_route_checks must be positive')
+    if max_seconds is not None and max_seconds <= 0:
+        raise ValueError('max_seconds must be positive')
     if not 0 <= max_displacements <= 4:
         raise ValueError('max_displacements must be between 0 and 4')
     if not unserved_job_ids:
@@ -173,6 +177,7 @@ def find_coverage_move(
     checks_by_job_depth: dict[tuple[int, str], int] = {}
     zero_rejections = 0
     budget_exhausted = False
+    deadline = monotonic() + max_seconds if max_seconds is not None else None
     active_depth = 0
     active_job_id = ''
     checked: dict[tuple[str, tuple[str, ...]], bool] = {
@@ -182,6 +187,9 @@ def find_coverage_move(
 
     def valid(engineer_id: str, order: tuple[str, ...]) -> bool:
         nonlocal exact_checks, zero_rejections, budget_exhausted
+        if deadline is not None and monotonic() >= deadline:
+            budget_exhausted = True
+            raise _BudgetReached
         key = (engineer_id, order)
         if key in checked:
             return checked[key]
@@ -313,6 +321,10 @@ def find_coverage_move(
             remaining_displacements: int,
             displaced_job_ids: tuple[str, ...],
         ) -> tuple[dict[str, tuple[str, ...]], tuple[str, ...]] | None:
+            nonlocal budget_exhausted
+            if deadline is not None and monotonic() >= deadline:
+                budget_exhausted = True
+                raise _BudgetReached
             protected_jobs = {job_id, *displaced_job_ids}
             for target_id in candidates.eligible_engineers_by_job[pending_job_id]:
                 target_order = tuple(current_routes.get(target_id, ()))

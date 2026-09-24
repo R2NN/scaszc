@@ -223,11 +223,15 @@ def main() -> int:
     parser.add_argument('--max-refinement-iterations', type=int, default=20)
     parser.add_argument('--refinement-query-budget', type=int, default=3000)
     parser.add_argument(
-        '--refinement-wall-seconds', type=float, default=600,
+        '--refinement-wall-seconds', type=float, default=120,
         help=(
             'Time allowed for exact CP-SAT refinement before a validated '
             'partial plan is built and passed to exact insertion and repair.'
         ),
+    )
+    parser.add_argument(
+        '--optimization-wall-seconds', type=float, default=90,
+        help='Maximum time for each exact insertion, repair and team compaction stage.',
     )
     parser.add_argument(
         '--skip-route-conflict-refinement',
@@ -248,7 +252,20 @@ def main() -> int:
     parser.add_argument('--skip-team-compaction', action='store_true')
     parser.add_argument('--team-compaction-candidates', type=int, default=12)
     parser.add_argument('--team-compaction-states', type=int, default=100_000)
-    parser.add_argument('--skip-exact-improvement', action='store_true')
+    improvement_group = parser.add_mutually_exclusive_group()
+    improvement_group.add_argument(
+        '--include-exact-improvement',
+        dest='skip_exact_improvement',
+        action='store_false',
+        help='Run the separate direct-insertion pass before chain repair.',
+    )
+    improvement_group.add_argument(
+        '--skip-exact-improvement',
+        dest='skip_exact_improvement',
+        action='store_true',
+        help='Skip the separate direct-insertion pass (the default).',
+    )
+    parser.set_defaults(skip_exact_improvement=True)
     parser.add_argument('--skip-chain-repair', action='store_true')
     parser.add_argument(
         '--execute', action='store_true',
@@ -293,6 +310,7 @@ def main() -> int:
         or args.max_refinement_iterations < 1
         or args.refinement_query_budget < 1
         or args.refinement_wall_seconds <= 0
+        or args.optimization_wall_seconds <= 0
         or args.lns_route_checks < 1
         or args.lns_beam_width < 1
         or args.lns_max_destroyed_jobs < 1
@@ -417,6 +435,7 @@ def main() -> int:
             '--metro-wait-seconds', args.metro_wait_seconds,
             '--max-exact-queries', args.refinement_query_budget,
             '--max-iterations', args.max_refinement_iterations,
+            '--full-coverage-seconds', 20,
             '--seconds-per-tier', args.seconds_per_tier,
             '--search-workers', args.search_workers,
             '--zone-workers', args.zone_workers,
@@ -449,6 +468,7 @@ def main() -> int:
             '--screening-root', screening,
             '--max-route-checks', args.repair_route_checks,
             '--max-displacements', 4, '--max-passes', args.repair_passes,
+            '--max-search-seconds-per-pass', 30,
             '--lns-route-checks', args.lns_route_checks,
             '--lns-beam-width', args.lns_beam_width,
             '--lns-max-destroyed-jobs', args.lns_max_destroyed_jobs,
@@ -523,6 +543,22 @@ def main() -> int:
     }
     for stage, command in commands:
         if (
+            stage == 'exact_team_compaction'
+            and current_plan is not None
+            and not _is_publishable_full_coverage(current_plan)
+        ):
+            stage_timings.append({
+                'stage': stage,
+                'duration_seconds': 0,
+                'skipped': 'coverage_incomplete',
+            })
+            print(json.dumps({
+                'event': 'STAGE_SKIPPED',
+                'stage': stage,
+                'reason': 'coverage_incomplete',
+            }, ensure_ascii=False), flush=True)
+            continue
+        if (
             not valhalla_snapshot_configured
             and stage in {'build_surface_matrices', 'refine_materialize_validate'}
         ):
@@ -557,6 +593,12 @@ def main() -> int:
                 timeout=(
                     args.refinement_wall_seconds
                     if stage == 'refine_materialize_validate'
+                    else args.optimization_wall_seconds
+                    if stage in {
+                        'exact_direct_insertion_improvement',
+                        'exact_chain_and_lns_repair',
+                        'exact_team_compaction',
+                    }
                     else None
                 ),
             )
@@ -595,8 +637,7 @@ def main() -> int:
                     'validated_plan': str(fallback_output),
                 }, ensure_ascii=False), flush=True)
             elif (
-                not isinstance(error, subprocess.CalledProcessError)
-                or stage not in {
+                stage not in {
                     'exact_direct_insertion_improvement',
                     'exact_chain_and_lns_repair',
                     'exact_team_compaction',
@@ -606,6 +647,32 @@ def main() -> int:
             ):
                 raise
             else:
+                checkpoint = planning_stages[stage]
+                if checkpoint.is_file() and _is_publishable_exact(checkpoint):
+                    current_plan = checkpoint
+                    reason = (
+                        'time_limit'
+                        if isinstance(error, subprocess.TimeoutExpired)
+                        else 'stage_error'
+                    )
+                    degraded_stages.append(stage)
+                    stage_timings.append({
+                        'stage': stage,
+                        'duration_seconds': round(time.perf_counter() - stage_started, 3),
+                        'interrupted': reason,
+                        'recovered_plan': str(checkpoint),
+                    })
+                    print(json.dumps({
+                        'event': 'OPTIMIZATION_CHECKPOINT_RECOVERED',
+                        'stage': stage,
+                        'reason': reason,
+                        'plan': str(checkpoint),
+                        'unserved_jobs': len(
+                            json.loads(checkpoint.read_text(encoding='utf-8'))
+                            ['plan']['unserved_job_ids']
+                        ),
+                    }, ensure_ascii=False), flush=True)
+                    continue
                 degraded_stages.append(stage)
                 stage_timings.append({
                     'stage': stage,

@@ -5,6 +5,7 @@ import json
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
+from time import monotonic
 
 from beeline_planning import (
     build_explanation_bundle,
@@ -56,6 +57,10 @@ def main() -> int:
         help='Comma-separated exact-check limits for direct, relocation and chain phases.',
     )
     parser.add_argument('--max-passes', type=int, default=10)
+    parser.add_argument(
+        '--max-search-seconds-per-pass', type=float,
+        help='Bound search between two accepted, fully validated coverage moves.',
+    )
     parser.add_argument('--lns-route-checks', type=int, default=2500)
     parser.add_argument('--lns-beam-width', type=int, default=48)
     parser.add_argument('--lns-max-destroyed-jobs', type=int, default=12)
@@ -79,6 +84,8 @@ def main() -> int:
         parser.error('Output must be a new file, distinct from the input plan')
     if args.max_passes < 1:
         parser.error('--max-passes must be positive')
+    if args.max_search_seconds_per_pass is not None and args.max_search_seconds_per_pass <= 0:
+        parser.error('--max-search-seconds-per-pass must be positive')
     if min(
         args.lns_route_checks,
         args.lns_beam_width,
@@ -239,6 +246,10 @@ def main() -> int:
     for pass_number in range(1, args.max_passes + 1):
         if not unserved:
             break
+        pass_deadline = (
+            monotonic() + args.max_search_seconds_per_pass
+            if args.max_search_seconds_per_pass is not None else None
+        )
         report = find_coverage_move(
             dataset,
             routes,
@@ -249,6 +260,10 @@ def main() -> int:
             max_displacements=args.max_displacements,
             max_checks_by_depth=checks_by_depth,
             reorder_affected_routes=True,
+            max_seconds=(
+                args.max_search_seconds_per_pass * 0.7
+                if args.max_search_seconds_per_pass is not None else None
+            ),
         )
         reports.append({
             'pass': pass_number,
@@ -270,7 +285,14 @@ def main() -> int:
             ),
         }
         lns_report = None
-        if report.move is None and not args.skip_exact_lns:
+        remaining_seconds = (
+            pass_deadline - monotonic() if pass_deadline is not None else None
+        )
+        if (
+            report.move is None
+            and not args.skip_exact_lns
+            and (remaining_seconds is None or remaining_seconds > 0)
+        ):
             lns_report = find_exact_lns_coverage_move(
                 dataset,
                 routes,
@@ -283,6 +305,7 @@ def main() -> int:
                 max_engineers=args.lns_max_engineers,
                 window_padding_minutes=args.lns_window_padding_minutes,
                 neighbour_radius=args.lns_neighbour_radius,
+                max_seconds=remaining_seconds,
             )
             lns_reports.append({
                 'pass': pass_number,
@@ -336,6 +359,13 @@ def main() -> int:
             **accepted_details,
             'changed_engineer_ids': sorted(move_routes),
         })
+        checkpoint = materialization_result_dict(trial)
+        checkpoint['artifact_type'] = 'EXACT_PLAN_COVERAGE_REPAIR'
+        checkpoint['source_plan'] = str(args.input_plan)
+        checkpoint['accepted_moves'] = list(accepted)
+        checkpoint['dataset_sha256'] = dataset.dataset_sha256
+        checkpoint['content_sha256'] = payload_sha256(checkpoint)
+        write_json_atomic(args.output, checkpoint)
         print(
             f'Pass {pass_number}: {accepted_kind} added '
             f'{inserted_job_id}; {len(unserved)} unserved remain',
@@ -361,6 +391,7 @@ def main() -> int:
         ),
         'screening_route_rejections': screening_rejections,
         'max_passes': args.max_passes,
+        'max_search_seconds_per_pass': args.max_search_seconds_per_pass,
         'exact_lns': {
             'enabled': not args.skip_exact_lns,
             'max_route_checks_per_pass': args.lns_route_checks,

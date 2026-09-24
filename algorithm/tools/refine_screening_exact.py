@@ -229,12 +229,30 @@ def _solve_refined_zone(
             )),
         )
     required_arcs: set[ArcKey] = set()
+    frozen_engineers: set[str] = set()
+    local_forbidden_assignments = set(forbidden_assignments)
     if mutable_job_ids is not None:
         for route in candidate.routes:
             if route.engineer_id not in dataset.engineers:
                 continue
+            if not any(
+                visit.job_id in mutable_job_ids for visit in route.visits
+            ):
+                frozen_engineers.add(route.engineer_id)
+                local_forbidden_assignments.update(
+                    (route.engineer_id, job_id)
+                    for job_id in mutable_job_ids
+                    if route.engineer_id
+                    in master.candidate_index.eligible_engineers_by_job[job_id]
+                )
             previous_job_id: str | None = None
             for visit in route.visits:
+                if route.engineer_id in frozen_engineers:
+                    required_arcs.add((
+                        route.engineer_id,
+                        previous_job_id or f'START:{route.engineer_id}',
+                        visit.job_id,
+                    ))
                 if (
                     previous_job_id is not None
                     and previous_job_id not in mutable_job_ids
@@ -246,6 +264,49 @@ def _solve_refined_zone(
                         visit.job_id,
                     ))
                 previous_job_id = visit.job_id
+        eligible = {}
+        for job_id, engineer_ids in master.candidate_index.eligible_engineers_by_job.items():
+            if job_id in mutable_job_ids:
+                eligible[job_id] = tuple(
+                    engineer_id for engineer_id in engineer_ids
+                    if engineer_id not in frozen_engineers
+                )
+            else:
+                owner = current_owner.get(job_id)
+                eligible[job_id] = (
+                    (owner,) if owner in engineer_ids else engineer_ids
+                )
+        if all(eligible.values()):
+            available_pairs = {
+                (engineer_id, job_id)
+                for job_id, engineer_ids in eligible.items()
+                for engineer_id in engineer_ids
+            }
+            master = replace(
+                master,
+                candidate_index=replace(
+                    master.candidate_index,
+                    eligible_engineers_by_job=MappingProxyType(eligible),
+                ),
+                arcs=tuple(
+                    arc for arc in master.arcs
+                    if (
+                        arc.engineer_id, arc.destination_job_id
+                    ) in available_pairs
+                    and (
+                        arc.origin_node_id.startswith('START:')
+                        or (arc.engineer_id, arc.origin_node_id) in available_pairs
+                    )
+                    and (
+                        arc.engineer_id not in frozen_engineers
+                        or (
+                            arc.engineer_id,
+                            arc.origin_node_id,
+                            arc.destination_job_id,
+                        ) in required_arcs
+                    )
+                ),
+            )
     zone_forced_assignments = tuple(
         assignment
         for assignment in forced_assignments
@@ -263,20 +324,29 @@ def _solve_refined_zone(
     attempts: list[int] = []
     expected = set(master.candidate_index.active_job_ids)
     zone_cuts = tuple(sorted(key for key in cuts if key[0] in dataset.engineers))
+    available_pairs = {
+        (engineer_id, job_id)
+        for job_id, engineer_ids in master.candidate_index.eligible_engineers_by_job.items()
+        for engineer_id in engineer_ids
+    }
+    available_arcs = {
+        (arc.engineer_id, arc.origin_node_id, arc.destination_job_id)
+        for arc in master.arcs
+    }
     zone_forbidden_assignments = tuple(sorted(
         assignment
-        for assignment in forbidden_assignments
-        if assignment[0] in dataset.engineers
+        for assignment in local_forbidden_assignments
+        if assignment in available_pairs
     ))
     zone_forbidden_arc_groups = tuple(
         group
         for group in forbidden_arc_groups
-        if group and group[0][0] in dataset.engineers
+        if group and all(key in available_arcs for key in group)
     )
     zone_forbidden_assignment_groups = tuple(
         group
         for group in forbidden_assignment_groups
-        if group and group[0][0] in dataset.engineers
+        if group and all(pair in available_pairs for pair in group)
     )
     for size in graph_sizes:
         attempts.append(size)
@@ -405,11 +475,20 @@ def _failure_dict(failure) -> dict[str, object]:
     }
 
 
+def _window_gap_minutes(left, right) -> int:
+    if left.window_end < right.window_start:
+        return int((right.window_start - left.window_end).total_seconds() // 60)
+    if right.window_end < left.window_start:
+        return int((left.window_start - right.window_end).total_seconds() // 60)
+    return 0
+
+
 def _mutable_jobs_for_conflicts(
     dataset,
     zone: str,
     assignment_conflict_groups: set[tuple[tuple[str, str], ...]],
     current_failures: tuple[ExactRefinementFailure, ...] = (),
+    max_jobs: int = 45,
 ) -> frozenset[str] | None:
     """Build a bounded neighbourhood around the current exact failures.
 
@@ -420,12 +499,7 @@ def _mutable_jobs_for_conflicts(
     ``_solve_refined_zone`` still falls back to the unrestricted zone when this
     neighbourhood is too small.
     """
-    seed_ids = {
-        job_id
-        for group in assignment_conflict_groups
-        for engineer_id, job_id in group
-        if dataset.engineers[engineer_id].zone_id == zone
-    }
+    seed_ids: set[str] = set()
     for failure in current_failures:
         if failure.zone_id != zone:
             continue
@@ -434,26 +508,30 @@ def _mutable_jobs_for_conflicts(
         if failure.origin_node_id in dataset.jobs:
             seed_ids.add(failure.origin_node_id)
     if not seed_ids:
+        seed_ids = {
+            job_id
+            for group in assignment_conflict_groups
+            for engineer_id, job_id in group
+            if dataset.engineers[engineer_id].zone_id == zone
+        }
+    if not seed_ids:
         return None
-    seed_jobs = [dataset.jobs[job_id] for job_id in seed_ids]
-    start = min(job.window_start for job in seed_jobs)
-    end = max(job.window_end for job in seed_jobs)
-    max_window = max(job.window_end - job.window_start for job in seed_jobs)
-    neighbourhood_start = start - max_window
-    neighbourhood_end = end + max_window
-    return frozenset(
-        job_id
-        for job_id, job in dataset.jobs.items()
-        if job.zone_id == zone
-        and (
-            job_id in seed_ids
-            or (
-                job.window_end - job.window_start <= max_window * 2
-                and job.window_start <= neighbourhood_end
-                and neighbourhood_start <= job.window_end
-            )
-        )
+    seed_jobs = tuple(dataset.jobs[job_id] for job_id in seed_ids)
+    nearby = sorted(
+        (
+            job_id for job_id, job in dataset.jobs.items()
+            if job.zone_id == zone and job_id not in seed_ids
+        ),
+        key=lambda job_id: (
+            min(
+                _window_gap_minutes(dataset.jobs[job_id], seed)
+                for seed in seed_jobs
+            ),
+            dataset.jobs[job_id].window_end,
+            job_id,
+        ),
     )
+    return frozenset(seed_ids | set(nearby[:max(0, max_jobs - len(seed_ids))]))
 
 
 def _inspect_parallel(

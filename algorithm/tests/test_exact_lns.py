@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime
 from types import MappingProxyType, SimpleNamespace
 from zoneinfo import ZoneInfo
+from unittest.mock import patch
 
 from beeline_planning.domain import (
     Engineer,
@@ -169,6 +170,20 @@ class ExactAwareLnsTests(unittest.TestCase):
         self.assertIsNone(report.move)
         self.assertTrue(report.budget_exhausted)
         self.assertEqual(report.route_checks, 1)
+
+    def test_search_time_budget_stops_before_expanding_routes(self) -> None:
+        with patch('beeline_planning.exact_lns.monotonic', side_effect=(0.0, 1.0)):
+            report = find_exact_lns_coverage_move(
+                self.dataset,
+                {'E1': (), 'E2': (), 'E3': ()},
+                {'J'},
+                self._candidates({'J': ('E1',)}),
+                lambda _engineer_id, _order: self.fail('route check after deadline'),
+                max_seconds=0.1,
+            )
+        self.assertIsNone(report.move)
+        self.assertTrue(report.budget_exhausted)
+        self.assertEqual(report.route_checks, 0)
 
 
 if __name__ == '__main__':

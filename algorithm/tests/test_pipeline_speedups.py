@@ -10,6 +10,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from datetime import UTC, datetime
+from datetime import timedelta
+from types import MappingProxyType
 from unittest.mock import patch
 from urllib.error import HTTPError
 
@@ -18,6 +20,13 @@ sys.path.insert(0, str(Path(__file__).parents[1] / 'tools'))
 from beeline_routing.models import Coordinate
 from beeline_routing.screening_cache import ScreeningCache
 from beeline_planning import load_planning_dataset
+from beeline_planning.eligibility import CandidateIndex
+from beeline_planning.master import MasterModelInput
+from beeline_planning.solver import (
+    MasterEngineerRoute,
+    MasterSolution,
+    MasterSolveStatus,
+)
 from beeline_routing.export import payload_sha256
 from tools.build_valhalla_screening_matrices import missing_matrix_requests
 from tools import build_valhalla_screening_matrices as matrix_builder
@@ -27,9 +36,94 @@ from tools.run_new_dataset_pipeline import (
     _refinement_fallback_candidate,
 )
 from tools.solve_screening_zones import _read_warm_orders
+from tools import refine_screening_exact as exact_refiner
 
 
 class ScreeningSpeedupTests(unittest.TestCase):
+    def test_exact_neighbourhood_uses_current_failure_and_is_bounded(self) -> None:
+        moment = datetime(2026, 8, 15, 8, tzinfo=UTC)
+        dataset = SimpleNamespace(
+            jobs={
+                job_id: SimpleNamespace(
+                    zone_id='Z',
+                    window_start=moment + timedelta(minutes=start),
+                    window_end=moment + timedelta(minutes=end),
+                )
+                for job_id, start, end in (
+                    ('previous', 0, 30),
+                    ('failed', 30, 60),
+                    ('near', 60, 90),
+                    ('far', 300, 330),
+                )
+            },
+            engineers={'E': SimpleNamespace(zone_id='Z')},
+        )
+        failure = SimpleNamespace(
+            zone_id='Z', origin_node_id='previous', destination_job_id='failed'
+        )
+        result = exact_refiner._mutable_jobs_for_conflicts(
+            dataset, 'Z', {(('E', 'far'),)}, (failure,), max_jobs=3
+        )
+        self.assertEqual(result, frozenset({'previous', 'failed', 'near'}))
+
+    def test_exact_local_solve_freezes_untouched_routes(self) -> None:
+        moment = datetime(2026, 8, 15, 8, tzinfo=UTC)
+        dataset = SimpleNamespace(
+            jobs={job_id: SimpleNamespace(zone_id='Z') for job_id in 'ACD'},
+            engineers={engineer_id: SimpleNamespace(zone_id='Z') for engineer_id in ('E1', 'E2')},
+        )
+        candidate_index = CandidateIndex(
+            planning_at=moment,
+            active_job_ids=('A', 'C', 'D'),
+            eligible_engineers_by_job=MappingProxyType({
+                'A': ('E1', 'E2'), 'C': ('E2',), 'D': ('E2',),
+            }),
+            rejection_codes=MappingProxyType({}),
+        )
+        master = MasterModelInput(moment, candidate_index, (), (), 'screening')
+        candidate = MasterSolution(
+            status=MasterSolveStatus.SCREENING_FEASIBLE,
+            planning_at=moment,
+            routes=(
+                MasterEngineerRoute('E1', (SimpleNamespace(job_id='A'),)),
+                MasterEngineerRoute('E2', (
+                    SimpleNamespace(job_id='C'), SimpleNamespace(job_id='D')
+                )),
+            ),
+            unserved_job_ids=(),
+            objective_proofs=(),
+            dataset_sha256='dataset',
+            screening_snapshot_sha256='screening',
+            solver_version='test',
+            search_graph_complete=True,
+            searched_arc_count=0,
+            operationally_excluded_arcs=(),
+        )
+        context = exact_refiner._ZoneMasterContext(dataset, master, {})
+        with patch.object(
+            exact_refiner, 'solve_screening_master', return_value=candidate
+        ) as solve:
+            exact_refiner._solve_refined_zone(
+                dataset, None, candidate, 'Z', set(), {}, (8,), 1, 1,
+                mutable_job_ids=frozenset({'A'}),
+                zone_cache=SimpleNamespace(get=lambda _zone: context),
+            )
+        configured_master = solve.call_args.args[1]
+        config = solve.call_args.args[2]
+        self.assertIn(('E2', 'C'), configured_master.hard_assignments)
+        self.assertIn(('E2', 'D'), configured_master.hard_assignments)
+        self.assertEqual(
+            configured_master.candidate_index.eligible_engineers_by_job['A'],
+            ('E1',),
+        )
+        self.assertEqual(
+            configured_master.candidate_index.eligible_engineers_by_job['C'],
+            ('E2',),
+        )
+        self.assertIn(('E2', 'START:E2', 'C'), config.required_arcs)
+        self.assertIn(('E2', 'C', 'D'), config.required_arcs)
+        self.assertNotIn(('E2', 'A'), config.forbidden_assignments)
+
     def test_exact_warm_start_is_protected_only_in_its_valid_scenario(self) -> None:
         root = Path(__file__).parents[2]
         dataset_root = root / 'data' / 'dataset'
