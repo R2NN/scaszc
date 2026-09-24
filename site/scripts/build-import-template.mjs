@@ -46,7 +46,7 @@ const ordersGuide = [
   ['bk_type / hd_type', 'Желательно', 'Тип и операция работ', 'Текст или код', 'INSTALL / GPON'],
   ['required_skill', 'Желательно', 'Навык исполнителя', 'Текст', 'Монтаж'],
   ['priority', 'Нет', 'Приоритет', 'NORMAL / HIGH / EMERGENCY', 'NORMAL'],
-  ['required_transport', 'Нет', 'Требование к транспорту', 'ANY / CAR / PUBLIC_TRANSIT / FOOT', 'CAR'],
+  ['required_transport', 'Нет', 'Требование к транспорту', 'ANY / CAR / PUBLIC_TRANSIT / WALKING / BICYCLE', 'CAR'],
   ['required_equipment', 'Нет', 'Необходимое оборудование', 'Значения через |', 'ONT|INSTALL_SET'],
   ['phone / email', 'Нет', 'Контакты клиента', 'Текст', '+7 999 100-10-01'],
   ['notes', 'Нет', 'Комментарий диспетчеру', 'Текст', 'Связаться за 30 минут'],
@@ -68,7 +68,7 @@ const engineersGuide = [
   ['engineer_name', 'Да', 'ФИО инженера', 'Текст', 'Алексей Смирнов'],
   ['skills', 'Да', 'Навыки инженера', 'Значения через |', 'Подключение|Диагностика'],
   ['shift_start / shift_end', 'Да', 'Границы рабочей смены', 'HH:MM', '08:00 / 17:00'],
-  ['transport', 'Да', 'Тип транспорта', 'CAR / PUBLIC_TRANSIT / FOOT / BIKE', 'CAR'],
+  ['transport', 'Да', 'Тип транспорта', 'CAR / PUBLIC_TRANSIT / WALKING / BICYCLE', 'CAR'],
   ['equipment', 'Нет', 'Доступное оборудование', 'Значения через |', 'ROUTER|INSTALL_SET'],
   ['start_address', 'Нет*', 'Адрес начала смены', 'Текст', 'Москва, ул. 8 Марта, 10'],
   ['start_latitude / start_longitude', 'Нет*', 'Точные координаты начала смены', 'Число', '55.799859 / 37.564312'],
@@ -158,7 +158,7 @@ function buildOrdersWorkbook() {
   ]);
   sheet.getRange('L2:L5000').dataValidation = { rule: { type: 'whole', operator: 'between', formula1: 1, formula2: 1440 } };
   sheet.getRange('P2:P5000').dataValidation = { rule: { type: 'list', values: ['NORMAL', 'HIGH', 'EMERGENCY'] } };
-  sheet.getRange('Q2:Q5000').dataValidation = { rule: { type: 'list', values: ['ANY', 'CAR', 'PUBLIC_TRANSIT', 'FOOT'] } };
+  sheet.getRange('Q2:Q5000').dataValidation = { rule: { type: 'list', values: ['ANY', 'CAR', 'PUBLIC_TRANSIT', 'WALKING', 'BICYCLE'] } };
   addGuide(workbook, 'Шаблон импорта заявок BeeGo!', ordersGuide, 'Не меняйте названия столбцов. Удалите примеры, добавьте свои заявки и загрузите файл в разделе «Заявки». Для каждой строки нужен адрес либо пара latitude/longitude.');
   workbook.recalculate();
   return workbook;
@@ -171,7 +171,7 @@ function buildEngineersWorkbook() {
     ['A:B', 21], ['C:C', 34], ['D:E', 16], ['F:F', 20], ['G:G', 28],
     ['H:H', 34], ['I:J', 18], ['K:N', 22],
   ]);
-  sheet.getRange('F2:F5000').dataValidation = { rule: { type: 'list', values: ['CAR', 'PUBLIC_TRANSIT', 'FOOT', 'BIKE'] } };
+  sheet.getRange('F2:F5000').dataValidation = { rule: { type: 'list', values: ['CAR', 'PUBLIC_TRANSIT', 'WALKING', 'BICYCLE'] } };
   sheet.getRange('L2:L5000').dataValidation = { rule: { type: 'list', values: ['AVAILABLE', 'UNAVAILABLE'] } };
   addGuide(workbook, 'Шаблон импорта инженеров BeeGo!', engineersGuide, 'Не меняйте названия столбцов. Удалите примеры, добавьте инженеров и загрузите файл в разделе «Инженеры». Несколько навыков или единиц оборудования разделяйте символом |.');
   workbook.recalculate();

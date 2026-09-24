@@ -29,6 +29,31 @@ test('new UI rows become a strictly loadable checksummed exact dataset', async (
   }
 });
 
+test('UI import preserves four transport requirements and excludes mismatched engineers', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'beego-ui-transport-'));
+  try {
+    const modes = ['CAR', 'PUBLIC_TRANSIT', 'BICYCLE', 'WALKING'];
+    const payload = {
+      ...samplePayload,
+      orders: modes.map((mode, index) => ({
+        ...samplePayload.orders[0], id: `JOB-${index}`, sourceId: `JOB-${index}`, transport: mode,
+      })),
+      engineers: modes.map((mode, index) => ({
+        ...samplePayload.engineers[0], id: `ENG-${index}`, sourceId: `ENG-${index}`, transport: mode,
+      })),
+    };
+    const dataset = path.join(directory, 'dataset');
+    const prepared = spawnSync(python, [path.join(repositoryRoot, 'algorithm', 'tools', 'prepare_ui_dataset.py'), dataset], { cwd: repositoryRoot, env: { ...process.env, PYTHONUTF8: '1' }, input: JSON.stringify(payload), encoding: 'utf8' });
+    assert.equal(prepared.status, 0, prepared.stdout || prepared.stderr);
+    const code = 'from pathlib import Path; from beeline_planning import load_planning_dataset, build_candidate_index; import json, sys; data=load_planning_dataset(Path(sys.argv[1]), "core"); candidates=build_candidate_index(data); print(json.dumps({job: list(candidates.eligible_engineers_by_job[job]) for job in sorted(data.jobs)}))';
+    const checked = spawnSync(python, ['-c', code, dataset], { cwd: repositoryRoot, env: { ...process.env, PYTHONPATH: path.join(repositoryRoot, 'algorithm', 'src'), PYTHONUTF8: '1' }, encoding: 'utf8' });
+    assert.equal(checked.status, 0, checked.stdout || checked.stderr);
+    assert.deepEqual(JSON.parse(checked.stdout), Object.fromEntries(modes.map((mode, index) => [`JOB-${index}`, [`ENG-${index}`]])));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('new area uses explicitly entered shared stock, including zero', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'beego-ui-stock-'));
   try {

@@ -9,6 +9,21 @@ test('replanning CSV accepts Russian semicolon headers without coordinates', () 
   assert.equal(request.skill, 'EMERGENCY');
   assert.equal(request.latitude, '');
   assert.equal(request.start, '13:00');
+  assert.equal(request.requiredTransport, 'ANY');
+});
+
+test('replanning CSV keeps all supported transport requirements', () => {
+  for (const [input, expected] of [
+    ['CAR', 'CAR'], ['PUBLIC_TRANSIT', 'PUBLIC_TRANSIT'],
+    ['Велосипед', 'BICYCLE'], ['FOOT', 'WALKING'],
+  ]) {
+    const [request] = parseReplanningCsv(`id,address,required_transport\n42,"Москва, ул. Тверская, 1",${input}`);
+    assert.equal(request.requiredTransport, expected);
+  }
+  assert.throws(
+    () => parseReplanningCsv('id,address,required_transport\n42,Москва,HOVERBOARD'),
+    /Неизвестное требование к транспорту/,
+  );
 });
 
 test('global region selection overrides a conflicting region from CSV', () => {

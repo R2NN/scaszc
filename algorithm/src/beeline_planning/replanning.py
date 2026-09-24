@@ -17,7 +17,7 @@ from beeline_routing.errors import RoutingError
 from beeline_routing.models import RouteStatus, TransportMode
 from beeline_routing.oracle import ExactRoutingOracle, OracleQuery
 
-from .domain import Event, EventType, PlanningDataset, Priority, RequiredTransport
+from .domain import Event, EventType, PlanningDataset, Priority
 from .departure_timing import retime_replanned_departures
 from .eligibility import build_candidate_index
 from .errors import InvalidPlanningData
@@ -168,7 +168,7 @@ def _static_eligible(dataset: PlanningDataset, engineer_id: str, job_id: str) ->
         return False
     if job.required_skill not in engineer.skills:
         return False
-    if job.required_transport == RequiredTransport.CAR and engineer.transport_mode != TransportMode.CAR:
+    if not job.required_transport.allows(engineer.transport_mode):
         return False
     return all(
         not dataset.equipment_catalog[need.equipment_id].reusable

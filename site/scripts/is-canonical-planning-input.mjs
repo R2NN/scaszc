@@ -10,7 +10,7 @@ const skill = value => {
 };
 const transport = value => {
   const raw = normalize(value).toLocaleLowerCase('ru-RU');
-  return { 'автомобиль': 'CAR', 'общественный транспорт': 'PUBLIC_TRANSIT', 'пешком': 'WALKING', 'велосипед': 'BICYCLE' }[raw] || raw.toUpperCase();
+  return { 'автомобиль': 'CAR', 'общественный транспорт': 'PUBLIC_TRANSIT', 'пешком': 'WALKING', 'велосипед': 'BICYCLE', auto: 'CAR', foot: 'WALKING', bike: 'BICYCLE' }[raw] || raw.toUpperCase();
 };
 const equipmentCode = value => {
   const raw = normalize(value).toLocaleLowerCase('ru-RU');
@@ -45,6 +45,7 @@ export function isCanonicalPlanningInput(payload, artifact, repositoryRoot = pro
       || clock(item.end) !== clock(source.window_end)
       || Number(item.duration) !== Number(source.service_duration_min)
       || skill(item.skill) !== source.required_skill
+      || transport(item.transport || source.required_transport) !== source.required_transport
       || normalize(item.zoneId || imported.zone_id) !== source.zone_id
       || !samePoint(item.coords, source.latitude, source.longitude)
       || (item.equipment && codes(item.equipment) !== codes(source.required_equipment));

@@ -29,6 +29,7 @@ SKILLS = {
 TRANSPORT = {
     'автомобиль': 'CAR', 'пешком': 'WALKING', 'велосипед': 'BICYCLE',
     'общественный транспорт': 'PUBLIC_TRANSIT',
+    'auto': 'CAR', 'foot': 'WALKING', 'bike': 'BICYCLE',
 }
 ZONE_LABELS = {'восток': 'EAST', 'юго-восток': 'SOUTHEAST', 'югоцентр': 'SOUTHCENTER'}
 
@@ -212,8 +213,8 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         rules.append({'bk_type': bk_type, 'hd_type': hd_type, 'service_duration_min': duration})
         transport_value = str(item.get('transport') or item.get('sourceData', {}).get('required_transport') or 'ANY').strip()
         raw_transport = TRANSPORT.get(transport_value.casefold(), transport_value.upper())
-        if raw_transport not in {'ANY', 'CAR'}:
-            raise ValueError(f'Транспорт заявки {job_id} должен быть ANY или CAR')
+        if raw_transport not in {'ANY', 'CAR', 'PUBLIC_TRANSIT', 'BICYCLE', 'WALKING'}:
+            raise ValueError(f'Неизвестное требование к транспорту заявки {job_id}: {transport_value}')
         raw_priority = str(item.get('priority') or '').casefold()
         priority = 'URGENT' if raw_priority in {'urgent', 'авария', 'срочная'} else 'NORMAL'
         jobs.append({'scenario': 'CORE', 'job_id': job_id, 'source_job_id': job_id, 'zone_id': zone_id, 'location_id': location_id, 'bk_type': bk_type, 'hd_type': hd_type, 'window_start': f'{planning_date}T{start}:00+03:00', 'window_end': f'{planning_date}T{end}:00+03:00', 'created_at': planning_at, 'service_duration_min': duration, 'priority': priority, 'required_skill': required_skill, 'required_transport': raw_transport, 'required_equipment': '|'.join(codes), 'gigabit_required': 'Нет', 'is_event_job': 'false', 'status': 'PENDING'})

@@ -319,3 +319,16 @@ test('team capacity does not invent a tie-break reason absent from planner outpu
   assert.equal(result.missingReasonCount, 1);
   assert.match(result.stats[0].explanation, /не передано планировщиком/);
 });
+
+test('team capacity treats ANY as unrestricted and reports an exact mode mismatch', () => {
+  const record = {
+    orders: [{ id: 'one', zone: 'A', skill: 'INSTALL', transport: 'ANY', start: '10:00', end: '12:00', duration: 60 }],
+    team: [{ id: 'free', zone: 'A', skills: ['INSTALL'], transport: 'CAR', shiftStart: '09:00', shiftEnd: '18:00' }],
+    plan: { routes: [], unassigned: [{ orderId: 'one' }] },
+  };
+  assert.doesNotMatch(analyzeTeamCapacity(record).stats[0].explanation, /не подходит транспорт/);
+  record.orders[0].transport = 'BICYCLE';
+  assert.match(analyzeTeamCapacity(record).stats[0].explanation, /не подходит транспорт/);
+  record.team[0].transport = 'BICYCLE';
+  assert.doesNotMatch(analyzeTeamCapacity(record).stats[0].explanation, /не подходит транспорт/);
+});

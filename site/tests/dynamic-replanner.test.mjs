@@ -47,6 +47,15 @@ test('dynamic replanning never moves a request to another region', () => {
   assert.equal(plan.unassigned.find(item => item.orderId === 'urgent')?.reasonCode, 'NO_ELIGIBLE_ENGINEER_IN_REGION');
 });
 
+test('dynamic replanning respects a bicycle-only request', () => {
+  const order = { id: 'bike-job', zone: 'Восток', skill: 'INSTALL', requiredTransport: 'BICYCLE', start: '11:00', end: '14:00', duration: 45, coords: [55.77, 37.64] };
+  const bikeEngineer = { ...engineers[1], id: 'east-bike', transport: 'BICYCLE' };
+  const plan = buildDynamicReplan([...baseOrders, order], [...engineers, bikeEngineer], basePlan);
+  assert.equal(plan.routes.find(route => route.engineerId === 'east-bike').assignments[0].orderId, 'bike-job');
+  const withoutBike = buildDynamicReplan([...baseOrders, order], engineers, basePlan);
+  assert.equal(withoutBike.unassigned.find(item => item.orderId === 'bike-job')?.reasonCode, 'NO_ELIGIBLE_ENGINEER_IN_REGION');
+});
+
 test('dynamic replanning removes a cancelled request from the published route', () => {
   const plan = buildDynamicReplan(baseOrders.filter(order => order.id !== 'a'), engineers, basePlan);
   assert.deepEqual(plan.routes.find(item => item.engineerId === 'east-1').assignments.map(item => item.orderId), ['b']);

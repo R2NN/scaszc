@@ -1203,7 +1203,7 @@ function ReplanningLocationPicker({ latitude, longitude, cluster, onPick }) {
 
 function ReplanningView({ record, data, cluster = 'all', isLive = false, planningDate = HACKATHON_PLANNING_DATE, onPreview, onApply, onRollback, onOpenPlanningDay }) {
   const [eventType, setEventType] = useState('new');
-  const [form, setForm] = useState({ externalId: '', name: '', address: '', zone: cluster === 'all' ? '' : cluster, skill: 'EMERGENCY', start: '13:00', end: '15:00', duration: '60', priority: 'Срочная', eventTime: currentTimeValue(), latitude: '', longitude: '', orderId: '', engineerId: '' });
+  const [form, setForm] = useState({ externalId: '', name: '', address: '', zone: cluster === 'all' ? '' : cluster, skill: 'EMERGENCY', start: '13:00', end: '15:00', duration: '60', priority: 'Срочная', requiredTransport: 'ANY', eventTime: currentTimeValue(), latitude: '', longitude: '', orderId: '', engineerId: '' });
   const [preview, setPreview] = useState({ status: 'idle', plan: null, message: '', model: null });
   const [location, setLocation] = useState({ status: 'idle', message: '' });
   const [mapOpen, setMapOpen] = useState(false);
@@ -1301,6 +1301,7 @@ function ReplanningView({ record, data, cluster = 'all', isLive = false, plannin
       zone: cluster === 'all' ? clusterOf(source) : cluster,
       skill: 'EMERGENCY',
       priority: 'Срочная',
+      requiredTransport: 'ANY',
       start: '13:00',
       end: '15:00',
       duration: '60',
@@ -1331,7 +1332,7 @@ function ReplanningView({ record, data, cluster = 'all', isLive = false, plannin
       name: form.name.trim() || `Новая заявка · ${form.address.trim()}`, address: form.address.trim(), zone: form.zone,
       skill: form.skill, start: form.start, end: form.end, duration: Number(form.duration),
       priority: form.priority, regionId: record?.regionId || 'moscow',
-      requiredTransport: 'ANY', requiredEquipment: '',
+      requiredTransport: form.requiredTransport, requiredEquipment: '',
       coords: Number.isFinite(latitude) && Number.isFinite(longitude) ? [latitude, longitude] : null,
     };
     return { orders: [...baseOrders, draftOrder], team: baseTeam, event: { type: 'NEW_ORDER', time: form.eventTime, orderId: draftOrder.id } };
@@ -1469,6 +1470,7 @@ function ReplanningView({ record, data, cluster = 'all', isLive = false, plannin
           <label>Клиент / объект<input value={form.name} placeholder="Клиент или объект" onChange={event => updateForm('name', event.target.value)}/></label>
           <label>Участок<BusinessSelect className="replanning-business-select" ariaLabel="Выбрать участок" value={form.zone} disabled={cluster !== 'all'} onChange={value => updateForm('zone', value)} options={[{ value: '', label: 'Выберите участок', hint: 'Региональные границы будут учтены в расчёте' }, ...availableClusters.map(item => ({ value: item, label: item, hint: `Бригады и маршруты зоны «${item}»` }))]}/></label>
           <label>Тип работ<BusinessSelect className="replanning-business-select" ariaLabel="Выбрать тип работ" value={form.skill} onChange={value => resetPreview({ skill: value, ...(value === 'EMERGENCY' ? { priority: 'Срочная' } : {}) })} options={[{ value: 'EMERGENCY', label: 'Аварийные работы', hint: 'Приоритетный выезд и аварийный допуск', priority: true }, { value: 'INSTALL', label: 'Подключение', hint: 'Монтаж и подключение оборудования' }, { value: 'LOCAL', label: 'Локальные работы', hint: 'Диагностика и ремонт на объекте' }]}/></label>
+          <label>Транспорт заявки<BusinessSelect className="replanning-business-select" ariaLabel="Выбрать транспорт заявки" value={form.requiredTransport} onChange={value => updateForm('requiredTransport', value)} options={[{ value: 'ANY', label: 'Любой транспорт' }, { value: 'CAR', label: 'Автомобиль' }, { value: 'PUBLIC_TRANSIT', label: 'Общественный транспорт' }, { value: 'BICYCLE', label: 'Велосипед' }, { value: 'WALKING', label: 'Пешком' }]}/></label>
           <label className="wide replanning-address-field">Адрес<div><input value={form.address} placeholder="Москва, улица, дом" onChange={event => updateForm('address', event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); searchAddress(); } }}/><button type="button" onClick={() => searchAddress()} disabled={location.status === 'loading'}><Search/>{location.status === 'loading' ? 'Ищем…' : 'Найти'}</button><button type="button" className={mapOpen ? 'active' : ''} onClick={() => setMapOpen(current => !current)}><MapPin/>{mapOpen ? 'Скрыть карту' : 'Выбрать на карте'}</button></div>{location.message ? <span className={location.status}>{location.message}</span> : null}</label>
           <ManualTimeField label="Время события" value={form.eventTime} onChange={value => updateForm('eventTime', value)}/><ManualTimeField label="Начало окна" value={form.start} onChange={value => updateForm('start', value)}/><ManualTimeField label="Конец окна" value={form.end} onChange={value => updateForm('end', value)}/><label>Длительность, мин<input type="number" min="1" value={form.duration} onChange={event => updateForm('duration', event.target.value)}/></label><label>Приоритет<BusinessSelect className="replanning-business-select" ariaLabel="Выбрать приоритет" value={form.priority} onChange={value => updateForm('priority', value)} options={[{ value: 'Срочная', label: 'Срочная', hint: 'Обработать в первую очередь', priority: true }, { value: 'Обычная', label: 'Обычная', hint: 'Стандартный порядок планирования' }]}/></label>
         </div>

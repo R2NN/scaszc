@@ -15,6 +15,7 @@ const HEADER_ALIASES = {
   end: ['end', 'window end', 'time window end', 'конец', 'конец окна', 'окно до'],
   duration: ['duration', 'duration min', 'service duration min', 'длительность', 'длительность мин'],
   priority: ['priority', 'приоритет'],
+  requiredTransport: ['required transport', 'transport', 'тип транспорта', 'транспорт'],
   eventTime: ['event time', 'incident time', 'created at', 'время события', 'время инцидента'],
   latitude: ['latitude', 'lat', 'широта'],
   longitude: ['longitude', 'lon', 'lng', 'долгота'],
@@ -32,6 +33,19 @@ const skillValue = value => {
   if (/upsell|дозаказ/.test(normalized)) return 'UPSELL';
   if (/local|локал|ремонт|диагност/.test(normalized)) return 'LOCAL';
   return 'INSTALL';
+};
+
+const transportValue = value => {
+  const normalized = normalizeHeader(value);
+  const aliases = {
+    '': 'ANY', any: 'ANY', car: 'CAR', auto: 'CAR', автомобиль: 'CAR',
+    public_transit: 'PUBLIC_TRANSIT', 'public transit': 'PUBLIC_TRANSIT', 'общественный транспорт': 'PUBLIC_TRANSIT',
+    bicycle: 'BICYCLE', bike: 'BICYCLE', велосипед: 'BICYCLE',
+    walking: 'WALKING', foot: 'WALKING', пешком: 'WALKING',
+  };
+  const mode = aliases[normalized];
+  if (!mode) throw new Error(`Неизвестное требование к транспорту: ${value}`);
+  return mode;
 };
 
 const parseMatrix = text => {
@@ -85,6 +99,7 @@ export function parseReplanningCsv(text, lockedZone = '') {
       end: timeValue(valueFor(row, 'end')) || '11:00',
       duration: String(Math.max(1, Number(valueFor(row, 'duration')) || 60)),
       priority: /urgent|emergency|авар|срочн/.test(normalizeHeader(valueFor(row, 'priority'))) ? 'Срочная' : 'Обычная',
+      requiredTransport: transportValue(valueFor(row, 'requiredTransport')),
       eventTime: timeValue(valueFor(row, 'eventTime')),
       latitude: hasCoordinates ? String(latitude) : '',
       longitude: hasCoordinates ? String(longitude) : '',

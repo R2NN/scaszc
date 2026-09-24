@@ -30,7 +30,7 @@ const straightDistanceKm = (from, to) => {
   return 6371 * 2 * Math.atan2(Math.sqrt(chord), Math.sqrt(1 - chord));
 };
 
-const TRANSPORT_SPEED = { CAR: 30, PUBLIC_TRANSIT: 18, BICYCLE: 14, WALK: 4.5 };
+const TRANSPORT_SPEED = { CAR: 30, PUBLIC_TRANSIT: 18, BICYCLE: 14, WALK: 4.5, WALKING: 4.5 };
 const TRANSPORT_LABEL = { CAR: 'автомобиле', PUBLIC_TRANSIT: 'общественном транспорте', TRANSIT: 'общественном транспорте', BICYCLE: 'велосипеде', WALK: 'пешком', WALKING: 'пешком' };
 
 const travelLeg = (from, to, transport) => {
@@ -45,8 +45,20 @@ const travelLeg = (from, to, transport) => {
   };
 };
 
-const canServe = (engineer, order) => zoneOf(engineer) === zoneOf(order)
-  && (engineer.skills || []).map(skillCode).includes(skillCode(order.skill || order.workType || order.sourceData?.required_skill));
+const transportCode = value => {
+  const raw = String(value || '').trim().toLocaleLowerCase('ru-RU');
+  return {
+    автомобиль: 'CAR', auto: 'CAR', 'общественный транспорт': 'PUBLIC_TRANSIT',
+    велосипед: 'BICYCLE', bike: 'BICYCLE', пешком: 'WALKING', foot: 'WALKING',
+  }[raw] || raw.toUpperCase();
+};
+
+const canServe = (engineer, order) => {
+  const required = transportCode(order.requiredTransport || order.transport || order.sourceData?.required_transport || 'ANY');
+  return zoneOf(engineer) === zoneOf(order)
+    && (engineer.skills || []).map(skillCode).includes(skillCode(order.skill || order.workType || order.sourceData?.required_skill))
+    && (required === 'ANY' || required === transportCode(engineer.transport));
+};
 
 const isUrgent = order => /urgent|emergency|авар|срочн/i.test(`${order?.priority || ''} ${order?.skill || ''}`);
 

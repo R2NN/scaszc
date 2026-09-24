@@ -67,12 +67,17 @@ def _skill(value: Any) -> str:
 
 
 def _transport(value: Any) -> RequiredTransport:
-    text = str(value or 'ANY').strip().upper()
-    if text in {'', 'ANY'}:
-        return RequiredTransport.ANY
-    if text in {'CAR', 'AUTO'}:
-        return RequiredTransport.CAR
-    raise ValueError(f'Неподдерживаемое требование к транспорту: {value}')
+    text = str(value or 'ANY').strip().casefold()
+    aliases = {
+        'auto': 'CAR', 'автомобиль': 'CAR',
+        'foot': 'WALKING', 'пешком': 'WALKING',
+        'bike': 'BICYCLE', 'велосипед': 'BICYCLE',
+        'общественный транспорт': 'PUBLIC_TRANSIT',
+    }
+    try:
+        return RequiredTransport(aliases.get(text, text.upper() or 'ANY'))
+    except ValueError as error:
+        raise ValueError(f'Неподдерживаемое требование к транспорту: {value}') from error
 
 
 def _equipment(order: dict[str, Any], catalog) -> tuple[EquipmentNeed, ...]:

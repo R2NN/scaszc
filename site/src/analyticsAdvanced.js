@@ -331,13 +331,13 @@ export function analyzeTeamCapacity(record) {
     if (!assignments.length) {
       const zoneBacklog = orders.filter(order => unresolvedById.has(String(order.id)) && (!zone || zoneOf(order) === zone));
       const firstOpen = zoneBacklog[0];
-      const requiredTransport = String(firstOpen?.requiredTransport || firstOpen?.transportRequirement || '').trim();
+      const requiredTransport = String(firstOpen?.requiredTransport || firstOpen?.transportRequirement || firstOpen?.transport || firstOpen?.sourceData?.required_transport || 'ANY').trim().toUpperCase();
       const estimatedTravel = numeric(firstOpen?.estimatedTravelMinutes || firstOpen?.travelMinutes);
       const firstOpenId = String(firstOpen?.sourceId || firstOpen?.id || '').replace(/^.*:/, '');
       const shiftCanReach = firstOpen && shiftStart != null && minute(firstOpen.start) != null && (!estimatedTravel || shiftStart + estimatedTravel <= minute(firstOpen.start));
       if (firstOpen && !skills.includes(skillOf(firstOpen))) {
         explanation = `Не назначен: заявка #${firstOpenId} требует навык «${skillLabel(skillOf(firstOpen))}», у инженера: ${skills.map(skillLabel).join(', ') || 'навыки не указаны'}.`;
-      } else if (firstOpen && requiredTransport && requiredTransport !== String(engineer.transport || '')) {
+      } else if (firstOpen && requiredTransport !== 'ANY' && (transportKey(requiredTransport) === 'unknown' || transportKey(requiredTransport) !== transportKey(engineer.transport))) {
         explanation = `Не назначен: не подходит транспорт для заявки #${firstOpenId} (${skillLabel(skillOf(firstOpen))}).`;
       } else if (firstOpen && !shiftCanReach) {
         explanation = `Не назначен: не успевает к началу окна заявки #${firstOpenId} на выбранном транспорте.`;
@@ -707,7 +707,7 @@ const transportKey = value => {
   if (normalized.includes('PUBLIC') || normalized.includes('ТРАНСПОРТ') || normalized.includes('МЕТРО')) return 'transit';
   if (normalized.includes('CAR') || normalized.includes('AUTO') || normalized.includes('АВТО')) return 'car';
   if (normalized.includes('BICYCLE') || normalized.includes('BIKE') || normalized.includes('ВЕЛО')) return 'bicycle';
-  if (normalized.includes('WALK') || normalized.includes('ПЕШ')) return 'walking';
+  if (normalized.includes('WALK') || normalized.includes('FOOT') || normalized.includes('ПЕШ')) return 'walking';
   return 'unknown';
 };
 

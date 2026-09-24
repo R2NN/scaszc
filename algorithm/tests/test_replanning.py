@@ -8,8 +8,8 @@ from zoneinfo import ZoneInfo
 
 from beeline_planning import (
     EngineerPlan, IdentityTravel, PlannedVisit, ProposedPlan,
-    ReplanningState, ReplanningStatus, ViolationCode,
-    load_planning_dataset, replan_after_event, validate_initial_plan,
+    ReplanningState, ReplanningStatus, RejectionCode, ViolationCode,
+    build_candidate_index, load_planning_dataset, replan_after_event, validate_initial_plan,
     validate_replanned_plan,
 )
 from beeline_planning.domain import (
@@ -151,6 +151,58 @@ class ReplanningTests(unittest.TestCase):
         self.assertEqual(
             sum(option.selected for option in result.candidate_evaluations['U']), 1
         )
+
+    def test_every_required_mode_is_enforced_by_candidates_and_validator(self) -> None:
+        modes = (
+            TransportMode.CAR,
+            TransportMode.PUBLIC_TRANSIT,
+            TransportMode.BICYCLE,
+            TransportMode.WALKING,
+        )
+        for mode in modes:
+            with self.subTest(mode=mode):
+                mismatch = TransportMode.WALKING if mode == TransportMode.CAR else TransportMode.CAR
+                self.engineers['E1'] = replace(self.engineers['E1'], transport_mode=mismatch)
+                self.engineers['E2'] = replace(self.engineers['E2'], transport_mode=mode)
+                self.jobs['A'] = replace(
+                    self.jobs['A'], required_transport=RequiredTransport(mode.value)
+                )
+                dataset = self.make_dataset(())
+                candidates = build_candidate_index(dataset)
+                self.assertIn('E2', candidates.eligible_engineers_by_job['A'])
+                self.assertIn(
+                    RejectionCode.TRANSPORT_MISMATCH, candidates.reasons('E1', 'A')
+                )
+                report = validate_initial_plan(dataset, self.source)
+                self.assertEqual(report.status.value, 'INVALID')
+                self.assertIn(
+                    ViolationCode.TRANSPORT_MISMATCH,
+                    {violation.code for violation in report.violations},
+                )
+                self.assertTrue(any(mode.value in violation.detail for violation in report.violations))
+
+        self.jobs['A'] = replace(self.jobs['A'], required_transport=RequiredTransport.ANY)
+        dataset = self.make_dataset(())
+        self.assertIn('E1', build_candidate_index(dataset).eligible_engineers_by_job['A'])
+        self.assertTrue(validate_initial_plan(dataset, self.source).is_valid)
+
+    def test_replanning_assigns_bicycle_only_job_to_bicycle_engineer(self) -> None:
+        self.engineers['E2'] = replace(
+            self.engineers['E2'], transport_mode=TransportMode.BICYCLE
+        )
+        self.jobs['U'] = replace(
+            self.job('U', 'Z1', self.at(10), priority=Priority.URGENT),
+            required_transport=RequiredTransport.BICYCLE,
+        )
+        event = self.event(1, EventType.NEW_URGENT_JOB, 'U', self.at(10))
+        dataset = self.make_dataset((event,))
+        result = replan_after_event(dataset, ReplanningState(self.source), event, _Oracle())
+        self.assertEqual(result.status, ReplanningStatus.EXACT_VALID)
+        owner = {
+            visit.job_id: route.engineer_id
+            for route in result.state.plan.engineer_plans for visit in route.visits
+        }
+        self.assertEqual(owner['U'], 'E2')
 
     def test_new_job_in_other_zone_uses_only_that_zones_engineer(self) -> None:
         self.jobs['U2'] = self.job(
