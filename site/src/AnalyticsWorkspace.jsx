@@ -1138,7 +1138,7 @@ function HistoryView({ records, comparisonRecords, mlForecast, forecastStatus = 
       </div>
       <WeeklyComparison records={records} selectedDate={selectedDate} onInspect={openInspector}/>
       <section className="analytics-panel analytics-history-panel">
-        <SectionHeading eyebrow="ДИНАМИКА" title="Как менялась нагрузка" description="Выберите день, чтобы зафиксировать его в общем фильтре аналитики"/>
+        <SectionHeading eyebrow="ДИНАМИКА" title="Как менялась нагрузка" description="Дни до 17 августа — синтетическая история для демонстрации. 17 августа — отдельно проверенный точный план."/>
         <div className="analytics-history-list">{visibleDays.map(day => <button type="button" key={day.date} className={`analytics-history-day ${day.date === selected.date ? 'selected' : ''}`} onClick={() => selectDay(day)} aria-current={day.date === selected.date ? 'date' : undefined}>
           <span className="history-date"><small>{weekdayLabel(day.date)}</small><b>{dayLabel(day.date)}</b></span>
           <span className="history-demand"><b>{day.assigned} из {day.total}</b><span><i style={{ width: `${day.coverage || 0}%` }}/></span></span>

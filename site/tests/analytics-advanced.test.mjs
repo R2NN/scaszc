@@ -242,7 +242,7 @@ test('early-visit proposal keeps departure, arrival and saved idle internally co
 });
 
 test('area anomalies compare the selected territory with matching weekdays', () => {
-  const result = detectAreaAnomalies(days, '2026-08-16');
+  const result = detectAreaAnomalies(days, '2026-03-14');
   assert.ok(result.some(item => item.zone === 'Юго-восток' && item.metric === 'Очередь'));
   assert.ok(result.every(item => item.dates >= 3 && item.value > item.previousMax));
   assert.deepEqual(detectAreaAnomalies(days.slice(-14), selected.date), []);

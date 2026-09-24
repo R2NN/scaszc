@@ -33,6 +33,7 @@ import { DEFAULT_REGION, regionCatalog } from './regions.js';
 import depotMarkerPurple from './assets/depot-marker-purple.png';
 import { MAP_SCALE, MAP_UI, groupGeographicMarkers, routeModeForCount, shouldClusterOrders, shouldShowRouteNumbers, stableRouteColor } from './mapDesign.js';
 import { AnalyticsWorkspace } from './AnalyticsWorkspace.jsx';
+import { canonicalDemoInput } from './canonicalDemo.js';
 
 maplibregl.setWorkerUrl(mapLibreWorkerUrl);
 const MAP_WORKER_COUNT=Math.min(4,Math.max(2,Math.ceil((navigator.hardwareConcurrency||4)/2)));
@@ -1436,12 +1437,31 @@ function SettingsPage({ settings, setSettings, region, setRegion, onToast }) {
 function SettingsModal({onClose,...props}){return <div className="modal-backdrop settings-modal-layer" role="dialog" aria-modal="true" aria-label="Настройки BeeGo!" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><section className="modal wide settings-modal-dialog"><button className="settings-modal-close" onClick={onClose} aria-label="Закрыть настройки" data-tooltip="Закрыть"><X/></button><SettingsPage {...props}/></section></div>}
 export function App(){
   const[settingsOpen,setSettingsOpen]=useState(false);
+  const userImportedRef=useRef(false);
   const lastMapScreenRef=useRef('orders');
   const appShellRef=useRef(null),previousExpandedRef=useRef(true),railAnimationsRef=useRef([]),toastSwipeRef=useRef(null);
   const[expanded,setExpanded]=useState(true),[screen,setScreen]=useState('orders'),[workspacePanelOpen,setWorkspacePanelOpen]=useState(true);const[theme,setTheme]=useState(()=>{try{return localStorage.getItem('beego-theme')==='dark'?'dark':'light'}catch{return'light'}});const[profile,setProfile]=useState(()=>{try{return {...{name:'Юлия Кузнецова',role:'dispatcher',email:'y.kuznetsova@beego.ru',avatar:'',avatarTone:'honey'},...JSON.parse(localStorage.getItem('beego-profile')||'{}')}}catch{return{name:'Юлия Кузнецова',role:'dispatcher',email:'y.kuznetsova@beego.ru',avatar:'',avatarTone:'honey'}}}),[profileOpen,setProfileOpen]=useState(false),[helpOpen,setHelpOpen]=useState(false);const[region,setRegion]=useState(DEFAULT_REGION);const[orders,setOrders]=useState([]),[engineers,setEngineers]=useState([]),[importSession,setImportSession]=useState(null),[reviewSession,setReviewSession]=useState(null);const[plan,setPlan]=useState(null),[planOpen,setPlanOpen]=useState(false);const[scheduled,setScheduled]=useState(false),[view,setView]=useState('timeline');const[selectedDate,setSelectedDate]=useState(()=>startOfDay(new Date())),[analyticsDate,setAnalyticsDate]=useState(()=>startOfDay(new Date()));const[selectedOrder,setSelectedOrder]=useState(null),[routeDetail,setRouteDetail]=useState(null),[focusedRoute,setFocusedRoute]=useState(null),[hoveredOrder,setHoveredOrder]=useState(null),[hoveredRouteId,setHoveredRouteId]=useState(null);const[optimizing,setOptimizing]=useState(false),[toast,setToast]=useState(null),[geocodeProgress,setGeocodeProgress]=useState(null);const[notifications,setNotifications]=useState(()=>{try{const stored=JSON.parse(localStorage.getItem('beego-notifications')||'[]');return Array.isArray(stored)?stored:[]}catch{return[]}}),[notificationsOpen,setNotificationsOpen]=useState(false);const toastTimersRef=useRef([]);const[settings,setSettings]=useState(()=>{const defaults={company:'Билайн Бизнес',email:'team@beego.ru',phone:'+7 999 000-00-00',balance:true,prioritizeUrgent:true,lockManual:true,allowLate:false};try{return{...defaults,...JSON.parse(localStorage.getItem('beego-settings')||'{}')}}catch{return defaults}});
   const[replanSnapshot,setReplanSnapshot]=useState(null);
   const[reviewFiles,setReviewFiles]=useState([]);
-  useEffect(()=>{setSelectedDate(startOfDay(new Date()))},[]);
+  useEffect(()=>{
+    let active=true;
+    const load=async()=>{
+      const [fixtureResponse,artifactResponse]=await Promise.all([
+        fetch('/test-data/beego-algorithm-initial.json'),
+        fetch('/data/beego-exact-plans.json'),
+      ]);
+      if(!fixtureResponse.ok||!artifactResponse.ok)throw new Error('Основной проверенный набор не загружен');
+      const [fixture,artifact]=await Promise.all([fixtureResponse.json(),artifactResponse.json()]);
+      const input=canonicalDemoInput(fixture,artifact);
+      const exactPlan=await requestPlan(input.orders,input.engineers,'moscow',input.planningDate);
+      if(!active||userImportedRef.current)return;
+      setOrders(input.orders);setEngineers(input.engineers);setPlan(exactPlan);setScheduled(true);
+      setSelectedDate(new Date(`${input.planningDate}T12:00:00`));
+      setAnalyticsDate(new Date(`${input.planningDate}T12:00:00`));
+    };
+    load().catch(error=>{if(active&&!userImportedRef.current)notify(error.message,{title:'Не удалось загрузить основной план'})});
+    return()=>{active=false};
+  },[]);
   useEffect(()=>{try{localStorage.setItem('beego-theme',theme)}catch{}document.documentElement.dataset.theme=theme;document.documentElement.style.colorScheme=theme;const themeMeta=document.querySelector('meta[name="theme-color"]');if(themeMeta)themeMeta.setAttribute('content',theme==='dark'?'#17191D':'#FFD21F')},[theme]);
   useEffect(()=>{try{localStorage.setItem('beego-profile',JSON.stringify(profile))}catch{}},[profile]);
   useEffect(()=>{try{localStorage.setItem('beego-region',region.id)}catch{}},[region.id]);
@@ -1460,6 +1480,7 @@ export function App(){
   const selectReviewFile=file=>setImportSession({...file,mode:'review',reviewFiles,onSelectFile:selectReviewFile,onAddFile:showMapping,onFileError:message=>notify(message,{title:'Не удалось добавить файл'})});
   const openReview=()=>{if(!reviewSession)return;selectReviewFile(reviewSession);setProfileOpen(false);setSettingsOpen(false);setHelpOpen(false);setNotificationsOpen(false)};
   const importRows=async({orders:nextOrders=[],engineers:nextEngineers=[]},reviewSnapshot)=>{
+    userImportedRef.current=true;
     if(reviewSnapshot){
       const normalizedSnapshot={...reviewSnapshot,fileId:reviewSnapshot.fileId||`${reviewSnapshot.fileName||'file'}:${Date.now()}`,importedAt:reviewSnapshot.importedAt||Date.now()};
       setReviewFiles(current=>[...current.filter(file=>file.fileId!==normalizedSnapshot.fileId&&file.fileName!==normalizedSnapshot.fileName),normalizedSnapshot]);

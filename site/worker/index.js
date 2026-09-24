@@ -383,11 +383,20 @@ async function api(request, env = {}) {
   if (url.pathname === "/api/plan" && request.method === "POST") {
     if (env.EXACT_PLANNER_URL) {
       const endpoint = new URL('/api/plan', env.EXACT_PLANNER_URL);
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: await request.text(),
-      });
+      let response;
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: await request.text(),
+          signal: AbortSignal.timeout(15 * 60 * 1000),
+        });
+      } catch (error) {
+        if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+          return json({ error: 'Расчёт остановлен после 15 минут: проверенный план не получен' }, { status: 504 });
+        }
+        throw error;
+      }
       return new Response(response.body, {
         status: response.status,
         headers: { 'content-type': response.headers.get('content-type') || 'application/json; charset=utf-8', 'cache-control': 'no-store' },

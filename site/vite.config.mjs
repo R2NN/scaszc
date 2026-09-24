@@ -50,7 +50,7 @@ const localPlanningApi = () => ({
           const payload = body ? JSON.parse(body.toString('utf8')) : {};
           const artifact = JSON.parse(loadLocalVariables().PLANNING_ARTIFACT_JSON || 'null');
           const sealed = isCanonicalPlanningInput(payload, artifact, process.cwd());
-          const plan = sealed ? worker.fetch(new Request('http://127.0.0.1/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }), { ...loadLocalVariables(), EXACT_PLANNER_URL: '' }) : await runExactPlan(payload, process.cwd());
+          const plan = sealed ? await worker.fetch(new Request('http://127.0.0.1/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }), { ...loadLocalVariables(), EXACT_PLANNER_URL: '' }) : await runExactPlan(payload, process.cwd());
           if (sealed) {
             response.writeHead(plan.status, Object.fromEntries(plan.headers));
             response.end(Buffer.from(await plan.arrayBuffer()));

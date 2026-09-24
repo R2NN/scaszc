@@ -213,7 +213,7 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd()) {
     PYTHONUTF8: '1',
   };
   const sourceHash = String(payload.basePlanContentSha256 || payload.plan?.contentSha256 || '');
-  const canonicalPlan = path.join(repositoryRoot, 'algorithm', 'artifacts', 'current', 'exact-205-of-205-28-teams-clean-automatic.json');
+  const canonicalPlan = path.join(repositoryRoot, 'algorithm', 'artifacts', 'current', 'initial-exact-205-of-205-retimed.json');
   const canonical = JSON.parse(await readFile(canonicalPlan, 'utf8'));
   let dataset = path.join(repositoryRoot, 'data', 'dataset');
   let inputPlan = canonicalPlan;

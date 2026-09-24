@@ -253,6 +253,10 @@ def main() -> int:
         '--departure-timing-wall-seconds', type=float, default=90,
         help='Time limit for bounded exact rerouting of early arrivals.',
     )
+    parser.add_argument(
+        '--max-wall-seconds', type=float, default=840,
+        help='Whole-pipeline time limit; return the last validated plan when it expires.',
+    )
     parser.add_argument('--skip-departure-timing', action='store_true')
     parser.add_argument(
         '--skip-route-conflict-refinement',
@@ -338,6 +342,7 @@ def main() -> int:
         or args.refinement_wall_seconds <= 0
         or args.optimization_wall_seconds <= 0
         or args.departure_timing_wall_seconds <= 0
+        or args.max_wall_seconds <= 0
         or args.lns_route_checks < 1
         or args.lns_beam_width < 1
         or args.lns_max_destroyed_jobs < 1
@@ -581,6 +586,7 @@ def main() -> int:
             and args.warm_start is None
             and warm_start is not None
         ),
+        'max_wall_seconds': args.max_wall_seconds,
         'robust_first_pass': robust_first_pass,
         'robust_travel_buffers_minutes': {
             'CAR': args.robust_car_buffer_minutes,
@@ -609,6 +615,7 @@ def main() -> int:
     first_valid_elapsed_seconds: float | None = None
     degraded_stages: list[str] = []
     pipeline_started = time.perf_counter()
+    deadline = pipeline_started + args.max_wall_seconds
     valhalla_snapshot_configured = False
     planning_stages = {
         'materialize_robust_exact': robust_exact,
@@ -619,6 +626,13 @@ def main() -> int:
         'exact_departure_timing': retimed,
     }
     for stage, command in commands:
+        # Leave enough time to checksum outputs and return a validated incumbent.
+        remaining = deadline - time.perf_counter() - 10
+        if remaining <= 0:
+            if current_plan is None or not _is_publishable_exact(current_plan):
+                raise TimeoutError('Planning time limit expired before a validated plan was found')
+            degraded_stages.append('global_time_limit')
+            break
         if (
             stage in {'solve_screening_master', 'refine_materialize_validate'}
             and current_plan is not None
@@ -711,25 +725,26 @@ def main() -> int:
         stage_started = time.perf_counter()
         fallback_reason = None
         try:
+            stage_limit = (
+                args.refinement_wall_seconds
+                if stage == 'refine_materialize_validate'
+                else args.robust_screening_wall_seconds
+                if stage == 'solve_robust_screening_master'
+                else args.robust_materialization_wall_seconds
+                if stage == 'materialize_robust_exact'
+                else args.optimization_wall_seconds
+                if stage in {
+                    'exact_direct_insertion_improvement',
+                    'exact_chain_and_lns_repair',
+                    'exact_team_compaction',
+                }
+                else args.departure_timing_wall_seconds
+                if stage == 'exact_departure_timing'
+                else None
+            )
             subprocess.run(
                 command, cwd=ROOT, env=environment, check=True,
-                timeout=(
-                    args.refinement_wall_seconds
-                    if stage == 'refine_materialize_validate'
-                    else args.robust_screening_wall_seconds
-                    if stage == 'solve_robust_screening_master'
-                    else args.robust_materialization_wall_seconds
-                    if stage == 'materialize_robust_exact'
-                    else args.optimization_wall_seconds
-                    if stage in {
-                        'exact_direct_insertion_improvement',
-                        'exact_chain_and_lns_repair',
-                        'exact_team_compaction',
-                    }
-                    else args.departure_timing_wall_seconds
-                    if stage == 'exact_departure_timing'
-                    else None
-                ),
+                timeout=min(remaining, stage_limit) if stage_limit else remaining,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
             if stage in {'solve_robust_screening_master', 'materialize_robust_exact'}:
@@ -757,6 +772,9 @@ def main() -> int:
                     loaded_dataset.dataset_sha256,
                 )
                 fallback_output = run_dir / f'{args.scenario}-exact-fallback.json'
+                fallback_remaining = deadline - time.perf_counter() - 10
+                if fallback_remaining <= 0:
+                    raise TimeoutError('Planning time limit expired before fallback validation')
                 subprocess.run(_command(
                     python, ROOT / 'tools' / 'materialize_exact_plan.py',
                     '--dataset', dataset, '--scenario', args.scenario,
@@ -767,7 +785,8 @@ def main() -> int:
                     '--metro-wait-seconds', args.metro_wait_seconds,
                     '--route-workers', args.route_workers,
                     '--drop-order-infeasible', '--execute',
-                ), cwd=ROOT, env=environment, check=True)
+                ), cwd=ROOT, env=environment, check=True,
+                    timeout=fallback_remaining)
                 if not _is_publishable_exact(fallback_output):
                     raise RuntimeError('Exact refinement fallback failed validation')
                 planning_stages[stage] = fallback_output

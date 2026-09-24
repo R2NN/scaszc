@@ -6,10 +6,11 @@ import { generateHistory } from '../scripts/generate-analytics-history.mjs';
 const fixture = JSON.parse(await readFile(new URL('../public/test-data/beego-algorithm-initial.json', import.meta.url), 'utf8'));
 const artifact = JSON.parse(await readFile(new URL('../public/data/beego-exact-plans.json', import.meta.url), 'utf8'));
 
-test('history ends on the date present in source jobs and has five consecutive weeks', () => {
+test('history spans six months and ends with the verified canonical day', () => {
   const history = generateHistory({ fixture, artifact });
   assert.equal(history.period.end, fixture.jobs[0].window_start.slice(0, 10));
-  assert.equal(history.days.length, 180);
+  assert.equal(history.period.start, '2026-02-17');
+  assert.equal(history.days.length, 182);
   for (let index = 1; index < history.days.length; index += 1) {
     const previous = Date.parse(`${history.days[index - 1].date}T12:00:00Z`);
     const current = Date.parse(`${history.days[index].date}T12:00:00Z`);
@@ -21,6 +22,7 @@ test('history ends on the date present in source jobs and has five consecutive w
   assert.equal(current.plan.metrics.assigned, 205);
   assert.equal(current.plan.metrics.unassigned, 0);
   assert.equal(current.plan.metrics.activeEngineers, 28);
+  assert.equal(current.dataKind, 'VERIFIED_CANONICAL_DAY');
   assert.equal(current.plan.contentSha256, artifact.plans.initial.contentSha256);
   assert.equal(current.plan.baseline.status, 'EXACT_VALID');
   assert.equal(current.plan.baseline.validationStatus, 'VALID');
@@ -32,6 +34,19 @@ test('history ends on the date present in source jobs and has five consecutive w
   assert.equal(current.plan.metrics.distanceKm, 1636.204);
   const sourceRoute = artifact.plans.baseline.routes.find(route => route.engineerId === current.plan.baseline.routes[0].engineerId);
   assert.equal(current.plan.baseline.routes[0].workloadMinutes, sourceRoute.workloadMinutes);
+});
+
+test('synthetic prior days are easier overall, with natural variation and no forced hard days', () => {
+  const days = generateHistory({ fixture, artifact }).days.slice(0, -1);
+  const complete = days.filter(day => day.plan.metrics.unassigned === 0);
+  const partial = days.filter(day => day.plan.metrics.unassigned > 0);
+  assert.ok(complete.length > days.length / 2);
+  assert.ok(partial.length > 15);
+  assert.ok(days.every(day => day.dataKind === 'SYNTHETIC_HISTORY'
+    && !Object.hasOwn(day, 'difficulty')
+    && day.plan.status === 'SYNTHETIC_HISTORY'
+    && day.plan.validationStatus === null
+    && day.plan.metrics.total <= 205));
 });
 
 test('every daily plan and actual visit references an existing order and engineer', () => {
@@ -72,9 +87,12 @@ test('current route history keeps delayed departures and the arrival buffer from
   const current = history.days.at(-1);
   const route = current.plan.routes.find(item => item.engineerId === 'EAST-ENG-01');
   const visit = route.assignments.find(item => item.orderId.endsWith('EAST-26645'));
-  assert.equal(visit.departureAt, '15:06');
-  assert.equal(visit.arrival, '15:25');
+  const exact = artifact.plans.initial.routes.find(item => item.engineerId === 'EAST-ENG-01')
+    .assignments.find(item => item.sourceOrderId === 'EAST-26645');
+  assert.equal(visit.departureAt, exact.departureAt);
+  assert.equal(visit.arrival, exact.arrival);
   assert.equal(visit.plannedStart, '16:00');
+  assert.equal(visit.plannedStart, exact.plannedStart);
 });
 
 test('generation is deterministic and can be anchored to another date', () => {

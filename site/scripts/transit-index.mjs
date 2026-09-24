@@ -3,13 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { remainingMilliseconds, stopProcessTree } from './process-deadline.mjs';
 
 const canonicalDate = '2026-08-17';
 const builds = new Map();
 
 const exists = async file => access(file).then(() => true, () => false);
 
-const run = (python, script, args, repositoryRoot) => new Promise((resolve, reject) => {
+const run = (python, script, args, repositoryRoot, deadlineAt = Infinity) => new Promise((resolve, reject) => {
+  const timeoutMs = Number.isFinite(deadlineAt) ? remainingMilliseconds(deadlineAt) : undefined;
   const child = spawn(python, [path.join(repositoryRoot, 'algorithm', 'tools', script), ...args], {
     cwd: repositoryRoot,
     env: { ...process.env, PYTHONPATH: path.join(repositoryRoot, 'algorithm', 'src'), PYTHONUTF8: '1' },
@@ -18,12 +20,20 @@ const run = (python, script, args, repositoryRoot) => new Promise((resolve, reje
   });
   let stdout = '';
   let stderr = '';
+  let timedOut = false;
+  const timer = timeoutMs === undefined ? null : setTimeout(() => { timedOut = true; stopProcessTree(child); }, timeoutMs);
+  timer?.unref();
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
   child.stdout.on('data', chunk => { stdout = (stdout + chunk).slice(-4000); });
   child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-4000); });
-  child.on('error', reject);
-  child.on('close', code => code === 0 ? resolve(stdout) : reject(new Error(stderr.trim() || stdout.trim() || `${script} завершился с кодом ${code}`)));
+  child.on('error', error => { if (timer) clearTimeout(timer); reject(error); });
+  child.on('close', code => {
+    if (timer) clearTimeout(timer);
+    if (timedOut) reject(new Error('Расчёт остановлен после 15 минут: индекс транспорта не был готов'));
+    else if (code === 0) resolve(stdout);
+    else reject(new Error(stderr.trim() || stdout.trim() || `${script} завершился с кодом ${code}`));
+  });
 });
 
 const validIndex = async (database, planningDate) => {
@@ -98,7 +108,7 @@ const railCredentials = async repositoryRoot => {
 };
 
 /** Select a complete exact-date or same-weekday railway source. */
-export const selectRailSource = async (base, metroSchema, planningDate, repositoryRoot, python) => {
+export const selectRailSource = async (base, metroSchema, planningDate, repositoryRoot, python, deadlineAt = Infinity) => {
   const bundled = path.join(base, 'dates', planningDate);
   if (await railSnapshot(bundled, planningDate)) return { directory: bundled, weekdayReference: false };
   const cached = path.join(repositoryRoot, 'runtime', 'ui-shared-cache', 'rail', 'dates', planningDate);
@@ -123,7 +133,7 @@ export const selectRailSource = async (base, metroSchema, planningDate, reposito
       '--output', sourceCache, '--date', sourceDate];
     if (credentials) args.push('--credentials', credentials);
     try {
-      await run(python, 'collect_rail_date.py', args, repositoryRoot);
+      await run(python, 'collect_rail_date.py', args, repositoryRoot, deadlineAt);
     } catch (error) {
       throw new Error(`Расписание МЦК/МЦД для ${planningDate} пока не собрано полностью. `
         + `Повторите расчёт после обновления квоты API. ${error.message}`);
@@ -138,7 +148,7 @@ export const selectRailSource = async (base, metroSchema, planningDate, reposito
 };
 
 /** Build and cache a date-specific transit index with explicit railway provenance. */
-export async function ensureTransitIndex(planningDate, repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')) {
+export async function ensureTransitIndex(planningDate, repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), { deadlineAt = Infinity } = {}) {
   const parsed = new Date(`${planningDate}T00:00:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(planningDate) || Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== planningDate) {
     throw new Error(`Некорректная дата расписания: ${planningDate}`);
@@ -189,28 +199,28 @@ export async function ensureTransitIndex(planningDate, repositoryRoot = path.res
     const python = process.env.BEEGO_PYTHON || 'python';
     await mkdir(temporary);
     try {
-      const rail = await selectRailSource(sources[1], sources[2], planningDate, repositoryRoot, python);
+      const rail = await selectRailSource(sources[1], sources[2], planningDate, repositoryRoot, python, deadlineAt);
       await run(python, 'build_local_transit_index.py', [
         '--gtfs', sources[0], '--rail', rail.directory, '--metro-schema', sources[2],
         '--output', temporaryDatabase, '--scenario-date', planningDate,
         ...(rail.weekdayReference ? ['--rail-weekday-reference'] : []),
-      ], repositoryRoot);
+      ], repositoryRoot, deadlineAt);
       const builtMetadata = JSON.parse(await readFile(temporaryDatabase.replace(/\.sqlite$/, '.manifest.json'), 'utf8'));
       if (!builtMetadata.rail_schedule_available) {
         throw new Error(`Для ${planningDate} не найдено полное расписание МЦК/МЦД`);
       }
-      await run(python, 'ensure_local_valhalla.py', ['--endpoint', 'http://127.0.0.1:8002'], repositoryRoot);
-      await run(python, 'build_surface_walk_transfers.py', ['--database', temporaryDatabase], repositoryRoot);
+      await run(python, 'ensure_local_valhalla.py', ['--endpoint', 'http://127.0.0.1:8002'], repositoryRoot, deadlineAt);
+      await run(python, 'build_surface_walk_transfers.py', ['--database', temporaryDatabase], repositoryRoot, deadlineAt);
       if (await validIndex(canonical, canonicalDate)) {
         try {
           await run(python, 'reuse_rapid_walk_transfers.py', [
             '--source', canonical, '--database', temporaryDatabase,
-          ], repositoryRoot);
+          ], repositoryRoot, deadlineAt);
         } catch {
-          await run(python, 'build_walk_transfers.py', ['--database', temporaryDatabase], repositoryRoot);
+          await run(python, 'build_walk_transfers.py', ['--database', temporaryDatabase], repositoryRoot, deadlineAt);
         }
       } else {
-        await run(python, 'build_walk_transfers.py', ['--database', temporaryDatabase], repositoryRoot);
+        await run(python, 'build_walk_transfers.py', ['--database', temporaryDatabase], repositoryRoot, deadlineAt);
       }
       const surfaceReport = JSON.parse(await readFile(temporaryDatabase.replace(/\.sqlite$/, '.surface_walk_transfers.json'), 'utf8'));
       const walkReport = JSON.parse(await readFile(temporaryDatabase.replace(/\.sqlite$/, '.walk_transfers.json'), 'utf8'));

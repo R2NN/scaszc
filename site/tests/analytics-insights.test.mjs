@@ -7,7 +7,7 @@ const history = JSON.parse(await readFile(new URL('../public/data/analytics-hist
 
 test('period summary separates planned visits from observed execution', () => {
   const model = buildHistoryModel(history.days, '2026-08-17');
-  assert.equal(model.days.length, 180);
+  assert.equal(model.days.length, 182);
   assert.equal(model.selected.actualAvailable, false);
   assert.equal(model.selected.onTimeRate, null);
   assert.equal(model.totals.actualDays, history.days.length - 1);

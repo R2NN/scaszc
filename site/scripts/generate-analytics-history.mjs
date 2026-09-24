@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DEFAULT_DAYS = 180;
+const DEFAULT_DAYS = 182;
 const ROOT = new URL('../', import.meta.url);
 
 const minutes = value => {
@@ -139,14 +139,15 @@ function normalizeBaseline(sourceBaseline, orderBySourceId) {
 function makeDay(date, endDate, jobs, engineers, sourcePlan, sourceBaseline) {
   const isCurrent = date === endDate;
   const weekday = dayIndex(date);
+  const engineerUnavailable = !isCurrent && hash(`${date}:availability`) % 5 === 0;
   const dayOfYear = Math.floor((new Date(`${date}T12:00:00Z`).getTime() - new Date(`${date.slice(0, 4)}-01-01T12:00:00Z`).getTime()) / 86400000);
-  const seasonal = 0.06 * Math.sin((dayOfYear - 22) / 365 * Math.PI * 2) + 0.035 * Math.cos((dayOfYear + 51) / 365 * Math.PI * 2);
-  const weekdayFactor = [0.7, 0.91, 1, 1.04, 1, 0.94, 0.76][weekday];
-  const noise = ((hash(`${date}:demand`) % 31) - 15) / 100;
-  const promotion = hash(`${date}:promotion`) % 37 === 0 ? 0.1 : 0;
-  const incident = hash(`${date}:incident`) % 71 === 0 ? 0.07 : 0;
+  const seasonal = 0.04 * Math.sin((dayOfYear - 22) / 365 * Math.PI * 2) + 0.025 * Math.cos((dayOfYear + 51) / 365 * Math.PI * 2);
+  const weekdayFactor = [0.68, 0.84, 0.88, 0.9, 0.88, 0.82, 0.72][weekday];
+  const noise = ((hash(`${date}:demand`) % 17) - 8) / 100;
+  const promotion = hash(`${date}:promotion`) % 37 === 0 ? 0.06 : 0;
+  const incident = hash(`${date}:incident`) % 71 === 0 ? 0.06 : 0;
   const holiday = /-(01-0[1-8]|02-23|03-08|05-0[19]|06-12|11-04)$/.test(date) ? -0.34 : 0;
-  const demandShare = isCurrent ? 1 : Math.max(0.48, Math.min(1, weekdayFactor + seasonal + noise + promotion + incident + holiday));
+  const demandShare = isCurrent ? 1 : Math.max(0.55, Math.min(1, weekdayFactor + seasonal + noise + promotion + incident + holiday));
   const target = Math.min(jobs.length, Math.max(1, Math.round(jobs.length * demandShare)));
   const selectedJobs = isCurrent
     ? jobs
@@ -154,13 +155,12 @@ function makeDay(date, endDate, jobs, engineers, sourcePlan, sourceBaseline) {
   const orders = selectedJobs.map(job => normalizeOrder(job, date));
   const orderBySourceId = new Map(orders.map(order => [order.sourceId, order]));
   const orderById = new Map(orders.map(order => [order.id, order]));
-  const absentEngineerId = isCurrent || hash(date) % 3 === 0
-    ? null
-    : engineers[hash(`${date}:engineer`) % engineers.length]?.engineer_id;
-  const team = engineers.filter(engineer => engineer.engineer_id !== absentEngineerId).map(normalizeEngineer);
+  const unavailableEngineerIds = new Set();
+  if (engineerUnavailable) unavailableEngineerIds.add(engineers[hash(`${date}:engineer`) % engineers.length]?.engineer_id);
+  const team = engineers.filter(engineer => !unavailableEngineerIds.has(engineer.engineer_id)).map(normalizeEngineer);
   const actual = [];
   const routes = sourcePlan.routes.map(route => {
-    if (route.engineerId === absentEngineerId) return null;
+    if (unavailableEngineerIds.has(route.engineerId)) return null;
     const assignments = route.assignments.filter(item => orderBySourceId.has(item.sourceOrderId)).map(item => {
       const order = orderBySourceId.get(item.sourceOrderId);
       const assignment = {
@@ -204,10 +204,11 @@ function makeDay(date, endDate, jobs, engineers, sourcePlan, sourceBaseline) {
   const waitingMinutes = assignments.reduce((sum, item) => sum + Math.max(0, minutes(item.plannedStart) - minutes(item.arrival)), 0);
   return {
     date,
+    dataKind: isCurrent ? 'VERIFIED_CANONICAL_DAY' : 'SYNTHETIC_HISTORY',
     orders,
     team,
     plan: {
-      status: isCurrent ? sourcePlan.status : 'HISTORICAL',
+      status: isCurrent ? sourcePlan.status : 'SYNTHETIC_HISTORY',
       validationStatus: isCurrent ? sourcePlan.validationStatus : null,
       contentSha256: isCurrent ? sourcePlan.contentSha256 : null,
       routes,
