@@ -409,6 +409,7 @@ class LocalTransitRoutingClient:
                     self.metadata['scenario_date'] if self.metadata.get('rail_schedule_available', True) else None
                 ),
                 'rail_schedule_available': self.metadata.get('rail_schedule_available', True),
+                'rail_schedule_scope': self.metadata.get('rail_schedule_scope'),
                 'metro_departure_schedule_available': False,
                 'metro_ride_included': any(step.mode == 'metro' for step in itinerary),
                 'distance_quality': 'lower_bound_for_transit_legs',
@@ -455,7 +456,8 @@ class LocalTransitRoutingClient:
                                if self.metadata.get('rail_schedule_available', True)
                                else 'surface_gtfs_and_metro_model_only'),
                                'metro_departure_schedule_available': False,
-                               'rail_normal_weekday_reference_date': self.metadata['rail_reference_date']},
+                               'rail_normal_weekday_reference_date': self.metadata['rail_reference_date'],
+                               'rail_schedule_scope': self.metadata.get('rail_schedule_scope')},
         )
         return DetailedRoute(origin.location_id, destination.location_id,
                              TransportMode.PUBLIC_TRANSIT, departure_at, RouteStatus.UNKNOWN,

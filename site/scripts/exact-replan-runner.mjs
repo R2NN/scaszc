@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ensureTransitIndex } from './transit-index.mjs';
+import { projectRoot } from './project-root.mjs';
 
 const clock = value => String(value || '').match(/T(\d{2}:\d{2})/)?.[1] || String(value || '').slice(0, 5);
 
@@ -200,6 +201,7 @@ export function compactExactReplan(raw, payload) {
  * Runs the Python exact replanner. Missing routing evidence is an error; no estimate is substituted.
  */
 export async function runExactReplan(payload, repositoryRoot = process.cwd()) {
+  repositoryRoot = projectRoot(repositoryRoot);
   const output = path.join(tmpdir(), `beego-exact-replan-${randomUUID()}.json`);
   const python = process.env.BEEGO_PYTHON || 'python';
   const script = path.join(repositoryRoot, 'algorithm', 'tools', 'replan_ui_event.py');

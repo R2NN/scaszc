@@ -157,6 +157,7 @@ def main() -> int:
     parser.add_argument('--rebuild-transit-index', action='store_true')
     parser.add_argument('--gtfs', type=Path)
     parser.add_argument('--rail', type=Path)
+    parser.add_argument('--rail-weekday-reference', action='store_true')
     parser.add_argument('--metro-schema', type=Path)
     parser.add_argument(
         '--valhalla-base-url', default='http://127.0.0.1:8002'
@@ -407,6 +408,7 @@ def main() -> int:
                 '--metro-schema', args.metro_schema.resolve(),
                 '--output', transit_index, '--scenario-date', planning_date,
                 '--metro-wait-seconds', args.metro_wait_seconds,
+                *(['--rail-weekday-reference'] if args.rail_weekday_reference else []),
             )),
             ('build_surface_walk_transfers', _command(
                 python, ROOT / 'tools' / 'build_surface_walk_transfers.py',

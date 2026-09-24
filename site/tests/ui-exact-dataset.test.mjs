@@ -6,8 +6,9 @@ import path from 'node:path';
 import test from 'node:test';
 import { runExactPlan } from '../scripts/exact-plan-runner.mjs';
 import { runExactReplan } from '../scripts/exact-replan-runner.mjs';
+import { projectRoot } from '../scripts/project-root.mjs';
 
-const repositoryRoot = process.cwd();
+const repositoryRoot = projectRoot();
 const python = process.env.BEEGO_PYTHON || 'python';
 const samplePayload = {
   planningDate: '2026-08-17',

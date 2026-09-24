@@ -1,9 +1,8 @@
 """Build a local, date-specific timetable index from real Moscow transit data.
 
 The GTFS feed is evaluated on the requested date. Railway entries come from a
-frozen normal-Monday Yandex Rasp response and are included only on Mondays.
-Other weekdays retain GTFS surface routes and the explicit metro model without
-inventing railway departures.
+saved Yandex Rasp response for the exact date or a documented weekday reference.
+Missing railway departures are never synthesized.
 """
 
 from __future__ import annotations
@@ -52,11 +51,31 @@ def build(
     output: Path,
     scenario: date,
     metro_wait_seconds: int = 180,
+    rail_weekday_reference: bool = False,
 ) -> dict:
     if metro_wait_seconds < 0:
         raise ValueError('Metro wait time must be non-negative')
-    reference = date.fromisoformat(json.loads((rail / 'manifest.json').read_text(encoding='utf-8'))['normal_weekday_reference_date'])
-    rail_schedule_available = scenario.weekday() == reference.weekday()
+    rail_manifest = json.loads((rail / 'manifest.json').read_text(encoding='utf-8'))
+    reference = date.fromisoformat(rail_manifest.get('source_date') or rail_manifest['normal_weekday_reference_date'])
+    schedule_scope = rail_manifest.get('schedule_scope', 'weekday_reference')
+    if schedule_scope not in {'exact_date', 'weekday_reference'}:
+        raise ValueError(f'Unknown rail schedule scope: {schedule_scope}')
+    if rail_weekday_reference and schedule_scope != 'exact_date':
+        raise ValueError('Rail weekday override requires an exact-date source snapshot')
+    if rail_weekday_reference and scenario.weekday() != reference.weekday():
+        raise ValueError('Rail weekday reference does not match scenario weekday')
+    rail_schedule_available = (
+        scenario.weekday() == reference.weekday() if rail_weekday_reference
+        else scenario == reference if schedule_scope == 'exact_date'
+        else scenario.weekday() == reference.weekday()
+    )
+    applied_scope = 'weekday_reference' if rail_weekday_reference else schedule_scope
+    station_map = json.loads((rail / 'rail_station_map.json').read_text(encoding='utf-8'))
+    rail_data = json.loads((rail / 'rail_schedule.json').read_text(encoding='utf-8')) if rail_schedule_available else {}
+    if rail_schedule_available:
+        missing_codes = {item['yandex_code'] for item in station_map.values()} - set(rail_data)
+        if missing_codes:
+            raise ValueError(f'Rail schedule is incomplete: {len(missing_codes)} stations have no timetable')
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix('.tmp.sqlite')
     temporary.unlink(missing_ok=True)
@@ -83,11 +102,24 @@ def build(
         CREATE TABLE stop_events(trip_id TEXT, sequence INTEGER, stop_id TEXT,
                                  arr INTEGER, dep INTEGER, pickup_type TEXT);
     ''')
+    calendar = gtfs / 'calendar.txt'
+    exceptions = gtfs / 'calendar_dates.txt'
+    if not calendar.exists() and not exceptions.exists():
+        raise ValueError('GTFS must contain calendar.txt or calendar_dates.txt')
+    scenario_key = scenario.strftime('%Y%m%d')
     active_services = {
-        row['service_id'] for row in rows(gtfs / 'calendar.txt')
-        if row['start_date'] <= scenario.strftime('%Y%m%d') <= row['end_date']
+        row['service_id'] for row in rows(calendar)
+        if row['start_date'] <= scenario_key <= row['end_date']
         and row[scenario.strftime('%A').lower()] == '1'
-    }
+    } if calendar.exists() else set()
+    if exceptions.exists():
+        for row in rows(exceptions):
+            if row['date'] != scenario_key:
+                continue
+            if row['exception_type'] == '1':
+                active_services.add(row['service_id'])
+            elif row['exception_type'] == '2':
+                active_services.discard(row['service_id'])
     routes = {row['route_id']: row for row in rows(gtfs / 'routes.txt')}
     active_trips = {}
     for row in rows(gtfs / 'trips.txt'):
@@ -169,7 +201,6 @@ def build(
                     station['location']['lon'], 'metro'))
         db.execute('INSERT OR REPLACE INTO network_station_ids VALUES (?,?)',
                    (station['id'], stop_id))
-    station_map = json.loads((rail / 'rail_station_map.json').read_text(encoding='utf-8'))
     code_to_station = {}
     for item in station_map.values():
         station = metro_by_id[item['metro_id']]
@@ -179,7 +210,6 @@ def build(
                    (stop_id, item['name'], station['location']['lat'], station['location']['lon'], item['kind']))
         network_station_ids[item['metro_id']] = stop_id
         db.execute('INSERT OR REPLACE INTO network_station_ids VALUES (?,?)', (item['metro_id'], stop_id))
-    rail_data = json.loads((rail / 'rail_schedule.json').read_text(encoding='utf-8')) if rail_schedule_available else {}
     by_uid = defaultdict(list)
     for code, schedule in rail_data.items():
         if code not in code_to_station:
@@ -209,7 +239,9 @@ def build(
                 invalid_rail_edges += 1
                 continue
             rail_edge_rows.append((code_to_station[left_code], code_to_station[right_code],
-                                   dep, arr, 'r:' + uid, 'YANDEX_RASP_NORMAL_MONDAY'))
+                           dep, arr, 'r:' + uid,
+                           'YANDEX_RASP_EXACT_DATE' if applied_scope == 'exact_date'
+                           else 'YANDEX_RASP_WEEKDAY_REFERENCE'))
             rail_edges += 1
     db.executemany('INSERT INTO trips VALUES (?,?,?,?)', rail_trip_rows)
     db.executemany('INSERT INTO connections(from_id,to_id,dep,arr,trip_id,source) VALUES (?,?,?,?,?,?)', rail_edge_rows)
@@ -305,6 +337,7 @@ def build(
         'scenario_date': scenario.isoformat(),
         'rail_reference_date': reference.isoformat() if rail_schedule_available else None,
         'rail_schedule_available': rail_schedule_available,
+        'rail_schedule_scope': applied_scope if rail_schedule_available else None,
         'active_gtfs_services': len(active_services),
         'active_gtfs_trips': len(active_trips),
         'surface_stops': stop_count,
@@ -328,7 +361,9 @@ def build(
         'metro_stations': len(metro_ids),
         'metro_model_paths': len(metro_path_rows),
         'metro_wait_assumption_seconds': metro_wait_seconds,
-        'gtfs_sha256': {name: sha256(gtfs / name) for name in ('calendar.txt', 'routes.txt', 'trips.txt', 'stops.txt', 'stop_times.txt')},
+        'gtfs_sha256': {name: sha256(gtfs / name) for name in
+                        ('calendar.txt', 'calendar_dates.txt', 'routes.txt', 'trips.txt',
+                         'stops.txt', 'stop_times.txt') if (gtfs / name).exists()},
         'rail_schedule_sha256': sha256(rail / 'rail_schedule.json'),
         'metro_schema_sha256': sha256(metro_schema),
     }
@@ -352,6 +387,7 @@ def main() -> None:
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--scenario-date', type=date.fromisoformat, default=date(2026, 8, 17))
     parser.add_argument('--metro-wait-seconds', type=int, default=180)
+    parser.add_argument('--rail-weekday-reference', action='store_true')
     args = parser.parse_args()
     print(json.dumps(build(
         args.gtfs,
@@ -360,6 +396,7 @@ def main() -> None:
         args.output,
         args.scenario_date,
         args.metro_wait_seconds,
+        args.rail_weekday_reference,
     ),
                      ensure_ascii=False, indent=2))
 

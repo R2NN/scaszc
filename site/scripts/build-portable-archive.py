@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import io
+import json
 import os
 import sys
 import zipfile
@@ -35,7 +36,8 @@ EXCLUDED_NAMES = {
     '.DS_Store',
 }
 EXCLUDED_SUFFIXES = {'.pyc', '.pyo', '.log', '.tmp', '.partial'}
-GTFS_FILES = ('calendar.txt', 'routes.txt', 'stop_times.txt', 'stops.txt', 'trips.txt')
+GTFS_FILES = ('routes.txt', 'stop_times.txt', 'stops.txt', 'trips.txt')
+GTFS_CALENDARS = ('calendar.txt', 'calendar_dates.txt')
 RAIL_FILES = ('manifest.json', 'rail_schedule.json', 'rail_station_map.json')
 
 
@@ -83,7 +85,10 @@ def package_files(output: Path, gtfs: Path, rail: Path, metro: Path, valhalla: P
                     continue
                 entries.append((file, f'{destination}/{relative}'.lstrip('/')))
 
-    for name in GTFS_FILES:
+    calendars = [name for name in GTFS_CALENDARS if (gtfs / name).is_file()]
+    if not calendars:
+        raise FileNotFoundError('GTFS requires calendar.txt or calendar_dates.txt')
+    for name in (*GTFS_FILES, *calendars):
         entries.append((gtfs / name, f'offline-assets/transit-sources/gtfs/{name}'))
     optional_agency = gtfs / 'agency.txt'
     if optional_agency.is_file():
@@ -92,6 +97,27 @@ def package_files(output: Path, gtfs: Path, rail: Path, metro: Path, valhalla: P
         file = rail / name
         if name in RAIL_FILES or file.is_file():
             entries.append((file, f'offline-assets/transit-sources/rail/{name}'))
+    date_sources = (rail / 'dates', REPOSITORY / 'runtime/ui-shared-cache/rail/dates')
+    packed_dates: set[str] = set()
+    for date_root in date_sources:
+        if not date_root.is_dir():
+            continue
+        for directory in sorted(date_root.iterdir()):
+            if not directory.is_dir() or directory.name in packed_dates:
+                continue
+            manifest_file = directory / 'manifest.json'
+            if not manifest_file.is_file():
+                continue
+            metadata = json.loads(manifest_file.read_text(encoding='utf-8'))
+            if (metadata.get('coverage_complete') is not True
+                    or metadata.get('schedule_scope') != 'exact_date'
+                    or metadata.get('source_date') != directory.name):
+                continue
+            packed_dates.add(directory.name)
+            for file in directory.rglob('*'):
+                if include(file, output, directory) and 'station_entries' not in file.relative_to(directory).parts:
+                    relative = file.relative_to(directory).as_posix()
+                    entries.append((file, f'offline-assets/transit-sources/rail/dates/{directory.name}/{relative}'))
     entries.append((metro, 'offline-assets/transit-sources/metro/schema.json'))
     for name in ('valhalla.json', 'valhalla_tiles.tar', 'admins.sqlite',
                  'timezones.sqlite', 'default_speeds.json', 'file_hashes.txt'):
@@ -127,6 +153,7 @@ def main() -> int:
     valhalla = source_path(args.valhalla_dir, 'BEEGO_VALHALLA_DIR', ROOT / 'valhalla-data',
                            Path('A:/LCT2-routing/valhalla-data'))
     files = package_files(output, gtfs, rail, metro, valhalla)
+    calendars = [name for name in GTFS_CALENDARS if (gtfs / name).is_file()]
     total = sum(path.stat().st_size for path, _ in files)
     print(f'FILES={len(files)} SOURCE_BYTES={total}', flush=True)
 
@@ -181,7 +208,7 @@ def main() -> int:
             f'{prefix}/public/data/beego-exact-plans.json',
             f'{prefix}/models/demand-forecast-catboost.cbm',
             f'{prefix}/valhalla-data/valhalla_tiles.tar',
-            *(f'{prefix}/offline-assets/transit-sources/gtfs/{name}' for name in GTFS_FILES),
+            *(f'{prefix}/offline-assets/transit-sources/gtfs/{name}' for name in (*GTFS_FILES, *calendars)),
             *(f'{prefix}/offline-assets/transit-sources/rail/{name}' for name in RAIL_FILES),
             f'{prefix}/offline-assets/transit-sources/metro/schema.json',
             f'{prefix}/PACKAGE_MANIFEST_SHA256.tsv',

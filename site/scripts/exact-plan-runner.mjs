@@ -4,6 +4,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { compactExactReplan } from './exact-replan-runner.mjs';
 import { ensureTransitIndex } from './transit-index.mjs';
+import { projectRoot } from './project-root.mjs';
 
 const run = (python, args, input, repositoryRoot) => new Promise((resolve, reject) => {
   const child = spawn(python, args, {
@@ -31,6 +32,7 @@ const run = (python, args, input, repositoryRoot) => new Promise((resolve, rejec
 
 /** Build and independently validate a new plan with the complete exact pipeline. */
 export async function runExactPlan(payload, repositoryRoot = process.cwd()) {
+  repositoryRoot = projectRoot(repositoryRoot);
   const runRoot = path.join(repositoryRoot, 'runtime', 'ui-runs', randomUUID());
   const dataset = path.join(runRoot, 'dataset');
   const results = path.join(runRoot, 'results');
