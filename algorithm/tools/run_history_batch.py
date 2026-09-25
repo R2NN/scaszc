@@ -91,6 +91,12 @@ def rail_reference(planning_date: str, cache: Path, base: Path) -> tuple[Path, s
     return directory, source_date
 
 
+def rail_weekday_override_required(rail: Path) -> bool:
+    """Older Monday snapshot already declares itself a weekday reference."""
+    manifest = json.loads((rail / 'manifest.json').read_text(encoding='utf-8'))
+    return manifest.get('schedule_scope', 'weekday_reference') == 'exact_date'
+
+
 def index_valid(database: Path, planning_date: str) -> bool:
     files = [database, database.with_suffix('.manifest.json'),
              database.with_suffix('.surface_walk_transfers.json'),
@@ -127,7 +133,8 @@ def build_index(args: argparse.Namespace, planning_date: str, day_dir: Path,
     execute([sys.executable, str(TOOLS / 'build_local_transit_index.py'),
              '--gtfs', str(args.gtfs), '--rail', str(rail),
              '--metro-schema', str(args.metro_schema), '--output', str(building),
-             '--scenario-date', planning_date, '--rail-weekday-reference'],
+             '--scenario-date', planning_date,
+             *(['--rail-weekday-reference'] if rail_weekday_override_required(rail) else [])],
             stage='build_transit_index', day_dir=day_dir, deadline=deadline)
     execute([sys.executable, str(TOOLS / 'build_surface_walk_transfers.py'),
              '--database', str(building)], stage='build_surface_walk_transfers',

@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / 'algorithm' / 'src'))
 
 from beeline_planning import load_planning_dataset  # noqa: E402
 from prepare_history_day import prepare  # noqa: E402
-from run_history_batch import plan_metrics  # noqa: E402
+from run_history_batch import plan_metrics, rail_reference, rail_weekday_override_required  # noqa: E402
 
 
 class HistoryBatchTests(unittest.TestCase):
@@ -37,6 +37,31 @@ class HistoryBatchTests(unittest.TestCase):
         self.assertEqual(plan_metrics(plan, 205)['assigned'], 205)
         with self.assertRaises(ValueError):
             plan_metrics(plan, 204)
+
+    def test_monday_reference_uses_its_declared_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary) / 'base'
+            cache = Path(temporary) / 'dates'
+            sunday = cache / '2026-09-27'
+            base.mkdir()
+            sunday.mkdir(parents=True)
+            (base / 'manifest.json').write_text(json.dumps({
+                'normal_weekday_reference_date': '2026-09-21',
+            }), encoding='utf-8')
+            (base / 'rail_schedule.json').write_text('{}', encoding='utf-8')
+            (sunday / 'manifest.json').write_text(json.dumps({
+                'schedule_scope': 'exact_date', 'source_date': '2026-09-27',
+                'coverage_complete': True,
+            }), encoding='utf-8')
+            (sunday / 'rail_schedule.json').write_text('{}', encoding='utf-8')
+            (sunday / 'rail_station_map.json').write_text('{}', encoding='utf-8')
+            selected, source_date = rail_reference('2026-08-10', cache, base)
+            self.assertEqual(selected, base)
+            self.assertEqual(source_date, '2026-09-21')
+            self.assertFalse(rail_weekday_override_required(selected))
+            selected, _ = rail_reference('2026-08-09', cache, base)
+            self.assertEqual(selected, sunday)
+            self.assertTrue(rail_weekday_override_required(selected))
 
 
 if __name__ == '__main__':
