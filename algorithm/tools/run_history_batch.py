@@ -8,12 +8,14 @@ analytics plan as a validated solver result.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -35,7 +37,8 @@ def save_json(path: Path, value: dict) -> None:
     temporary.replace(path)
 
 
-def execute(command: list[str], *, stage: str, day_dir: Path, deadline: float) -> None:
+def execute(command: list[str], *, stage: str, day_dir: Path, deadline: float,
+            extra_env: dict[str, str] | None = None) -> None:
     remaining = deadline - time.monotonic()
     if remaining <= 5:
         raise TimeoutError(f'{stage}: суточный лимит 15 минут исчерпан')
@@ -45,7 +48,8 @@ def execute(command: list[str], *, stage: str, day_dir: Path, deadline: float) -
         log.flush()
         child = subprocess.Popen(
             command, cwd=ROOT, env={**os.environ, 'PYTHONPATH': str(ROOT / 'algorithm' / 'src'),
-                                     'PYTHONUTF8': '1', 'PYTHONUNBUFFERED': '1'},
+                                     'PYTHONUTF8': '1', 'PYTHONUNBUFFERED': '1',
+                                     **(extra_env or {})},
             stdout=log, stderr=subprocess.STDOUT, creationflags=flags,
         )
         try:
@@ -116,6 +120,26 @@ def index_valid(database: Path, planning_date: str) -> bool:
         return False
 
 
+def check_direct_valhalla(endpoint: str) -> None:
+    """Require an actual running Valhalla HTTP server for direct routing."""
+    with urllib.request.urlopen(f'{endpoint.rstrip("/")}/status', timeout=5) as response:
+        status = json.load(response)
+    if not status.get('version') or 'route' not in status.get('available_actions', []):
+        raise RuntimeError('Direct Valhalla is not ready for road routing')
+
+
+def direct_valhalla_revision(tile_archive: Path, endpoint: str) -> str:
+    """Bind direct Valhalla routing to a checked local graph snapshot."""
+    check_direct_valhalla(endpoint)
+    if not tile_archive.is_file():
+        raise FileNotFoundError(f'Valhalla tile archive is missing: {tile_archive}')
+    digest = hashlib.sha256()
+    with tile_archive.open('rb') as source:
+        for block in iter(lambda: source.read(8 * 1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def build_index(args: argparse.Namespace, planning_date: str, day_dir: Path,
                 deadline: float) -> tuple[Path, str]:
     database = args.output_root / 'transit' / f'moscow_{planning_date}.sqlite'
@@ -128,8 +152,12 @@ def build_index(args: argparse.Namespace, planning_date: str, day_dir: Path,
     for suffix in ('.sqlite', '.manifest.json', '.surface_walk_transfers.json',
                    '.walk_transfers.json'):
         building.with_suffix(suffix).unlink(missing_ok=True)
-    execute([sys.executable, str(TOOLS / 'ensure_local_valhalla.py')],
-            stage='ensure_local_valhalla', day_dir=day_dir, deadline=deadline)
+    if args.valhalla_backend == 'bridge':
+        execute([sys.executable, str(TOOLS / 'ensure_local_valhalla.py'),
+                 '--endpoint', args.valhalla_base_url],
+                stage='ensure_local_valhalla', day_dir=day_dir, deadline=deadline)
+    else:
+        check_direct_valhalla(args.valhalla_base_url)
     execute([sys.executable, str(TOOLS / 'build_local_transit_index.py'),
              '--gtfs', str(args.gtfs), '--rail', str(rail),
              '--metro-schema', str(args.metro_schema), '--output', str(building),
@@ -137,7 +165,9 @@ def build_index(args: argparse.Namespace, planning_date: str, day_dir: Path,
              *(['--rail-weekday-reference'] if rail_weekday_override_required(rail) else [])],
             stage='build_transit_index', day_dir=day_dir, deadline=deadline)
     execute([sys.executable, str(TOOLS / 'build_surface_walk_transfers.py'),
-             '--database', str(building)], stage='build_surface_walk_transfers',
+             '--database', str(building),
+             '--endpoint', f'{args.valhalla_base_url.rstrip("/")}/sources_to_targets'],
+            stage='build_surface_walk_transfers',
             day_dir=day_dir, deadline=deadline)
     execute([sys.executable, str(TOOLS / 'reuse_rapid_walk_transfers.py'),
              '--source', str(args.canonical_index), '--database', str(building)],
@@ -213,8 +243,12 @@ def run_day(args: argparse.Namespace, history_date: str, expected_jobs: int) -> 
                  '--dataset', str(dataset), '--scenario', 'core',
                  '--run-dir', str(run_dir), '--transit-index', str(transit_index),
                  '--shared-cache-dir', str(args.output_root / 'shared-cache'),
+                 '--valhalla-base-url', args.valhalla_base_url,
+                 *(['--skip-valhalla-autostart'] if args.valhalla_backend == 'direct' else []),
                  '--max-wall-seconds', str(min(840, remaining)), '--execute'],
-                stage='exact_pipeline', day_dir=day_dir, deadline=deadline)
+                stage='exact_pipeline', day_dir=day_dir, deadline=deadline,
+                extra_env=({'VALHALLA_TILE_REVISION': args.tile_revision}
+                           if args.valhalla_backend == 'direct' else None))
         summary = json.loads((run_dir / 'pipeline-run.json').read_text(encoding='utf-8'))
         plan_path = Path(summary['publishable_final_plan'])
         record.update(plan_metrics(plan_path, expected_jobs))
@@ -247,6 +281,10 @@ def main() -> int:
                         'BEEGO_METRO_SCHEMA', 'A:/LCT2-routing/research/mosmetro-api/schema.json')))
     parser.add_argument('--canonical-index', type=Path, default=ROOT / 'data' /
                         'transit' / 'moscow_2026-08-17.sqlite')
+    parser.add_argument('--valhalla-backend', choices=('bridge', 'direct'), default='bridge')
+    parser.add_argument('--valhalla-base-url', default='http://127.0.0.1:8002')
+    parser.add_argument('--tile-archive', type=Path, default=Path(
+                        'A:/LCT2-routing/valhalla-data/valhalla_tiles.tar'))
     parser.add_argument('--start-date', default='2026-08-16')
     parser.add_argument('--end-date', default='2026-02-17')
     parser.add_argument('--max-days', type=int, default=0)
@@ -259,6 +297,8 @@ def main() -> int:
                      args.rail_base / 'rail_schedule.json', args.metro_schema, args.canonical_index):
         if not required.is_file():
             parser.error(f'Missing input: {required}')
+    args.tile_revision = (direct_valhalla_revision(args.tile_archive, args.valhalla_base_url)
+                          if args.valhalla_backend == 'direct' else None)
     args.output_root.mkdir(parents=True, exist_ok=True)
     history = json.loads(args.history.read_text(encoding='utf-8'))
     days = sorted((day for day in history['days'] if args.end_date <= day['date'] <= args.start_date),
