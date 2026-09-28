@@ -68,6 +68,7 @@ export async function runExactPlan(payload, repositoryRoot = process.cwd()) {
     '--run-dir', results,
     '--transit-index', transitIndex,
     '--shared-cache-dir', path.join(repositoryRoot, 'runtime', 'ui-shared-cache'),
+    '--stable-plan-cache-dir', path.join(repositoryRoot, 'runtime', 'ui-shared-cache', 'verified-plans'),
     '--max-wall-seconds', String(pipelineBudgetSeconds),
     '--execute',
   ], undefined, repositoryRoot, deadlineAt);

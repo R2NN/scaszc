@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -12,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from beeline_routing.export import payload_sha256, write_json_atomic
+from beeline_routing.valhalla import DEFAULT_TRAFFIC_PROFILE
 
 
 ROOT = Path(__file__).parents[1]
@@ -22,6 +24,16 @@ def _sha256(path: Path) -> str:
     with path.open('rb') as source:
         for block in iter(lambda: source.read(8 * 1024 * 1024), b''):
             digest.update(block)
+    return digest.hexdigest()
+
+
+def _planner_source_sha256() -> str:
+    """Invalidate saved plans whenever planning or routing code changes."""
+    digest = hashlib.sha256()
+    for root in (ROOT / 'src', ROOT / 'tools'):
+        for path in sorted(root.rglob('*.py')):
+            digest.update(path.relative_to(ROOT).as_posix().encode('utf-8'))
+            digest.update(_sha256(path).encode('ascii'))
     return digest.hexdigest()
 
 
@@ -165,10 +177,62 @@ def _discover_exact_incumbent(
             int(metrics.get('unserved_normal_jobs', 0)),
             int(metrics.get('used_engineers', len(plan.get('engineer_plans', ())))),
             int(metrics.get('total_distance_m', 0)),
+            int(metrics.get('total_waiting_minutes', 0)),
             int(metrics.get('total_travel_minutes', 0)),
         )
         candidates.append((key, path.resolve()))
     return min(candidates, key=lambda item: (item[0], str(item[1])))[1] if candidates else None
+
+
+def _validated_exact_incumbent(path: Path | None, dataset) -> bool:
+    """Reuse a warm exact plan only after checksum and full validation checks."""
+    if path is None:
+        return False
+    from beeline_planning import validate_initial_plan
+    from beeline_planning.export import load_exact_plan_artifact
+
+    try:
+        plan, _ = load_exact_plan_artifact(path, dataset.dataset_sha256)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    return validate_initial_plan(dataset, plan).status.value == 'VALID'
+
+
+def _stable_plan_cache_key(
+    dataset_sha256: str, scenario: str, transit_index: Path,
+    environment: dict[str, str], metro_wait_seconds: int,
+) -> str:
+    """Bind a repeatable plan to its inputs and frozen routing sources."""
+    traffic_path = Path(
+        environment.get('TRAFFIC4CAST_PROFILE') or DEFAULT_TRAFFIC_PROFILE
+    )
+    return payload_sha256({
+        'dataset_sha256': dataset_sha256,
+        'scenario': scenario,
+        'planner_source_sha256': _planner_source_sha256(),
+        'transit_index_sha256': _sha256(transit_index),
+        'valhalla_tile_revision': environment['VALHALLA_TILE_REVISION'],
+        'valhalla_runtime_revision': environment['VALHALLA_RUNTIME_REVISION'],
+        'traffic_profile_sha256': (
+            _sha256(traffic_path) if traffic_path.is_file() else None
+        ),
+        'metro_wait_seconds': metro_wait_seconds,
+    })
+
+
+def _reuse_verified_plan(
+    current: Path | None, incumbent: Path, *, cache_hit: bool,
+    warm_verified: bool, recompute: bool,
+) -> bool:
+    """Freeze a cached result, or a complete independently checked warm plan."""
+    return (
+        not recompute
+        and current == incumbent
+        and (
+            cache_hit
+            or (warm_verified and _is_publishable_full_coverage(current))
+        )
+    )
 
 
 def main() -> int:
@@ -258,20 +322,28 @@ def main() -> int:
     warm_start_group.add_argument(
         '--warm-start',
         type=Path,
-        help='Previous screening or exact plan used only as a structural solver hint.',
+        help='Previous screening hint or validated exact incumbent.',
     )
     warm_start_group.add_argument(
         '--no-warm-start',
         action='store_true',
         help=(
-            'Disable explicit and auto-discovered structural hints. Use this '
-            'for a clean reproducibility benchmark.'
+            'Disable explicit and auto-discovered plan hints. Also omit '
+            '--stable-plan-cache-dir for a cold benchmark.'
         ),
     )
     parser.add_argument(
         '--shared-cache-dir',
         type=Path,
         help='Reusable matrix and exact-route caches; defaults beside run-dir.',
+    )
+    parser.add_argument(
+        '--stable-plan-cache-dir', type=Path,
+        help='Reuse a fully validated result for identical dataset and routing inputs.',
+    )
+    parser.add_argument(
+        '--recompute-stable-plan', action='store_true',
+        help='Search again while retaining the saved exact plan as an incumbent.',
     )
     parser.add_argument('--max-refinement-iterations', type=int, default=20)
     parser.add_argument('--refinement-query-budget', type=int, default=3000)
@@ -354,6 +426,7 @@ def main() -> int:
                 loaded_dataset.initial_planning_at.isoformat(),
             )
         )
+    warm_incumbent_verified = _validated_exact_incumbent(warm_start, loaded_dataset)
     if args.metro_wait_seconds < 0:
         parser.error('--metro-wait-seconds must be non-negative')
     if (
@@ -526,6 +599,7 @@ def main() -> int:
             '--zone-workers', args.zone_workers,
             '--adaptive-predecessors', args.adaptive_predecessors,
             '--cold-start-seed-seconds', args.cold_start_seed_seconds,
+            '--cold-start-improve-seconds', 0,
             '--coverage-first-only',
         )),
         ('refine_materialize_validate', _command(
@@ -625,6 +699,7 @@ def main() -> int:
             and args.warm_start is None
             and warm_start is not None
         ),
+        'verified_warm_incumbent': str(warm_start) if warm_incumbent_verified else None,
         'max_wall_seconds': args.max_wall_seconds,
         'robust_first_pass': robust_first_pass,
         'robust_travel_buffers_minutes': {
@@ -649,9 +724,17 @@ def main() -> int:
     completed_stages = []
     stage_timings = []
     started_at = datetime.now(UTC)
-    current_plan: Path | None = None
-    first_valid_plan: Path | None = None
-    first_valid_elapsed_seconds: float | None = None
+    incumbent_copy = run_dir / f'{args.scenario}-verified-warm-incumbent.json'
+    if warm_incumbent_verified:
+        shutil.copy2(warm_start, incumbent_copy)
+    current_plan: Path | None = incumbent_copy if warm_incumbent_verified else None
+    incumbent_source: Path | None = warm_start if warm_incumbent_verified else None
+    stable_cache_path: Path | None = None
+    stable_cache_hit = False
+    first_valid_plan: Path | None = current_plan
+    first_valid_elapsed_seconds: float | None = (
+        0.0 if warm_incumbent_verified else None
+    )
     degraded_stages: list[str] = []
     pipeline_started = time.perf_counter()
     deadline = pipeline_started + args.max_wall_seconds
@@ -673,8 +756,30 @@ def main() -> int:
             degraded_stages.append('global_time_limit')
             break
         if (
+            stage not in {
+                'ensure_local_valhalla', 'validate_dataset', 'routing_preflight',
+            }
+            and _reuse_verified_plan(
+                current_plan, incumbent_copy, cache_hit=stable_cache_hit,
+                warm_verified=warm_incumbent_verified,
+                recompute=args.recompute_stable_plan,
+            )
+        ):
+            stage_timings.append({
+                'stage': stage,
+                'duration_seconds': 0,
+                'skipped': 'verified_stable_incumbent',
+            })
+            print(json.dumps({
+                'event': 'STAGE_SKIPPED',
+                'stage': stage,
+                'reason': 'verified_stable_incumbent',
+            }, ensure_ascii=False), flush=True)
+            continue
+        if (
             stage in {'solve_screening_master', 'refine_materialize_validate'}
             and current_plan is not None
+            and current_plan == robust_exact
             and _is_publishable_full_coverage(current_plan)
         ):
             stage_timings.append({
@@ -901,6 +1006,37 @@ def main() -> int:
             'duration_seconds': round(duration_seconds, 3),
             **({'fallback_reason': fallback_reason} if fallback_reason else {}),
         })
+        if stage == 'routing_preflight' and args.stable_plan_cache_dir is not None:
+            if not valhalla_snapshot_configured:
+                _configure_valhalla_snapshot(environment, args.valhalla_base_url)
+                valhalla_snapshot_configured = True
+            cache_key = _stable_plan_cache_key(
+                loaded_dataset.dataset_sha256, args.scenario, transit_index,
+                environment, args.metro_wait_seconds,
+            )
+            stable_cache_path = args.stable_plan_cache_dir.resolve() / f'{cache_key}.json'
+            if (
+                stable_cache_path.is_file()
+                and _validated_exact_incumbent(stable_cache_path, loaded_dataset)
+                and (
+                    current_plan is None
+                    or _exact_quality_key(stable_cache_path)
+                    <= _exact_quality_key(current_plan)
+                )
+            ):
+                shutil.copy2(stable_cache_path, incumbent_copy)
+                current_plan = incumbent_copy
+                incumbent_source = stable_cache_path
+                first_valid_plan = incumbent_copy
+                first_valid_elapsed_seconds = round(
+                    time.perf_counter() - pipeline_started, 3
+                )
+                stable_cache_hit = True
+                print(json.dumps({
+                    'event': 'VERIFIED_PLAN_CACHE_HIT',
+                    'source': str(stable_cache_path),
+                    'coverage_complete': _is_publishable_full_coverage(incumbent_copy),
+                }, ensure_ascii=False), flush=True)
         if stage in planning_stages:
             candidate_plan = planning_stages[stage]
             if candidate_plan.is_file() and _is_publishable_exact(candidate_plan):
@@ -953,6 +1089,21 @@ def main() -> int:
     unserved_jobs = tuple(final_payload.get('plan', {}).get('unserved_job_ids', ()))
     coverage_complete = not unserved_jobs
     publication_allowed = final_payload.get('publication_allowed') is True
+    if (
+        stable_cache_path is not None
+        and publication_allowed
+        and (current_plan != incumbent_copy or stable_cache_hit)
+    ):
+        replace_cache = (
+            not stable_cache_path.is_file()
+            or not _validated_exact_incumbent(stable_cache_path, loaded_dataset)
+            or _exact_quality_key(current_plan) < _exact_quality_key(stable_cache_path)
+        )
+        if replace_cache:
+            stable_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = stable_cache_path.with_suffix('.json.tmp')
+            shutil.copy2(current_plan, temporary)
+            temporary.replace(stable_cache_path)
     run_payload = {
         **plan,
         'status': 'COMPLETE' if publication_allowed else 'FAILED_VALIDATION',
@@ -963,6 +1114,11 @@ def main() -> int:
         'first_valid_plan': str(first_valid_plan) if first_valid_plan else None,
         'first_valid_elapsed_seconds': first_valid_elapsed_seconds,
         'degraded_stages': degraded_stages,
+        'reused_verified_incumbent': (
+            str(incumbent_source) if current_plan == incumbent_copy else None
+        ),
+        'stable_plan_cache_path': str(stable_cache_path) if stable_cache_path else None,
+        'stable_plan_cache_hit': stable_cache_hit,
         'output_files': output_files,
         'coverage_complete': coverage_complete,
         'unserved_job_ids': list(unserved_jobs),

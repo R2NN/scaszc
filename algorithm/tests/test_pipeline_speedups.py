@@ -32,9 +32,13 @@ from tools.build_valhalla_screening_matrices import missing_matrix_requests
 from tools import build_valhalla_screening_matrices as matrix_builder
 from tools.run_new_dataset_pipeline import (
     _choose_exact_plan,
+    _discover_exact_incumbent,
     _is_publishable_exact,
     _is_publishable_full_coverage,
     _refinement_fallback_candidate,
+    _stable_plan_cache_key,
+    _reuse_verified_plan,
+    _validated_exact_incumbent,
 )
 from tools.promote_best_history_plans import best_saved_plan
 from tools.solve_screening_zones import _read_warm_orders, _with_travel_buffers
@@ -42,6 +46,50 @@ from tools import refine_screening_exact as exact_refiner
 
 
 class ScreeningSpeedupTests(unittest.TestCase):
+    def test_only_full_warm_plan_or_explicit_cache_hit_skips_search(self) -> None:
+        artifacts = Path(__file__).parents[1] / 'artifacts' / 'current'
+        complete = artifacts / 'initial-exact-205-of-205-retimed.json'
+        partial = artifacts / 'initial-exact-204-of-205.json'
+        self.assertTrue(_reuse_verified_plan(
+            complete, complete, cache_hit=False, warm_verified=True,
+            recompute=False,
+        ))
+        self.assertFalse(_reuse_verified_plan(
+            partial, partial, cache_hit=False, warm_verified=True,
+            recompute=False,
+        ))
+        self.assertTrue(_reuse_verified_plan(
+            partial, partial, cache_hit=True, warm_verified=False,
+            recompute=False,
+        ))
+        self.assertFalse(_reuse_verified_plan(
+            complete, complete, cache_hit=True, warm_verified=True,
+            recompute=True,
+        ))
+
+    def test_stable_plan_cache_tracks_routing_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            index = Path(directory) / 'transit.sqlite'
+            index.write_bytes(b'first timetable')
+            routing = {
+                'VALHALLA_TILE_REVISION': 'tiles-1',
+                'VALHALLA_RUNTIME_REVISION': 'local-1',
+            }
+            first = _stable_plan_cache_key('dataset-1', 'core', index, routing, 180)
+            self.assertEqual(
+                first, _stable_plan_cache_key('dataset-1', 'core', index, routing, 180),
+            )
+            self.assertNotEqual(
+                first, _stable_plan_cache_key(
+                    'dataset-1', 'core', index,
+                    {**routing, 'VALHALLA_TILE_REVISION': 'tiles-2'}, 180,
+                ),
+            )
+            index.write_bytes(b'changed timetable')
+            self.assertNotEqual(
+                first, _stable_plan_cache_key('dataset-1', 'core', index, routing, 180),
+            )
+
     def test_travel_buffers_affect_only_moving_car_and_transit_arcs(self) -> None:
         moment = datetime(2026, 8, 17, 7, tzinfo=UTC)
         arcs = tuple(
@@ -163,6 +211,12 @@ class ScreeningSpeedupTests(unittest.TestCase):
         stress = load_planning_dataset(dataset_root, 'stress')
         self.assertTrue(_read_warm_orders(exact, core)[1])
         self.assertEqual(_read_warm_orders(exact, stress), ({}, False))
+        self.assertTrue(_validated_exact_incumbent(exact, core))
+        self.assertFalse(_validated_exact_incumbent(exact, stress))
+        selected = _discover_exact_incumbent(
+            core.dataset_sha256, core.initial_planning_at.isoformat(),
+        )
+        self.assertEqual(selected.name, 'initial-exact-205-of-205-retimed.json')
 
     def test_bulk_cache_reuses_coordinates_when_ids_change(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
