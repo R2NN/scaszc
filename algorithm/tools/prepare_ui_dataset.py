@@ -454,7 +454,9 @@ if __name__ == '__main__':
     try:
         print(json.dumps(prepare(json.load(sys.stdin), Path(sys.argv[1])), ensure_ascii=False))
     except Exception as error:
-        print(json.dumps({'status': 'FAILED', 'error': str(error),
+        print(json.dumps({'status': 'FAILED',
+                          'code': 'INVALID_INPUT' if isinstance(error, ValueError) else 'PREPARATION_FAILED',
+                          'error': str(error),
                           'details': error.issues if isinstance(error, InputDataError) else [str(error)]},
                          ensure_ascii=False))
         raise SystemExit(1)

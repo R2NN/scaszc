@@ -37,7 +37,7 @@ const run = (python, args, input, repositoryRoot, deadlineAt) => new Promise((re
     if (code === 0) resolve(result || {});
     else {
       const error = new Error(result?.error || stderr.trim() || stdout.trim() || `Exact pipeline exited with code ${code}`);
-      if (result?.status === 'FAILED') {
+      if (result?.code === 'INVALID_INPUT') {
         error.code = 'INVALID_INPUT';
         error.details = Array.isArray(result.details) ? result.details : [];
       }
