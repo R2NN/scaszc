@@ -5,6 +5,7 @@ $node = Join-Path $root 'offline-assets/node/node.exe'
 $python = Join-Path $root '.venv/Scripts/python.exe'
 $wheels = Join-Path $root 'offline-assets/python-wheels'
 $image = 'ghcr.io/valhalla/valhalla-scripted:latest'
+$expectedImageId = 'sha256:bc7c22f054c26effa5222a55a9d7a840369f254d314989f9040505342dc7ab84'
 $container = 'beego-handoff-valhalla'
 
 function Test-Port([int]$Port) {
@@ -67,8 +68,8 @@ if (-not (Test-Valhalla)) {
     }
     & docker info *> $null
     if ($LASTEXITCODE -ne 0) { throw 'Docker Desktop установлен, но движок не запущен.' }
-    & docker image inspect $image *> $null
-    if ($LASTEXITCODE -ne 0) {
+    $installedImageId = & docker image inspect $image --format '{{.Id}}' 2>$null
+    if ($LASTEXITCODE -ne 0 -or $installedImageId -ne $expectedImageId) {
         & docker load -i (Join-Path $root 'offline-assets/docker/valhalla-scripted-3.8.3.tar')
         if ($LASTEXITCODE -ne 0) { throw 'Не удалось загрузить образ Valhalla из архива.' }
     }
