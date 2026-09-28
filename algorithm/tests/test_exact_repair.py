@@ -15,6 +15,7 @@ from beeline_planning.domain import (
 from beeline_planning.eligibility import CandidateIndex, build_candidate_index
 from beeline_planning.exact_repair import (
     find_coverage_move,
+    find_urgent_exchange_move,
     master_from_orders,
     zero_travel_order_feasible,
 )
@@ -244,6 +245,31 @@ class ExactCoverageRepairTests(unittest.TestCase):
         )
         self.assertIsNone(report.move)
         self.assertTrue(report.budget_exhausted)
+
+    def test_urgent_exchange_releases_only_normal_work(self) -> None:
+        self.jobs['J'] = replace(self.jobs['J'], priority=Priority.URGENT)
+        self.jobs['B'] = replace(self.jobs['B'], priority=Priority.URGENT)
+        self.dataset.active_commitments_at = lambda _moment: ()
+        report = find_urgent_exchange_move(
+            self.dataset, {'E1': ('A', 'B')}, {'J'},
+            self._candidates({'J': ('E1',)}),
+            lambda _engineer_id, order: order == ('J', 'B'),
+        )
+        self.assertIsNotNone(report.move)
+        self.assertEqual(report.move.released_normal_job_ids, ('A',))
+        self.assertEqual(report.move.routes, {'E1': ('J', 'B')})
+
+    def test_urgent_exchange_respects_hard_commitments(self) -> None:
+        self.jobs['J'] = replace(self.jobs['J'], priority=Priority.URGENT)
+        self.dataset.active_commitments_at = lambda _moment: (
+            SimpleNamespace(job_id='A'),
+        )
+        report = find_urgent_exchange_move(
+            self.dataset, {'E1': ('A',)}, {'J'},
+            self._candidates({'J': ('E1',)}),
+            lambda _engineer_id, _order: True,
+        )
+        self.assertIsNone(report.move)
 
     def test_depth_limits_still_allow_a_chain_search(self) -> None:
         routes = {'E1': ('A',), 'E2': ('B',), 'E3': ()}

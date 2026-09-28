@@ -50,12 +50,23 @@ def verify_day(batch_root: Path, date: str) -> tuple[Path, dict, dict]:
         visit.job_id for route in new_plan.engineer_plans for visit in route.visits
     }
     targets = {move['job_id'] for move in new['accepted_moves']}
+    released_normals = {
+        job_id for move in new['accepted_moves']
+        for job_id in move.get('released_normal_job_ids', ())
+    }
+    recovered_normals = set(new.get('recovered_normal_job_ids', ()))
     if (
-        not targets or new_assigned != old_assigned | targets
+        not targets
+        or not recovered_normals <= released_normals
+        or any(dataset.jobs[job_id].priority.value != 'NORMAL'
+               for job_id in released_normals)
+        or new_assigned != (old_assigned - released_normals) | targets | recovered_normals
         or set(old_plan.unserved_job_ids) - set(new_plan.unserved_job_ids) != targets
+        or set(new_plan.unserved_job_ids) - set(old_plan.unserved_job_ids)
+        != released_normals - recovered_normals
         or any(dataset.jobs[job_id].priority.value != 'URGENT' for job_id in targets)
     ):
-        raise ValueError(f'{date}: repair changed jobs outside the urgent targets')
+        raise ValueError(f'{date}: repair changed jobs outside urgent exchanges')
     old_metrics = old['validation']['metrics']
     new_metrics = new['validation']['metrics']
     if (
@@ -63,6 +74,7 @@ def verify_day(batch_root: Path, date: str) -> tuple[Path, dict, dict]:
         != old_metrics['unserved_urgent_jobs'] - len(targets)
         or new_metrics['unserved_normal_jobs']
         != old_metrics['unserved_normal_jobs']
+        + len(released_normals - recovered_normals)
     ):
         raise ValueError(f'{date}: validator metrics changed unexpectedly')
     for route in new_plan.engineer_plans:
@@ -77,6 +89,8 @@ def verify_day(batch_root: Path, date: str) -> tuple[Path, dict, dict]:
     return new_path, status, {
         'date': date,
         'targets': sorted(targets),
+        'released_normal_jobs': sorted(released_normals),
+        'recovered_normal_jobs': sorted(recovered_normals),
         'before': old_metrics['unserved_urgent_jobs'],
         'after': new_metrics['unserved_urgent_jobs'],
         'artifact_sha256': new['content_sha256'],

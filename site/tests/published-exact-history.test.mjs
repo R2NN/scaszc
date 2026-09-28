@@ -61,3 +61,13 @@ test('published historical day dates are consecutive and do not repeat', () => {
     assert.equal(current - previous, 86400000);
   }
 });
+
+test('every published emergency has a validated assignment', () => {
+  for (const day of history.days) {
+    const urgentIds = new Set(day.orders.filter(order => order.priority === 'Авария').map(order => order.id));
+    const assignedIds = new Set(day.plan.routes.flatMap(route => route.assignments.map(item => item.orderId)));
+    for (const id of urgentIds) {
+      assert.ok(assignedIds.has(id), `${day.date}: emergency ${id} is unassigned`);
+    }
+  }
+});

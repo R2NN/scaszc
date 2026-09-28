@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from datetime import timedelta
+from itertools import combinations
 from time import monotonic
 from typing import Callable, Mapping
 
@@ -48,6 +49,22 @@ class RepairSearchReport:
     route_checks_by_depth: tuple[int, ...]
     route_checks_by_job: Mapping[str, int]
     zero_travel_rejections: int
+    budget_exhausted: bool
+
+
+@dataclass(frozen=True, slots=True)
+class UrgentExchangeMove:
+    """Assign an urgent job by releasing lower-priority work on one route."""
+
+    inserted_job_id: str
+    routes: Mapping[str, tuple[str, ...]]
+    released_normal_job_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class UrgentExchangeReport:
+    move: UrgentExchangeMove | None
+    route_checks: int
     budget_exhausted: bool
 
 
@@ -122,6 +139,118 @@ def zero_travel_order_feasible(
     return not job_ids or moment - first_departure <= timedelta(
         minutes=engineer.max_route_minutes
     )
+
+
+def find_urgent_exchange_move(
+    dataset: PlanningDataset,
+    routes: Mapping[str, tuple[str, ...]],
+    unserved_job_ids: set[str],
+    candidates: CandidateIndex,
+    route_check: RouteCheck,
+    *,
+    max_released_normals: int = 2,
+    max_route_checks: int = 400,
+    max_seconds: float | None = None,
+) -> UrgentExchangeReport:
+    """Prefer an urgent job when exact capacity requires releasing normal work.
+
+    The caller must validate the complete changed plan. A failed bounded search
+    does not prove the urgent job impossible.
+    """
+    if not 1 <= max_released_normals <= 3 or max_route_checks < 1:
+        raise ValueError('Invalid urgent exchange search limits')
+    if max_seconds is not None and max_seconds <= 0:
+        raise ValueError('max_seconds must be positive')
+    urgent_ids = sorted(
+        (job_id for job_id in unserved_job_ids
+         if dataset.jobs[job_id].priority == Priority.URGENT),
+        key=lambda job_id: (
+            dataset.jobs[job_id].window_end,
+            len(candidates.eligible_engineers_by_job[job_id]), job_id,
+        ),
+    )
+    if not urgent_ids:
+        return UrgentExchangeReport(None, 0, False)
+    deadline = monotonic() + max_seconds if max_seconds is not None else None
+    checks = 0
+    committed = {
+        commitment.job_id
+        for commitment in dataset.active_commitments_at(dataset.initial_planning_at)
+    }
+    stock = {
+        (item.zone_id, item.equipment_id): item.quantity_available
+        for item in dataset.shared_inventory
+    }
+    used: Counter[tuple[str, str]] = Counter()
+
+    def shared_needs(job_id: str) -> Counter[tuple[str, str]]:
+        job = dataset.jobs[job_id]
+        needs: Counter[tuple[str, str]] = Counter()
+        for need in job.required_equipment:
+            if dataset.equipment_catalog[need.equipment_id].shared_stock:
+                needs[job.zone_id, need.equipment_id] += need.quantity
+        return needs
+
+    for order in routes.values():
+        for job_id in order:
+            used.update(shared_needs(job_id))
+
+    for release_count in range(1, max_released_normals + 1):
+        for urgent_id in urgent_ids:
+            urgent = dataset.jobs[urgent_id]
+            engineer_ids = sorted(
+                candidates.eligible_engineers_by_job[urgent_id],
+                key=lambda engineer_id: (
+                    len(routes.get(engineer_id, ())), engineer_id,
+                ),
+            )
+            for engineer_id in engineer_ids:
+                if dataset.engineers[engineer_id].zone_id != urgent.zone_id:
+                    continue
+                order = tuple(routes.get(engineer_id, ()))
+                releasable = sorted(
+                    (job_id for job_id in order
+                     if dataset.jobs[job_id].priority == Priority.NORMAL
+                     and job_id not in committed),
+                    key=lambda job_id: (
+                        not (
+                            dataset.jobs[job_id].window_start <= urgent.window_end
+                            and urgent.window_start <= dataset.jobs[job_id].window_end
+                        ),
+                        job_id,
+                    ),
+                )
+                for released in combinations(releasable, release_count):
+                    released_stock: Counter[tuple[str, str]] = Counter()
+                    for job_id in released:
+                        released_stock.update(shared_needs(job_id))
+                    if any(
+                        used[key] - released_stock[key] + quantity
+                        > stock.get(key, 0)
+                        for key, quantity in shared_needs(urgent_id).items()
+                    ):
+                        continue
+                    reduced = tuple(job_id for job_id in order if job_id not in released)
+                    for position in range(len(reduced) + 1):
+                        if deadline is not None and monotonic() >= deadline:
+                            return UrgentExchangeReport(None, checks, True)
+                        proposal = (
+                            reduced[:position] + (urgent_id,) + reduced[position:]
+                        )
+                        if not zero_travel_order_feasible(dataset, engineer_id, proposal):
+                            continue
+                        if checks >= max_route_checks:
+                            return UrgentExchangeReport(None, checks, True)
+                        checks += 1
+                        if route_check(engineer_id, proposal):
+                            return UrgentExchangeReport(
+                                UrgentExchangeMove(
+                                    urgent_id, {engineer_id: proposal},
+                                    tuple(sorted(released)),
+                                ),
+                                checks, False,
+                            )
+    return UrgentExchangeReport(None, checks, False)
 
 
 def find_coverage_move(

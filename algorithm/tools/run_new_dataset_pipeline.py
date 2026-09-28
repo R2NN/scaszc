@@ -1087,6 +1087,10 @@ def main() -> int:
         raise RuntimeError('Pipeline finished without a planning artifact')
     final_payload = json.loads(current_plan.read_text(encoding='utf-8'))
     unserved_jobs = tuple(final_payload.get('plan', {}).get('unserved_job_ids', ()))
+    unserved_urgent_jobs = tuple(sorted(
+        job_id for job_id in unserved_jobs
+        if loaded_dataset.jobs[job_id].priority.value == 'URGENT'
+    ))
     coverage_complete = not unserved_jobs
     publication_allowed = final_payload.get('publication_allowed') is True
     if (
@@ -1122,6 +1126,11 @@ def main() -> int:
         'output_files': output_files,
         'coverage_complete': coverage_complete,
         'unserved_job_ids': list(unserved_jobs),
+        'urgent_coverage': {
+            'status': 'ALL_ASSIGNED' if not unserved_urgent_jobs else 'UNRESOLVED',
+            'unserved_job_ids': list(unserved_urgent_jobs),
+            'infeasibility_proven': False,
+        },
         'publishable_final_plan': str(current_plan) if publication_allowed else None,
         'candidate_plan': str(current_plan),
     }
@@ -1134,6 +1143,7 @@ def main() -> int:
         'coverage_complete': coverage_complete,
         'degraded_stages': degraded_stages,
         'unserved_jobs': len(unserved_jobs),
+        'unserved_urgent_jobs': len(unserved_urgent_jobs),
         'run_manifest': str(run_dir / 'pipeline-run.json'),
     }, ensure_ascii=False), flush=True)
     return 0 if publication_allowed else 2
