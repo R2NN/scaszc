@@ -11,7 +11,8 @@
 ## С чего начать другому агенту
 
 1. Проверь `PACKAGE_MANIFEST_SHA256.tsv` командой `python VERIFY_PACKAGE.py`.
-2. Прочитай этот файл и `algorithm/NEW_DATA_RUNBOOK.md`.
+2. Прочитай этот файл, `CHECK_BEFORE_DEMO_RU.md` и
+   `algorithm/NEW_DATA_RUNBOOK.md`.
 3. Если нужен запуск сайта и новые расчёты на Windows x64, запусти
    `powershell -ExecutionPolicy Bypass -File .\START_BEEGO.ps1` из корня.
 4. Не меняй `data/dataset` при проверке воспроизводимости. Новые загрузки

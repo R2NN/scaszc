@@ -51,6 +51,8 @@ def main() -> None:
     if any(day['unserved_urgent'] != 0 for day in days):
         raise SystemExit('В истории есть незакрытые аварии')
     required = (
+        'HANDOFF_FOR_AGENT_RU.md',
+        'CHECK_BEFORE_DEMO_RU.md',
         'site/public/data/analytics-history.json',
         'site/public/data/beego-exact-plans.json',
         'algorithm/artifacts/current/initial-exact-205-of-205-retimed.json',

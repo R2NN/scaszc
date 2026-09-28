@@ -178,8 +178,8 @@ def assemble(stage: Path, batch: Path, valhalla: Path, gtfs: Path,
               stage / 'offline-assets/node/node.exe')
     copy_file(credentials, stage / '.env.routing.local')
     copy_file(ROOT / 'site/.dev.vars', stage / 'credentials/site.dev.vars.backup')
-    for name in ('HANDOFF_FOR_AGENT_RU.md', 'START_BEEGO.ps1',
-                 'VERIFY_PACKAGE.py'):
+    for name in ('HANDOFF_FOR_AGENT_RU.md', 'CHECK_BEFORE_DEMO_RU.md',
+                 'START_BEEGO.ps1', 'VERIFY_PACKAGE.py'):
         copy_file(ROOT / 'packaging' / name, stage / name)
     copy_file(ROOT / 'packaging/build_complete_handoff.py',
               stage / 'packaging/build_complete_handoff.py')
