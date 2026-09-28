@@ -13,13 +13,13 @@ EAST-ENG-11;Бригада Каушнян;EAST;Восток;12:00;22:00;OFFICE-E
 EAST-ENG-12;Бригада Попов;EAST;Восток;12:00;22:00;OFFICE-EAST;CAR;true;10;600;hybrid_synthetic_v2_1
 SOUTHEAST-ENG-01;Бригада Белоновский;SOUTHEAST;Юго-восток;10:00;22:00;OFFICE-SOUTHEAST;CAR;true;10;720;hybrid_synthetic_v2_1
 SOUTHEAST-ENG-02;Бригада Демин;SOUTHEAST;Юго-восток;10:00;22:00;OFFICE-SOUTHEAST;CAR;true;10;720;hybrid_synthetic_v2_1
-SOUTHEAST-ENG-03;Бригада Макаров;SOUTHEAST;Юго-восток;12:00;22:00;OFFICE-SOUTHEAST;BICYCLE;true;10;600;hybrid_synthetic_v2_1
-SOUTHEAST-ENG-04;Бригада Саламатин;SOUTHEAST;Юго-восток;08:00;18:00;OFFICE-SOUTHEAST;PUBLIC_TRANSIT;true;10;600;hybrid_synthetic_v2_1
-SOUTHEAST-ENG-05;Бригада Бузань;SOUTHEAST;Юго-восток;12:00;22:00;OFFICE-SOUTHEAST;WALKING;true;10;600;hybrid_synthetic_v2_1
+SOUTHEAST-ENG-03;Бригада Макаров;SOUTHEAST;Юго-восток;08:00;18:00;OFFICE-SOUTHEAST;BICYCLE;true;10;600;hybrid_synthetic_v2_1
+SOUTHEAST-ENG-04;Бригада Саламатин;SOUTHEAST;Юго-восток;12:00;22:00;OFFICE-SOUTHEAST;PUBLIC_TRANSIT;true;10;600;hybrid_synthetic_v2_1
+SOUTHEAST-ENG-05;Бригада Бузань;SOUTHEAST;Юго-восток;08:00;18:00;OFFICE-SOUTHEAST;WALKING;true;10;600;hybrid_synthetic_v2_1
 SOUTHEAST-ENG-06;Бригада Каушнян;SOUTHEAST;Юго-восток;10:00;22:00;OFFICE-SOUTHEAST;CAR;true;10;720;hybrid_synthetic_v2_1
 SOUTHEAST-ENG-07;Бригада Паршин;SOUTHEAST;Юго-восток;08:00;18:00;OFFICE-SOUTHEAST;CAR;true;10;600;hybrid_synthetic_v2_1
 SOUTHEAST-ENG-08;Бригада Андреев;SOUTHEAST;Юго-восток;08:00;18:00;OFFICE-SOUTHEAST;CAR;true;10;600;hybrid_synthetic_v2_1
-SOUTHEAST-ENG-09;Бригада Рыбин;SOUTHEAST;Юго-восток;12:00;22:00;OFFICE-SOUTHEAST;CAR;true;10;600;hybrid_synthetic_v2_1
+SOUTHEAST-ENG-09;Бригада Рыбин;SOUTHEAST;Юго-восток;08:00;18:00;OFFICE-SOUTHEAST;CAR;true;10;600;hybrid_synthetic_v2_1
 SOUTHEAST-ENG-10;Бригада Горбанев;SOUTHEAST;Юго-восток;10:00;22:00;OFFICE-SOUTHEAST;CAR;true;10;720;hybrid_synthetic_v2_1
 SOUTHEAST-ENG-11;Бригада Козырь;SOUTHEAST;Юго-восток;10:00;22:00;OFFICE-SOUTHEAST;PUBLIC_TRANSIT;true;10;720;hybrid_synthetic_v2_1
 SOUTHEAST-ENG-12;Бригада Царьков;SOUTHEAST;Юго-восток;10:00;22:00;OFFICE-SOUTHEAST;CAR;true;10;720;hybrid_synthetic_v2_1

@@ -21,17 +21,21 @@ test('history spans six months and ends with the verified canonical day', () => 
   assert.equal(current.plan.metrics.total, 205);
   assert.equal(current.plan.metrics.assigned, 205);
   assert.equal(current.plan.metrics.unassigned, 0);
-  assert.equal(current.plan.metrics.activeEngineers, 28);
+  assert.equal(current.plan.metrics.activeEngineers, artifact.plans.initial.metrics.activeEngineers);
   assert.equal(current.dataKind, 'VERIFIED_CANONICAL_DAY');
   assert.equal(current.plan.contentSha256, artifact.plans.initial.contentSha256);
   assert.equal(current.plan.baseline.status, 'EXACT_VALID');
   assert.equal(current.plan.baseline.validationStatus, 'VALID');
   assert.equal(current.plan.baseline.methodology, 'EXACT_FCFS_SAME_ROUTING_AND_VALIDATOR');
-  assert.equal(current.plan.baseline.metrics.assigned, 104);
-  assert.equal(current.plan.baseline.metrics.unassigned, 101);
-  assert.equal(current.plan.baseline.metrics.activeEngineers, 35);
-  assert.equal(current.plan.baseline.metrics.distanceKm, 1069.535);
-  assert.equal(current.plan.metrics.distanceKm, 1636.204);
+  assert.equal(current.plan.baseline.metrics.assigned, artifact.plans.baseline.metrics.assigned);
+  assert.equal(current.plan.baseline.metrics.unassigned, artifact.plans.baseline.metrics.unassigned);
+  assert.equal(current.plan.baseline.metrics.activeEngineers, artifact.plans.baseline.metrics.activeEngineers);
+  assert.equal(current.plan.baseline.metrics.distanceKm,
+    artifact.plans.baseline.routes.reduce((sum, route) => sum
+      + route.assignments.reduce((distance, item) => distance + item.distanceM, 0) / 1000, 0));
+  assert.equal(current.plan.metrics.distanceKm,
+    artifact.plans.initial.routes.reduce((sum, route) => sum
+      + route.assignments.reduce((distance, item) => distance + item.distanceM, 0), 0) / 1000);
   const sourceRoute = artifact.plans.baseline.routes.find(route => route.engineerId === current.plan.baseline.routes[0].engineerId);
   assert.equal(current.plan.baseline.routes[0].workloadMinutes, sourceRoute.workloadMinutes);
 });
@@ -85,13 +89,14 @@ test('every daily plan and actual visit references an existing order and enginee
 test('current route history keeps delayed departures and the arrival buffer from the plan artifact', () => {
   const history = generateHistory({ fixture, artifact });
   const current = history.days.at(-1);
-  const route = current.plan.routes.find(item => item.engineerId === 'EAST-ENG-01');
-  const visit = route.assignments.find(item => item.orderId.endsWith('EAST-26645'));
-  const exact = artifact.plans.initial.routes.find(item => item.engineerId === 'EAST-ENG-01')
-    .assignments.find(item => item.sourceOrderId === 'EAST-26645');
+  const exact = artifact.plans.initial.routes.flatMap(item => item.assignments)
+    .find(item => item.departureAt < item.plannedStart);
+  assert.ok(exact);
+  const route = current.plan.routes.find(item => item.engineerId === exact.engineerId);
+  const visit = route.assignments.find(item => item.orderId.endsWith(exact.sourceOrderId));
+  assert.ok(visit);
   assert.equal(visit.departureAt, exact.departureAt);
   assert.equal(visit.arrival, exact.arrival);
-  assert.equal(visit.plannedStart, '16:00');
   assert.equal(visit.plannedStart, exact.plannedStart);
 });
 

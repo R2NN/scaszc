@@ -6765,8 +6765,8 @@
       "engineer_name": "Бригада Макаров",
       "zone_id": "SOUTHEAST",
       "zone_name": "Юго-восток",
-      "shift_start": "12:00",
-      "shift_end": "22:00",
+      "shift_start": "08:00",
+      "shift_end": "18:00",
       "start_office_id": "OFFICE-SOUTHEAST",
       "transport_type": "BICYCLE",
       "is_available": true,
@@ -6779,8 +6779,8 @@
       "engineer_name": "Бригада Саламатин",
       "zone_id": "SOUTHEAST",
       "zone_name": "Юго-восток",
-      "shift_start": "08:00",
-      "shift_end": "18:00",
+      "shift_start": "12:00",
+      "shift_end": "22:00",
       "start_office_id": "OFFICE-SOUTHEAST",
       "transport_type": "PUBLIC_TRANSIT",
       "is_available": true,
@@ -6793,8 +6793,8 @@
       "engineer_name": "Бригада Бузань",
       "zone_id": "SOUTHEAST",
       "zone_name": "Юго-восток",
-      "shift_start": "12:00",
-      "shift_end": "22:00",
+      "shift_start": "08:00",
+      "shift_end": "18:00",
       "start_office_id": "OFFICE-SOUTHEAST",
       "transport_type": "WALKING",
       "is_available": true,
@@ -6849,8 +6849,8 @@
       "engineer_name": "Бригада Рыбин",
       "zone_id": "SOUTHEAST",
       "zone_name": "Юго-восток",
-      "shift_start": "12:00",
-      "shift_end": "22:00",
+      "shift_start": "08:00",
+      "shift_end": "18:00",
       "start_office_id": "OFFICE-SOUTHEAST",
       "transport_type": "CAR",
       "is_available": true,
@@ -7323,6 +7323,22 @@
     {
       "engineer_id": "SOUTHCENTER-ENG-11",
       "skill_id": "EMERGENCY"
+    },
+    {
+      "engineer_id": "EAST-ENG-02",
+      "skill_id": "INSTALL"
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-06",
+      "skill_id": "INSTALL"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-04",
+      "skill_id": "LOCAL"
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-04",
+      "skill_id": "INSTALL"
     }
   ],
   "engineer_equipment": [
@@ -7719,6 +7735,21 @@
     {
       "engineer_id": "SOUTHCENTER-ENG-11",
       "equipment_id": "CABLE_SET",
+      "quantity": 1
+    },
+    {
+      "engineer_id": "EAST-ENG-02",
+      "equipment_id": "INSTALL_SET",
+      "quantity": 1
+    },
+    {
+      "engineer_id": "SOUTHCENTER-ENG-06",
+      "equipment_id": "INSTALL_SET",
+      "quantity": 1
+    },
+    {
+      "engineer_id": "SOUTHEAST-ENG-04",
+      "equipment_id": "INSTALL_SET",
       "quantity": 1
     }
   ],

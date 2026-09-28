@@ -53,12 +53,12 @@ const result = {
   initial: verify('initial', initialJobs, {
     assigned: 205,
     unassigned: 0,
-    contentSha256: '2089fec94974a5858ac4f7bbbb1fe6598fe9cf1b4cba5161f79f277f4a0f3dd4',
+    contentSha256: 'aa3ff30b0bcba927e0743f12f6237946f1fcc8a70d69959e2e149c3203d21f52',
   }),
   event: verify('event', fixture.jobs, {
     assigned: 206,
     unassigned: 0,
-    contentSha256: '60d4f8a98aa69ceeacf7ee86b0d46ae89d58e739876bff03923c52ab99c9a882',
+    contentSha256: '32cce5bc07787c49838823630a4478b1d6925966a9fae52146d130017f825086',
   }),
 };
 

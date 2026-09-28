@@ -205,7 +205,7 @@ class ScreeningSpeedupTests(unittest.TestCase):
         dataset_root = root / 'data' / 'dataset'
         exact = (
             root / 'algorithm' / 'artifacts' / 'current'
-            / 'exact-205-of-205-28-teams-clean-automatic.json'
+            / 'initial-exact-205-of-205-retimed.json'
         )
         core = load_planning_dataset(dataset_root, 'core')
         stress = load_planning_dataset(dataset_root, 'stress')

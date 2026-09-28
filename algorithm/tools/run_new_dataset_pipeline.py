@@ -569,7 +569,7 @@ def main() -> int:
                 '--search-workers', args.search_workers,
                 '--zone-workers', args.zone_workers,
                 '--adaptive-predecessors', args.adaptive_predecessors,
-                '--cold-start-seed-seconds', 10,
+                '--cold-start-seed-seconds', 20,
                 '--cold-start-improve-seconds', 0,
                 '--coverage-first-only',
                 '--car-travel-buffer-minutes', args.robust_car_buffer_minutes,
