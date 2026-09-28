@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "dev:api": "node scripts/dev-api.mjs",
+    "start:server": "node server/main.mjs",
+    "backup:shifts": "node scripts/backup-shifts.mjs",
     "build:planning-artifact": "node scripts/build-planning-artifact.mjs",
     "normalize:departures": "node scripts/apply-departure-buffer.mjs",
     "build:analytics-history": "node scripts/generate-analytics-history.mjs",
@@ -16,12 +18,16 @@
     "test:algorithm": "node scripts/verify-algorithm-integration.mjs",
     "test:analytics-history": "node --test tests/analytics-history.test.mjs tests/analytics-insights.test.mjs tests/analytics-advanced.test.mjs tests/ml-demand-forecast.test.mjs",
     "test:ml-forecast": "node --test tests/ml-demand-forecast.test.mjs",
-    "test:territories": "node scripts/verify-moscow-territories.mjs"
+    "test:territories": "node scripts/verify-moscow-territories.mjs",
+    "test:map": "node --test tests/map-design.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "5.0.4",
+    "better-sqlite3": "^13.0.3",
     "lucide-react": "^1.46.0",
     "maplibre-gl": "^6.9.1",
+    "pdfjs-dist": "^5.7.284",
+    "pdfkit": "^0.20.2",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "vite": "6.4.2",

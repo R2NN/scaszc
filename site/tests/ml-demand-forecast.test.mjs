@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import test from 'node:test';
 
 const forecast = JSON.parse(await readFile(new URL('../public/data/ml-demand-forecast.json', import.meta.url), 'utf8'));
@@ -17,4 +17,10 @@ test('CatBoost forecast artifact is complete and internally reconciled', () => {
   for (const dimension of ['zones', 'skills', 'timeBands']) {
     for (const item of forecast[dimension]) assert.ok(item.low <= item.middle && item.middle <= item.high);
   }
+});
+
+test('trained CatBoost model is included in the handoff', async () => {
+  assert.equal(forecast.modelArtifact, 'models/demand-forecast-catboost.cbm');
+  const model = await stat(new URL('../models/demand-forecast-catboost.cbm', import.meta.url));
+  assert.ok(model.size > 10_000);
 });

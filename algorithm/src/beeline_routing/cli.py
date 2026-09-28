@@ -30,7 +30,8 @@ from .models import RouteStatus, TransportMode
 from .oracle import ExactRoutingOracle, OracleQuery
 from .yandex import PROVIDER as YANDEX_PROVIDER
 from .yandex import YandexRoutingClient
-from .valhalla import ValhallaRoutingClient
+from .valhalla import DEFAULT_TRAFFIC_PROFILE, ValhallaRoutingClient
+from .traffic4cast import Traffic4castProfile
 from .valhalla_hybrid import Valhalla2GisRoutingClient
 from .valhalla_here import ValhallaHereRoutingClient
 from .local_transit import LocalTransitRoutingClient
@@ -111,7 +112,8 @@ def create_route_client(
             cache,
             namespace=(
                 f'{transit_index.resolve()}:{stat.st_size}:{stat.st_mtime_ns}:'
-                f'metro-wait={metro_wait_seconds}'
+                f'metro-wait={metro_wait_seconds}:'
+                f'road-snapshot={valhalla.runtime_revision}'
             ),
         )
     raise RoutingError(f'Unsupported detailed-route provider: {provider}')
@@ -161,6 +163,7 @@ def command_preflight(args: argparse.Namespace) -> int:
         key=lambda mode: mode.value,
     )
     blockers: list[dict[str, str]] = []
+    index_metadata: dict[str, object] = {}
     index_path = args.transit_index.resolve()
     transit_manifest = index_path.with_suffix('.manifest.json')
     if not index_path.is_file() or not transit_manifest.is_file():
@@ -168,7 +171,7 @@ def command_preflight(args: argparse.Namespace) -> int:
                          'resolution': 'Build the GTFS and railway index on disk A:.'})
     else:
         index_metadata = json.loads(transit_manifest.read_text(encoding='utf-8'))
-        if index_metadata.get('scenario_date') != planning_at.date().isoformat():
+        if TransportMode.PUBLIC_TRANSIT in required_modes and index_metadata.get('scenario_date') != planning_at.date().isoformat():
             blockers.append({'code': 'LOCAL_TRANSIT_INDEX_DATE_MISMATCH',
                              'resolution': 'Rebuild the index for the dataset planning date.'})
         if index_metadata.get('unmapped_rail_stations'):
@@ -183,10 +186,23 @@ def command_preflight(args: argparse.Namespace) -> int:
     except OSError:
         blockers.append({'code': 'LOCAL_VALHALLA_UNAVAILABLE',
                          'resolution': 'Start the local Valhalla Docker service on port 8002.'})
+    traffic_path = Path(os.environ.get('TRAFFIC4CAST_PROFILE') or DEFAULT_TRAFFIC_PROFILE)
+    traffic_metadata = None
+    if TransportMode.CAR in required_modes:
+        try:
+            traffic_metadata = Traffic4castProfile(traffic_path).metadata
+        except (OSError, ValueError, KeyError, RoutingError) as error:
+            blockers.append({
+                'code': 'TRAFFIC4CAST_PROFILE_UNAVAILABLE',
+                'resolution': f'Build or repair the Moscow Traffic4cast 2021 profile at {traffic_path}: {error}',
+            })
     payload = {
         'status': 'READY_FOR_LOCAL_ROUTING' if not blockers else 'BLOCKED',
         'providers': {
-            'surface_mcc_mcd_timetable': 'LOCAL_GTFS_AND_FROZEN_RASP',
+            'surface_mcc_mcd_timetable': (
+                'LOCAL_GTFS_AND_FROZEN_RASP'
+                if index_metadata.get('rail_schedule_available', True) else 'LOCAL_GTFS_ONLY_RAIL_UNAVAILABLE'
+            ) if index_metadata else 'UNAVAILABLE',
             'metro_model': 'MOSMETRO_SCHEMA_WITH_EXPLICIT_WAIT_ASSUMPTION',
             'car_walking_and_bicycle': 'LOCAL_VALHALLA',
         },
@@ -196,6 +212,9 @@ def command_preflight(args: argparse.Namespace) -> int:
         'required_modes': [mode.value for mode in required_modes],
         'transit_index': str(index_path),
         'valhalla_route_endpoint': valhalla_endpoint,
+        'traffic4cast_profile': str(traffic_path) if traffic_metadata else None,
+        'traffic4cast_profile_sha256': traffic_metadata.sha256 if traffic_metadata else None,
+        'traffic4cast_source_days': traffic_metadata.source_days if traffic_metadata else None,
         'query_time_api_key_required': False,
         'metro_timetable_exact': False,
         'metro_wait_assumption_seconds': 180,

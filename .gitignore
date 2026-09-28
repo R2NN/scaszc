@@ -16,3 +16,14 @@ data/transit/*.sqlite
 Thumbs.db
 .idea/
 .vscode/
+
+# Local merged runtime and credentials
+site/.beego-data/
+history/
+offline-assets/
+.env.routing.local
+credentials/
+valhalla-data/
+.venv/
+site/.dev.vars
+

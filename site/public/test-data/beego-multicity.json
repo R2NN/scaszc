@@ -1,0 +1,13 @@
+{
+  "jobs": [
+    {"job_id":"MSK-001","name":"Подключение офиса","city":"Москва","address":"Москва, Тверская улица, 7","latitude":55.7574,"longitude":37.6136,"window_start":"09:00","window_end":"13:00","service_duration_min":45,"work_type":"Подключение","required_skill":"Подключение","priority":"NORMAL"},
+    {"job_id":"MSK-002","name":"Диагностика линии","city":"Москва","address":"Москва, Покровка, 18","latitude":55.7605,"longitude":37.6452,"window_start":"11:00","window_end":"16:00","service_duration_min":60,"work_type":"Локальные работы","required_skill":"Локальные работы","priority":"NORMAL"},
+    {"job_id":"SPB-001","name":"Монтаж канала","city":"Санкт-Петербург","address":"Санкт-Петербург, Невский проспект, 28","latitude":59.9358,"longitude":30.3259,"window_start":"09:30","window_end":"14:00","service_duration_min":50,"work_type":"Подключение","required_skill":"Подключение","priority":"NORMAL"},
+    {"job_id":"KZN-001","name":"Аварийное восстановление","city":"Казань","address":"Казань, улица Баумана, 15","latitude":55.7908,"longitude":49.1142,"window_start":"08:30","window_end":"12:00","service_duration_min":70,"work_type":"Аварийные работы","required_skill":"Аварийные работы","priority":"EMERGENCY"}
+  ],
+  "engineers": [
+    {"engineer_id":"MSK-ENG-1","engineer_name":"Алексей Морозов","city":"Москва","skills":"Подключение|Локальные работы","shift_start":"08:00","shift_end":"18:00","transport":"Автомобиль","start_address":"Москва, Лубянская площадь, 1","start_latitude":55.7590,"start_longitude":37.6257},
+    {"engineer_id":"SPB-ENG-1","engineer_name":"Мария Соколова","city":"Санкт-Петербург","skills":"Подключение","shift_start":"08:00","shift_end":"18:00","transport":"Автомобиль","start_address":"Санкт-Петербург, Литейный проспект, 1","start_latitude":59.9460,"start_longitude":30.3481},
+    {"engineer_id":"KZN-ENG-1","engineer_name":"Тимур Сафин","city":"Казань","skills":"Аварийные работы","shift_start":"08:00","shift_end":"18:00","transport":"Автомобиль","start_address":"Казань, Кремлёвская улица, 2","start_latitude":55.7974,"start_longitude":49.1050}
+  ]
+}

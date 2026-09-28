@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import unittest
-from datetime import timedelta
+from dataclasses import replace
+from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from beeline_planning import (
     MasterEngineerRoute,
+    MasterArc,
+    MasterModelInput,
     MasterSolution,
     MasterSolveStatus,
     MasterVisit,
@@ -14,6 +18,8 @@ from beeline_planning import (
     ExactRefinementReport,
     RefinementFailureKind,
     apply_refinement_report,
+    apply_schedule_failure_assignment_cuts,
+    apply_schedule_failure_route_conflicts,
     build_candidate_index,
     inspect_exact_candidate,
     load_planning_dataset,
@@ -25,6 +31,7 @@ from beeline_routing.models import (
     RouteStep,
 )
 from beeline_routing.oracle import ExactRoutingOracle
+from tools import refine_screening_exact as refinement_tool
 
 
 DATASET = Path(__file__).parents[1] / 'work/dataset_v21/beeline_synthetic_dataset_v2_1'
@@ -152,8 +159,116 @@ class ExactRefinementInspectionTests(unittest.TestCase):
             {RefinementFailureKind.WINDOW, RefinementFailureKind.SHIFT},
         )
 
+    def test_reuses_only_identical_route_reports(self) -> None:
+        calls = []
+
+        def make_oracle():
+            calls.append(1)
+            return ExactRoutingOracle(_Client(RouteStatus.OK, 7))
+
+        cache = {}
+        candidate = self.candidate()
+        first = refinement_tool._inspect_parallel(
+            self.dataset, candidate, make_oracle, 1,
+            route_report_cache=cache,
+        )
+        stats = {}
+        second = refinement_tool._inspect_parallel(
+            self.dataset, candidate, make_oracle, 1,
+            route_report_cache=cache, stats=stats,
+        )
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(second.observations, first.observations)
+        self.assertEqual(second.complete_engineer_ids, first.complete_engineer_ids)
+        self.assertEqual(second.exact_provider_queries, 0)
+        self.assertEqual(stats, {'reused_routes': 1, 'checked_routes': 0})
+
+        route = candidate.routes[0]
+        changed = replace(candidate, routes=(replace(
+            route,
+            visits=(replace(route.visits[0], screening_duration_minutes=3),),
+        ),))
+        third = refinement_tool._inspect_parallel(
+            self.dataset, changed, make_oracle, 1,
+            route_report_cache=cache,
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(third.observations[0].screening_duration_minutes, 3)
+
+    def test_unknown_route_is_rechecked(self) -> None:
+        calls = []
+
+        def make_oracle():
+            calls.append(1)
+            return ExactRoutingOracle(_Client(RouteStatus.UNKNOWN))
+
+        cache = {}
+        for _ in range(2):
+            report = refinement_tool._inspect_parallel(
+                self.dataset, self.candidate(), make_oracle, 1,
+                route_report_cache=cache,
+            )
+            self.assertEqual(report.failures[0].kind, RefinementFailureKind.ROUTING_UNKNOWN)
+        self.assertEqual(len(calls), 2)
+        self.assertFalse(cache)
+
+    def test_zone_master_cache_patches_only_exact_duration_arcs(self) -> None:
+        engineer = self.engineer
+        job = self.job
+        arc = MasterArc(
+            engineer.engineer_id,
+            f'START:{engineer.engineer_id}',
+            self.dataset.offices[engineer.start_office_id].location_id,
+            job.job_id,
+            job.location_id,
+            2,
+            50,
+            engineer.transport_mode,
+            True,
+        )
+        master = MasterModelInput(
+            self.dataset.initial_planning_at,
+            build_candidate_index(self.dataset),
+            (arc,),
+            (),
+            's' * 64,
+        )
+        with patch.object(
+            refinement_tool, 'build_master_model_input', return_value=master,
+        ) as builder:
+            cache = refinement_tool._ZoneMasterCache(self.dataset, object())
+            context = cache.get(job.zone_id)
+            self.assertIs(cache.get(job.zone_id), context)
+            self.assertIs(context.with_overrides({}), master)
+            key = (engineer.engineer_id, arc.origin_node_id, job.job_id)
+            adjusted = context.with_overrides({key: 9})
+            self.assertEqual(adjusted.arcs[0].screening_duration_minutes, 9)
+            self.assertFalse(adjusted.arcs[0].screening_is_surrogate)
+            self.assertEqual(master.arcs[0].screening_duration_minutes, 2)
+            self.assertIsNot(adjusted, master)
+            with self.assertRaisesRegex(ValueError, 'absent from zone graph'):
+                context.with_overrides({(engineer.engineer_id, 'missing', job.job_id): 9})
+            self.assertEqual(builder.call_count, 1)
+
 
 class RefinementActionTests(unittest.TestCase):
+    def test_schedule_cuts_are_added_incrementally_per_zone(self) -> None:
+        first = ExactRefinementFailure(
+            RefinementFailureKind.WINDOW, 'E1', 'EAST', 'J0', 'J1',
+            '2026-08-17T10:00:00+03:00', 'first',
+        )
+        second = replace(first, destination_job_id='J2', reason='second')
+        other_zone = replace(first, engineer_id='E2', zone_id='SOUTHEAST')
+        routing_error = replace(
+            second, kind=RefinementFailureKind.ROUTING_UNKNOWN,
+        )
+        self.assertEqual(
+            refinement_tool._bounded_conflict_failures(
+                (first, second, other_zone, routing_error)
+            ),
+            (first, other_zone, routing_error),
+        )
+
     def report(self, kind: RefinementFailureKind, *, observation: bool):
         arc = ('E1', 'J0', 'J1')
         observations = (
@@ -234,6 +349,119 @@ class RefinementActionTests(unittest.TestCase):
         )
         self.assertTrue(action.blocked_unknown)
         self.assertNotIn(unknown_arc, cuts)
+
+    def test_schedule_failure_creates_generic_assignment_cut(self) -> None:
+        _, report = self.report(RefinementFailureKind.WINDOW, observation=True)
+        cuts: set[tuple[str, str]] = set()
+        action = apply_schedule_failure_assignment_cuts(
+            report,
+            assignment_cuts=cuts,
+        )
+        self.assertEqual(action.new_cuts, (('E1', 'J1'),))
+        self.assertEqual(action.changed_zones, frozenset({'EAST'}))
+        self.assertIn(('E1', 'J1'), cuts)
+        resumed = apply_schedule_failure_assignment_cuts(
+            report,
+            assignment_cuts=cuts,
+        )
+        self.assertFalse(resumed.new_cuts)
+        self.assertEqual(resumed.changed_zones, frozenset({'EAST'}))
+
+    def test_forced_assignment_is_never_cut(self) -> None:
+        _, report = self.report(RefinementFailureKind.SHIFT, observation=False)
+        cuts: set[tuple[str, str]] = set()
+        action = apply_schedule_failure_assignment_cuts(
+            report,
+            assignment_cuts=cuts,
+            protected_assignments=frozenset({('E1', 'J1')}),
+        )
+        self.assertFalse(action.new_cuts)
+        self.assertEqual(action.protected_failures, report.failures)
+        self.assertFalse(cuts)
+
+    def test_schedule_failure_forbids_only_failed_route_prefix(self) -> None:
+        _, report = self.report(RefinementFailureKind.WINDOW, observation=True)
+        moment = datetime.fromisoformat('2026-08-17T10:00:00+03:00')
+        candidate = MasterSolution(
+            MasterSolveStatus.SCREENING_FEASIBLE,
+            moment,
+            (
+                MasterEngineerRoute(
+                    'E1',
+                    (
+                        MasterVisit(1, 'J0', 'START:E1', moment, moment, 0, 0, 'WALKING', False),
+                        MasterVisit(2, 'J1', 'J0', moment, moment, 0, 0, 'WALKING', False),
+                    ),
+                ),
+            ),
+            (),
+            (),
+            'd' * 64,
+            's' * 64,
+            'test',
+            False,
+            0,
+            (),
+        )
+        groups: set[tuple[tuple[str, str, str], ...]] = set()
+        assignment_groups: set[tuple[tuple[str, str], ...]] = set()
+        action = apply_schedule_failure_route_conflicts(
+            report,
+            candidate,
+            conflict_groups=groups,
+            assignment_conflict_groups=assignment_groups,
+        )
+        expected = (
+            ('E1', 'START:E1', 'J0'),
+            ('E1', 'J0', 'J1'),
+        )
+        self.assertEqual(action.new_groups, (expected,))
+        self.assertEqual(groups, {expected})
+        self.assertFalse(action.new_assignment_groups)
+
+        reverse_failure = ExactRefinementFailure(
+            RefinementFailureKind.WINDOW,
+            'E1',
+            'EAST',
+            'J1',
+            'J0',
+            moment.isoformat(),
+            'test',
+        )
+        reverse_report = ExactRefinementReport(
+            (), (reverse_failure,), (), 1, 0
+        )
+        reverse_candidate = MasterSolution(
+            MasterSolveStatus.SCREENING_FEASIBLE,
+            moment,
+            (
+                MasterEngineerRoute(
+                    'E1',
+                    (
+                        MasterVisit(1, 'J1', 'START:E1', moment, moment, 0, 0, 'WALKING', False),
+                        MasterVisit(2, 'J0', 'J1', moment, moment, 0, 0, 'WALKING', False),
+                    ),
+                ),
+            ),
+            (),
+            (),
+            'd' * 64,
+            's' * 64,
+            'test',
+            False,
+            0,
+            (),
+        )
+        reverse_action = apply_schedule_failure_route_conflicts(
+            reverse_report,
+            reverse_candidate,
+            conflict_groups=groups,
+            assignment_conflict_groups=assignment_groups,
+        )
+        self.assertEqual(
+            reverse_action.new_assignment_groups,
+            ((('E1', 'J0'), ('E1', 'J1')),),
+        )
 
 
 if __name__ == '__main__':

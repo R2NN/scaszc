@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import math
 import sqlite3
-import urllib.request
+import threading
+import urllib.parse
 from pathlib import Path
+
+
+_connections = threading.local()
 
 
 def approx_m(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -17,17 +22,40 @@ def approx_m(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 
 def matrix(endpoint: str, sources: list[tuple[float, float]], targets: list[tuple[float, float]]) -> list[list[dict]]:
+    """Measure walks while reusing one local HTTP connection per worker thread."""
     body = {
         'sources': [{'lat': lat, 'lon': lon} for lat, lon in sources],
         'targets': [{'lat': lat, 'lon': lon} for lat, lon in targets],
         'costing': 'pedestrian',
         'units': 'kilometers',
     }
-    request = urllib.request.Request(endpoint, data=json.dumps(body).encode(),
-                                     headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.load(response)
-    return payload['sources_to_targets']
+    address = urllib.parse.urlsplit(endpoint)
+    if address.scheme not in {'http', 'https'} or not address.hostname:
+        raise ValueError(f'Invalid walking matrix endpoint: {endpoint}')
+    path = urllib.parse.urlunsplit(('', '', address.path or '/', address.query, ''))
+    pool = getattr(_connections, 'pool', None)
+    if pool is None:
+        pool = _connections.pool = {}
+    for attempt in range(2):
+        connection = pool.get(endpoint)
+        if connection is None:
+            client = http.client.HTTPSConnection if address.scheme == 'https' else http.client.HTTPConnection
+            connection = client(address.hostname, address.port, timeout=30)
+            pool[endpoint] = connection
+        try:
+            connection.request('POST', path, body=json.dumps(body).encode('utf-8'),
+                               headers={'Content-Type': 'application/json'})
+            response = connection.getresponse()
+            raw = response.read()
+            if response.status != 200:
+                raise OSError(f'Walking matrix HTTP {response.status}: {raw[:240]!r}')
+            return json.loads(raw)['sources_to_targets']
+        except (OSError, http.client.HTTPException):
+            connection.close()
+            pool.pop(endpoint, None)
+            if attempt:
+                raise
+    raise RuntimeError('Walking matrix retry loop returned without a result')
 
 
 def build(database: Path, endpoint: str, radius_m: int, neighbor_count: int) -> dict:

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-labelledby="title desc">
+  <title id="title">Новый городской набор данных</title>
+  <desc id="desc">Карта города, папка с данными и метка BeeGo</desc>
+  <defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#3b3100" flood-opacity=".14"/>
+    </filter>
+  </defs>
+  <path d="M25 119c27-20 43-21 68-5 19 12 37 13 59-2 23-16 43-13 65 7" fill="none" stroke="#e7d277" stroke-width="4" stroke-linecap="round" stroke-dasharray="7 9"/>
+  <g opacity=".65" fill="#dcebdc">
+    <path d="M12 70h33v49H12z"/><path d="M51 51h29v68H51z"/><path d="M164 62h27v57h-27z"/><path d="M196 42h31v77h-31z"/>
+  </g>
+  <g fill="none" stroke="#b7ccb9" stroke-width="3">
+    <path d="M19 80h19M19 91h19M58 63h15M58 75h15M171 74h13M171 86h13M203 56h17M203 68h17M203 80h17"/>
+  </g>
+  <g filter="url(#shadow)">
+    <path d="M70 48h42l10 12h49a10 10 0 0 1 10 10v49a12 12 0 0 1-12 12H70a12 12 0 0 1-12-12V60a12 12 0 0 1 12-12Z" fill="#fffdf3" stroke="#24272b" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M59 72h121v47a12 12 0 0 1-12 12H71a12 12 0 0 1-12-12Z" fill="#ffd21f" stroke="#24272b" stroke-width="4"/>
+    <path d="M91 93h58M91 108h43" fill="none" stroke="#6d5600" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+  </g>
+  <g transform="translate(151 19)" filter="url(#shadow)">
+    <path d="M28 3C14 3 4 13 4 27c0 18 24 39 24 39s24-21 24-39C52 13 42 3 28 3Z" fill="#fff" stroke="#24272b" stroke-width="4"/>
+    <circle cx="28" cy="27" r="10" fill="#ffd21f" stroke="#24272b" stroke-width="4"/>
+  </g>
+  <circle cx="64" cy="43" r="8" fill="#ffd21f"/>
+  <path d="m61 43 3 3 6-7" fill="none" stroke="#24272b" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

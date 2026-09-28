@@ -1,8 +1,10 @@
 /* Large GeoPotok-style calendar with independent month and year selection. */
 .date-control{top:10px}
-.date-switch{gap:9px;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible}
+.date-switch{gap:9px;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 .date-switch button{height:52px;border:1px solid #dfe3e8!important;border-radius:12px!important;background:#fff;box-shadow:0 3px 12px rgba(34,42,55,.08);transition:background .16s,color .16s,border-color .16s,box-shadow .16s,transform .16s}
 .date-switch button:first-child,.date-switch button:last-child{width:52px;color:#393d42}
+.date-switch button:first-child>svg,.date-switch button:last-child>svg{width:20px;height:20px;color:#202428;stroke:#202428;stroke-width:2;filter:none}
+.date-switch button:first-child>svg>*,.date-switch button:last-child>svg>*{stroke:#202428;stroke-width:2}
 .date-switch button:nth-child(2){min-width:276px;padding:0 20px;gap:12px;background:#fff}
 .date-switch button:nth-child(2)>svg:first-child{color:#9a7600}
 .date-switch button:hover:not(:disabled){border-color:#e5bd21!important;background:#fff4ad;box-shadow:0 6px 17px rgba(83,64,5,.13);transform:translateY(-1px)}
@@ -30,17 +32,18 @@
 .month-grid,.year-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:8px 0 12px}
 .month-grid button,.year-grid button{height:48px;border:1px solid #e3e6ea;border-radius:11px;background:#fff;color:#4e535b;font-size:13px;font-weight:750;cursor:pointer;transition:background .15s,color .15s,border-color .15s,transform .15s}
 .month-grid button:hover:not(:disabled),.year-grid button:hover{border-color:#e1b600;background:#fff5b8;color:#493800;transform:translateY(-1px)}
-.calendar-grid button.selected{background:#fff;color:#2d3035;font-weight:820;box-shadow:inset 0 0 0 2px #ffd21f,0 4px 11px rgba(131,92,0,.1)}
+.calendar-grid button.selected{border-color:#d1a900;background:#ffd21f;color:#202428;font-weight:820;box-shadow:0 0 0 2px rgba(255,210,31,.22),0 4px 11px rgba(131,92,0,.12)}
 .month-grid button.selected,.year-grid button.selected{border-color:#d9ad00;background:#fff;color:#272000;box-shadow:inset 0 0 0 1px #ffd21f,0 4px 11px rgba(121,84,0,.08)}
 .month-grid button:disabled{background:#f4f5f6;color:#b8bcc2;border-color:#e8eaed;cursor:not-allowed;opacity:.75}
 .app-shell.dark .date-switch{background:transparent!important;border:0!important;box-shadow:none!important}
 .app-shell.dark .date-switch button{background:#202329;color:#eef0f2;border-color:#3b4149!important;box-shadow:0 4px 15px rgba(0,0,0,.25)}
 .app-shell.dark .date-switch button:nth-child(2){background:#202329}
+.app-shell.dark .date-switch button:first-child>svg,.app-shell.dark .date-switch button:last-child>svg,.app-shell.dark .date-switch button:first-child>svg>*,.app-shell.dark .date-switch button:last-child>svg>*{color:#fff;stroke:#fff;filter:none}
 .app-shell.dark .date-switch button:hover:not(:disabled),.app-shell.dark .date-switch button:nth-child(2).active{background:#302d1b!important;color:#ffe16a;border-color:#8d7518!important}
 .app-shell.dark .date-switch button:disabled{background:#1a1d21;color:#626971;border-color:#30353c!important;box-shadow:none}
 .app-shell.dark .calendar-head>button:first-child,.app-shell.dark .calendar-head>button:last-child,.app-shell.dark .calendar-select,.app-shell.dark .month-grid button,.app-shell.dark .year-grid button{background:#252930!important;color:#e6e9ec;border-color:#3d434b!important}
 .app-shell.dark .calendar-select:hover,.app-shell.dark .calendar-select.active,.app-shell.dark .month-grid button:hover:not(:disabled),.app-shell.dark .year-grid button:hover{background:rgba(255,210,31,.12)!important;color:#ffe16a;border-color:#8d7518!important}
-.app-shell.dark .calendar-grid button.selected{background:#fff!important;color:#1f2226!important;box-shadow:inset 0 0 0 2px #ffd21f,0 4px 13px rgba(0,0,0,.25)}
+.app-shell.dark .calendar-grid button.selected{border-color:#d1a900!important;background:#ffd21f!important;color:#202428!important;box-shadow:0 0 0 2px rgba(255,210,31,.22),0 4px 13px rgba(0,0,0,.25)}
 .app-shell.dark .month-grid button.selected,.app-shell.dark .year-grid button.selected{background:#fff!important;color:#1f2226!important;border-color:#ffd21f!important;box-shadow:inset 0 0 0 1px #ffd21f}
 .app-shell.dark .month-grid button:disabled,.app-shell.dark .calendar-head>button:disabled{background:#1a1d21!important;color:#5f666f;border-color:#30353c!important}
 @media(max-width:1180px){.date-switch button:nth-child(2){min-width:220px}.date-switch span{display:none}}
@@ -52,6 +55,28 @@
 .analytics-date-control .date-popover{animation:analyticsCalendarIn .2s cubic-bezier(.2,.75,.25,1)}
 @keyframes analyticsCalendarIn{from{opacity:0;transform:translateY(-7px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(max-width:900px){.analytics-date-control{top:auto}.analytics-date-control .date-switch{gap:7px}.analytics-date-control .date-switch button:first-child,.analytics-date-control .date-switch button:last-child{display:flex}.analytics-date-control .date-switch span{display:inline-flex}.analytics-date-control .date-popover{width:min(404px,calc(100vw - 100px))}}
+
+/* Only the unavailable next-day button uses a frosted surface. The gaps around
+   it remain fully transparent and show the map without any blur. */
+.minimal-topbar .date-switch>button:last-child:disabled{
+  display:flex!important;
+  background:rgba(255,255,255,.62)!important;
+  border-color:rgba(255,255,255,.78)!important;
+  color:rgba(32,36,40,.42)!important;
+  opacity:1!important;
+  box-shadow:0 4px 14px rgba(31,39,48,.08)!important;
+  backdrop-filter:blur(8px) saturate(.9)!important;
+  -webkit-backdrop-filter:blur(8px) saturate(.9)!important;
+}
+.minimal-topbar .date-switch>button:last-child:disabled>svg,
+.minimal-topbar .date-switch>button:last-child:disabled>svg>*{color:rgba(32,36,40,.42)!important;stroke:rgba(32,36,40,.42)!important}
+.app-shell.dark .minimal-topbar .date-switch>button:last-child:disabled{
+  background:rgba(24,27,31,.64)!important;
+  border-color:rgba(255,255,255,.12)!important;
+  box-shadow:0 4px 14px rgba(0,0,0,.2)!important;
+}
+.app-shell.dark .minimal-topbar .date-switch>button:last-child:disabled>svg,
+.app-shell.dark .minimal-topbar .date-switch>button:last-child:disabled>svg>*{color:rgba(255,255,255,.38)!important;stroke:rgba(255,255,255,.38)!important}
 
 /* Larger sidebar labels and icons, with the same center line in collapsed mode. */
 .sidebar nav{gap:7px;padding:10px}

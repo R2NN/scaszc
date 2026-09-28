@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { translateServiceLabel } from './workTypes.js';
+import { isInformationalOrder, translateServiceLabel } from './workTypes.js';
 import {
-  AlertTriangle, Check, ChevronDown, FileSpreadsheet,
-  Info, Plus, Search, ShieldCheck, X,
+  AlertTriangle, Check, ChevronDown, Filter,
+  FilePlus2, Files, Info, Plus, Redo2, Search, ShieldCheck, Undo2, X,
 } from 'lucide-react';
 import { useDropdownPresence } from './useDropdownPresence.js';
+import { regionForCity, resolveImportedCity } from './regions.js';
+import { pushImportHistory, redoImportHistory, undoImportHistory } from './importHistory.js';
 
 const ORDER_FIELD_GROUPS = [
   {
@@ -13,6 +15,10 @@ const ORDER_FIELD_GROUPS = [
     fields: [
       ['id', 'ID заявки', true],
       ['externalId', 'Внешний ID', false],
+      ['customerId', 'ID клиента', false],
+      ['objectId', 'ID объекта', false],
+      ['contractNumber', 'Номер договора', false],
+      ['accountNumber', 'Лицевой счёт', false],
       ['name', 'Имя клиента / объект', false],
       ['scenario', 'Сценарий', false],
     ],
@@ -22,9 +28,22 @@ const ORDER_FIELD_GROUPS = [
     label: 'Местоположение',
     fields: [
       ['address', 'Адрес', false],
+      ['locationId', 'ID адреса / локации', false],
+      ['city', 'Город', false],
+      ['region', 'Регион / область', false],
       ['district', 'Район', false],
+      ['street', 'Улица', false],
+      ['house', 'Дом', false],
+      ['building', 'Корпус / строение', false],
+      ['apartment', 'Квартира / помещение', false],
+      ['postalCode', 'Почтовый индекс', false],
+      ['entrance', 'Подъезд', false],
+      ['floor', 'Этаж', false],
       ['latitude', 'Широта', false],
       ['longitude', 'Долгота', false],
+      ['coordinateAccuracy', 'Точность координат', false],
+      ['geocodeProvider', 'Источник геокодирования', false],
+      ['geocodeObjectId', 'ID объекта геокодера', false],
       ['zone', 'Зона / участок', false],
       ['zoneId', 'ID зоны', false],
       ['zoneName', 'Название зоны', false],
@@ -42,6 +61,14 @@ const ORDER_FIELD_GROUPS = [
       ['skill', 'Требуемый навык', false],
       ['priority', 'Приоритет', false],
       ['status', 'Статус', false],
+      ['category', 'Категория', false],
+      ['subcategory', 'Подкатегория', false],
+      ['source', 'Источник заявки', false],
+      ['channel', 'Канал обращения', false],
+      ['slaMinutes', 'SLA, мин', false],
+      ['requiredEngineers', 'Требуется исполнителей', false],
+      ['preferredEngineerId', 'Предпочтительный инженер', false],
+      ['teamId', 'ID бригады / команды', false],
       ['connectionType', 'Тип подключения', false],
       ['isEventJob', 'Событийная заявка', false],
     ],
@@ -52,6 +79,8 @@ const ORDER_FIELD_GROUPS = [
     fields: [
       ['transport', 'Транспорт', false],
       ['equipment', 'Оборудование', false],
+      ['materialCode', 'Код материала', false],
+      ['equipmentQuantity', 'Количество оборудования', false],
       ['gigabitRequired', 'Требуется гигабит', false],
     ],
   },
@@ -61,6 +90,7 @@ const ORDER_FIELD_GROUPS = [
     fields: [
       ['phone', 'Телефон', false],
       ['email', 'Email', false],
+      ['contactPerson', 'Контактное лицо', false],
     ],
   },
   {
@@ -68,7 +98,12 @@ const ORDER_FIELD_GROUPS = [
     label: 'Дополнительно',
     fields: [
       ['createdAt', 'Дата создания', false],
+      ['serviceDate', 'Дата выполнения', false],
+      ['completedAt', 'Дата завершения', false],
       ['geocodeStatus', 'Статус геокодирования', false],
+      ['sourceSystem', 'Исходная система', false],
+      ['tags', 'Метки', false],
+      ['cancellationReason', 'Причина отмены', false],
       ['notes', 'Комментарий', false],
       ['ignore', 'Не импортировать', false],
     ],
@@ -82,6 +117,9 @@ const ENGINEER_FIELD_GROUPS = [
     fields: [
       ['engineerId', 'ID инженера', true],
       ['engineerName', 'Имя инженера', true],
+      ['engineerPersonnelNumber', 'Табельный номер', false],
+      ['engineerTeamId', 'ID бригады / команды', false],
+      ['engineerRole', 'Роль', false],
       ['engineerStatus', 'Статус', false],
     ],
   },
@@ -90,8 +128,13 @@ const ENGINEER_FIELD_GROUPS = [
     label: 'Смена и навыки',
     fields: [
       ['engineerSkills', 'Навыки', true],
+      ['engineerQualification', 'Квалификация', false],
+      ['engineerSpecialization', 'Специализация', false],
       ['engineerShiftStart', 'Начало смены', true],
       ['engineerShiftEnd', 'Конец смены', true],
+      ['engineerBreakMinutes', 'Перерыв, мин', false],
+      ['engineerCapacityMinutes', 'Доступное время, мин', false],
+      ['engineerMaxOrders', 'Максимум заявок', false],
     ],
   },
   {
@@ -99,6 +142,7 @@ const ENGINEER_FIELD_GROUPS = [
     label: 'Ресурсы',
     fields: [
       ['engineerTransport', 'Транспорт', true],
+      ['engineerVehicleId', 'ID транспорта', false],
       ['engineerEquipment', 'Оборудование', false],
     ],
   },
@@ -107,9 +151,14 @@ const ENGINEER_FIELD_GROUPS = [
     label: 'Точка старта',
     fields: [
       ['engineerStartAddress', 'Адрес старта', false],
+      ['engineerLocationId', 'ID стартовой локации', false],
+      ['engineerCity', 'Город', false],
+      ['engineerRegion', 'Регион / область', false],
+      ['engineerDistrict', 'Район', false],
       ['engineerStartLatitude', 'Широта старта', false],
       ['engineerStartLongitude', 'Долгота старта', false],
       ['engineerZone', 'Зона / участок', false],
+      ['engineerZoneId', 'ID зоны', false],
     ],
   },
   {
@@ -118,6 +167,8 @@ const ENGINEER_FIELD_GROUPS = [
     fields: [
       ['engineerPhone', 'Телефон', false],
       ['engineerEmail', 'Email', false],
+      ['engineerNotes', 'Комментарий', false],
+      ['engineerSourceSystem', 'Исходная система', false],
       ['ignore', 'Не импортировать', false],
     ],
   },
@@ -138,12 +189,29 @@ const ENGINEER_FIELD_META = new Map(
 const ORDER_ALIASES = {
   id: ['job id', 'order id', 'request id', 'id', 'ид заявки', 'номер заявки', 'идентификатор'],
   externalId: ['source job id', 'external id', 'source id', 'внешний id', 'исходный id'],
+  customerId: ['customer id', 'client id', 'id клиента', 'ид клиента'],
+  objectId: ['object id', 'site id', 'id объекта', 'ид объекта'],
+  contractNumber: ['contract number', 'contract no', 'номер договора', 'договор'],
+  accountNumber: ['account number', 'billing account', 'лицевой счет', 'лицевой счёт'],
   name: ['customer name', 'client name', 'name', 'имя клиента', 'клиент', 'наименование'],
   scenario: ['scenario', 'сценарий'],
   address: ['address', 'адрес'],
+  locationId: ['location id', 'location_id', 'address id', 'id локации', 'id адреса'],
+  city: ['city', 'locality', 'town', 'город', 'населенный пункт'],
+  region: ['region', 'area', 'province', 'state', 'регион', 'область'],
   district: ['district', 'район'],
+  street: ['street', 'street name', 'улица'],
+  house: ['house', 'house number', 'building number', 'дом', 'номер дома'],
+  building: ['building', 'block', 'structure', 'корпус', 'строение'],
+  apartment: ['apartment', 'flat', 'office number', 'квартира', 'помещение', 'офис номер'],
+  postalCode: ['postal code', 'zip', 'zip code', 'postcode', 'почтовый индекс', 'индекс'],
+  entrance: ['entrance', 'подъезд'],
+  floor: ['floor', 'этаж'],
   latitude: ['latitude', 'lat', 'широта'],
   longitude: ['longitude', 'lon', 'lng', 'долгота'],
+  coordinateAccuracy: ['coordinate accuracy', 'coordinate_accuracy', 'accuracy', 'точность координат'],
+  geocodeProvider: ['geocode provider', 'geocode_provider', 'geocoder', 'источник геокодирования'],
+  geocodeObjectId: ['geocode object id', 'geocode_object_id', 'geocoder object id', 'id объекта геокодера'],
   zone: ['zone', 'зона', 'участок'],
   zoneId: ['zone id', 'id зоны', 'код зоны'],
   zoneName: ['zone name', 'название зоны'],
@@ -155,38 +223,108 @@ const ORDER_ALIASES = {
   skill: ['required skill', 'skill', 'требуемый навык', 'навык'],
   priority: ['priority', 'приоритет'],
   status: ['status', 'статус'],
+  category: ['category', 'категория'],
+  subcategory: ['subcategory', 'sub category', 'подкатегория'],
+  source: ['source', 'request source', 'order source', 'источник заявки'],
+  channel: ['channel', 'request channel', 'канал обращения'],
+  slaMinutes: ['sla min', 'sla minutes', 'sla_minutes', 'sla', 'срок sla'],
+  requiredEngineers: ['required engineers', 'engineer count', 'required_engineers', 'количество исполнителей'],
+  preferredEngineerId: ['preferred engineer id', 'preferred_engineer_id', 'предпочтительный инженер'],
+  teamId: ['team id', 'brigade id', 'team_id', 'id бригады', 'id команды'],
   connectionType: ['connection type', 'тип подключения'],
   isEventJob: ['is event job', 'event job', 'событийная заявка'],
   transport: ['required transport', 'transport', 'transport type', 'транспорт'],
   equipment: ['required equipment', 'equipment', 'equipment codes', 'оборудование'],
+  materialCode: ['material code', 'material_code', 'код материала'],
+  equipmentQuantity: ['equipment quantity', 'equipment_quantity', 'количество оборудования'],
   gigabitRequired: ['gigabit required', 'требуется гигабит', 'гигабит'],
   phone: ['phone', 'telephone', 'телефон'],
   email: ['email', 'e mail', 'почта'],
+  contactPerson: ['contact person', 'contact name', 'контактное лицо'],
   createdAt: ['created at', 'creation date', 'дата создания'],
+  serviceDate: ['date', 'service date', 'work date', 'scheduled date', 'дата', 'дата выполнения', 'дата работ', 'день выполнения'],
+  completedAt: ['completed at', 'completion date', 'дата завершения'],
   geocodeStatus: ['geocode status', 'статус геокодирования'],
+  sourceSystem: ['source system', 'source_system', 'исходная система'],
+  tags: ['tags', 'labels', 'метки', 'теги'],
+  cancellationReason: ['cancellation reason', 'cancel reason', 'причина отмены'],
   notes: ['notes', 'note', 'comment', 'description', 'комментарий', 'примечание'],
 };
 
 const ENGINEER_ALIASES = {
   engineerId: ['engineer id', 'engineer_id', 'employee id', 'employee_id', 'technician id', 'worker id', 'id', 'ид инженера', 'табельный номер'],
   engineerName: ['engineer name', 'engineer_name', 'employee name', 'employee_name', 'technician name', 'worker name', 'name', 'фио', 'имя инженера', 'инженер'],
+  engineerPersonnelNumber: ['personnel number', 'personnel_number', 'employee number', 'табельный номер'],
+  engineerTeamId: ['team id', 'team_id', 'brigade id', 'id бригады', 'id команды'],
+  engineerRole: ['role', 'position', 'должность', 'роль'],
   engineerSkills: ['skills', 'skill', 'engineer skills', 'required skills', 'competencies', 'навыки', 'навык', 'компетенции'],
+  engineerQualification: ['qualification', 'grade', 'квалификация', 'разряд'],
+  engineerSpecialization: ['specialization', 'speciality', 'специализация', 'специальность'],
   engineerShiftStart: ['shift start', 'shift_start', 'work start', 'work_start', 'start time', 'начало смены', 'смена с'],
   engineerShiftEnd: ['shift end', 'shift_end', 'work end', 'work_end', 'end time', 'конец смены', 'смена до'],
+  engineerBreakMinutes: ['break minutes', 'break_minutes', 'перерыв мин'],
+  engineerCapacityMinutes: ['capacity minutes', 'capacity_minutes', 'доступное время мин'],
+  engineerMaxOrders: ['max orders', 'max_orders', 'максимум заявок'],
   engineerTransport: ['transport', 'transport type', 'vehicle', 'vehicle type', 'транспорт', 'тип транспорта'],
+  engineerVehicleId: ['vehicle id', 'vehicle_id', 'car id', 'id транспорта'],
   engineerEquipment: ['equipment', 'equipment codes', 'tools', 'оборудование', 'инструменты'],
   engineerStartAddress: ['start address', 'start_address', 'base address', 'base_address', 'depot', 'office', 'адрес старта', 'база', 'офис'],
+  engineerLocationId: ['location id', 'location_id', 'start location id', 'id стартовой локации'],
+  engineerCity: ['city', 'locality', 'town', 'start city', 'base city', 'город', 'город старта'],
+  engineerRegion: ['region', 'area', 'province', 'регион', 'область'],
+  engineerDistrict: ['district', 'район'],
   engineerStartLatitude: ['start latitude', 'start_latitude', 'latitude', 'lat', 'широта старта', 'широта'],
   engineerStartLongitude: ['start longitude', 'start_longitude', 'longitude', 'lon', 'lng', 'долгота старта', 'долгота'],
   engineerZone: ['zone', 'zone name', 'district', 'region', 'зона', 'участок', 'район', 'регион'],
+  engineerZoneId: ['zone id', 'zone_id', 'id зоны'],
   engineerStatus: ['status', 'availability', 'статус', 'доступность'],
   engineerPhone: ['phone', 'telephone', 'телефон'],
   engineerEmail: ['email', 'e mail', 'почта'],
+  engineerNotes: ['notes', 'comment', 'комментарий', 'примечание'],
+  engineerSourceSystem: ['source system', 'source_system', 'исходная система'],
 };
 
 const FIELD_CONFIG = {
   orders: { groups: ORDER_FIELD_GROUPS, meta: ORDER_FIELD_META, aliases: ORDER_ALIASES },
   engineers: { groups: ENGINEER_FIELD_GROUPS, meta: ENGINEER_FIELD_META, aliases: ENGINEER_ALIASES },
+};
+
+const FIELD_VALUE_TYPES = {
+  id: ['text', 'number'], externalId: ['text', 'number'], customerId: ['text', 'number'], objectId: ['text', 'number'],
+  contractNumber: ['text', 'number'], accountNumber: ['text', 'number'], name: ['text'], scenario: ['text'],
+  address: ['text'], locationId: ['text', 'number'], city: ['text'], region: ['text'], district: ['text'],
+  street: ['text'], house: ['text', 'number'], building: ['text', 'number'], apartment: ['text', 'number'],
+  postalCode: ['text', 'number'], entrance: ['text', 'number'], floor: ['text', 'number'], latitude: ['number'], longitude: ['number'],
+  coordinateAccuracy: ['text', 'number'], geocodeProvider: ['text'], geocodeObjectId: ['text', 'number'],
+  zone: ['text'], zoneId: ['text', 'number'], zoneName: ['text'], windowStart: ['time', 'date'], windowEnd: ['time', 'date'],
+  duration: ['number'], workType: ['text'], serviceType: ['text'], skill: ['text', 'list'], priority: ['text', 'number'], status: ['text'],
+  category: ['text'], subcategory: ['text'], source: ['text'], channel: ['text'], slaMinutes: ['number'], requiredEngineers: ['number'],
+  preferredEngineerId: ['text', 'number'], teamId: ['text', 'number'], connectionType: ['text'], isEventJob: ['boolean', 'number', 'text'],
+  transport: ['text'], equipment: ['text', 'list'], materialCode: ['text', 'number'], equipmentQuantity: ['number'],
+  gigabitRequired: ['boolean', 'number', 'text'], phone: ['phone', 'text', 'number'], email: ['email', 'text'], contactPerson: ['text'],
+  createdAt: ['date', 'time', 'number'], serviceDate: ['date', 'time', 'number'], completedAt: ['date', 'time', 'number'],
+  geocodeStatus: ['text'], sourceSystem: ['text'], tags: ['text', 'list'], cancellationReason: ['text'], notes: ['text'],
+  engineerId: ['text', 'number'], engineerName: ['text'], engineerPersonnelNumber: ['text', 'number'], engineerTeamId: ['text', 'number'],
+  engineerRole: ['text'], engineerStatus: ['text'], engineerSkills: ['text', 'list'], engineerQualification: ['text', 'number'],
+  engineerSpecialization: ['text'], engineerShiftStart: ['time', 'date'], engineerShiftEnd: ['time', 'date'],
+  engineerBreakMinutes: ['number'], engineerCapacityMinutes: ['number'], engineerMaxOrders: ['number'],
+  engineerTransport: ['text'], engineerVehicleId: ['text', 'number'], engineerEquipment: ['text', 'list'],
+  engineerStartAddress: ['text'], engineerLocationId: ['text', 'number'], engineerCity: ['text'], engineerRegion: ['text'],
+  engineerDistrict: ['text'], engineerStartLatitude: ['number'], engineerStartLongitude: ['number'], engineerZone: ['text'],
+  engineerZoneId: ['text', 'number'], engineerPhone: ['phone', 'text', 'number'], engineerEmail: ['email', 'text'],
+  engineerNotes: ['text'], engineerSourceSystem: ['text'], ignore: ['any'],
+};
+
+const COLUMN_TYPE_LABELS = {
+  unknown: 'Тип не определён',
+  text: 'Текст',
+  number: 'Число',
+  boolean: 'Да / нет',
+  time: 'Время',
+  date: 'Дата',
+  email: 'Email',
+  phone: 'Телефон',
+  list: 'Список значений',
 };
 
 const normalize = value => String(value ?? '')
@@ -200,9 +338,19 @@ const autoMapHeaders = (headers, entityType = 'orders') => {
   const used = new Set();
   return Object.fromEntries(headers.map((header, index) => {
     const normalized = normalize(header);
-    const match = Object.entries(aliasesByField).find(([field, aliases]) => !used.has(field) && aliases.map(normalize).includes(normalized));
-    if (match) used.add(match[0]);
-    return [index, match?.[0] || ''];
+    const matches = Object.entries(aliasesByField).filter(([field]) => !used.has(field)).map(([field, aliases]) => {
+      const normalizedAliases = aliases.map(normalize);
+      const exact = normalizedAliases.includes(normalized);
+      const fuzzyLength = normalizedAliases.reduce((best, alias) => {
+        if (alias.length < 4 || normalized.length < 4) return best;
+        return normalized.includes(alias) || alias.includes(normalized) ? Math.max(best, Math.min(alias.length, normalized.length)) : best;
+      }, 0);
+      return { field, score: exact ? 1000 : fuzzyLength };
+    }).filter(item => item.score > 0).sort((a, b) => b.score - a.score);
+    const match = matches[0];
+    if (match) used.add(match.field);
+    const fallbackName = String(header || `Столбец ${index + 1}`).trim();
+    return [index, match?.field || `custom:${fallbackName}`];
   }));
 };
 
@@ -220,6 +368,36 @@ const asTime = value => {
   if (iso) return iso[1];
   if (simple) return `${simple[1].padStart(2, '0')}:${simple[2]}`;
   return '';
+};
+
+export function inferImportColumnProfile(values = [], header = '') {
+  const sample = values.map(value => String(value ?? '').trim()).filter(Boolean).slice(0, 300);
+  if (!sample.length) return { type: 'unknown', label: COLUMN_TYPE_LABELS.unknown, sampleSize: 0, confidence: 0 };
+  const ratio = predicate => sample.filter(predicate).length / sample.length;
+  const normalizedHeader = normalize(header);
+  const booleanTokens = new Set(['1', '0', 'true', 'false', 'yes', 'no', 'y', 'n', 'да', 'нет']);
+  const numberRatio = ratio(value => Number.isFinite(Number(value.replace(',', '.'))));
+  const booleanRatio = ratio(value => booleanTokens.has(normalize(value)));
+  const emailRatio = ratio(value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
+  const timeRatio = ratio(value => /(?:^|T)(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:$|[+Z\s])/.test(value));
+  const dateRatio = ratio(value => /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:[T\s].*)?$/.test(value) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}(?:\s.*)?$/.test(value));
+  const phoneRatio = ratio(value => /^\+?[\d\s().-]{7,}$/.test(value) && value.replace(/\D/g, '').length >= 7);
+  const listRatio = ratio(value => /[|;]|,\s*\S/.test(value));
+  let type = 'text';
+  let confidence = 1;
+  if (emailRatio >= .8) ({ type, confidence } = { type: 'email', confidence: emailRatio });
+  else if ((/phone|телефон/.test(normalizedHeader) && phoneRatio >= .7)) ({ type, confidence } = { type: 'phone', confidence: phoneRatio });
+  else if (timeRatio >= .8) ({ type, confidence } = { type: 'time', confidence: timeRatio });
+  else if (dateRatio >= .8) ({ type, confidence } = { type: 'date', confidence: dateRatio });
+  else if (booleanRatio >= .9 && new Set(sample.map(normalize)).size <= 4) ({ type, confidence } = { type: 'boolean', confidence: booleanRatio });
+  else if (numberRatio >= .9) ({ type, confidence } = { type: 'number', confidence: numberRatio });
+  else if (listRatio >= .65) ({ type, confidence } = { type: 'list', confidence: listRatio });
+  return { type, label: COLUMN_TYPE_LABELS[type], sampleSize: sample.length, confidence };
+}
+
+const fieldMatchesProfile = (fieldId, profile) => {
+  if (fieldId === 'ignore' || profile.type === 'unknown') return true;
+  return (FIELD_VALUE_TYPES[fieldId] || ['text']).includes(profile.type);
 };
 
 const translatePriority = value => {
@@ -372,7 +550,30 @@ export async function parseImportFile(file, preferredEntityType = 'orders') {
   };
 }
 
-function buildOrders(headers, rows, mappings, region) {
+const ORDER_CORE_FIELDS = new Set([
+  'id', 'externalId', 'name', 'scenario', 'address', 'locationId', 'city', 'region', 'district', 'street', 'house', 'building',
+  'apartment', 'postalCode', 'entrance', 'floor', 'latitude', 'longitude', 'coordinateAccuracy', 'geocodeProvider', 'geocodeObjectId',
+  'zone', 'zoneId', 'zoneName', 'windowStart', 'windowEnd', 'duration', 'workType', 'serviceType', 'skill', 'priority', 'status',
+  'connectionType', 'isEventJob', 'transport', 'equipment', 'gigabitRequired', 'phone', 'email', 'createdAt', 'serviceDate',
+  'geocodeStatus', 'notes', 'ignore',
+]);
+
+const ENGINEER_CORE_FIELDS = new Set([
+  'engineerId', 'engineerName', 'engineerStatus', 'engineerSkills', 'engineerShiftStart', 'engineerShiftEnd', 'engineerTransport',
+  'engineerEquipment', 'engineerStartAddress', 'engineerLocationId', 'engineerCity', 'engineerRegion', 'engineerDistrict',
+  'engineerStartLatitude', 'engineerStartLongitude', 'engineerZone', 'engineerZoneId', 'engineerPhone', 'engineerEmail', 'ignore',
+]);
+
+const supplementaryFields = (row, mappings, entityType, coreFields) => {
+  const meta = FIELD_CONFIG[entityType]?.meta;
+  return Object.fromEntries(Object.entries(mappings).flatMap(([column, field]) => {
+    if (!field || field === 'ignore' || coreFields.has(field)) return [];
+    const label = field.startsWith('custom:') ? field.slice(7) : (meta?.get(field)?.label || field);
+    return [[label, row[Number(column)] ?? '']];
+  }));
+};
+
+export function buildOrders(headers, rows, mappings, region) {
   const columnFor = fieldId => Number(Object.keys(mappings).find(key => mappings[key] === fieldId));
   const valueFor = (row, fieldId) => {
     const column = columnFor(fieldId);
@@ -384,25 +585,38 @@ function buildOrders(headers, rows, mappings, region) {
     const serviceType = valueFor(row, 'serviceType');
     const serviceLabel = translateServiceLabel(serviceType);
     const skill = valueFor(row, 'skill');
+    const informational = isInformationalOrder({ serviceType, workType, name: valueFor(row, 'name') });
     const lat = asNumber(valueFor(row, 'latitude'));
     const lon = asNumber(valueFor(row, 'longitude'));
-    const customFields = {};
-    Object.entries(mappings).forEach(([column, field]) => {
-      if (field?.startsWith('custom:')) customFields[field.slice(7)] = row[Number(column)] ?? '';
-    });
+    const customFields = supplementaryFields(row, mappings, 'orders', ORDER_CORE_FIELDS);
+    const detailedAddress = [
+      valueFor(row, 'street'),
+      valueFor(row, 'house') ? `д. ${valueFor(row, 'house')}` : '',
+      valueFor(row, 'building') ? `корп. ${valueFor(row, 'building')}` : '',
+      valueFor(row, 'apartment') ? `пом. ${valueFor(row, 'apartment')}` : '',
+    ].filter(Boolean).join(', ');
+    const address = valueFor(row, 'address') || detailedAddress || [valueFor(row, 'district'), valueFor(row, 'zoneName'), valueFor(row, 'zone')].filter(Boolean).join(', ');
+    const city = resolveImportedCity(valueFor(row, 'city'), address, region.name);
+    const rowRegion = regionForCity(city, lat !== null && lon !== null ? [lat, lon] : null);
     return {
-      id: index + 1,
+      id: `${rowRegion.id}:${sourceId}`,
       sourceId,
       name: valueFor(row, 'name') || `${serviceLabel || workType || 'Заявка'} ${sourceId}`,
-      address: valueFor(row, 'address') || [valueFor(row, 'district'), valueFor(row, 'zoneName'), valueFor(row, 'zone')].filter(Boolean).join(', '),
+      address,
+      city: rowRegion.name,
+      regionName: rowRegion.name,
+      locationId: valueFor(row, 'locationId'),
+      postalCode: valueFor(row, 'postalCode'),
+      entrance: valueFor(row, 'entrance'),
+      floor: valueFor(row, 'floor'),
       phone: valueFor(row, 'phone'),
       email: valueFor(row, 'email'),
       start: asTime(valueFor(row, 'windowStart')),
       end: asTime(valueFor(row, 'windowEnd')),
       duration: asNumber(valueFor(row, 'duration')) || 60,
-      priority: translatePriority(valueFor(row, 'priority')),
+      priority: informational ? 'Обычная' : translatePriority(valueFor(row, 'priority')),
       workType,
-      skill: translateSkill(skill, workType || serviceType),
+      skill: informational && /emerg|авар/i.test(skill) ? '' : translateSkill(skill, workType || serviceType),
       equipment: translateEquipment(valueFor(row, 'equipment')),
       transport: valueFor(row, 'transport'),
       district: valueFor(row, 'district'),
@@ -415,10 +629,14 @@ function buildOrders(headers, rows, mappings, region) {
       scenario: valueFor(row, 'scenario'),
       notes: valueFor(row, 'notes'),
       createdAt: valueFor(row, 'createdAt'),
-      regionId: region.id,
+      serviceDate: valueFor(row, 'serviceDate'),
+      regionId: rowRegion.id,
       status: valueFor(row, 'status') || 'Новая',
       coords: lat !== null && lon !== null ? [lat, lon] : null,
       geocodeStatus: valueFor(row, 'geocodeStatus') || (lat !== null && lon !== null ? 'ready' : 'needs_geocoding'),
+      coordinateAccuracy: valueFor(row, 'coordinateAccuracy'),
+      geocodeProvider: valueFor(row, 'geocodeProvider'),
+      geocodeObjectId: valueFor(row, 'geocodeObjectId'),
       customFields,
       sourceData: Object.fromEntries(headers.map((header, column) => [header, row[column] ?? ''])),
     };
@@ -445,10 +663,10 @@ const translateTransport = value => {
   if (/foot|walk|пеш/.test(text)) return 'Пешком';
   if (/bike|bicycle|вело/.test(text)) return 'Велосипед';
   if (/car|auto|авто/.test(text)) return 'Автомобиль';
-  return String(value || 'Автомобиль').trim();
+  return String(value || '').trim();
 };
 
-function buildEngineers(headers, rows, mappings, region) {
+export function buildEngineers(headers, rows, mappings, region) {
   const columnFor = fieldId => Number(Object.keys(mappings).find(key => mappings[key] === fieldId));
   const valueFor = (row, fieldId) => {
     const column = columnFor(fieldId);
@@ -460,24 +678,29 @@ function buildEngineers(headers, rows, mappings, region) {
     const lon = asNumber(valueFor(row, 'engineerStartLongitude'));
     const skills = [...new Set(splitList(valueFor(row, 'engineerSkills')).map(translateEngineerSkill))];
     const equipment = [...new Set(splitList(valueFor(row, 'engineerEquipment')).map(translateEquipment).filter(Boolean))];
-    const customFields = {};
-    Object.entries(mappings).forEach(([column, field]) => {
-      if (field?.startsWith('custom:')) customFields[field.slice(7)] = row[Number(column)] ?? '';
-    });
+    const customFields = supplementaryFields(row, mappings, 'engineers', ENGINEER_CORE_FIELDS);
+    const startAddress = valueFor(row, 'engineerStartAddress') || region.name;
+    const city = resolveImportedCity(valueFor(row, 'engineerCity'), startAddress, region.name);
+    const rowRegion = regionForCity(city, lat !== null && lon !== null ? [lat, lon] : null);
     return {
-      id: String(sourceId),
+      id: `${rowRegion.id}:${sourceId}`,
       sourceId: String(sourceId),
       name: valueFor(row, 'engineerName') || `Инженер ${index + 1}`,
-      regionId: region.id,
+      city: rowRegion.name,
+      regionName: rowRegion.name,
+      regionId: rowRegion.id,
       skills,
       transport: translateTransport(valueFor(row, 'engineerTransport')),
       shiftStart: asTime(valueFor(row, 'engineerShiftStart')) || '08:00',
       shiftEnd: asTime(valueFor(row, 'engineerShiftEnd')) || '18:00',
       equipment,
-      startAddress: valueFor(row, 'engineerStartAddress') || region.office,
-      startCoords: lat !== null && lon !== null ? [lat, lon] : region.coords,
+      startAddress,
+      locationId: valueFor(row, 'engineerLocationId'),
+      startCoords: lat !== null && lon !== null ? [lat, lon] : rowRegion.coords,
       zone: valueFor(row, 'engineerZone'),
-      status: valueFor(row, 'engineerStatus') || 'Доступен сегодня',
+      zoneId: valueFor(row, 'engineerZoneId'),
+      district: valueFor(row, 'engineerDistrict'),
+      status: valueFor(row, 'engineerStatus') || 'Доступность не указана',
       phone: valueFor(row, 'engineerPhone'),
       email: valueFor(row, 'engineerEmail'),
       load: 0,
@@ -552,48 +775,126 @@ function validateRows(rows, mappings, entityType = 'orders') {
   return invalid;
 }
 
-function MappingMenu({ column, mappings, entityType, onSelect, onClose, position, visible }) {
+function MappingMenu({ column, header, values, mappings, entityType, onSelect, onClose, position, visible }) {
   const [customName, setCustomName] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const current = mappings[column] || '';
   const used = new Set(Object.entries(mappings).filter(([key]) => Number(key) !== column).map(([, value]) => value));
   const fieldGroups = FIELD_CONFIG[entityType]?.groups || ORDER_FIELD_GROUPS;
+  const profile = useMemo(() => inferImportColumnProfile(values, header), [values, header]);
+  const availableGroups = useMemo(() => fieldGroups.map(group => ({
+    ...group,
+    fields: group.fields.filter(([id]) => {
+      if (used.has(id) && id !== 'ignore') return false;
+      return showAll || id === current || fieldMatchesProfile(id, profile);
+    }),
+  })).filter(group => group.fields.length), [fieldGroups, used, showAll, current, profile]);
   const addCustom = () => {
     const name = customName.trim();
     if (!name) return;
     onSelect(`custom:${name}`);
   };
-  return <div className={`import-mapping-menu dropdown-transition ${visible ? 'is-open' : 'is-closing'}`} style={{ left: position.left, top: position.top }} role="listbox" aria-label="Тип данных столбца">
+  return <div className={`import-mapping-menu dropdown-transition ${visible ? 'is-open' : 'is-closing'}`} style={{ left: position.left, top: position.top, maxHeight: position.maxHeight }} role="listbox" aria-label="Назначение столбца">
+    <div className="mapping-type-summary"><span><Info/></span><div><b>Назначение столбца</b></div><button type="button" onClick={() => setShowAll(value => !value)}>{showAll ? 'Только подходящие' : 'Все поля'}</button></div>
     <div className="mapping-menu-scroll">
-      {fieldGroups.map(group => <section key={group.id}><h4>{group.label}</h4>{group.fields.map(([id, label, required]) => <button type="button" role="option" aria-selected={current === id} disabled={used.has(id) && id !== 'ignore'} className={current === id ? 'selected' : ''} key={id} onClick={() => onSelect(id)}><span>{label}{required ? <em>обязательно</em> : null}</span>{current === id ? <Check /> : null}</button>)}</section>)}
+      {availableGroups.map(group => <section key={group.id}><h4>{group.label}</h4>{group.fields.map(([id, label, required]) => <button type="button" role="option" aria-selected={current === id} className={current === id ? 'selected' : ''} key={id} onClick={() => onSelect(id)}><span>{label}{required ? <em>обязательно</em> : null}</span>{current === id ? <Check /> : null}</button>)}</section>)}
     </div>
     <div className="custom-field-create"><input value={customName} onChange={event => setCustomName(event.target.value)} onKeyDown={event => event.key === 'Enter' && addCustom()} placeholder="Своё поле"/><button type="button" onClick={addCustom} aria-label="Добавить своё поле"><Plus/></button></div>
     <button type="button" className="mapping-menu-close" onClick={onClose}><X/>Закрыть</button>
   </div>;
 }
 
-export function ImportWorkspace({ session, region, onCancel, onImport }) {
+function FilterMenu({ header, values, selected, onApply, onReset, onClose, position, visible }) {
+  const uniqueValues = useMemo(() => [...new Set(values.map(value => String(value ?? '')))].sort((left, right) => (
+    left.localeCompare(right, 'ru', { numeric: true, sensitivity: 'base' })
+  )), [values]);
+  const [query, setQuery] = useState('');
+  const [checkedValues, setCheckedValues] = useState(() => selected === undefined ? uniqueValues : selected);
+  const filteredValues = useMemo(() => {
+    const normalizedQuery = normalize(query);
+    return normalizedQuery ? uniqueValues.filter(value => normalize(value || 'Пустые значения').includes(normalizedQuery)) : uniqueValues;
+  }, [uniqueValues, query]);
+  const checked = new Set(checkedValues);
+  const toggleValue = value => setCheckedValues(current => (
+    current.includes(value) ? current.filter(item => item !== value) : [...current, value]
+  ));
+  return <div className={`import-mapping-menu import-filter-menu dropdown-transition ${visible ? 'is-open' : 'is-closing'}`} style={{ left: position.left, top: position.top, maxHeight: position.maxHeight }} role="dialog" aria-label={`Фильтр столбца ${header}`}>
+    <div className="mapping-type-summary"><span><Filter/></span><div><b>Фильтр столбца</b><small title={header}>{header}</small></div></div>
+    <label className="column-filter-search"><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Найти значение"/>{query ? <button type="button" onClick={() => setQuery('')} aria-label="Очистить поиск"><X/></button> : null}</label>
+    <div className="column-filter-select-all"><button type="button" onClick={() => setCheckedValues(uniqueValues)}>Выбрать все</button><button type="button" onClick={() => setCheckedValues([])}>Снять все</button></div>
+    <div className="mapping-menu-scroll filter-values-list">
+      {filteredValues.length ? filteredValues.map(value => <button type="button" role="checkbox" aria-checked={checked.has(value)} className={checked.has(value) ? 'selected' : ''} key={value} onClick={() => toggleValue(value)}><i>{checked.has(value) ? <Check/> : null}</i><span>{value || 'Пустые значения'}</span></button>) : <div className="filter-no-values">Значения не найдены</div>}
+    </div>
+    <div className="filter-menu-actions"><button type="button" onClick={onReset}>Сбросить</button><button type="button" className="primary" onClick={() => onApply(checkedValues)}>Применить</button></div>
+    <button type="button" className="mapping-menu-close" onClick={onClose}><X/>Закрыть</button>
+  </div>;
+}
+
+export function ImportWorkspace({ session, region, onCancel, onImport, files = [], onSelectFile, onAddFile, onFileError, closing = false }) {
+  const reviewMode = session.mode === 'review';
+  const requestClose = () => reviewMode ? onCancel() : setCancelConfirm(true);
   const datasets = session.datasets || { [session.entityType || 'orders']: session };
   const availableTypes = ['orders', 'engineers'].filter(entityType => datasets[entityType]);
   const [activeType, setActiveType] = useState(() => (
     datasets[session.entityType] ? session.entityType : availableTypes[0]
   ));
-  const [drafts, setDrafts] = useState(() => Object.fromEntries(availableTypes.map(entityType => [entityType, {
-    rows: datasets[entityType].rows.map(row => [...row]),
-    mappings: autoMapHeaders(datasets[entityType].headers, entityType),
-    editedCells: new Set(),
-  }])));
+  const [draftHistory, setDraftHistory] = useState(() => session.editHistory || ({
+    past: [],
+    present: Object.fromEntries(availableTypes.map(entityType => [entityType, {
+      rows: datasets[entityType].rows.map(row => [...row]),
+      mappings: datasets[entityType].savedMappings
+        ? { ...datasets[entityType].savedMappings }
+        : autoMapHeaders(datasets[entityType].headers, entityType),
+      editedCells: new Set(datasets[entityType].editedCells || []),
+    }])),
+    future: [],
+  }));
   const [menuColumn, setMenuColumn] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ left: 24, top: 120 });
+  const [filterColumn, setFilterColumn] = useState(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterMenuVersion, setFilterMenuVersion] = useState(0);
+  const [filterPosition, setFilterPosition] = useState({ left: 24, top: 120 });
+  const [columnFilters, setColumnFilters] = useState(() => Object.fromEntries(availableTypes.map(entityType => [entityType, {}])));
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [search, setSearch] = useState('');
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const tableRef = useRef(null);
+  const fileMenuRef = useRef(null);
+  const extraFileInputRef = useRef(null);
+  const extraFileTypeRef = useRef('orders');
+  const editHistoryKeyRef = useRef('');
   const mappingPresence = useDropdownPresence(menuOpen);
+  const filterPresence = useDropdownPresence(filterOpen);
+  const fileMenuPresence = useDropdownPresence(fileMenuOpen, 180);
+  const drafts = draftHistory.present;
+  const canUndo = draftHistory.past.length > 0;
+  const canRedo = draftHistory.future.length > 0;
   const activeDataset = datasets[activeType];
   const activeDraft = drafts[activeType];
   const rows = activeDraft.rows;
   const mappings = activeDraft.mappings;
   const editedCells = activeDraft.editedCells;
+  const activeColumnFilters = columnFilters[activeType] || {};
+  const sourceFiles = useMemo(() => {
+    const unique = new Map();
+    [...(files.length ? files : session.reviewFiles || []), session].forEach((item, index) => {
+      if (!item) return;
+      const key = item.fileId || `${item.fileName || 'Файл'}:${item.importedAt || index}`;
+      unique.set(key, item);
+    });
+    return [...unique.values()];
+  }, [files, session]);
+
+  useEffect(() => {
+    if (!fileMenuOpen) return undefined;
+    const close = event => {
+      if (!fileMenuRef.current?.contains(event.target)) setFileMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [fileMenuOpen]);
 
   const requirements = useMemo(() => requirementState(mappings, activeType), [mappings, activeType]);
   const mappingReady = requirements.every(item => item.ok);
@@ -607,48 +908,157 @@ export function ImportWorkspace({ session, region, onCancel, onImport }) {
     return [entityType, {
       ready: typeRequirements.every(item => item.ok) && typeInvalidCells.size === 0,
       rowIssueCount: new Set([...typeInvalidCells].map(key => key.split(':')[0])).size,
+      missing: typeRequirements.filter(item => !item.ok).map(item => item.label),
+      invalidCellCount: typeInvalidCells.size,
     }];
   })), [drafts, availableTypes.join('|')]);
   const allReady = availableTypes.every(entityType => validationByType[entityType].ready);
+  const validationMessages = useMemo(() => {
+    const messages = requirements.filter(item => !item.ok).map(item => `Не сопоставлено обязательное поле: ${item.label}.`);
+    [...invalidCells].sort((left, right) => left.localeCompare(right, 'ru', { numeric: true })).forEach(key => {
+      const [rowIndexText, columnText] = key.split(':'), rowIndex = Number(rowIndexText), column = Number(columnText);
+      const header = activeDataset.headers[column] || `Столбец ${column + 1}`;
+      const field = mappings[column] || '';
+      const raw = String(rows[rowIndex]?.[column] ?? '').trim();
+      let reason = raw ? 'значение имеет неверный формат' : 'значение не заполнено';
+      if (field === 'duration') reason = 'нужно положительное число минут';
+      else if (field === 'engineerSkills') reason = raw ? 'разрешено не более трёх навыков' : 'навыки не заполнены';
+      else if (field === 'engineerId') reason = raw ? 'ID повторяется в другой строке' : 'ID не заполнен';
+      else if (field === 'engineerShiftStart' || field === 'engineerShiftEnd') reason = raw ? 'время должно быть в формате ЧЧ:ММ' : 'время смены не заполнено';
+      else if (['address', 'latitude', 'longitude'].includes(field)) reason = 'укажите адрес либо корректные широту и долготу';
+      messages.push(`Строка ${rowIndex + 2}, «${header}»: ${reason}.`);
+    });
+    availableTypes.filter(entityType => entityType !== activeType && !validationByType[entityType].ready).forEach(entityType => {
+      const title = entityType === 'engineers' ? 'Инженеры' : 'Заявки';
+      validationByType[entityType].missing.forEach(label => messages.push(`Вкладка «${title}»: не сопоставлено поле «${label}».`));
+      if (validationByType[entityType].rowIssueCount) messages.push(`Вкладка «${title}»: ошибки в ${validationByType[entityType].rowIssueCount} строках (${validationByType[entityType].invalidCellCount} ячеек).`);
+    });
+    return messages;
+  }, [requirements, invalidCells, activeDataset.headers, mappings, rows, availableTypes.join('|'), activeType, validationByType]);
   const visibleRows = useMemo(() => {
     const query = normalize(search);
-    if (!query) return rows.map((row, index) => ({ row, index }));
-    return rows.map((row, index) => ({ row, index })).filter(({ row }) => normalize(row.join(' ')).includes(query));
-  }, [rows, search]);
+    return rows.map((row, index) => ({ row, index })).filter(({ row }) => {
+      const passesColumns = Object.entries(activeColumnFilters).every(([column, allowed]) => allowed.includes(String(row[Number(column)] ?? '')));
+      return passesColumns && (!query || normalize(row.join(' ')).includes(query));
+    });
+  }, [rows, search, activeColumnFilters]);
   const normalizedSearch = normalize(search);
+
+  const commitDrafts = (updater, historyKey = '') => {
+    const coalesce = Boolean(historyKey) && editHistoryKeyRef.current === historyKey;
+    editHistoryKeyRef.current = historyKey;
+    setDraftHistory(history => {
+      const next = updater(history.present);
+      return pushImportHistory(history, next, { coalesce });
+    });
+  };
+
+  const undoDraftChange = () => {
+    editHistoryKeyRef.current = '';
+    setDraftHistory(undoImportHistory);
+  };
+
+  const redoDraftChange = () => {
+    editHistoryKeyRef.current = '';
+    setDraftHistory(redoImportHistory);
+  };
 
   useEffect(() => {
     const close = event => {
       if (event.type === 'keydown' && event.key !== 'Escape') return;
-      if (event.type === 'pointerdown' && (event.target.closest?.('.import-mapping-menu') || event.target.closest?.('.column-mapping-button'))) return;
+      if (event.type === 'pointerdown' && (event.target.closest?.('.import-mapping-menu') || event.target.closest?.('.column-mapping-button') || event.target.closest?.('.column-filter-button'))) return;
       setMenuOpen(false);
+      setFilterOpen(false);
     };
-    if (!menuOpen) return undefined;
+    if (!menuOpen && !filterOpen) return undefined;
     document.addEventListener('pointerdown', close);
     document.addEventListener('keydown', close);
     return () => {
       document.removeEventListener('pointerdown', close);
       document.removeEventListener('keydown', close);
     };
-  }, [menuOpen]);
+  }, [menuOpen, filterOpen]);
+
+  useEffect(() => {
+    const onHistoryShortcut = event => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redoDraftChange();
+        else undoDraftChange();
+      } else if (key === 'y') {
+        event.preventDefault();
+        redoDraftChange();
+      }
+    };
+    document.addEventListener('keydown', onHistoryShortcut);
+    return () => document.removeEventListener('keydown', onHistoryShortcut);
+  });
+
+  const dropdownPosition = event => {
+    const anchor = event.currentTarget.closest('th') || event.currentTarget;
+    const rect = anchor.getBoundingClientRect();
+    // The app shell uses CSS zoom: DOM rectangles are visual pixels, while a
+    // fixed child's left/top are still measured in unzoomed CSS pixels.
+    const scale = rect.width / anchor.offsetWidth || 1;
+    const width = 390;
+    const visualLeft = Math.max(12, Math.min(rect.left, window.innerWidth - width * scale - 12));
+    const visualTop = rect.bottom + 7;
+    return {
+      left: visualLeft / scale,
+      top: visualTop / scale,
+      maxHeight: Math.max(220, (window.innerHeight - visualTop - 12) / scale),
+    };
+  };
 
   const openMapping = (column, event) => {
     if (menuOpen && menuColumn === column) {
       setMenuOpen(false);
       return;
     }
-    const rect = event.currentTarget.getBoundingClientRect();
-    const menuHeight = Math.min(610, window.innerHeight - 24);
-    setMenuPosition({
-      left: Math.max(12, Math.min(rect.left, window.innerWidth - 402)),
-      top: Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - menuHeight - 12)),
-    });
+    setFilterOpen(false);
+    setMenuPosition(dropdownPosition(event));
     setMenuColumn(column);
     setMenuOpen(true);
   };
 
+  const openFilter = (column, event) => {
+    if (filterOpen && filterColumn === column) {
+      setFilterOpen(false);
+      return;
+    }
+    setMenuOpen(false);
+    setFilterPosition(dropdownPosition(event));
+    setFilterColumn(column);
+    setFilterMenuVersion(version => version + 1);
+    setFilterOpen(true);
+  };
+
+  const applyColumnFilter = selectedValues => {
+    const uniqueValues = new Set(rows.map(row => String(row[filterColumn] ?? '')));
+    setColumnFilters(current => {
+      const nextForType = { ...(current[activeType] || {}) };
+      if (selectedValues.length === uniqueValues.size) delete nextForType[filterColumn];
+      else nextForType[filterColumn] = selectedValues;
+      return { ...current, [activeType]: nextForType };
+    });
+    setFilterOpen(false);
+    requestAnimationFrame(() => tableRef.current?.scrollTo({ top: 0, behavior: 'smooth' }));
+  };
+
+  const resetColumnFilter = () => {
+    setColumnFilters(current => {
+      const nextForType = { ...(current[activeType] || {}) };
+      delete nextForType[filterColumn];
+      return { ...current, [activeType]: nextForType };
+    });
+    setFilterOpen(false);
+  };
+
   const selectMapping = field => {
-    setDrafts(current => {
+    editHistoryKeyRef.current = '';
+    commitDrafts(current => {
       const nextMappings = { ...current[activeType].mappings };
       if (field !== 'ignore') Object.keys(nextMappings).forEach(key => { if (nextMappings[key] === field) nextMappings[key] = ''; });
       nextMappings[menuColumn] = field;
@@ -663,28 +1073,51 @@ export function ImportWorkspace({ session, region, onCancel, onImport }) {
   };
 
   const editCell = (rowIndex, columnIndex, value) => {
-    setDrafts(current => {
+    commitDrafts(current => {
       const draft = current[activeType];
       return { ...current, [activeType]: {
         ...draft,
         rows: draft.rows.map((row, index) => index === rowIndex ? row.map((cell, column) => column === columnIndex ? value : cell) : row),
         editedCells: new Set(draft.editedCells).add(`${rowIndex}:${columnIndex}`),
       } };
-    });
+    }, `cell:${activeType}:${rowIndex}:${columnIndex}`);
   };
 
   const submit = () => {
     if (!allReady) return;
+    const reviewedDatasets = Object.fromEntries(availableTypes.map(entityType => [entityType, {
+      ...datasets[entityType],
+      rows: drafts[entityType].rows.map(row => [...row]),
+      savedMappings: { ...drafts[entityType].mappings },
+      editedCells: [...drafts[entityType].editedCells],
+    }]));
     onImport({
       orders: drafts.orders ? buildOrders(datasets.orders.headers, drafts.orders.rows, drafts.orders.mappings, region) : [],
       engineers: drafts.engineers ? buildEngineers(datasets.engineers.headers, drafts.engineers.rows, drafts.engineers.mappings, region) : [],
-    });
+    }, { ...session, datasets: reviewedDatasets, editHistory: draftHistory, reviewRegion: session.reviewRegion || region, mode: 'review' });
+  };
+
+  const requestAdditionalFile = entityType => {
+    extraFileTypeRef.current = entityType;
+    setFileMenuOpen(false);
+    extraFileInputRef.current?.click();
+  };
+
+  const addAdditionalFile = async file => {
+    if (!file) return;
+    try {
+      const nextSession = await parseImportFile(file, extraFileTypeRef.current);
+      (onAddFile || session.onAddFile)?.({ ...nextSession, fileId: `${file.name}:${file.lastModified}:${file.size}`, importedAt: Date.now() });
+    } catch (error) {
+      (onFileError || session.onFileError)?.(error?.message || 'Не удалось прочитать дополнительный файл');
+    }
   };
 
   const switchDataset = entityType => {
     setActiveType(entityType);
     setSearch('');
     setMenuOpen(false);
+    setFilterOpen(false);
     requestAnimationFrame(() => tableRef.current?.scrollTo({ top: 0, left: 0, behavior: 'smooth' }));
   };
 
@@ -693,44 +1126,52 @@ export function ImportWorkspace({ session, region, onCancel, onImport }) {
     drafts.engineers ? `${drafts.engineers.rows.length} инженеров` : '',
   ].filter(Boolean).join(' и ');
   const entityLabel = activeType === 'engineers' ? 'инженеров' : 'заявок';
-  const requirementHeading = activeType === 'engineers' ? 'Для команды' : 'Для планирования';
-
-  return <div className="import-workspace" role="dialog" aria-modal="true" aria-label="Проверка и загрузка данных">
+  const readyRequirementCount = requirements.filter(item => item.ok).length;
+  return <div className={`import-workspace${reviewMode ? ' is-review' : ''}${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-label="Проверка и загрузка данных">
     <header className="import-header">
-      <div className="import-title"><span><FileSpreadsheet/></span><div><h1>Проверка данных</h1><p>{session.fileName} · {rows.length} {entityLabel} · участок «{region.name}» · лист «{activeDataset.sheetName}»</p></div></div>
+      <div className="import-title">{!reviewMode ? <img src="/beego-mark.png" alt="BeeGo"/> : null}<div><h1>Данные</h1><p>{activeDataset.fileName || session.fileName} · {rows.length} {entityLabel} · участок «{region.name}» · лист «{activeDataset.sheetName}»</p></div></div>
+      {reviewMode ? <div className="import-file-picker" ref={fileMenuRef}>
+        <button type="button" className="import-file-picker-trigger" aria-label="Открыть загруженные файлы" title="Загруженные файлы" aria-haspopup="menu" aria-expanded={fileMenuOpen} onClick={() => setFileMenuOpen(open => !open)}><Files/><span><small>{sourceFiles.length > 1 ? `${sourceFiles.length} файла` : 'Исходный файл'}</small><b>{session.fileName || activeDataset.fileName}</b></span><ChevronDown/></button>
+        {fileMenuPresence.present ? <div className={`import-file-menu dropdown-transition ${fileMenuPresence.visible ? 'is-open' : 'is-closing'}`} role="menu">
+          <header><span><Files/></span><div><b>Загруженные файлы</b><small>Выберите набор для просмотра</small></div></header>
+          <div className="import-file-menu-list">{sourceFiles.map((file, index) => {
+            const selected = (file.fileId && file.fileId === session.fileId) || (!file.fileId && file.fileName === session.fileName);
+            const fileDatasets = file.datasets || {};
+            const totalRows = Object.values(fileDatasets).reduce((total, dataset) => total + (dataset?.rows?.length || 0), 0) || file.rows?.length || 0;
+            return <button type="button" role="menuitemradio" aria-checked={selected} className={selected ? 'selected' : ''} key={file.fileId || `${file.fileName}-${index}`} onClick={() => { setFileMenuOpen(false); if (!selected) (onSelectFile || session.onSelectFile)?.(file); }}><span><b>{file.fileName || `Файл ${index + 1}`}</b><small>{totalRows} строк · {Object.keys(fileDatasets).map(type => type === 'orders' ? 'заявки' : 'инженеры').join(' + ') || (file.entityType === 'engineers' ? 'инженеры' : 'заявки')}</small></span>{selected ? <Check/> : null}</button>;
+          })}</div>
+          <div className="import-file-menu-add"><b>Добавить ещё</b><button type="button" onClick={() => requestAdditionalFile('orders')}><FilePlus2/><span>Файл заявок<small>CSV, JSON, XLS или XLSX</small></span></button><button type="button" onClick={() => requestAdditionalFile('engineers')}><FilePlus2/><span>Файл инженеров<small>CSV, JSON, XLS или XLSX</small></span></button></div>
+        </div> : null}
+        <input ref={extraFileInputRef} className="workspace-file-input" type="file" accept=".csv,.json,.xls,.xlsx,application/json" onChange={event => { addAdditionalFile(event.target.files?.[0]); event.target.value = ''; }}/>
+      </div> : null}
       {availableTypes.length > 1 ? <nav className="import-dataset-tabs" aria-label="Наборы данных">{availableTypes.map(entityType => <button type="button" key={entityType} className={activeType === entityType ? 'active' : ''} onClick={() => switchDataset(entityType)}><span>{entityType === 'orders' ? 'Заявки' : 'Инженеры'}</span><b>{drafts[entityType].rows.length}</b>{validationByType[entityType].ready ? <Check/> : <AlertTriangle/>}</button>)}</nav> : null}
-      <button className="import-header-close" type="button" onClick={() => setCancelConfirm(true)} aria-label="Отменить загрузку"><X/></button>
+      <button className="import-header-close" type="button" onClick={requestClose} aria-label={reviewMode ? 'Закрыть проверку данных' : 'Отменить загрузку'}><X/></button>
     </header>
 
     <main className="import-main">
-      <aside className="import-checklist">
-        <div><h2>Что нужно проверить</h2><p>Укажите, что означает каждый столбец, и исправьте данные прямо в таблице.</p></div>
-        <section className="requirements-list"><h3>{requirementHeading}</h3>{requirements.map(item => <div className={item.ok ? 'ok' : ''} key={item.label}>{item.ok ? <Check/> : <span/>}<b>{item.label}</b></div>)}</section>
-        <section className="import-stats"><h3>Состояние файла</h3><div><span>Столбцы</span><b>{mappedCount} из {activeDataset.headers.length}</b></div><div><span>Исправлено ячеек</span><b>{editedCells.size}</b></div><div className={rowIssueCount ? 'warning' : ''}><span>Строки с ошибками</span><b>{rowIssueCount}</b></div></section>
-        <div className="import-help"><Info/><p>Изменения применятся только после загрузки.</p></div>
-      </aside>
-
       <section className="import-table-area">
-        <div className="import-table-toolbar"><div><h2>Сопоставление и редактирование</h2><p>Выберите назначение столбцов и проверьте значения.</p></div><label><Search/><input value={search} onChange={changeSearch} placeholder="Найти в таблице"/><kbd aria-live="polite">{visibleRows.length}/{rows.length}</kbd>{search ? <button type="button" onClick={() => setSearch('')} aria-label="Очистить поиск"><X/></button> : null}</label></div>
-        <div className="import-table-scroll" ref={tableRef} onScroll={() => setMenuOpen(false)}>
+        <div className="import-table-toolbar"><div><h2>Сопоставление и редактирование</h2><p>Выберите назначение столбцов и проверьте значения.</p></div><div className="import-table-tools"><div className="import-status-summary" aria-label="Состояние файла"><span className={mappedCount === activeDataset.headers.length ? 'ok' : 'warning'}><small>Столбцы</small><b>{mappedCount}/{activeDataset.headers.length}</b></span><span className={mappingReady ? 'ok' : 'warning'}><small>Обязательные</small><b>{readyRequirementCount}/{requirements.length}</b></span><span><small>Изменено</small><b>{editedCells.size}</b></span><span className={rowIssueCount ? 'warning' : 'ok'}><small>Ошибки</small><b>{rowIssueCount}</b></span></div><div className="import-history-actions" aria-label="История изменений"><button type="button" disabled={!canUndo} onClick={undoDraftChange} aria-label="Отменить изменение" title="Назад · Ctrl+Z"><Undo2/></button><button type="button" disabled={!canRedo} onClick={redoDraftChange} aria-label="Вернуть изменение" title="Вперёд · Ctrl+Y"><Redo2/></button></div><label><Search/><input value={search} onChange={changeSearch} placeholder="Найти в таблице"/><kbd aria-live="polite">{visibleRows.length}/{rows.length}</kbd>{search ? <button type="button" onClick={() => setSearch('')} aria-label="Очистить поиск"><X/></button> : null}</label></div></div>
+        <div className="import-table-scroll" ref={tableRef} onScroll={() => { setMenuOpen(false); setFilterOpen(false); }}>
           <table className="import-grid">
             <thead><tr>{activeDataset.headers.map((header, column) => {
               const field = mappings[column];
-              return <th key={`${header}-${column}`} className={!field ? 'unmapped' : ''}><button type="button" className="column-mapping-button" onClick={event => openMapping(column, event)} aria-expanded={menuOpen && menuColumn === column}><span><b>{fieldLabel(field, activeType)}</b><small>{groupClass(field, activeType) || 'Тип не выбран'}</small></span><ChevronDown/></button><em title={header}>{header}</em></th>;
+              const filterActive = Object.prototype.hasOwnProperty.call(activeColumnFilters, column);
+              return <th key={`${header}-${column}`} className={!field ? 'unmapped' : ''}><button type="button" className="column-mapping-button" onClick={event => openMapping(column, event)} aria-expanded={menuOpen && menuColumn === column}><span><b>{fieldLabel(field, activeType)}</b><small>{groupClass(field, activeType) || 'Тип не выбран'}</small></span><ChevronDown/></button><button type="button" className={`column-filter-button ${filterActive ? 'active' : ''}`} onClick={event => openFilter(column, event)} aria-label={`Фильтр столбца ${header}`} aria-expanded={filterOpen && filterColumn === column}><span title={header}>{header}</span><Filter/></button></th>;
             })}</tr></thead>
             <tbody>{visibleRows.length ? visibleRows.map(({ row, index }) => <tr key={index} className={[...invalidCells].some(key => key.startsWith(`${index}:`)) ? 'has-error' : ''}>{row.map((cell, column) => {
               const key = `${index}:${column}`;
               const matchesSearch = normalizedSearch && normalize(cell).includes(normalizedSearch);
-              return <td key={column} className={`${invalidCells.has(key) ? 'invalid ' : ''}${editedCells.has(key) ? 'edited ' : ''}${matchesSearch ? 'search-match' : ''}`}><input value={cell} onChange={event => editCell(index, column, event.target.value)} aria-label={`Строка ${index + 1}, ${activeDataset.headers[column]}`}/>{invalidCells.has(key) ? <AlertTriangle/> : editedCells.has(key) ? <Check/> : null}</td>;
+              return <td key={column} className={`${invalidCells.has(key) ? 'invalid ' : ''}${editedCells.has(key) ? 'edited ' : ''}${matchesSearch ? 'search-match' : ''}`}><input value={cell} onBlur={() => { editHistoryKeyRef.current = ''; }} onChange={event => editCell(index, column, event.target.value)} aria-label={`Строка ${index + 1}, ${activeDataset.headers[column]}`}/>{invalidCells.has(key) ? <AlertTriangle/> : editedCells.has(key) ? <Check/> : null}</td>;
             })}</tr>) : <tr className="import-no-results"><td colSpan={activeDataset.headers.length}><Search/><b>Ничего не найдено</b><span>Попробуйте изменить запрос</span></td></tr>}</tbody>
           </table>
         </div>
       </section>
     </main>
 
-    <footer className="import-footer"><div>{!mappingReady ? <><AlertTriangle/><span>Укажите все обязательные поля</span></> : invalidCells.size ? <><AlertTriangle/><span>Исправьте {rowIssueCount} {rowIssueCount === 1 ? 'строку' : 'строки'} с ошибками</span></> : !allReady ? <><AlertTriangle/><span>Проверьте вторую вкладку данных</span></> : <><ShieldCheck/><span>Все наборы проверены. Можно загружать.</span></>}</div><button type="button" onClick={() => setCancelConfirm(true)}>Отменить</button><button type="button" className="primary" disabled={!allReady} onClick={submit}><Check/>Загрузить {importButtonText}</button></footer>
+    <footer className="import-footer"><div className={`import-validation-summary ${validationMessages.length ? 'has-errors' : 'is-ready'}`} tabIndex={validationMessages.length ? 0 : undefined} aria-describedby={validationMessages.length ? 'import-validation-details' : undefined}>{!mappingReady ? <><AlertTriangle/><span>Укажите все обязательные поля</span></> : invalidCells.size ? <><AlertTriangle/><span>Исправьте {rowIssueCount} {rowIssueCount === 1 ? 'строку' : 'строки'} с ошибками</span></> : !allReady ? <><AlertTriangle/><span>Проверьте вторую вкладку данных</span></> : <><ShieldCheck/><span>{reviewMode ? 'Все наборы проверены. Изменения можно сохранить.' : 'Все наборы проверены. Можно загружать.'}</span></>}{validationMessages.length ? <aside id="import-validation-details" className="import-validation-details" role="tooltip"><b>Что именно нужно исправить</b><p>Наведите на сообщение или перейдите к нему клавишей Tab — список останется открытым.</p><ul>{validationMessages.slice(0, 12).map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}</ul>{validationMessages.length > 12 ? <small>И ещё {validationMessages.length - 12} ошибок. Исправьте показанные строки — список обновится автоматически.</small> : null}</aside> : null}</div><button type="button" onClick={requestClose}>{reviewMode ? 'Закрыть' : 'Отменить'}</button><button type="button" className="primary" disabled={!allReady} onClick={submit}><Check/>{reviewMode ? 'Сохранить изменения' : `Загрузить ${importButtonText}`}</button></footer>
 
-    {mappingPresence.present && menuColumn !== null ? <MappingMenu column={menuColumn} mappings={mappings} entityType={activeType} onSelect={selectMapping} onClose={() => setMenuOpen(false)} position={menuPosition} visible={mappingPresence.visible}/> : null}
-    {cancelConfirm ? <div className="import-confirm-backdrop"><section className="import-confirm" role="alertdialog" aria-modal="true" aria-labelledby="cancel-import-title"><span><AlertTriangle/></span><h2 id="cancel-import-title">Отменить загрузку?</h2><p>Сопоставление столбцов и все исправления в таблице будут потеряны.</p><footer><button type="button" onClick={() => setCancelConfirm(false)}>Вернуться к таблице</button><button type="button" className="danger-button" onClick={onCancel}>Да, отменить</button></footer></section></div> : null}
+    {mappingPresence.present && menuColumn !== null ? <MappingMenu column={menuColumn} header={activeDataset.headers[menuColumn]} values={rows.map(row => row[menuColumn])} mappings={mappings} entityType={activeType} onSelect={selectMapping} onClose={() => setMenuOpen(false)} position={menuPosition} visible={mappingPresence.visible}/> : null}
+    {filterPresence.present && filterColumn !== null ? <FilterMenu key={`${activeType}-${filterColumn}-${filterMenuVersion}`} header={activeDataset.headers[filterColumn]} values={rows.map(row => row[filterColumn])} selected={activeColumnFilters[filterColumn]} onApply={applyColumnFilter} onReset={resetColumnFilter} onClose={() => setFilterOpen(false)} position={filterPosition} visible={filterPresence.visible}/> : null}
+    {cancelConfirm ? <div className="import-confirm-backdrop"><section className="import-confirm" role="alertdialog" aria-modal="true" aria-labelledby="cancel-import-title"><span><AlertTriangle/></span><h2 id="cancel-import-title">{reviewMode ? 'Закрыть проверку данных?' : 'Отменить загрузку?'}</h2><p>{reviewMode ? 'Несохранённые изменения в таблице будут потеряны.' : 'Сопоставление столбцов и все исправления в таблице будут потеряны.'}</p><footer><button type="button" onClick={() => setCancelConfirm(false)}>Вернуться к таблице</button><button type="button" className="danger-button" onClick={onCancel}>{reviewMode ? 'Да, закрыть' : 'Да, отменить'}</button></footer></section></div> : null}
   </div>;
 }

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import urllib.parse
 import urllib.request
 from collections import defaultdict
@@ -22,11 +23,15 @@ MISSING_CODES = {382: 's9855175', 372: 's9855170', 364: 's9855166'}
 API = 'https://api.rasp.yandex-net.ru/v3.0/search/'
 
 
-def key_from_file(path: Path) -> str:
-    for line in path.read_text(encoding='utf-8').splitlines():
-        name, separator, value = line.partition('=')
-        if separator and name.strip() == 'YANDEX_RASP_API_KEY':
-            return value.strip()
+def key_from_file(path: Path | None) -> str:
+    key = os.environ.get('YANDEX_RASP_API_KEY')
+    if key:
+        return key
+    if path is not None:
+        for line in path.read_text(encoding='utf-8').splitlines():
+            name, separator, value = line.partition('=')
+            if separator and name.strip() == 'YANDEX_RASP_API_KEY':
+                return value.strip()
     raise RuntimeError('YANDEX_RASP_API_KEY missing')
 
 
@@ -41,9 +46,10 @@ def fetch(code_from: str, code_to: str, source_date: str, key: str,
     if cache.is_file():
         return json.loads(cache.read_text(encoding='utf-8'))
     parameters = {'from': code_from, 'to': code_to, 'date': source_date,
-                  'transport_types': 'suburban', 'limit': 500, 'apikey': key}
+                  'transport_types': 'suburban', 'limit': 500}
     request = urllib.request.Request(API + '?' + urllib.parse.urlencode(parameters),
-                                     headers={'User-Agent': 'beeline-routing-hackathon/0.1'})
+                                     headers={'User-Agent': 'beeline-routing-hackathon/0.1',
+                                              'Authorization': key})
     with urllib.request.urlopen(request, timeout=30) as response:
         payload = json.load(response)
     if payload.get('pagination', {}).get('total', 0) > len(payload.get('segments', [])):
@@ -53,7 +59,7 @@ def fetch(code_from: str, code_to: str, source_date: str, key: str,
     return payload
 
 
-def build(rail_dir: Path, schema_path: Path, credentials: Path) -> dict:
+def build(rail_dir: Path, schema_path: Path, credentials: Path | None) -> dict:
     manifest_path = rail_dir / 'manifest.json'
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     source_date = manifest['normal_weekday_reference_date']

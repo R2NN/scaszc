@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import MappingProxyType
@@ -31,6 +32,7 @@ from beeline_planning import (
     probe_exact_initial_plan_routes,
     solve_screening_master,
     validate_initial_plan,
+    validate_screening_solution,
 )
 from beeline_planning.errors import InvalidPlanningData
 from beeline_planning.domain import (
@@ -264,7 +266,7 @@ class IndependentValidatorTests(unittest.TestCase):
 class CpSatMasterTests(unittest.TestCase):
     def test_lexicographic_priority_is_proven_on_tiny_instance(self) -> None:
         timezone = ZoneInfo('Europe/Moscow')
-        day = datetime(2026, 8, 17, tzinfo=timezone)
+        day = datetime(2026, 10, 3, tzinfo=timezone)
         engineer = Engineer(
             engineer_id='E1',
             zone_id='Z',
@@ -305,7 +307,7 @@ class CpSatMasterTests(unittest.TestCase):
             dataset_sha256='d' * 64,
             scenario='TEST',
             timezone_name='Europe/Moscow',
-            planning_date='2026-08-17',
+            planning_date=day.date().isoformat(),
             initial_planning_at=day.replace(hour=7),
             locations=MappingProxyType(
                 {
@@ -368,6 +370,48 @@ class CpSatMasterTests(unittest.TestCase):
         )
         self.assertEqual(strict_solution.routes, ())
 
+        one_job_dataset = replace(
+            dataset,
+            jobs=MappingProxyType({'J_URGENT': jobs['J_URGENT']}),
+        )
+        one_job_candidates = replace(
+            candidates,
+            active_job_ids=('J_URGENT',),
+            eligible_engineers_by_job=MappingProxyType({'J_URGENT': ('E1',)}),
+        )
+        one_job_master = replace(
+            master,
+            candidate_index=one_job_candidates,
+            arcs=tuple(arc for arc in arcs if arc.destination_job_id == 'J_URGENT'
+                       and arc.origin_node_id == 'START:E1'),
+        )
+        coverage_hint = solve_screening_master(
+            one_job_dataset,
+            one_job_master,
+            SolverConfig(
+                max_seconds_per_tier=2,
+                full_coverage_seconds=2,
+                stop_after_full_coverage=True,
+            ),
+        )
+        quick_refinement = solve_screening_master(
+            one_job_dataset,
+            one_job_master,
+            SolverConfig(
+                max_seconds_per_tier=2,
+                full_coverage_seconds=2,
+                stop_at_first_full_coverage_solution=True,
+            ),
+            hint_solution=coverage_hint,
+        )
+        self.assertEqual(quick_refinement.unserved_job_ids, ())
+        self.assertEqual(
+            validate_screening_solution(
+                one_job_dataset, one_job_master, quick_refinement
+            ),
+            (),
+        )
+
         solution = solve_screening_master(
             dataset,
             master,
@@ -378,6 +422,19 @@ class CpSatMasterTests(unittest.TestCase):
         )
         self.assertEqual(solution.status, MasterSolveStatus.SCREENING_OPTIMAL)
         self.assertTrue(solution.all_tiers_proven)
+        self.assertEqual(validate_screening_solution(dataset, master, solution), ())
+        late_visit = replace(
+            solution.routes[0].visits[0],
+            service_start_at=day.replace(hour=10),
+        )
+        invalid = replace(
+            solution,
+            routes=(replace(solution.routes[0], visits=(late_visit,)),),
+        )
+        self.assertTrue(any(
+            'Client window violated' in error
+            for error in validate_screening_solution(dataset, master, invalid)
+        ))
         self.assertEqual(solution.unserved_job_ids, ('J_NORMAL',))
         self.assertEqual(
             [visit.job_id for route in solution.routes for visit in route.visits],
@@ -396,6 +453,24 @@ class CpSatMasterTests(unittest.TestCase):
                 ('urgent_response_minutes', 65),
             ],
         )
+        coverage_only = solve_screening_master(
+            dataset,
+            master,
+            SolverConfig(
+                max_seconds_per_tier=2,
+                require_full_coverage=False,
+                stop_after_coverage=True,
+            ),
+        )
+        self.assertEqual(
+            coverage_only.status,
+            MasterSolveStatus.SCREENING_FEASIBLE,
+        )
+        self.assertEqual(
+            [proof.metric for proof in coverage_only.objective_proofs],
+            ['unserved_urgent_jobs', 'unserved_normal_jobs'],
+        )
+        self.assertEqual(coverage_only.unserved_job_ids, ('J_NORMAL',))
 
         polished = solve_screening_master(
             dataset,
@@ -439,6 +514,39 @@ class CpSatMasterTests(unittest.TestCase):
             MasterSolveStatus.SCREENING_INFEASIBLE,
         )
         self.assertEqual(impossible_reduction.routes, ())
+
+        forbidden = solve_screening_master(
+            dataset,
+            master,
+            SolverConfig(
+                max_seconds_per_tier=2,
+                require_full_coverage=False,
+                forbidden_assignments=(('E1', 'J_URGENT'),),
+            ),
+        )
+        self.assertEqual(forbidden.unserved_job_ids, ('J_URGENT',))
+        self.assertEqual(
+            [
+                visit.job_id
+                for route in forbidden.routes
+                for visit in route.visits
+            ],
+            ['J_NORMAL'],
+        )
+        with self.assertRaisesRegex(ValueError, 'cannot be empty'):
+            SolverConfig(forbidden_arc_groups=((),))
+        with self.assertRaisesRegex(ValueError, 'cannot be empty'):
+            SolverConfig(forbidden_assignment_groups=((),))
+        with self.assertRaisesRegex(ValueError, 'Required arc is absent'):
+            solve_screening_master(
+                dataset,
+                master,
+                SolverConfig(
+                    max_seconds_per_tier=2,
+                    require_full_coverage=False,
+                    required_arcs=(('E1', 'J_NORMAL', 'MISSING'),),
+                ),
+            )
 
 
 class ExactMaterializationTests(unittest.TestCase):

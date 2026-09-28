@@ -8,8 +8,8 @@ from zoneinfo import ZoneInfo
 
 from beeline_planning import (
     EngineerPlan, IdentityTravel, PlannedVisit, ProposedPlan,
-    ReplanningState, ReplanningStatus, ViolationCode,
-    load_planning_dataset, replan_after_event, validate_initial_plan,
+    ReplanningState, ReplanningStatus, RejectionCode, ViolationCode,
+    build_candidate_index, load_planning_dataset, replan_after_event, validate_initial_plan,
     validate_replanned_plan,
 )
 from beeline_planning.domain import (
@@ -152,6 +152,58 @@ class ReplanningTests(unittest.TestCase):
             sum(option.selected for option in result.candidate_evaluations['U']), 1
         )
 
+    def test_every_required_mode_is_enforced_by_candidates_and_validator(self) -> None:
+        modes = (
+            TransportMode.CAR,
+            TransportMode.PUBLIC_TRANSIT,
+            TransportMode.BICYCLE,
+            TransportMode.WALKING,
+        )
+        for mode in modes:
+            with self.subTest(mode=mode):
+                mismatch = TransportMode.WALKING if mode == TransportMode.CAR else TransportMode.CAR
+                self.engineers['E1'] = replace(self.engineers['E1'], transport_mode=mismatch)
+                self.engineers['E2'] = replace(self.engineers['E2'], transport_mode=mode)
+                self.jobs['A'] = replace(
+                    self.jobs['A'], required_transport=RequiredTransport(mode.value)
+                )
+                dataset = self.make_dataset(())
+                candidates = build_candidate_index(dataset)
+                self.assertIn('E2', candidates.eligible_engineers_by_job['A'])
+                self.assertIn(
+                    RejectionCode.TRANSPORT_MISMATCH, candidates.reasons('E1', 'A')
+                )
+                report = validate_initial_plan(dataset, self.source)
+                self.assertEqual(report.status.value, 'INVALID')
+                self.assertIn(
+                    ViolationCode.TRANSPORT_MISMATCH,
+                    {violation.code for violation in report.violations},
+                )
+                self.assertTrue(any(mode.value in violation.detail for violation in report.violations))
+
+        self.jobs['A'] = replace(self.jobs['A'], required_transport=RequiredTransport.ANY)
+        dataset = self.make_dataset(())
+        self.assertIn('E1', build_candidate_index(dataset).eligible_engineers_by_job['A'])
+        self.assertTrue(validate_initial_plan(dataset, self.source).is_valid)
+
+    def test_replanning_assigns_bicycle_only_job_to_bicycle_engineer(self) -> None:
+        self.engineers['E2'] = replace(
+            self.engineers['E2'], transport_mode=TransportMode.BICYCLE
+        )
+        self.jobs['U'] = replace(
+            self.job('U', 'Z1', self.at(10), priority=Priority.URGENT),
+            required_transport=RequiredTransport.BICYCLE,
+        )
+        event = self.event(1, EventType.NEW_URGENT_JOB, 'U', self.at(10))
+        dataset = self.make_dataset((event,))
+        result = replan_after_event(dataset, ReplanningState(self.source), event, _Oracle())
+        self.assertEqual(result.status, ReplanningStatus.EXACT_VALID)
+        owner = {
+            visit.job_id: route.engineer_id
+            for route in result.state.plan.engineer_plans for visit in route.visits
+        }
+        self.assertEqual(owner['U'], 'E2')
+
     def test_new_job_in_other_zone_uses_only_that_zones_engineer(self) -> None:
         self.jobs['U2'] = self.job(
             'U2', 'Z2', self.at(10), priority=Priority.URGENT, location='L3'
@@ -209,6 +261,24 @@ class ReplanningTests(unittest.TestCase):
         self.assertEqual(owner['U'], ('E2', self.at(10, 10)))
         self.assertEqual(owner['B'], ('E1', self.at(10, 10)))
 
+    def test_impossible_late_insertion_is_pruned_before_routing(self) -> None:
+        self.engineers['E2'] = replace(self.engineers['E2'], is_available=False)
+        self.jobs = {
+            'B': self.jobs['B'],
+            'U': replace(
+                self.job('U', 'Z1', self.at(10), priority=Priority.URGENT),
+                window_end=self.at(11),
+            ),
+        }
+        self.source = ProposedPlan(
+            self.t0, (EngineerPlan('E1', (self.visit('B', self.at(14)),)),), ()
+        )
+        event = self.event(1, EventType.NEW_URGENT_JOB, 'U', self.at(10))
+        self.dataset = self.make_dataset((event,))
+        result = replan_after_event(self.dataset, ReplanningState(self.source), event, _Oracle())
+        self.assertEqual(result.status, ReplanningStatus.EXACT_VALID)
+        self.assertEqual(result.exact_route_checks, 1)
+
     def test_large_urgent_speed_gain_justifies_ejection_with_restoration(self) -> None:
         self.engineers['E1'] = replace(self.engineers['E1'], max_jobs=1)
         self.engineers['E2'] = replace(self.engineers['E2'], shift_start=self.at(13), max_jobs=1)
@@ -227,6 +297,37 @@ class ReplanningTests(unittest.TestCase):
         self.assertEqual(owner['U'], ('E1', self.at(10)))
         self.assertEqual(owner['B'][0], 'E2')
         self.assertLessEqual(owner['B'][1], self.at(14))
+
+    def test_ejected_job_prefers_an_already_active_restorer(self) -> None:
+        self.engineers['E1'] = replace(self.engineers['E1'], max_jobs=1)
+        self.engineers['E2'] = replace(self.engineers['E2'], shift_start=self.at(13), max_jobs=1)
+        self.engineers['E3'] = replace(
+            self.engineers['E2'], engineer_id='E3', shift_start=self.at(8),
+            transport_mode=TransportMode.WALKING, max_jobs=2,
+        )
+        self.jobs['C'] = self.job('C', 'Z1', self.t0)
+        self.jobs['U'] = replace(
+            self.job('U', 'Z1', self.at(10), priority=Priority.URGENT),
+            required_transport=RequiredTransport.CAR,
+        )
+        self.source = ProposedPlan(
+            self.t0,
+            (
+                EngineerPlan('E1', (self.visit('B', self.at(14)),)),
+                EngineerPlan('E3', (self.visit('C', self.at(9)),)),
+            ),
+            ('A',),
+        )
+        event = self.event(1, EventType.NEW_URGENT_JOB, 'U', self.at(10))
+        self.dataset = self.make_dataset((event,))
+        result = replan_after_event(self.dataset, ReplanningState(self.source), event, _Oracle())
+        self.assertEqual(result.status, ReplanningStatus.EXACT_VALID)
+        owner = {
+            visit.job_id: route.engineer_id
+            for route in result.state.plan.engineer_plans for visit in route.visits
+        }
+        self.assertEqual(owner['U'], 'E1')
+        self.assertEqual(owner['B'], 'E3')
 
     def test_small_urgent_speed_gain_does_not_displace_normal_job(self) -> None:
         self.engineers['E1'] = replace(self.engineers['E1'], max_jobs=1)
@@ -254,6 +355,25 @@ class ReplanningTests(unittest.TestCase):
         self.assertEqual(result.state.canceled_job_ids, frozenset({'B'}))
         self.assertEqual([visit.job_id for route in result.state.plan.engineer_plans for visit in route.visits], ['A'])
         self.assertNotIn('B', result.state.plan.unserved_job_ids)
+
+    def test_unchanged_route_reuses_verified_evidence_without_new_checks(self) -> None:
+        self.jobs['C'] = self.job('C', 'Z1', self.t0)
+        self.source = ProposedPlan(
+            self.t0,
+            (
+                EngineerPlan('E1', (
+                    self.visit('A', self.at(9)),
+                    self.visit('B', self.at(11)),
+                )),
+                EngineerPlan('E2', (self.visit('C', self.at(11)),)),
+            ),
+            (),
+        )
+        event = self.event(1, EventType.CANCEL_JOB, 'B', self.at(10))
+        self.dataset = self.make_dataset((event,))
+        result = replan_after_event(self.dataset, ReplanningState(self.source), event, _Oracle())
+        self.assertEqual(result.status, ReplanningStatus.EXACT_VALID)
+        self.assertEqual(result.exact_route_checks, 1)
 
     def test_cancel_started_job_is_rejected(self) -> None:
         event = self.event(1, EventType.CANCEL_JOB, 'A', self.at(9, 10))

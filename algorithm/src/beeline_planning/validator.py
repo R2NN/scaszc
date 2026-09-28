@@ -10,7 +10,7 @@ from typing import Mapping
 
 from beeline_routing.models import DetailedRoute, RouteStatus, TransportMode
 
-from .domain import Commitment, Job, PlanningDataset, Priority, RequiredTransport
+from .domain import Commitment, Job, PlanningDataset, Priority
 from .plan import IdentityTravel, ProposedPlan
 
 
@@ -209,12 +209,13 @@ def _validate_plan(
                 violations.append(
                     Violation(ViolationCode.SKILL_MISSING, subject, job.required_skill)
                 )
-            if (
-                job.required_transport == RequiredTransport.CAR
-                and engineer.transport_mode != TransportMode.CAR
-            ):
+            if not job.required_transport.allows(engineer.transport_mode):
                 violations.append(
-                    Violation(ViolationCode.TRANSPORT_MISMATCH, subject, 'CAR is required')
+                    Violation(
+                        ViolationCode.TRANSPORT_MISMATCH,
+                        subject,
+                        f'{job.required_transport.value} is required',
+                    )
                 )
             for need in job.required_equipment:
                 item = dataset.equipment_catalog[need.equipment_id]

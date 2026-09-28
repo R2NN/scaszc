@@ -17,12 +17,16 @@ from beeline_planning import (
     ObjectiveProof,
     SolverConfig,
     build_master_model_input,
+    build_full_coverage_routing_seed,
     load_planning_dataset,
     load_screening_matrices,
     screening_solution_quality,
     solve_screening_master,
+    validate_initial_plan,
+    validate_screening_solution,
 )
-from beeline_planning.export import master_solution_dict
+from beeline_planning.export import load_exact_plan_artifact, master_solution_dict
+from beeline_routing.models import TransportMode
 from beeline_routing.export import payload_sha256, write_json_atomic
 
 
@@ -57,10 +61,35 @@ def _zone_dataset(source, zone: str):
     )
 
 
+def _with_travel_buffers(master, car_minutes: int, transit_minutes: int):
+    """Reserve travel slack during screening; exact routing remains authoritative."""
+    buffers = {
+        TransportMode.CAR: car_minutes,
+        TransportMode.PUBLIC_TRANSIT: transit_minutes,
+    }
+    if not any(buffers.values()):
+        return master
+    return replace(
+        master,
+        arcs=tuple(
+            replace(
+                arc,
+                screening_duration_minutes=(
+                    arc.screening_duration_minutes + buffers[arc.screening_source_mode]
+                ),
+                screening_is_surrogate=True,
+            )
+            if arc.screening_duration_minutes > 0
+            and buffers.get(arc.screening_source_mode, 0) > 0
+            else arc
+            for arc in master.arcs
+        ),
+    )
+
+
 def _read_warm_orders(
     path: Path | None,
-    dataset_sha256: str,
-    initial_planning_at: str,
+    dataset,
 ) -> tuple[dict[str, list[str]], bool]:
     if path is None:
         return {}, False
@@ -82,12 +111,19 @@ def _read_warm_orders(
     protected_exact_incumbent = bool(
         payload.get('status') == 'EXACT_VALID'
         and payload.get('publication_allowed') is True
-        and payload.get('dataset_sha256') == dataset_sha256
+        and payload.get('dataset_sha256') == dataset.dataset_sha256
         and isinstance(payload.get('validation'), dict)
         and payload['validation'].get('status') == 'VALID'
         and isinstance(payload.get('plan'), dict)
-        and payload['plan'].get('planning_at') == initial_planning_at
+        and payload['plan'].get('planning_at') == dataset.initial_planning_at.isoformat()
     )
+    if protected_exact_incumbent:
+        exact_plan, _ = load_exact_plan_artifact(path, dataset.dataset_sha256)
+        if validate_initial_plan(dataset, exact_plan).status.value != 'VALID':
+            # The same dataset package may contain scenarios with different
+            # hard commitments. An incompatible exact plan is a poor hint as
+            # well as an unsafe incumbent for the current scenario.
+            return {}, False
     return orders, protected_exact_incumbent
 
 
@@ -245,12 +281,53 @@ def main() -> int:
     parser.add_argument('--zone-workers', type=int, default=3)
     parser.add_argument('--adaptive-predecessors', default='8,16,0')
     parser.add_argument(
+        '--car-travel-buffer-minutes', type=int, default=0,
+        help='Conservative per-leg screening buffer for car trips.',
+    )
+    parser.add_argument(
+        '--transit-travel-buffer-minutes', type=int, default=0,
+        help='Conservative per-leg screening buffer for public transit trips.',
+    )
+    parser.add_argument(
+        '--cold-start-seed-seconds',
+        type=int,
+        default=60,
+        help=(
+            'Per-zone budget for a generic VRPTW coverage seed when no warm '
+            'start is supplied. Set 0 to disable.'
+        ),
+    )
+    parser.add_argument(
+        '--cold-start-improve-seconds',
+        type=int,
+        default=10,
+        help=(
+            'Per-zone budget for a team-saving VRPTW search before the '
+            'ordinary cold-start fallback. Set 0 to disable.'
+        ),
+    )
+    parser.add_argument(
+        '--coverage-first-only',
+        action='store_true',
+        help=(
+            'Return immediately after CP-SAT validates full coverage and '
+            'defer team minimization to exact team compaction.'
+        ),
+    )
+    parser.add_argument(
         '--objective-policy',
         choices=('service-quality', 'compact-team'),
         default='compact-team',
     )
     args = parser.parse_args()
-    if args.zone_workers < 1 or args.search_workers < 1:
+    if (
+        args.zone_workers < 1
+        or args.search_workers < 1
+        or args.cold_start_seed_seconds < 0
+        or args.cold_start_improve_seconds < 0
+        or args.car_travel_buffer_minutes < 0
+        or args.transit_travel_buffer_minutes < 0
+    ):
         parser.error('Worker counts must be positive')
     if (
         args.seconds_per_tier <= 0
@@ -275,8 +352,7 @@ def main() -> int:
     screening = load_screening_matrices(args.screening_root, source)
     warm_orders, protected_exact_incumbent = _read_warm_orders(
         args.warm_start,
-        source.dataset_sha256,
-        source.initial_planning_at.isoformat(),
+        source,
     )
     zones = sorted({job.zone_id for job in source.jobs.values()})
     protected_candidate = None
@@ -285,7 +361,11 @@ def main() -> int:
         projected_zones = []
         for zone in zones:
             zone_dataset = _zone_dataset(source, zone)
-            zone_master = build_master_model_input(zone_dataset, screening)
+            zone_master = _with_travel_buffers(
+                build_master_model_input(zone_dataset, screening),
+                args.car_travel_buffer_minutes,
+                args.transit_travel_buffer_minutes,
+            )
             projected_zones.append(_project_hint(
                 zone_dataset,
                 zone_master,
@@ -299,11 +379,84 @@ def main() -> int:
         zone: str,
     ) -> tuple[str, MasterSolution, list[int], dict[str, object]]:
         dataset = _zone_dataset(source, zone)
-        master = build_master_model_input(dataset, screening)
+        master = _with_travel_buffers(
+            build_master_model_input(dataset, screening),
+            args.car_travel_buffer_minutes,
+            args.transit_travel_buffer_minutes,
+        )
+        active_job_ids = set(master.candidate_index.active_job_ids)
+        cold_seed = None
+        improved_seed = None
+        cold_seed_attempts: list[dict[str, object]] = []
         hint = (
             _project_hint(dataset, master, warm_orders, screening.snapshot_sha256)
             if warm_orders else None
         )
+        if hint is None and args.cold_start_seed_seconds > 0:
+            improved_represents_all = False
+            if args.cold_start_improve_seconds > 0:
+                improved_seed = build_full_coverage_routing_seed(
+                    dataset,
+                    master,
+                    screening,
+                    max_seconds=args.cold_start_improve_seconds,
+                    stop_at_full_coverage=False,
+                )
+                improved_represents_all = (
+                    {
+                        visit.job_id
+                        for route in improved_seed.routes
+                        for visit in route.visits
+                    }
+                    | set(improved_seed.unserved_job_ids)
+                ) == active_job_ids
+                cold_seed_attempts.append({
+                    'phase': 'team_search',
+                    'served_jobs': sum(
+                        len(route.visits) for route in improved_seed.routes
+                    ),
+                    'unserved_jobs': len(improved_seed.unserved_job_ids),
+                    'used_engineers': len(improved_seed.routes),
+                    'represents_all_active_jobs': improved_represents_all,
+                })
+                if improved_represents_all and not improved_seed.unserved_job_ids:
+                    cold_seed = improved_seed
+            if cold_seed is None:
+                fallback_seed = build_full_coverage_routing_seed(
+                    dataset,
+                    master,
+                    screening,
+                    max_seconds=args.cold_start_seed_seconds,
+                )
+                fallback_represents_all = (
+                    {
+                        visit.job_id
+                        for route in fallback_seed.routes
+                        for visit in route.visits
+                    }
+                    | set(fallback_seed.unserved_job_ids)
+                ) == active_job_ids
+                cold_seed_attempts.append({
+                    'phase': 'coverage_fallback',
+                    'served_jobs': sum(
+                        len(route.visits) for route in fallback_seed.routes
+                    ),
+                    'unserved_jobs': len(fallback_seed.unserved_job_ids),
+                    'used_engineers': len(fallback_seed.routes),
+                    'represents_all_active_jobs': fallback_represents_all,
+                })
+                if fallback_represents_all:
+                    cold_seed = fallback_seed
+                elif improved_represents_all:
+                    cold_seed = improved_seed
+            if cold_seed is not None:
+                hint = cold_seed
+        buffered_seed_incomplete = bool(
+            (args.car_travel_buffer_minutes or args.transit_travel_buffer_minutes)
+            and cold_seed is not None
+            and cold_seed.unserved_job_ids
+        )
+        search_graph_sizes = graph_sizes[:1] if buffered_seed_incomplete else graph_sizes
         attempts: list[int] = []
         best_solution = (
             hint
@@ -311,52 +464,115 @@ def main() -> int:
             else _project_hint(dataset, master, {}, screening.snapshot_sha256)
         )
         found_solution = hint is not None and protected_exact_incumbent
-        active_job_ids = set(master.candidate_index.active_job_ids)
-
-        for size in graph_sizes:
-            attempts.append(size)
-            candidate = solve_screening_master(
+        retry_with_coverage_seed = (
+            not buffered_seed_incomplete
+            and cold_seed is not None
+            and cold_seed is improved_seed
+        )
+        for seed_round in range(2):
+            for size in search_graph_sizes:
+                attempts.append(size)
+                validate_full_seed = (
+                    hint is not None and not hint.unserved_job_ids
+                )
+                candidate = solve_screening_master(
+                    dataset,
+                    master,
+                    SolverConfig(
+                        max_seconds_per_tier=args.seconds_per_tier,
+                        num_search_workers=args.search_workers,
+                        max_predecessors_per_destination=size or None,
+                        require_full_coverage=validate_full_seed,
+                        stop_after_full_coverage=(
+                            args.coverage_first_only and validate_full_seed
+                        ),
+                        stop_after_coverage=args.coverage_first_only,
+                        full_coverage_seconds=args.seconds_per_tier,
+                        objective_policy=(
+                            ObjectivePolicy.SERVICE_QUALITY
+                            if args.objective_policy == 'service-quality'
+                            else ObjectivePolicy.COMPACT_TEAM
+                        ),
+                    ),
+                    hint_solution=hint,
+                )
+                represented = {
+                    visit.job_id
+                    for route in candidate.routes
+                    for visit in route.visits
+                } | set(candidate.unserved_job_ids)
+                if represented == active_job_ids:
+                    if (
+                        not found_solution
+                        or screening_solution_quality(dataset, candidate).key
+                        < screening_solution_quality(dataset, best_solution).key
+                    ):
+                        best_solution = candidate
+                        found_solution = True
+                    hint = best_solution
+                if found_solution and not best_solution.unserved_job_ids:
+                    break
+            if (
+                found_solution and not best_solution.unserved_job_ids
+            ) or not retry_with_coverage_seed or seed_round:
+                break
+            fallback_seed = build_full_coverage_routing_seed(
                 dataset,
                 master,
-                SolverConfig(
-                    max_seconds_per_tier=args.seconds_per_tier,
-                    num_search_workers=args.search_workers,
-                    max_predecessors_per_destination=size or None,
-                    require_full_coverage=False,
-                    objective_policy=(
-                        ObjectivePolicy.SERVICE_QUALITY
-                        if args.objective_policy == 'service-quality'
-                        else ObjectivePolicy.COMPACT_TEAM
-                    ),
-                ),
-                hint_solution=hint,
+                screening,
+                max_seconds=args.cold_start_seed_seconds,
             )
-            represented = {
-                visit.job_id
-                for route in candidate.routes
-                for visit in route.visits
-            } | set(candidate.unserved_job_ids)
-            if represented == active_job_ids:
-                if (
-                    not found_solution
-                    or screening_solution_quality(dataset, candidate).key
-                    < screening_solution_quality(dataset, best_solution).key
-                ):
-                    best_solution = candidate
-                    found_solution = True
-                hint = best_solution
-            if found_solution and not best_solution.unserved_job_ids:
+            fallback_represents_all = (
+                {
+                    visit.job_id
+                    for route in fallback_seed.routes
+                    for visit in route.visits
+                }
+                | set(fallback_seed.unserved_job_ids)
+            ) == active_job_ids
+            cold_seed_attempts.append({
+                'phase': 'coverage_retry',
+                'served_jobs': sum(
+                    len(route.visits) for route in fallback_seed.routes
+                ),
+                'unserved_jobs': len(fallback_seed.unserved_job_ids),
+                'used_engineers': len(fallback_seed.routes),
+                'represents_all_active_jobs': fallback_represents_all,
+            })
+            if not fallback_represents_all:
                 break
+            cold_seed = fallback_seed
+            hint = fallback_seed
 
         polish: dict[str, object] = {
+            'buffered_seed_incomplete': buffered_seed_incomplete,
+            'cold_start_seed': (
+                {
+                    'attempted': True,
+                    'served_jobs': sum(
+                        len(route.visits) for route in cold_seed.routes
+                    ),
+                    'unserved_jobs': len(cold_seed.unserved_job_ids),
+                    'used_engineers': len(cold_seed.routes),
+                    'attempts': cold_seed_attempts,
+                }
+                if cold_seed is not None
+                else {
+                    'attempted': bool(cold_seed_attempts),
+                    'attempts': cold_seed_attempts,
+                }
+            ),
             'enabled': (
-                args.polish_seconds_per_tier > 0
-                or args.full_graph_polish_seconds > 0
+                not args.coverage_first_only
+                and (
+                    args.polish_seconds_per_tier > 0
+                    or args.full_graph_polish_seconds > 0
+                )
             ),
             'attempted': False,
             'applied': False,
         }
-        if found_solution and (
+        if not args.coverage_first_only and found_solution and (
             args.polish_seconds_per_tier > 0
             or args.full_graph_polish_seconds > 0
         ):
@@ -490,6 +706,21 @@ def main() -> int:
         merged = protected_candidate
         final_quality = protected_quality
         incumbent_fallback_used = True
+    if not incumbent_fallback_used:
+        violations = validate_screening_solution(
+            source,
+            _with_travel_buffers(
+                build_master_model_input(source, screening),
+                args.car_travel_buffer_minutes,
+                args.transit_travel_buffer_minutes,
+            ),
+            merged,
+        )
+        if violations:
+            raise RuntimeError(
+                'Independent screening validation failed: '
+                + '; '.join(violations[:5])
+            )
     payload = master_solution_dict(merged)
     payload['decomposition'] = {
         'independent_zones': True,
@@ -507,6 +738,10 @@ def main() -> int:
         ),
         'incumbent_fallback_used': incumbent_fallback_used,
         'final_quality': final_quality.as_dict(),
+        'travel_buffers_minutes': {
+            'CAR': args.car_travel_buffer_minutes,
+            'PUBLIC_TRANSIT': args.transit_travel_buffer_minutes,
+        },
     }
     payload['content_sha256'] = payload_sha256(payload)
     write_json_atomic(args.output, payload)

@@ -397,19 +397,26 @@ class LocalTransitRoutingClient:
         request = (origin.location_id, destination.location_id, departure_at.isoformat())
         response = [(step.mode, step.duration_seconds, step.attributes.get('trip_id')) for step in itinerary]
         provenance = Provenance(
-            provider='LOCAL_GTFS_RASP_VALHALLA', endpoint=str(self.database),
+            provider=('LOCAL_GTFS_RASP_VALHALLA' if self.metadata.get('rail_schedule_available', True)
+                      else 'LOCAL_GTFS_VALHALLA'), endpoint=str(self.database),
             request_sha256=hashlib.sha256(json.dumps(request).encode()).hexdigest(),
             response_sha256=hashlib.sha256(json.dumps(response).encode()).hexdigest(),
             fetched_at=datetime.now(UTC).isoformat(), cache_hit=True,
             provider_metadata={
                 'surface_schedule_date': self.metadata['scenario_date'],
                 'rail_normal_weekday_reference_date': self.metadata['rail_reference_date'],
-                'rail_schedule_applied_to_date': self.metadata['scenario_date'],
+                'rail_schedule_applied_to_date': (
+                    self.metadata['scenario_date'] if self.metadata.get('rail_schedule_available', True) else None
+                ),
+                'rail_schedule_available': self.metadata.get('rail_schedule_available', True),
+                'rail_schedule_scope': self.metadata.get('rail_schedule_scope'),
                 'metro_departure_schedule_available': False,
                 'metro_ride_included': any(step.mode == 'metro' for step in itinerary),
                 'distance_quality': 'lower_bound_for_transit_legs',
                 'geometry_quality': 'stop_to_stop_for_transit_legs',
-                'network_completeness': 'surface_gtfs_and_mcc_mcd_subset',
+                'network_completeness': ('surface_gtfs_and_mcc_mcd_subset'
+                                         if self.metadata.get('rail_schedule_available', True)
+                                         else 'surface_gtfs_and_metro_model_only'),
                 'metro_model_candidate_seconds': metro_route.duration_seconds if metro_route else None,
                 'metro_model_wait_assumption_seconds': (
                     metro_route.provenance.provider_metadata['boarding_wait_assumption_seconds']
@@ -440,13 +447,17 @@ class LocalTransitRoutingClient:
                  departure_at: datetime, reason: str) -> DetailedRoute:
         request = (origin.location_id, destination.location_id, departure_at.isoformat())
         provenance = Provenance(
-            provider='LOCAL_GTFS_RASP_VALHALLA', endpoint=str(self.database),
+            provider=('LOCAL_GTFS_RASP_VALHALLA' if self.metadata.get('rail_schedule_available', True)
+                      else 'LOCAL_GTFS_VALHALLA'), endpoint=str(self.database),
             request_sha256=hashlib.sha256(json.dumps(request).encode()).hexdigest(),
             response_sha256=hashlib.sha256(reason.encode()).hexdigest(),
             fetched_at=datetime.now(UTC).isoformat(), cache_hit=True,
-            provider_metadata={'network_completeness': 'surface_gtfs_and_mcc_mcd_subset',
+            provider_metadata={'network_completeness': ('surface_gtfs_and_mcc_mcd_subset'
+                               if self.metadata.get('rail_schedule_available', True)
+                               else 'surface_gtfs_and_metro_model_only'),
                                'metro_departure_schedule_available': False,
-                               'rail_normal_weekday_reference_date': self.metadata['rail_reference_date']},
+                               'rail_normal_weekday_reference_date': self.metadata['rail_reference_date'],
+                               'rail_schedule_scope': self.metadata.get('rail_schedule_scope')},
         )
         return DetailedRoute(origin.location_id, destination.location_id,
                              TransportMode.PUBLIC_TRANSIT, departure_at, RouteStatus.UNKNOWN,

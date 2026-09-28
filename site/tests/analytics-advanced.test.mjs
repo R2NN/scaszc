@@ -220,13 +220,14 @@ test('early-visit proposal keeps departure, arrival and saved idle internally co
   assert.equal(gap.customerCall.arrivalAt, 1123);
   assert.equal(gap.customerCall.proposedStart, 1125);
   assert.equal(gap.customerCall.savedMinutes, 62);
+  assert.equal(gap.customerCall.travelMinutes, 13);
   assert.equal(gap.nextOrderSourceId, 'SOUTHCENTER-30243');
   assert.equal(gap.nextOrderAddress, 'Город Москва, ул.Нижегородская, д. 14');
   assert.equal(gap.nextClientName, 'Анна');
   assert.equal(gap.nextClientPhone, '+7 900 000-00-00');
   assert.equal(gap.travelDistanceKm, 3.2);
   assert.equal(gap.nextOrderDuration, 40);
-  assert.match(gap.proposal.impact, /начать в 18:45.*выедет в 18:30/);
+  assert.match(gap.proposal.impact, /ждёт 62 мин.*выедет в 18:30.*13 мин на дорогу.*начнёт визит в 18:45/);
 });
 
 test('area anomalies compare the selected territory with matching weekdays', () => {
@@ -284,6 +285,21 @@ test('resource explanation uses the real window, zone, skill and idle-team capab
   assert.equal(result.causes.reduce((sum, cause) => sum + cause.count, 0), selected.plan.unassigned.length);
 });
 
+test('generic planner reason is presented as a candidate check request, not a precise diagnosis', () => {
+  const record = {
+    orders: [{ id: 'one', zone: 'Восток', skill: 'INSTALL', start: '10:00', end: '12:00', duration: 60 }],
+    team: [{ id: 'crew', name: 'Бригада', zone: 'Восток', skills: ['INSTALL'], shiftStart: '08:00', shiftEnd: '18:00' }],
+    plan: { routes: [], unassigned: [{ orderId: 'one', reasonCode: 'STATIC_ELIGIBLE_BUT_UNSERVED' }] },
+  };
+  const explanation = analyzeResourceGaps(record).explanations[0];
+  assert.equal(explanation.reasonCode, 'STATIC_ELIGIBLE_BUT_UNSERVED');
+  assert.match(explanation.label, /подходящие бригады есть/i);
+  assert.match(explanation.detail, /не содержит допустимого назначения/i);
+  assert.doesNotMatch(explanation.detail, /Что известно:/i);
+  assert.match(explanation.detail, /не указывает, какое именно условие/i);
+  for (const check of ['навык', 'зону', 'окно', 'дорогу', 'занятость']) assert.match(explanation.action, new RegExp(check, 'i'));
+});
+
 test('team capacity includes idle crews and explains only facts supported by the plan inputs', () => {
   const result = analyzeTeamCapacity(selected);
   const idle = result.stats.filter(item => !item.hasRoute);
@@ -296,6 +312,14 @@ test('team capacity includes idle crews and explains only facts supported by the
   assert.equal(result.lowestActive.engineerId, active.sort((a, b) => a.utilization - b.utilization)[0].engineerId);
   assert.equal(result.averageLoad, Math.round(result.stats.reduce((sum, item) => sum + item.utilization, 0) / result.stats.length));
   assert.equal(result.missingReasonCount, 0);
+});
+
+test('team capacity normalizes imported Russian transport labels for resource filters', () => {
+  const record = { ...selected, team: selected.team.map(engineer => ({ ...engineer, transport: ({ CAR: 'Автомобиль', PUBLIC_TRANSIT: 'Общественный транспорт', WALKING: 'Пешком', BICYCLE: 'Велосипед' })[engineer.transport] })) };
+  const stats = analyzeTeamCapacity(record).stats;
+  assert.equal(stats.length, selected.team.length);
+  assert.deepEqual(new Set(stats.map(item => item.transport)), new Set(selected.team.map(item => item.transport)));
+  assert.ok(stats.every(item => item.transport !== 'UNKNOWN'));
 });
 
 test('team capacity does not invent a tie-break reason absent from planner output', () => {

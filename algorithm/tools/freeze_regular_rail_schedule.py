@@ -1,10 +1,7 @@
-"""Freeze a normal-weekday MCC/MCD timetable from Yandex Rasp for local routing.
+"""Freeze an MCC/MCD timetable for a specific date from Yandex Rasp.
 
-The source date is deliberately independent from the hackathon input date.  It
-is a reproducible normal-weekday reference timetable that is kept on disk and
-then used without further API requests.  The script never fabricates a
-departure: each saved entry is an API response with its source station and
-request parameters.
+The source date is saved with the snapshot. Each saved entry is an API response
+with its source station and request parameters. Partial snapshots are resumable.
 
 The free Yandex Rasp quota is limited.  The collector is resumable: run it
 again with the same output folder, or set another key in
@@ -22,8 +19,10 @@ import urllib.parse
 import urllib.error
 import urllib.request
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 
@@ -60,28 +59,36 @@ MCD_CODE_ALIASES = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--credentials', type=Path, required=True)
+    parser.add_argument('--credentials', type=Path,
+                        help='File containing YANDEX_RASP_API_KEY; environment variable also works.')
     parser.add_argument('--metro-schema', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--date', default=SOURCE_DATE, help='Normal-weekday source date in YYYY-MM-DD.')
+    parser.add_argument('--date', default=SOURCE_DATE, help='Schedule date in YYYY-MM-DD.')
     parser.add_argument('--kinds', default='mcc,mcd', help='Comma-separated: mcc,mcd.')
     parser.add_argument('--max-requests', type=int, default=450)
     parser.add_argument('--pause-seconds', type=float, default=0.05)
+    parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--map-only', action='store_true', help='Match metro-schema stations to Yandex codes without API schedule calls.')
     return parser.parse_args()
 
 
-def load_key(credentials: Path) -> str:
-    for raw in credentials.read_text(encoding='utf-8').splitlines():
-        key, separator, value = raw.partition('=')
-        if separator and key.strip() == 'YANDEX_RASP_API_KEY' and value.strip():
-            return value.strip()
-    raise RuntimeError('YANDEX_RASP_API_KEY is missing from the credentials file.')
+def load_key(credentials: Path | None) -> str:
+    key = os.environ.get('YANDEX_RASP_API_KEY')
+    if key:
+        return key
+    if credentials is not None:
+        for raw in credentials.read_text(encoding='utf-8').splitlines():
+            name, separator, value = raw.partition('=')
+            if separator and name.strip() == 'YANDEX_RASP_API_KEY' and value.strip():
+                return value.strip()
+    raise RuntimeError('YANDEX_RASP_API_KEY is required for railway timetable collection.')
 
 
 def get_json(path: str, parameters: dict[str, Any], api_key: str) -> dict[str, Any]:
-    query = urllib.parse.urlencode({**parameters, 'apikey': api_key})
-    request = urllib.request.Request(API_ROOT + path + '?' + query, headers={'User-Agent': USER_AGENT})
+    query = urllib.parse.urlencode(parameters)
+    request = urllib.request.Request(API_ROOT + path + '?' + query, headers={
+        'User-Agent': USER_AGENT, 'Authorization': api_key,
+    })
     with urllib.request.urlopen(request, timeout=90) as response:
         payload = json.load(response)
     if not isinstance(payload, dict):
@@ -178,12 +185,15 @@ def selected_stations(schema: dict[str, Any], kinds: set[str]) -> list[dict[str,
     return rows
 
 
-def fetch_all_pages(code: str, date: str, api_key: str, budget: list[int], pause_seconds: float) -> list[dict[str, Any]]:
+def fetch_all_pages(code: str, date: str, api_key: str, budget: list[int],
+                    pause_seconds: float, budget_lock: Lock) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     offset = 0
     while True:
-        if budget[0] <= 0:
-            raise RuntimeError('Request budget exhausted.')
+        with budget_lock:
+            if budget[0] <= 0:
+                raise RuntimeError('Request budget exhausted.')
+            budget[0] -= 1
         payload = get_json('schedule/', {
             'station': code,
             'date': date,
@@ -191,7 +201,6 @@ def fetch_all_pages(code: str, date: str, api_key: str, budget: list[int], pause
             'limit': 100,
             'offset': offset,
         }, api_key)
-        budget[0] -= 1
         page = payload.get('schedule')
         pagination = payload.get('pagination')
         if not isinstance(page, list) or not isinstance(pagination, dict):
@@ -208,26 +217,38 @@ def fetch_all_pages(code: str, date: str, api_key: str, budget: list[int], pause
 
 def main() -> int:
     args = parse_args()
-    if args.max_requests < 1 or args.pause_seconds < 0:
-        raise SystemExit('max-requests must be positive and pause-seconds must be non-negative.')
+    if args.max_requests < 1 or args.pause_seconds < 0 or not 1 <= args.workers <= 8:
+        raise SystemExit('max-requests must be positive, pause-seconds non-negative, workers 1..8.')
     kinds = {value.strip() for value in args.kinds.split(',') if value.strip()}
     if not kinds or not kinds <= {'mcc', 'mcd'}:
         raise SystemExit('kinds must contain mcc and/or mcd.')
+    date = datetime.fromisoformat(args.date).date().isoformat()
     output = args.output.resolve()
+    api_key = '' if args.map_only else load_key(args.credentials)
     catalog_path = output / 'yandex_stations.json'
     if not catalog_path.exists():
+        if args.map_only:
+            raise RuntimeError('Station catalog is required in map-only mode.')
         catalog = get_json('stations_list/', {'lang': 'ru_RU', 'format': 'json'}, api_key)
         atomic_json(catalog_path, catalog)
     catalog = load_json(catalog_path, {})
-    api_key = '' if args.map_only else load_key(args.credentials)
     candidates = station_candidates(all_station_records(catalog))
     schema = load_json(args.metro_schema, {})
     stations_path = output / 'rail_station_map.json'
     schedule_path = output / 'rail_schedule.json'
+    station_entries_dir = output / 'station_entries'
+    station_entries_dir.mkdir(parents=True, exist_ok=True)
     stations = load_json(stations_path, {})
     schedules = load_json(schedule_path, {})
+    for saved in station_entries_dir.glob('*.json'):
+        schedules[saved.stem] = load_json(saved, {})
+    for code, schedule in schedules.items():
+        if schedule.get('source_date') != date:
+            raise RuntimeError(f'Saved schedule for station {code} belongs to another date')
     budget = [args.max_requests]
+    budget_lock = Lock()
     unresolved: list[dict[str, Any]] = []
+    pending: dict[str, dict[str, Any]] = {}
     for item in selected_stations(schema, kinds):
         metro_id = str(item['metro_id'])
         if metro_id not in stations:
@@ -266,24 +287,42 @@ def main() -> int:
             }
             atomic_json(stations_path, stations)
         code = stations[metro_id]['yandex_code']
-        if args.map_only or code in schedules:
+        if args.map_only or code in schedules or code in pending:
             continue
-        try:
-            entries = fetch_all_pages(code, args.date, api_key, budget, args.pause_seconds)
-        except urllib.error.HTTPError as error:
-            unresolved.append({**item, 'yandex_code': code, 'http_status': error.code})
-            stations.pop(metro_id, None)
-            atomic_json(stations_path, stations)
-            continue
-        except RuntimeError as error:
-            if str(error) == 'Request budget exhausted.':
-                break
-            raise
-        schedules[code] = {'source_date': args.date, 'fetched_at': datetime.now(UTC).isoformat(), 'entries': entries}
-        atomic_json(schedule_path, schedules)
+        pending[code] = item
+    if pending:
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            futures = {
+                pool.submit(fetch_all_pages, code, date, api_key, budget,
+                            args.pause_seconds, budget_lock): code
+                for code in pending
+            }
+            for future in as_completed(futures):
+                code = futures[future]
+                try:
+                    entries = future.result()
+                except urllib.error.HTTPError as error:
+                    if error.code != 404:
+                        for pending_future in futures:
+                            pending_future.cancel()
+                        raise RuntimeError(f'Yandex Rasp returned HTTP {error.code} for station {code}') from error
+                    unresolved.append({**pending[code], 'yandex_code': code, 'http_status': error.code})
+                    stations = {key: station for key, station in stations.items()
+                                if station['yandex_code'] != code}
+                    atomic_json(stations_path, stations)
+                    continue
+                except RuntimeError as error:
+                    if str(error) == 'Request budget exhausted.':
+                        continue
+                    raise
+                schedules[code] = {'source_date': date, 'fetched_at': datetime.now(UTC).isoformat(),
+                                   'entries': entries}
+                atomic_json(station_entries_dir / f'{code}.json', schedules[code])
+    atomic_json(schedule_path, schedules)
     manifest = {
-        'normal_weekday_reference_date': args.date,
-        'input_date_not_modified': '2026-08-17',
+        'normal_weekday_reference_date': date,
+        'source_date': date,
+        'schedule_scope': 'exact_date',
         'source': 'Yandex Rasp API v3',
         'source_endpoint': API_ROOT,
         'requested_kinds': sorted(kinds),

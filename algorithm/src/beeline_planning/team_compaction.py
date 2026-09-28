@@ -8,6 +8,7 @@ from typing import Callable, Mapping
 
 from .domain import PlanningDataset
 from .eligibility import CandidateIndex
+from .plan import EngineerPlan, ProposedPlan
 from .screening import ScreeningMatrices
 
 
@@ -45,6 +46,39 @@ class TeamEliminationSearchReport:
 
 
 RouteEvaluator = Callable[[str, tuple[str, ...]], RouteEvaluation | None]
+
+
+def merge_exact_compaction_delta(
+    base_plan: ProposedPlan,
+    eliminated_engineer_id: str,
+    updated_plans: Mapping[str, EngineerPlan],
+) -> ProposedPlan:
+    """Apply one proven compaction delta to the latest accepted exact plan.
+
+    Multi-pass compaction must build on the preceding accepted plan, not on the
+    original input artifact.  Otherwise a later pass silently restores a route
+    eliminated by an earlier pass and loses its already verified route updates.
+    """
+    if eliminated_engineer_id in updated_plans:
+        raise ValueError('Eliminated engineer cannot also receive a route update')
+    existing_engineers = {
+        route.engineer_id for route in base_plan.engineer_plans
+    }
+    unknown_updates = set(updated_plans) - existing_engineers
+    if unknown_updates:
+        raise ValueError(
+            f'Route updates contain engineers absent from base plan: '
+            f'{sorted(unknown_updates)}'
+        )
+    return ProposedPlan(
+        planning_at=base_plan.planning_at,
+        engineer_plans=tuple(
+            updated_plans.get(route.engineer_id, route)
+            for route in base_plan.engineer_plans
+            if route.engineer_id != eliminated_engineer_id
+        ),
+        unserved_job_ids=base_plan.unserved_job_ids,
+    )
 
 
 def build_screening_route_evaluator(

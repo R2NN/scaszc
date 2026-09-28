@@ -38,8 +38,19 @@ class SolverConfig:
     presolve_probing_deterministic_time_limit: float = 0.1
     max_predecessors_per_destination: int | None = None
     excluded_arcs: tuple[tuple[str, str, str], ...] = ()
+    required_arcs: tuple[tuple[str, str, str], ...] = ()
+    forbidden_arc_groups: tuple[
+        tuple[tuple[str, str, str], ...], ...
+    ] = ()
+    forbidden_assignments: tuple[tuple[str, str], ...] = ()
+    forbidden_assignment_groups: tuple[
+        tuple[tuple[str, str], ...], ...
+    ] = ()
     objective_policy: ObjectivePolicy = ObjectivePolicy.COMPACT_TEAM
     require_full_coverage: bool = True
+    stop_after_full_coverage: bool = False
+    stop_at_first_full_coverage_solution: bool = False
+    stop_after_coverage: bool = False
     full_coverage_seconds: float = 300.0
     allow_partial_after_proven_infeasible: bool = False
     fixed_unserved_by_priority: tuple[int, int] | None = None
@@ -71,6 +82,10 @@ class SolverConfig:
             raise ValueError('Fixed partial coverage requires require_full_coverage=False')
         if self.max_used_engineers is not None and self.max_used_engineers < 0:
             raise ValueError('max_used_engineers must be non-negative')
+        if any(not group for group in self.forbidden_arc_groups):
+            raise ValueError('Forbidden arc groups cannot be empty')
+        if any(not group for group in self.forbidden_assignment_groups):
+            raise ValueError('Forbidden assignment groups cannot be empty')
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,11 +280,14 @@ def _build_cp_model(
         for route in hint_solution.routes
         for visit in route.visits
     ) if hint_solution is not None else frozenset()
+    conflict_arcs = frozenset(
+        key for group in config.forbidden_arc_groups for key in group
+    )
     search_arcs, search_graph_complete = _select_search_arcs(
         master.arcs,
         config.max_predecessors_per_destination,
         config.excluded_arcs,
-        hint_arcs,
+        hint_arcs | conflict_arcs | frozenset(config.required_arcs),
     )
     arcs_by_key = {
         (item.engineer_id, item.origin_node_id, item.destination_job_id): item
@@ -348,6 +366,34 @@ def _build_cp_model(
 
     if config.max_used_engineers is not None:
         model.add(_sum(used.values()) <= config.max_used_engineers)
+
+    for pair in config.forbidden_assignments:
+        if pair not in assignment:
+            raise ValueError(
+                f'Forbidden assignment is absent from the candidate graph: {pair}'
+            )
+        model.add(assignment[pair] == 0)
+
+    for group in config.forbidden_assignment_groups:
+        missing = tuple(pair for pair in group if pair not in assignment)
+        if missing:
+            raise ValueError(
+                f'Forbidden assignment conflict contains absent pairs: {missing}'
+            )
+        model.add(_sum(assignment[pair] for pair in group) <= len(group) - 1)
+
+    for group in config.forbidden_arc_groups:
+        missing = tuple(key for key in group if key not in arc)
+        if missing:
+            raise ValueError(
+                f'Forbidden route conflict contains absent arcs: {missing}'
+            )
+        model.add(_sum(arc[key] for key in group) <= len(group) - 1)
+
+    for key in config.required_arcs:
+        if key not in arc:
+            raise ValueError(f'Required arc is absent from the search graph: {key}')
+        model.add(arc[key] == 1)
 
     for engineer_id, job_id in master.hard_assignments:
         model.add(assignment[(engineer_id, job_id)] == 1)
@@ -565,7 +611,14 @@ def _add_solution_structure_hint(
     arcs_by_key: dict[tuple[str, str, str], MasterArc],
     solution: MasterSolution,
 ) -> None:
-    """Warm-start assignments and route order from another audited search."""
+    """Warm-start assignments and route order from another audited search.
+
+    Candidate artifacts may contain placeholder or stale timestamps (for
+    example, a zero-travel feasibility seed).  Reusing those values can make a
+    structurally strong route hint actively harmful to CP-SAT.  Therefore time
+    hints are rebuilt from the current screening graph and are emitted only
+    when the complete hinted route has a feasible earliest schedule.
+    """
     if solution.dataset_sha256 != dataset.dataset_sha256:
         raise ValueError('Hint solution belongs to another dataset checksum')
     assigned_engineer: dict[str, str] = {}
@@ -579,21 +632,53 @@ def _add_solution_structure_hint(
         if route.engineer_id not in dataset.engineers:
             raise ValueError(f'Hint contains unknown engineer {route.engineer_id}')
         used_engineers.add(route.engineer_id)
+        engineer = dataset.engineers[route.engineer_id]
         origin = f'START:{route.engineer_id}'
+        route_times: dict[tuple[str, str], tuple[int, int]] = {}
+        route_moment = max(solution.planning_at, engineer.shift_start)
+        route_departure: datetime | None = None
+        route_schedule_feasible = True
         for visit in route.visits:
             if visit.job_id not in active_jobs:
                 raise ValueError(f'Hint contains inactive job {visit.job_id}')
             if visit.job_id in assigned_engineer:
                 raise ValueError(f'Hint assigns job twice: {visit.job_id}')
             assigned_engineer[visit.job_id] = route.engineer_id
-            hinted_times[(route.engineer_id, visit.job_id)] = (
-                _minute(day_start, visit.departure_at),
-                _minute(day_start, visit.service_start_at),
-            )
             key = (route.engineer_id, origin, visit.job_id)
             if key in arcs_by_key:
                 selected_arcs.add(key)
+                job = dataset.jobs[visit.job_id]
+                departure_at = max(route_moment, job.created_at)
+                service_start_at = max(
+                    departure_at
+                    + timedelta(
+                        minutes=arcs_by_key[key].screening_duration_minutes
+                    ),
+                    job.window_start,
+                    job.created_at,
+                )
+                service_end_at = service_start_at + timedelta(
+                    minutes=job.service_duration_min
+                )
+                if route_departure is None:
+                    route_departure = departure_at
+                if (
+                    service_start_at > job.window_end
+                    or service_end_at > engineer.shift_end
+                    or service_end_at - route_departure
+                    > timedelta(minutes=engineer.max_route_minutes)
+                ):
+                    route_schedule_feasible = False
+                route_times[(route.engineer_id, visit.job_id)] = (
+                    _minute(day_start, departure_at),
+                    _minute(day_start, service_start_at),
+                )
+                route_moment = service_end_at
+            else:
+                route_schedule_feasible = False
             origin = visit.job_id
+        if route_schedule_feasible:
+            hinted_times.update(route_times)
     unserved = set(solution.unserved_job_ids)
     if set(active_jobs) != set(assigned_engineer) | unserved:
         raise ValueError('Hint must cover every active job exactly once')
@@ -801,6 +886,35 @@ def _replace_hint_with_solution(model: cp_model.CpModel, solver: cp_model.CpSolv
         model.add_hint(variable, solver.value(variable))
 
 
+def _full_coverage_hint_stability(
+    built: _BuiltModel,
+    hint_solution: MasterSolution,
+) -> cp_model.LinearExpr | None:
+    """Prefer the smallest local change while extending a coverage hint.
+
+    Previously unserved jobs are deliberately absent from the penalty, and
+    opening an additional engineer is not penalized.  Coverage can therefore
+    grow first; the normal lexicographic objectives run only afterwards.
+    """
+    assignment_losses: list[cp_model.LinearExpr] = []
+    arc_losses: list[cp_model.LinearExpr] = []
+    for route in hint_solution.routes:
+        for visit in route.visits:
+            pair = (route.engineer_id, visit.job_id)
+            if pair in built.variables.assignment:
+                assignment_losses.append(1 - built.variables.assignment[pair])
+            key = (route.engineer_id, visit.origin_node_id, visit.job_id)
+            if key in built.variables.arc:
+                arc_losses.append(1 - built.variables.arc[key])
+    if not assignment_losses and not arc_losses:
+        return None
+    assignment_weight = len(arc_losses) + 1
+    return (
+        assignment_weight * _sum(assignment_losses)
+        + _sum(arc_losses)
+    )
+
+
 def _extract_solution(
     dataset: PlanningDataset,
     master: MasterModelInput,
@@ -908,11 +1022,29 @@ def solve_screening_master(
     if config.require_full_coverage:
         for variable in built.variables.unserved.values():
             built.model.add(variable == 0)
+        stability_objective = (
+            _full_coverage_hint_stability(built, hint_solution)
+            if hint_solution is not None
+            else None
+        )
+        if stability_objective is not None:
+            built.model.minimize(stability_objective)
         coverage_solver = _configure_solver(
             config,
             max_seconds=config.full_coverage_seconds,
         )
-        coverage_status = coverage_solver.solve(built.model)
+        if config.stop_at_first_full_coverage_solution:
+            class FirstCoverageSolution(cp_model.CpSolverSolutionCallback):
+                def on_solution_callback(self) -> None:
+                    self.stop_search()
+
+            coverage_status = coverage_solver.solve(
+                built.model, FirstCoverageSolution()
+            )
+        else:
+            coverage_status = coverage_solver.solve(built.model)
+        if stability_objective is not None:
+            built.model.clear_objective()
         if coverage_status in {cp_model.OPTIMAL, cp_model.FEASIBLE}:
             proofs.extend((
                 ObjectiveProof(
@@ -935,6 +1067,15 @@ def solve_screening_master(
             last_solver = coverage_solver
             objective_tiers = built.objective_tiers[2:]
             starting_tier = 3
+            if config.stop_after_full_coverage:
+                return _extract_solution(
+                    dataset,
+                    master,
+                    built,
+                    coverage_solver,
+                    MasterSolveStatus.SCREENING_FEASIBLE,
+                    proofs,
+                )
             _replace_hint_with_solution(built.model, coverage_solver)
         elif coverage_status == cp_model.INFEASIBLE:
             if (
@@ -970,6 +1111,9 @@ def solve_screening_master(
                 searched_arc_count=len(built.arcs_by_key),
                 operationally_excluded_arcs=config.excluded_arcs,
             )
+
+    if config.stop_after_coverage and not config.require_full_coverage:
+        objective_tiers = objective_tiers[:2]
 
     for tier, (metric, expression) in enumerate(
         objective_tiers,
@@ -1046,9 +1190,12 @@ def solve_screening_master(
 
     if last_solver is None:
         raise RuntimeError('Model has no objective tiers')
-    if config.fixed_unserved_by_priority is not None:
-        # The polishing run proves nothing about better coverage because its
-        # incumbent coverage is deliberately fixed by the caller.
+    if (
+        config.fixed_unserved_by_priority is not None
+        or (config.stop_after_coverage and not config.require_full_coverage)
+    ):
+        # Fixed-coverage polishing and early coverage search do not optimize
+        # every objective tier, so neither may claim a complete optimum.
         final_status = MasterSolveStatus.SCREENING_FEASIBLE
     elif built.search_graph_complete:
         final_status = MasterSolveStatus.SCREENING_OPTIMAL

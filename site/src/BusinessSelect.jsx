@@ -4,15 +4,17 @@ import './business-select.css';
 
 /**
  * Единый выпадающий список BeeGo с управлением мышью и клавиатурой.
- * @param {{value: string, options: Array<{value: string, label: string, hint?: string, priority?: boolean, disabled?: boolean}>, onChange: (value: string) => void, ariaLabel: string, className?: string}} props
+ * @param {{value: string, options: Array<{value: string, label: string, hint?: string, priority?: boolean, disabled?: boolean}>, onChange: (value: string) => void, ariaLabel: string, className?: string, disabled?: boolean}} props
  */
-export function BusinessSelect({ value, options, onChange, ariaLabel, className = '' }) {
+export function BusinessSelect({ value, options, onChange, ariaLabel, className = '', disabled = false, searchable = false }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef(null);
   const selectedIndex = Math.max(0, options.findIndex(option => option.value === value));
   const selected = options[selectedIndex] || options[0];
-  const enabledIndexes = useMemo(() => options.map((option, index) => option.disabled ? -1 : index).filter(index => index >= 0), [options]);
+  const visibleOptions = useMemo(() => options.map((option, index) => ({option,index})).filter(({option,index}) => !searchable || !query.trim() || !index || `${option.label} ${option.hint||''}`.toLocaleLowerCase('ru-RU').includes(query.trim().toLocaleLowerCase('ru-RU'))), [options,query,searchable]);
+  const enabledIndexes = useMemo(() => visibleOptions.filter(({option}) => !option.disabled).map(({index})=>index), [visibleOptions]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -28,6 +30,8 @@ export function BusinessSelect({ value, options, onChange, ariaLabel, className 
   }, [open]);
 
   const show = () => {
+    if (disabled) return;
+    setQuery('');
     setActiveIndex(options[selectedIndex]?.disabled ? (enabledIndexes[0] ?? 0) : selectedIndex);
     setOpen(true);
   };
@@ -44,6 +48,8 @@ export function BusinessSelect({ value, options, onChange, ariaLabel, className 
     setActiveIndex(enabledIndexes[(next + enabledIndexes.length) % enabledIndexes.length]);
   };
   const onKeyDown = event => {
+    if (disabled) return;
+    if (event.target instanceof HTMLInputElement && !['ArrowDown','ArrowUp','Escape'].includes(event.key)) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (!open) show();
@@ -61,14 +67,16 @@ export function BusinessSelect({ value, options, onChange, ariaLabel, className 
     }
   };
 
-  return <div className={`business-select ${open ? 'open' : ''} ${className}`.trim()} ref={rootRef} onKeyDown={onKeyDown}>
-    <button type="button" className="business-select-trigger" onClick={() => open ? setOpen(false) : show()} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open}>
+  return <div className={`business-select ${open ? 'open' : ''} ${disabled ? 'disabled' : ''} ${className}`.trim()} ref={rootRef} onKeyDown={onKeyDown}>
+    <button type="button" className="business-select-trigger" disabled={disabled} onClick={() => open ? setOpen(false) : show()} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open}>
       <span>{selected?.label || 'Выберите значение'}</span><ChevronDown/>
     </button>
     {open ? <div className="business-select-menu" role="listbox" aria-label={ariaLabel}>
-      {options.map((option, index) => <button type="button" role="option" aria-selected={option.value === value} disabled={option.disabled} className={`${option.value === value ? 'selected' : ''} ${index === activeIndex ? 'focused' : ''} ${option.priority ? 'priority' : ''}`.trim()} key={option.value} onPointerMove={() => !option.disabled && setActiveIndex(index)} onClick={() => choose(option)}>
+      {searchable?<input className="business-select-search" value={query} onChange={event=>{setQuery(event.target.value);setActiveIndex(0)}} placeholder="Найти в списке…" aria-label={`Поиск: ${ariaLabel}`} autoFocus/>:null}
+      {visibleOptions.map(({option,index}) => <button type="button" role="option" aria-selected={option.value === value} disabled={option.disabled} className={`${option.value === value ? 'selected' : ''} ${index === activeIndex ? 'focused' : ''} ${option.priority ? 'priority' : ''}`.trim()} key={option.value} onPointerMove={() => !option.disabled && setActiveIndex(index)} onClick={() => choose(option)}>
         <span><b>{option.label}</b>{option.hint ? <small>{option.hint}</small> : null}</span>{option.value === value ? <Check/> : null}
       </button>)}
+      {!visibleOptions.length?<p className="business-select-empty">Совпадений нет</p>:null}
     </div> : null}
   </div>;
 }

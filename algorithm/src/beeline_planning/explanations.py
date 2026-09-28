@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 
 from beeline_routing.models import DetailedRoute
 
-from .domain import Event, EventType, PlanningDataset, Priority, RequiredTransport
+from .domain import Event, EventType, PlanningDataset, Priority
 from .eligibility import RejectionCode, build_candidate_index
 from .errors import InvalidPlanningData
 from .plan import ProposedPlan
@@ -192,10 +192,7 @@ def _static_checks(dataset: PlanningDataset, engineer_id: str, job_id: str) -> d
     return {
         'zone': 'PASS' if engineer.zone_id == job.zone_id else 'FAIL',
         'skill': 'PASS' if job.required_skill in engineer.skills else 'FAIL',
-        'transport': 'PASS' if (
-            job.required_transport == RequiredTransport.ANY
-            or engineer.transport_mode.value == job.required_transport.value
-        ) else 'FAIL',
+        'transport': 'PASS' if job.required_transport.allows(engineer.transport_mode) else 'FAIL',
         'personal_equipment': 'PASS' if reusable_ok else 'FAIL',
         'time_window': 'PASS',
         'shift': 'PASS',

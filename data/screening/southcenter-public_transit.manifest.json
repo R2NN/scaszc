@@ -17,6 +17,6 @@
     "OK": 3136
   },
   "matrix_file": "southcenter-public_transit.csv",
-  "matrix_file_sha256": "3bbeb4f358fe0a1b9181c5e81807c4dfaf10daa08a91822b3a0f67d64d0e8129",
+  "matrix_file_sha256": "db80f677e4aaf202ef776db24b08e316afaf40e8cf7564c12732ccb81f51c3fa",
   "matrix_content_sha256": "d374812bb27dd2f674707ec632523393ecf9d0dae4faff386e2a42cbdb3b662e"
 }

@@ -1,2 +1,8 @@
 # Бесплатный ключ создаётся в Geoapify MyProjects.
 GEOAPIFY_API_KEY=your_free_geoapify_key
+# Не добавляйте реальные секреты в репозиторий. ID ключа не равен ID каталога.
+YANDEX_AI_API_KEY=your_server_side_api_key
+YANDEX_AI_FOLDER_ID=your_yandex_cloud_folder_id
+# Дополнительные ограничения расходов AI: максимум запросов за час и токенов за месяц.
+BEEGO_AI_MAX_PER_HOUR=10
+BEEGO_AI_MONTHLY_TOKEN_BUDGET=240000

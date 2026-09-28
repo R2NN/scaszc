@@ -1,0 +1,25 @@
+.beego-time-field{position:relative;display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;font-weight:750}
+.beego-time-label{color:inherit}
+.beego-time-trigger{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:42px;padding:9px 12px;border:1px solid #d5dee8;border-radius:10px;background:#f9fbfe;color:#27303a;font:inherit;font-size:13px;font-weight:700;text-align:left;cursor:pointer;transition:border-color .16s,box-shadow .16s,background .16s}
+.beego-time-trigger:hover{border-color:#cfb44d;background:#fffdf5}
+.beego-time-trigger:focus-visible,.beego-time-trigger.is-open{outline:none;border-color:#d6ad04;box-shadow:0 0 0 3px #ffdb4233}
+.beego-time-trigger svg{flex:none;color:#66520d}
+.beego-time-menu{position:absolute;z-index:21000;top:calc(100% + 6px);left:0;width:200px;max-width:100%;padding:7px;border:1px solid #dbe2ea;border-radius:12px;background:#fff;box-shadow:0 14px 34px #20304030}
+.beego-time-menu.opens-up{top:auto;bottom:calc(100% + 6px)}
+.beego-time-menu-heading{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:3px 5px 6px;color:#687684;font-size:11px;font-weight:800;text-align:center}
+.beego-time-columns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.beego-time-options{height:204px;overflow:auto;scrollbar-width:thin;scrollbar-color:#c9d2dc transparent;overscroll-behavior:contain}
+.beego-time-options button{display:block;width:100%;min-height:32px;margin:1px 0;border:0;border-radius:7px;background:transparent;color:#2d3742;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.beego-time-options button:hover{background:#fff4bf}
+.beego-time-options button[aria-pressed="true"]{background:#ffd21f;color:#211b0b}
+.beego-time-options button:focus-visible{outline:2px solid #c79d00;outline-offset:-2px}
+.app-shell.dark .beego-time-trigger{background:#2a2e35;border-color:#47505b;color:#f2f3f5}
+.app-shell.dark .beego-time-trigger:hover{background:#34362e;border-color:#b99a38}
+.app-shell.dark .beego-time-trigger svg{color:#f0d76b}
+.app-shell.dark .beego-time-menu{background:#292e35;border-color:#4b5560;box-shadow:0 14px 34px #0008}
+.app-shell.dark .beego-time-menu-heading{color:#b6c2cd}
+.app-shell.dark .beego-time-options button{color:#eef1f4}
+.app-shell.dark .beego-time-options button:hover{background:#494128}
+.app-shell.dark .beego-time-options button[aria-pressed="true"]{background:#ffd21f;color:#211b0b}
+.manual-entry-grid>.beego-time-field{font-size:13px;gap:7px}
+.manual-entry-grid .beego-time-trigger{min-height:43px}

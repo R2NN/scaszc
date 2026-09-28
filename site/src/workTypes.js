@@ -16,6 +16,14 @@ export const translateServiceLabel = value => {
 
 export const displayOrderName = order => translateServiceLabel(order?.name || 'Заявка');
 
+export const isInformationalOrder = order => [order?.serviceType, order?.workType, order?.name]
+  .some(value => /^(?:информация|информационная(?:\s+заявка)?|information)(?=\s|$)/.test(normalize(value)));
+
+export const effectiveOrderSkill = order => {
+  const skill = String(order?.skill || order?.workType || '').trim();
+  return isInformationalOrder(order) && /^(?:авар|emerg)/.test(normalize(skill)) ? '' : skill;
+};
+
 export const workPointType = order => {
   const priority = normalize(order?.priority);
   const workType = normalize(order?.workType);
@@ -26,8 +34,8 @@ export const workPointType = order => {
   const descriptiveText = [sourceType, skill, name].filter(Boolean).join(' ');
 
   // Red is reserved for an explicitly emergency job. Equipment never affects it.
-  if (priority === 'авария' || /^(?:авария|аварийн(?:ая|ое|ый|ые)|emergency|critical)(?=\s|$)/.test(sourceType)) return 'emergency';
-  if (/(?:^|\s)(?:информация|information)(?=\s|$)/.test(descriptiveText)) return 'other';
+  if (isInformationalOrder(order)) return 'other';
+  if (['авария', 'urgent', 'critical'].includes(priority) || /^(?:авария|аварийн(?:ая|ое|ый|ые)|emergency|critical)(?=\s|$)/.test(sourceType) || /^(?:emergency|аварийн)/.test(skill)) return 'emergency';
   if (/подключ|install|connection/.test(descriptiveText)) return 'connection';
   if (/оборуд|дозаказ|замен|upgrade|equipment/.test(descriptiveText)) return 'upgrade';
   if (/обслуж|ремонт|диагност|конверген|repair|service|diagnostic|нет\s*линка|no\s*link|ip[\s-]*адрес|разрыв|ошиб|низк.*скорост|работа\s+с\s+кабел|мониторинг|tve\/ent.*ошиб/.test(descriptiveText)) return 'service';

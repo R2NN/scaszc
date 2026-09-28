@@ -78,6 +78,146 @@ class RefinementActions:
     blocked_unknown: bool
 
 
+@dataclass(frozen=True, slots=True)
+class AssignmentCutActions:
+    """Assignment exclusions learned from exact schedule failures."""
+
+    changed_zones: frozenset[str]
+    new_cuts: tuple[tuple[str, str], ...]
+    protected_failures: tuple[ExactRefinementFailure, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RouteConflictCutActions:
+    """Route-prefix no-goods learned from exact schedule failures."""
+
+    changed_zones: frozenset[str]
+    new_groups: tuple[tuple[tuple[str, str, str], ...], ...]
+    new_assignment_groups: tuple[tuple[tuple[str, str], ...], ...]
+    unmatched_failures: tuple[ExactRefinementFailure, ...]
+
+
+def apply_schedule_failure_route_conflicts(
+    report: ExactRefinementReport,
+    candidate: MasterSolution,
+    *,
+    conflict_groups: set[tuple[tuple[str, str, str], ...]],
+    assignment_conflict_groups: set[tuple[tuple[str, str], ...]],
+) -> RouteConflictCutActions:
+    """Forbid only the concrete route prefix that failed exact scheduling.
+
+    Unlike an engineer/job exclusion, this no-good preserves both assignment
+    and reordering choices.  It merely prevents CP-SAT from returning the same
+    already disproven prefix on the next iteration.
+    """
+    schedule_kinds = {
+        RefinementFailureKind.WINDOW,
+        RefinementFailureKind.SHIFT,
+        RefinementFailureKind.ROUTE_LIMIT,
+    }
+    routes = {route.engineer_id: route for route in candidate.routes}
+    changed_zones: set[str] = set()
+    new_groups: list[tuple[tuple[str, str, str], ...]] = []
+    new_assignment_groups: list[tuple[tuple[str, str], ...]] = []
+    unmatched: list[ExactRefinementFailure] = []
+    for failure in report.failures:
+        if failure.kind not in schedule_kinds:
+            continue
+        route = routes.get(failure.engineer_id)
+        prefix: list[tuple[str, str, str]] = []
+        matched = False
+        if route is not None:
+            for visit in route.visits:
+                prefix.append((
+                    route.engineer_id,
+                    visit.origin_node_id,
+                    visit.job_id,
+                ))
+                if (
+                    visit.origin_node_id == failure.origin_node_id
+                    and visit.job_id == failure.destination_job_id
+                ):
+                    matched = True
+                    break
+        if not matched:
+            unmatched.append(failure)
+            continue
+        group = tuple(prefix)
+        changed_zones.add(failure.zone_id)
+        if group not in conflict_groups:
+            conflict_groups.add(group)
+            new_groups.append(group)
+        if (
+            len(group) == 2
+            and group[0][1] == f'START:{failure.engineer_id}'
+            and group[1][1] == group[0][2]
+        ):
+            first_job_id = group[0][2]
+            second_job_id = group[1][2]
+            reverse_group = (
+                (
+                    failure.engineer_id,
+                    f'START:{failure.engineer_id}',
+                    second_job_id,
+                ),
+                (failure.engineer_id, second_job_id, first_job_id),
+            )
+            assignment_group = tuple(sorted((
+                (failure.engineer_id, first_job_id),
+                (failure.engineer_id, second_job_id),
+            )))
+        else:
+            reverse_group = ()
+            assignment_group = ()
+        if reverse_group and reverse_group in conflict_groups:
+            if assignment_group not in assignment_conflict_groups:
+                assignment_conflict_groups.add(assignment_group)
+                new_assignment_groups.append(assignment_group)
+    return RouteConflictCutActions(
+        changed_zones=frozenset(changed_zones),
+        new_groups=tuple(new_groups),
+        new_assignment_groups=tuple(new_assignment_groups),
+        unmatched_failures=tuple(unmatched),
+    )
+
+
+def apply_schedule_failure_assignment_cuts(
+    report: ExactRefinementReport,
+    *,
+    assignment_cuts: set[tuple[str, str]],
+    protected_assignments: frozenset[tuple[str, str]] = frozenset(),
+) -> AssignmentCutActions:
+    """Exclude engineer/job pairs that failed an exact schedule check.
+
+    The cut is derived only from a concrete exact failure in the current run.
+    No dataset IDs or preselected engineers are embedded in this policy.
+    """
+    schedule_kinds = {
+        RefinementFailureKind.WINDOW,
+        RefinementFailureKind.SHIFT,
+        RefinementFailureKind.ROUTE_LIMIT,
+    }
+    changed_zones: set[str] = set()
+    new_cuts: list[tuple[str, str]] = []
+    protected_failures: list[ExactRefinementFailure] = []
+    for failure in report.failures:
+        if failure.kind not in schedule_kinds:
+            continue
+        pair = (failure.engineer_id, failure.destination_job_id)
+        if pair in protected_assignments:
+            protected_failures.append(failure)
+            continue
+        changed_zones.add(failure.zone_id)
+        if pair not in assignment_cuts:
+            assignment_cuts.add(pair)
+            new_cuts.append(pair)
+    return AssignmentCutActions(
+        changed_zones=frozenset(changed_zones),
+        new_cuts=tuple(new_cuts),
+        protected_failures=tuple(protected_failures),
+    )
+
+
 def apply_refinement_report(
     report: ExactRefinementReport,
     *,

@@ -5,17 +5,21 @@ import json
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
+from time import monotonic
 
 from beeline_planning import (
     build_explanation_bundle,
     build_candidate_index,
+    find_exact_lns_coverage_move,
     load_planning_dataset,
     load_screening_matrices,
     materialize_exact_initial_plan,
 )
-from beeline_planning.exact_repair import find_coverage_move, master_from_orders
+from beeline_planning.exact_repair import (
+    find_coverage_move, find_urgent_exchange_move, master_from_orders,
+)
 from beeline_planning.export import materialization_result_dict
-from beeline_planning.materialize import MaterializationStatus
+from beeline_planning.materialize import MaterializationStatus, _materialize_route
 from beeline_routing.cache import RoutingCache
 from beeline_routing.cli import create_route_client
 from beeline_routing.export import payload_sha256, write_json_atomic
@@ -24,7 +28,10 @@ from beeline_routing.oracle import ExactRoutingOracle
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description='Repair exact coverage using within-zone relocations and ejection chains.'
+        description=(
+            'Repair exact coverage using ejection chains and exact-aware '
+            'large-neighbourhood search.'
+        )
     )
     parser.add_argument('--dataset', type=Path, required=True)
     parser.add_argument('--scenario', choices=('core', 'stress'), required=True)
@@ -52,6 +59,17 @@ def main() -> int:
         help='Comma-separated exact-check limits for direct, relocation and chain phases.',
     )
     parser.add_argument('--max-passes', type=int, default=10)
+    parser.add_argument(
+        '--max-search-seconds-per-pass', type=float,
+        help='Bound search between two accepted, fully validated coverage moves.',
+    )
+    parser.add_argument('--lns-route-checks', type=int, default=2500)
+    parser.add_argument('--lns-beam-width', type=int, default=48)
+    parser.add_argument('--lns-max-destroyed-jobs', type=int, default=12)
+    parser.add_argument('--lns-max-engineers', type=int, default=4)
+    parser.add_argument('--lns-window-padding-minutes', type=int, default=120)
+    parser.add_argument('--lns-neighbour-radius', type=int, default=1)
+    parser.add_argument('--skip-exact-lns', action='store_true')
     parser.add_argument('--timeout-seconds', type=float, default=30)
     parser.add_argument('--max-attempts', type=int, default=2)
     parser.add_argument('--metro-wait-seconds', type=int, default=180)
@@ -68,6 +86,17 @@ def main() -> int:
         parser.error('Output must be a new file, distinct from the input plan')
     if args.max_passes < 1:
         parser.error('--max-passes must be positive')
+    if args.max_search_seconds_per_pass is not None and args.max_search_seconds_per_pass <= 0:
+        parser.error('--max-search-seconds-per-pass must be positive')
+    if min(
+        args.lns_route_checks,
+        args.lns_beam_width,
+        args.lns_max_destroyed_jobs,
+        args.lns_max_engineers,
+    ) < 1:
+        parser.error('Exact LNS budgets must be positive')
+    if args.lns_window_padding_minutes < 0 or args.lns_neighbour_radius < 0:
+        parser.error('Exact LNS neighbourhood limits must be non-negative')
     checks_by_depth = None
     if args.checks_by_depth:
         try:
@@ -212,42 +241,208 @@ def main() -> int:
                 print(f'Checked {computed_routes} changed route orders', flush=True)
         return route_results[key]
 
+    def exact_urgent_route_valid(engineer_id: str, order: tuple[str, ...]) -> bool:
+        """Check urgency exchanges without screening-matrix false negatives."""
+        nonlocal computed_routes
+        key = (engineer_id, order)
+        if not route_results.get(key, False):
+            proposal = master_from_orders(
+                single_route_dataset, {engineer_id: order},
+                all_active - set(order),
+            )
+            result = _materialize_route(
+                single_route_dataset, proposal.routes[0], oracle,
+                drop_order_infeasible=False,
+            )
+            route_results[key] = result.plan is not None
+            computed_routes += 1
+        return route_results[key]
+
     accepted: list[dict[str, object]] = []
     reports: list[dict[str, object]] = []
+    lns_reports: list[dict[str, object]] = []
+    urgent_exchange_reports: list[dict[str, object]] = []
     current = initial
     for pass_number in range(1, args.max_passes + 1):
         if not unserved:
             break
+        urgent_unserved = {
+            job_id for job_id in unserved
+            if dataset.jobs[job_id].priority.value == 'URGENT'
+        }
+        search_unserved = urgent_unserved or unserved
+        pass_deadline = (
+            monotonic() + args.max_search_seconds_per_pass
+            if args.max_search_seconds_per_pass is not None else None
+        )
+        if urgent_unserved:
+            first_search_seconds = min(
+                8,
+                args.max_search_seconds_per_pass * 0.25
+                if args.max_search_seconds_per_pass is not None else 8,
+            )
+        else:
+            first_search_seconds = (
+                args.max_search_seconds_per_pass * 0.7
+                if args.max_search_seconds_per_pass is not None else None
+            )
         report = find_coverage_move(
             dataset,
             routes,
-            unserved,
+            search_unserved,
             candidates,
             exact_route_valid,
-            max_route_checks=args.max_route_checks,
-            max_displacements=args.max_displacements,
-            max_checks_by_depth=checks_by_depth,
-            reorder_affected_routes=True,
+            max_route_checks=(
+                min(args.max_route_checks, 100)
+                if urgent_unserved else args.max_route_checks
+            ),
+            max_displacements=0 if urgent_unserved else args.max_displacements,
+            max_checks_by_depth=None if urgent_unserved else checks_by_depth,
+            reorder_affected_routes=not urgent_unserved,
+            max_seconds=first_search_seconds,
         )
+        direct_report = report if urgent_unserved else None
+        move_routes = report.move.routes if report.move is not None else None
+        inserted_job_id = (
+            report.move.inserted_job_id if report.move is not None else None
+        )
+        accepted_kind = report.move.kind if report.move is not None else None
+        accepted_details: dict[str, object] = {
+            'displaced_job_ids': (
+                list(report.move.displaced_job_ids) if report.move is not None else []
+            ),
+        }
+        released_normal_ids: set[str] = set()
+        remaining_seconds = (
+            pass_deadline - monotonic() if pass_deadline is not None else None
+        )
+        if (
+            move_routes is None
+            and urgent_unserved
+            and (remaining_seconds is None or remaining_seconds > 0)
+        ):
+            exchange = find_urgent_exchange_move(
+                dataset, routes, urgent_unserved, candidates,
+                exact_urgent_route_valid,
+                max_released_normals=2,
+                max_route_checks=min(args.max_route_checks, 500),
+                max_seconds=(
+                    min(15, remaining_seconds)
+                    if remaining_seconds is not None else 15
+                ),
+            )
+            urgent_exchange_reports.append({
+                'pass': pass_number,
+                'route_checks': exchange.route_checks,
+                'budget_exhausted': exchange.budget_exhausted,
+                'move_found': exchange.move is not None,
+            })
+            if exchange.move is not None:
+                move_routes = exchange.move.routes
+                inserted_job_id = exchange.move.inserted_job_id
+                released_normal_ids = set(
+                    exchange.move.released_normal_job_ids
+                )
+                accepted_kind = 'URGENT_EXCHANGE'
+                accepted_details = {
+                    'released_normal_job_ids': sorted(released_normal_ids),
+                }
+        remaining_seconds = (
+            pass_deadline - monotonic() if pass_deadline is not None else None
+        )
+        if (
+            move_routes is None and urgent_unserved
+            and (remaining_seconds is None or remaining_seconds > 0)
+        ):
+            report = find_coverage_move(
+                dataset, routes, urgent_unserved, candidates,
+                exact_route_valid,
+                max_route_checks=args.max_route_checks,
+                max_displacements=args.max_displacements,
+                max_checks_by_depth=checks_by_depth,
+                reorder_affected_routes=True,
+                max_seconds=remaining_seconds,
+            )
+            if report.move is not None:
+                move_routes = report.move.routes
+                inserted_job_id = report.move.inserted_job_id
+                accepted_kind = report.move.kind
+                accepted_details = {
+                    'displaced_job_ids': list(report.move.displaced_job_ids),
+                }
         reports.append({
             'pass': pass_number,
-            'route_checks': report.route_checks,
+            'route_checks': report.route_checks + (
+                direct_report.route_checks
+                if direct_report is not None and report is not direct_report else 0
+            ),
+            'direct_route_checks': (
+                direct_report.route_checks if direct_report is not None else 0
+            ),
             'route_checks_by_depth': list(report.route_checks_by_depth),
             'route_checks_by_job': dict(report.route_checks_by_job),
             'zero_travel_rejections': report.zero_travel_rejections,
-            'budget_exhausted': report.budget_exhausted,
-            'move_found': report.move is not None,
+            'budget_exhausted': report.budget_exhausted or (
+                direct_report.budget_exhausted
+                if direct_report is not None else False
+            ),
+            'move_found': move_routes is not None,
         })
-        if report.move is None:
+        lns_report = None
+        remaining_seconds = (
+            pass_deadline - monotonic() if pass_deadline is not None else None
+        )
+        if (
+            move_routes is None
+            and not args.skip_exact_lns
+            and (remaining_seconds is None or remaining_seconds > 0)
+        ):
+            lns_report = find_exact_lns_coverage_move(
+                dataset,
+                routes,
+                search_unserved,
+                candidates,
+                exact_route_valid,
+                max_route_checks=args.lns_route_checks,
+                beam_width=args.lns_beam_width,
+                max_destroyed_jobs=args.lns_max_destroyed_jobs,
+                max_engineers=args.lns_max_engineers,
+                window_padding_minutes=args.lns_window_padding_minutes,
+                neighbour_radius=args.lns_neighbour_radius,
+                max_seconds=remaining_seconds,
+            )
+            lns_reports.append({
+                'pass': pass_number,
+                'route_checks': lns_report.route_checks,
+                'expanded_states': lns_report.expanded_states,
+                'zero_travel_rejections': lns_report.zero_travel_rejections,
+                'neighbourhoods_tried': lns_report.neighbourhoods_tried,
+                'complete_states_checked': lns_report.complete_states_checked,
+                'budget_exhausted': lns_report.budget_exhausted,
+                'move_found': lns_report.move is not None,
+            })
+            if lns_report.move is not None:
+                move_routes = lns_report.move.routes
+                inserted_job_id = lns_report.move.inserted_job_id
+                accepted_kind = 'EXACT_AWARE_LNS'
+                accepted_details = {
+                    'destroyed_job_ids': list(lns_report.move.destroyed_job_ids),
+                    'neighbourhood_engineer_ids': list(
+                        lns_report.move.neighbourhood_engineer_ids
+                    ),
+                }
+
+        if move_routes is None or inserted_job_id is None or accepted_kind is None:
             print(
-                f'Pass {pass_number}: no move, {report.route_checks} exact route checks; '
-                f'budget exhausted={report.budget_exhausted}',
+                f'Pass {pass_number}: no coverage move; chain checks='
+                f'{report.route_checks}, LNS checks='
+                f'{lns_report.route_checks if lns_report is not None else 0}',
                 flush=True,
             )
             break
         trial_routes = dict(routes)
-        trial_routes.update(report.move.routes)
-        trial_unserved = unserved - {report.move.inserted_job_id}
+        trial_routes.update(move_routes)
+        trial_unserved = (unserved - {inserted_job_id}) | released_normal_ids
         trial = materialize_exact_initial_plan(
             dataset,
             master_from_orders(dataset, trial_routes, trial_unserved),
@@ -263,14 +458,21 @@ def main() -> int:
         current = trial
         accepted.append({
             'pass': pass_number,
-            'job_id': report.move.inserted_job_id,
-            'kind': report.move.kind,
-            'displaced_job_ids': list(report.move.displaced_job_ids),
-            'changed_engineer_ids': sorted(report.move.routes),
+            'job_id': inserted_job_id,
+            'kind': accepted_kind,
+            **accepted_details,
+            'changed_engineer_ids': sorted(move_routes),
         })
+        checkpoint = materialization_result_dict(trial)
+        checkpoint['artifact_type'] = 'EXACT_PLAN_COVERAGE_REPAIR'
+        checkpoint['source_plan'] = str(args.input_plan)
+        checkpoint['accepted_moves'] = list(accepted)
+        checkpoint['dataset_sha256'] = dataset.dataset_sha256
+        checkpoint['content_sha256'] = payload_sha256(checkpoint)
+        write_json_atomic(args.output, checkpoint)
         print(
-            f'Pass {pass_number}: {report.move.kind} added '
-            f'{report.move.inserted_job_id}; {len(unserved)} unserved remain',
+            f'Pass {pass_number}: {accepted_kind} added '
+            f'{inserted_job_id}; {len(unserved)} unserved remain',
             flush=True,
         )
 
@@ -282,6 +484,8 @@ def main() -> int:
     payload['source_plan'] = str(args.input_plan)
     payload['accepted_moves'] = accepted
     payload['search_reports'] = reports
+    payload['exact_lns_reports'] = lns_reports
+    payload['urgent_exchange_reports'] = urgent_exchange_reports
     payload['search_configuration'] = {
         'max_route_checks_per_pass': args.max_route_checks,
         'max_displacements': args.max_displacements,
@@ -292,6 +496,21 @@ def main() -> int:
         ),
         'screening_route_rejections': screening_rejections,
         'max_passes': args.max_passes,
+        'max_search_seconds_per_pass': args.max_search_seconds_per_pass,
+        'exact_lns': {
+            'enabled': not args.skip_exact_lns,
+            'max_route_checks_per_pass': args.lns_route_checks,
+            'beam_width': args.lns_beam_width,
+            'max_destroyed_jobs': args.lns_max_destroyed_jobs,
+            'max_engineers': args.lns_max_engineers,
+            'window_padding_minutes': args.lns_window_padding_minutes,
+            'neighbour_radius': args.lns_neighbour_radius,
+        },
+        'urgent_exchange': {
+            'enabled': True,
+            'max_released_normal_jobs': 2,
+            'max_route_checks_per_pass': min(args.max_route_checks, 500),
+        },
         'provider': 'valhalla-local-transit',
         'transit_index': str(args.transit_index),
         'metro_wait_assumption_seconds': args.metro_wait_seconds,
@@ -305,8 +524,18 @@ def main() -> int:
             current.validation,
             search_budget_exhausted=any(
                 bool(report['budget_exhausted']) for report in reports
+            ) or any(
+                bool(report['budget_exhausted']) for report in lns_reports
+            ) or any(
+                bool(report['budget_exhausted'])
+                for report in urgent_exchange_reports
             ),
-            exact_route_checks=sum(int(report['route_checks']) for report in reports),
+            exact_route_checks=(
+                sum(int(report['route_checks']) for report in reports)
+                + sum(int(report['route_checks']) for report in lns_reports)
+                + sum(int(report['route_checks'])
+                      for report in urgent_exchange_reports)
+            ),
             exact_provider_queries=current.exact_provider_queries,
             global_optimality_proven=False,
         )

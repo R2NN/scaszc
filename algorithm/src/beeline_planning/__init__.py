@@ -12,6 +12,7 @@ from .domain import (
     Priority,
     RequiredTransport,
 )
+from .baseline import build_exact_fcfs_baseline
 from .counterfactual import (
     CounterfactualResult,
     CounterfactualStatus,
@@ -20,6 +21,11 @@ from .counterfactual import (
     evaluate_initial_assignment_counterfactual,
 )
 from .eligibility import CandidateIndex, RejectionCode, build_candidate_index
+from .exact_lns import (
+    ExactLnsMove,
+    ExactLnsSearchReport,
+    find_exact_lns_coverage_move,
+)
 from .explanations import ClaimLevel, build_explanation_bundle
 from .errors import HardModelInfeasible, InvalidPlanningData, PlanningError
 from .loader import load_planning_dataset
@@ -33,6 +39,7 @@ from .materialize import (
 from .plan import EngineerPlan, IdentityTravel, PlannedVisit, ProposedPlan
 from .quality import ScreeningSolutionQuality, screening_solution_quality
 from .refinement import (
+    AssignmentCutActions,
     ExactArcObservation,
     ExactRefinementFailure,
     ExactRefinementReport,
@@ -41,7 +48,10 @@ from .refinement import (
     ProbeFailureKind,
     RefinementFailureKind,
     RefinementActions,
+    RouteConflictCutActions,
     apply_refinement_report,
+    apply_schedule_failure_assignment_cuts,
+    apply_schedule_failure_route_conflicts,
     inspect_exact_candidate,
     probe_exact_initial_plan_routes,
 )
@@ -52,6 +62,7 @@ from .replanning import (
     ReplanningStatus,
     replan_after_event,
 )
+from .routing_seed import build_full_coverage_routing_seed
 from .screening import (
     ScreeningCell,
     ScreeningEstimate,
@@ -68,12 +79,14 @@ from .solver import (
     SolverConfig,
     solve_screening_master,
 )
+from .screening_validator import validate_screening_solution
 from .team_compaction import (
     RouteEvaluation,
     TeamEliminationCandidate,
     TeamEliminationSearchReport,
     build_screening_route_evaluator,
     find_team_elimination_candidates,
+    merge_exact_compaction_delta,
 )
 from .validator import (
     PlanMetrics,
@@ -87,6 +100,7 @@ from .validator import (
 
 __all__ = [
     'CandidateIndex',
+    'AssignmentCutActions',
     'CandidateEvaluation',
     'ClaimLevel',
     'Commitment',
@@ -97,6 +111,8 @@ __all__ = [
     'EquipmentNeed',
     'EngineerPlan',
     'ExactArcObservation',
+    'ExactLnsMove',
+    'ExactLnsSearchReport',
     'ExactRefinementFailure',
     'ExactRefinementReport',
     'ExactRouteProbeFailure',
@@ -126,6 +142,7 @@ __all__ = [
     'ProbeFailureKind',
     'RefinementFailureKind',
     'RefinementActions',
+    'RouteConflictCutActions',
     'ProposedPlan',
     'RejectionCode',
     'ReplanningResult',
@@ -145,9 +162,13 @@ __all__ = [
     'Violation',
     'ViolationCode',
     'build_candidate_index',
+    'build_exact_fcfs_baseline',
     'apply_refinement_report',
+    'apply_schedule_failure_assignment_cuts',
+    'apply_schedule_failure_route_conflicts',
     'build_explanation_bundle',
     'build_master_model_input',
+    'build_full_coverage_routing_seed',
     'build_screening_route_evaluator',
     'load_planning_dataset',
     'load_screening_matrices',
@@ -160,7 +181,10 @@ __all__ = [
     'replan_after_event',
     'solve_screening_master',
     'find_team_elimination_candidates',
+    'find_exact_lns_coverage_move',
+    'merge_exact_compaction_delta',
     'screening_solution_quality',
     'validate_initial_plan',
     'validate_replanned_plan',
+    'validate_screening_solution',
 ]

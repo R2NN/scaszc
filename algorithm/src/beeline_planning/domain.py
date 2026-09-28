@@ -17,6 +17,13 @@ class Priority(StrEnum):
 class RequiredTransport(StrEnum):
     ANY = 'ANY'
     CAR = 'CAR'
+    PUBLIC_TRANSIT = 'PUBLIC_TRANSIT'
+    BICYCLE = 'BICYCLE'
+    WALKING = 'WALKING'
+
+    def allows(self, mode: TransportMode) -> bool:
+        """Allow any mode for ANY, otherwise require the engineer's exact mode."""
+        return self is RequiredTransport.ANY or self.value == mode.value
 
 
 class JobStatus(StrEnum):
@@ -27,6 +34,7 @@ class EventType(StrEnum):
     NEW_URGENT_JOB = 'NEW_URGENT_JOB'
     ENGINEER_UNAVAILABLE = 'ENGINEER_UNAVAILABLE'
     CANCEL_JOB = 'CANCEL_JOB'
+    MANUAL_ASSIGNMENT = 'MANUAL_ASSIGNMENT'
 
 
 class CommitmentType(StrEnum):

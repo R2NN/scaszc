@@ -8,7 +8,7 @@ from typing import Mapping
 
 from beeline_routing.models import TransportMode
 
-from .domain import Engineer, Job, PlanningDataset, RequiredTransport
+from .domain import Engineer, Job, PlanningDataset
 from .errors import InvalidPlanningData
 
 
@@ -51,10 +51,7 @@ def _static_reasons(
         reasons.append(RejectionCode.ZONE_MISMATCH)
     if job.required_skill not in engineer.skills:
         reasons.append(RejectionCode.SKILL_MISSING)
-    if (
-        job.required_transport == RequiredTransport.CAR
-        and engineer.transport_mode != TransportMode.CAR
-    ):
+    if not job.required_transport.allows(engineer.transport_mode):
         reasons.append(RejectionCode.TRANSPORT_MISMATCH)
     for need in job.required_equipment:
         item = dataset.equipment_catalog[need.equipment_id]

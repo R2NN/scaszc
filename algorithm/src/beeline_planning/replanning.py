@@ -17,7 +17,8 @@ from beeline_routing.errors import RoutingError
 from beeline_routing.models import RouteStatus, TransportMode
 from beeline_routing.oracle import ExactRoutingOracle, OracleQuery
 
-from .domain import Event, EventType, PlanningDataset, Priority, RequiredTransport
+from .domain import Event, EventType, PlanningDataset, Priority
+from .departure_timing import retime_replanned_departures
 from .eligibility import build_candidate_index
 from .errors import InvalidPlanningData
 from .plan import EngineerPlan, IdentityTravel, PlannedVisit, ProposedPlan
@@ -73,6 +74,8 @@ class ReplanningResult:
     candidate_evaluations: Mapping[str, tuple[CandidateEvaluation, ...]] = field(
         default_factory=dict
     )
+    departure_timing_queries: int = 0
+    departure_timing_changes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,7 +168,7 @@ def _static_eligible(dataset: PlanningDataset, engineer_id: str, job_id: str) ->
         return False
     if job.required_skill not in engineer.skills:
         return False
-    if job.required_transport == RequiredTransport.CAR and engineer.transport_mode != TransportMode.CAR:
+    if not job.required_transport.allows(engineer.transport_mode):
         return False
     return all(
         not dataset.equipment_catalog[need.equipment_id].reusable
@@ -313,7 +316,7 @@ def replan_after_event(
                 engineer_id, EngineerPlan(engineer_id, ())
             ).visits if visit.departure_at > event.event_time
             and visit.job_id in active_job_ids
-            and visit.job_id not in forced_assignments
+            and forced_assignments.get(visit.job_id, engineer_id) == engineer_id
         )
         for engineer_id in dataset.engineers
     }
@@ -328,6 +331,25 @@ def replan_after_event(
         key = (engineer_id, order)
         if key in trial_cache:
             return trial_cache[key]
+        original_route = old_routes.get(engineer_id)
+        original_suffix = tuple(
+            visit.job_id for visit in original_route.visits
+            if visit.departure_at > event.event_time
+        ) if original_route else ()
+        newly_unavailable = (
+            event.event_type == EventType.ENGINEER_UNAVAILABLE
+            and event.target_id == engineer_id
+            and any(
+                event.event_time < visit.departure_at < event.unavailable_until
+                for visit in original_route.visits
+            )
+        ) if original_route else False
+        # The source plan is independently validated above. An untouched route
+        # has the same job order and exact route evidence after this event.
+        if order == original_suffix and not newly_unavailable:
+            result = _RouteTrial(original_route.visits if original_route else ())
+            trial_cache[key] = result
+            return result
         if exact_checks >= max_route_checks:
             budget_exhausted = True
             return _RouteTrial(None, order[0] if order else None, 'SEARCH_BUDGET_EXHAUSTED')
@@ -479,17 +501,27 @@ def replan_after_event(
         for item in dataset.shared_inventory
     }
 
-    def stock_allows(job_id: str, removed: str | None = None) -> bool:
-        usage: Counter[tuple[str, str]] = Counter()
-        for assigned_id in assigned_jobs() - ({removed} if removed else set()):
+    stock_usage: Counter[tuple[str, str]] = Counter()
+
+    def refresh_stock_usage() -> None:
+        stock_usage.clear()
+        for assigned_id in assigned_jobs():
             assigned_job = dataset.jobs[assigned_id]
             for need in assigned_job.required_equipment:
                 if dataset.equipment_catalog[need.equipment_id].shared_stock:
-                    usage[assigned_job.zone_id, need.equipment_id] += need.quantity
+                    stock_usage[assigned_job.zone_id, need.equipment_id] += need.quantity
+
+    def stock_allows(job_id: str, removed: str | None = None) -> bool:
         job = dataset.jobs[job_id]
+        removed_job = dataset.jobs[removed] if removed else None
         return all(
             not dataset.equipment_catalog[need.equipment_id].shared_stock
-            or usage[job.zone_id, need.equipment_id] + need.quantity
+            or stock_usage[job.zone_id, need.equipment_id]
+            - (sum(
+                old_need.quantity for old_need in removed_job.required_equipment
+                if old_need.equipment_id == need.equipment_id
+            ) if removed_job is not None and removed_job.zone_id == job.zone_id else 0)
+            + need.quantity
             <= inventory_available.get((job.zone_id, need.equipment_id), 0)
             for need in job.required_equipment
         )
@@ -573,10 +605,46 @@ def replan_after_event(
             item.order,
         ))
 
+    def can_fit_time_lower_bound(
+        engineer_id: str, old_order: tuple[str, ...], position: int, job_id: str
+    ) -> bool:
+        """Skip insertions impossible even with zero travel time."""
+        engineer = dataset.engineers[engineer_id]
+        if len(frozen[engineer_id]) + len(old_order) >= engineer.max_jobs:
+            return False
+        previous_visits = schedule(engineer_id, old_order).visits or ()
+        prefix_length = len(frozen[engineer_id]) + position
+        previous = previous_visits[prefix_length - 1] if prefix_length else None
+        next_visit = (
+            previous_visits[prefix_length]
+            if prefix_length < len(previous_visits) else None
+        )
+        job = dataset.jobs[job_id]
+        earliest_departure = max(
+            event.event_time,
+            engineer.shift_start,
+            job.created_at,
+            unavailable.get(engineer_id, event.event_time),
+            previous.service_start_at + timedelta(
+                minutes=dataset.jobs[previous.job_id].service_duration_min
+            ) if previous else event.event_time,
+            original_departure.get(job_id, event.event_time)
+            if original_owner.get(job_id) == engineer_id else event.event_time,
+        )
+        earliest_finish = max(earliest_departure, job.window_start) + timedelta(
+            minutes=job.service_duration_min
+        )
+        return (
+            earliest_departure <= job.window_end
+            and earliest_finish <= engineer.shift_end
+            and (next_visit is None or earliest_finish <= dataset.jobs[next_visit.job_id].window_end)
+        )
+
     for job_id in pending:
         if budget_exhausted:
             reasons[job_id] = 'SEARCH_BUDGET_EXHAUSTED'
             continue
+        refresh_stock_usage()
         stock_is_available = stock_allows(job_id)
         direct_options: list[_InsertionCandidate] = []
         for engineer_id in eligible_engineers(job_id) if stock_is_available else ():
@@ -584,6 +652,8 @@ def replan_after_event(
                 continue
             old_order = orders[engineer_id]
             for position in range(len(old_order) + 1):
+                if not can_fit_time_lower_bound(engineer_id, old_order, position, job_id):
+                    continue
                 candidate_order = old_order[:position] + (job_id,) + old_order[position:]
                 try:
                     trial = schedule(engineer_id, candidate_order)
@@ -653,13 +723,21 @@ def replan_after_event(
                             continue
                         restoration = None
                         if stock_is_available:
-                            for restorer_id in candidates.eligible_engineers_by_job[displaced]:
+                            restorers = sorted(
+                                candidates.eligible_engineers_by_job[displaced],
+                                key=lambda item: (
+                                    not bool(frozen[item] or orders[item]),
+                                    len(orders[item]),
+                                    item,
+                                ),
+                            )
+                            for restorer_id in restorers:
                                 if restorer_id == engineer_id:
                                     continue
                                 if dataset.engineers[restorer_id].zone_id != dataset.jobs[displaced].zone_id:
                                     continue
                                 restorer_order = orders[restorer_id]
-                                for restore_at in range(len(restorer_order) + 1):
+                                for restore_at in range(len(restorer_order), -1, -1):
                                     restored_order = (
                                         restorer_order[:restore_at] + (displaced,)
                                         + restorer_order[restore_at:]
@@ -785,6 +863,21 @@ def replan_after_event(
             'Replanning produced an invalid plan: '
             + ', '.join(f'{item.code.value}:{item.subject_id}' for item in validation.violations)
         )
+    timing = retime_replanned_departures(
+        dataset, plan, state.plan, oracle,
+        event_time=event.event_time,
+        applied_event_ids=frozenset(new_applied),
+        canceled_job_ids=frozenset(canceled),
+        unavailable_until_by_engineer=unavailable,
+    )
+    plan = timing.plan
+    validation = validate_replanned_plan(
+        dataset, plan, state.plan,
+        event_time=event.event_time,
+        applied_event_ids=frozenset(new_applied),
+        canceled_job_ids=frozenset(canceled),
+        unavailable_until_by_engineer=unavailable,
+    )
     next_state = ReplanningState(
         plan=plan,
         applied_event_ids=new_applied,
@@ -796,4 +889,6 @@ def replan_after_event(
         ReplanningStatus.EXACT_VALID, next_state, validation,
         event.event_id, exact_checks, budget_exhausted, reasons,
         candidate_evaluations=candidate_evaluations,
+        departure_timing_queries=timing.exact_queries,
+        departure_timing_changes=timing.changed_legs,
     )

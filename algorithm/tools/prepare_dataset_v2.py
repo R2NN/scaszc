@@ -251,7 +251,7 @@ def create_policies(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             'assignment': 'Каждая выполненная заявка назначается ровно одному инженеру.',
             'zone_policy': 'HARD',
             'skills': 'required_skill должен входить в engineer_skills.',
-            'transport': 'required_transport=CAR разрешает только CAR; ANY разрешает любой тип.',
+            'transport': 'Конкретный required_transport требует тот же тип транспорта инженера; ANY разрешает любой тип.',
             'time_window_semantics': 'SERVICE_START_WITHIN_WINDOW',
             'time_window_interval': 'CLOSED',
             'service_completion_after_window_end': 'ALLOWED_IF_WITHIN_SHIFT',

@@ -2,6 +2,8 @@ import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import worker from '../worker/index.js';
+import { createOperationsApi } from '../server/operationsApi.mjs';
+import { handleExactPlanning } from '../server/exactPlanningApi.mjs';
 
 const variablesFile = resolve('.dev.vars');
 const planningArtifactFile = resolve('public/data/beego-exact-plans.json');
@@ -21,6 +23,9 @@ const loadVariables = () => {
   return variables;
 };
 
+const localVariables = loadVariables();
+const operations = createOperationsApi({ seedFromBase: true, routingOptions: { geoapifyKey: localVariables.GEOAPIFY_API_KEY }, aiOptions: { apiKey: localVariables.YANDEX_AI_API_KEY, folderId: localVariables.YANDEX_AI_FOLDER_ID } });
+
 const server = createServer(async (request, response) => {
   try {
     const chunks = [];
@@ -32,7 +37,7 @@ const server = createServer(async (request, response) => {
       body: ['GET', 'HEAD'].includes(request.method) ? undefined : body,
       duplex: body ? 'half' : undefined,
     });
-    const webResponse = await worker.fetch(webRequest, loadVariables());
+    const webResponse = await operations.handle(webRequest) || await handleExactPlanning(webRequest) || await worker.fetch(webRequest, loadVariables());
     response.writeHead(webResponse.status, Object.fromEntries(webResponse.headers));
     response.end(Buffer.from(await webResponse.arrayBuffer()));
   } catch (error) {

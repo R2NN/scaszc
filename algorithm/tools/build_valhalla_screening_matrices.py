@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
+import time
 import urllib.request
 import urllib.error
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -39,7 +41,10 @@ def request_matrix(endpoint: str, sources, targets, costing: str, timeout: float
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:
         body = json.loads(response.read())
-    return body['sources_to_targets']
+    block = body.get('sources_to_targets')
+    if not isinstance(block, list):
+        raise ValueError(f'Valhalla matrix error: {str(body)[:240]}')
+    return block
 
 
 def request_route(endpoint: str, origin, destination, costing: str,
@@ -59,8 +64,63 @@ def request_route(endpoint: str, origin, destination, costing: str,
         headers={'Content-Type': 'application/json'},
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        summary = json.loads(response.read())['trip']['summary']
+        route_response = json.loads(response.read())
+    trip = route_response.get('trip')
+    if not isinstance(trip, dict) or 'summary' not in trip:
+        raise RuntimeError(
+            f'Valhalla route unavailable for {costing}: '
+            f'{origin.location_id} -> {destination.location_id}; '
+            f'response={route_response!r}'
+        )
+    summary = trip['summary']
     return int(math.ceil(float(summary['time']))), int(round(float(summary['length']) * 1000))
+
+
+def missing_matrix_requests(
+    location_count: int,
+    batch_size: int,
+    cached_pairs: set[tuple[int, int]],
+) -> list[tuple[list[int], list[int]]]:
+    """Batch cold blocks, but request only missing rows in warm blocks."""
+    requests: list[tuple[list[int], list[int]]] = []
+    for source_start in range(0, location_count, batch_size):
+        sources = list(range(source_start, min(source_start + batch_size, location_count)))
+        for target_start in range(0, location_count, batch_size):
+            targets = list(range(target_start, min(target_start + batch_size, location_count)))
+            missing = [
+                (source, target)
+                for source in sources
+                for target in targets
+                if (source, target) not in cached_pairs
+            ]
+            if not missing:
+                continue
+            if len(missing) >= (len(sources) * len(targets)) / 2:
+                requests.append((sources, targets))
+                continue
+            missing_sources = {
+                source for source, _ in missing
+            }
+            missing_targets = {
+                target for _, target in missing
+            }
+            if len(missing_sources) <= len(missing_targets):
+                for source in sources:
+                    targets_for_source = [
+                        target for target in targets
+                        if (source, target) not in cached_pairs
+                    ]
+                    if targets_for_source:
+                        requests.append(([source], targets_for_source))
+            else:
+                for target in targets:
+                    sources_for_target = [
+                        source for source in sources
+                        if (source, target) not in cached_pairs
+                    ]
+                    if sources_for_target:
+                        requests.append((sources_for_target, [target]))
+    return requests
 
 
 def build(args: argparse.Namespace) -> int:
@@ -69,61 +129,135 @@ def build(args: argparse.Namespace) -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     fetched_at = datetime.now(UTC).isoformat()
     cache = ScreeningCache(args.cache) if args.cache is not None else None
+    tile_revision = args.tile_revision or os.environ.get('VALHALLA_TILE_REVISION')
+    runtime_revision = os.environ.get('VALHALLA_RUNTIME_REVISION', 'unknown-runtime')
+    if cache is not None and not tile_revision:
+        raise RuntimeError(
+            'A tile revision is required to reuse screening cells safely; '
+            'start the BeeGo pipeline or pass --tile-revision.'
+        )
     for mode, costing in COSTING.items():
         for zone, locations in by_zone.items():
             cells: list[MatrixCell] = []
             content_payload = []
             by_pair: dict[tuple[int, int], dict] = {}
             cache_hits = 0
-            namespace = f'valhalla-screening-v1:{args.route_endpoint}'
+            namespace = (
+                f'valhalla-screening-v2:{args.route_endpoint}:'
+                f'{runtime_revision}:{tile_revision or "uncached"}'
+            )
             if cache is not None:
-                for source_index, origin in enumerate(locations):
-                    for target_index, destination in enumerate(locations):
-                        cached = cache.get_surface(
-                            namespace, mode.value, origin, destination
-                        )
-                        if cached is not None:
-                            duration_seconds, distance_m = cached
-                            by_pair[(source_index, target_index)] = {
-                                'time': duration_seconds,
-                                'distance': distance_m / 1000,
-                                'cache_hit': True,
-                            }
-                            cache_hits += 1
-            for source_start in range(0, len(locations), args.batch_size):
-                sources = locations[source_start:source_start + args.batch_size]
-                for target_start in range(0, len(locations), args.batch_size):
-                    targets = locations[target_start:target_start + args.batch_size]
-                    block_pairs = {
-                        (source_start + source_offset, target_start + target_offset)
-                        for source_offset in range(len(sources))
-                        for target_offset in range(len(targets))
+                for pair, (duration_seconds, distance_m) in cache.get_surfaces(
+                    namespace, mode.value, locations
+                ).items():
+                    by_pair[pair] = {
+                        'time': duration_seconds,
+                        'distance': distance_m / 1000,
+                        'cache_hit': True,
                     }
-                    if block_pairs.issubset(by_pair):
-                        continue
+                    cache_hits += 1
+            requests = missing_matrix_requests(
+                len(locations), args.batch_size, set(by_pair)
+            )
+
+            def fetch(spec: tuple[list[int], list[int]]):
+                pending = [(spec, 0, 0)]
+                completed = []
+                while pending:
+                    (source_indices, target_indices), depth, busy_retries = pending.pop()
                     try:
                         block = request_matrix(
                             args.endpoint,
-                            sources,
-                            targets,
+                            [locations[index] for index in source_indices],
+                            [locations[index] for index in target_indices],
                             costing,
                             args.timeout_seconds,
                         )
-                    except (urllib.error.URLError, KeyError, ValueError):
+                        if len(block) != len(source_indices) or any(
+                            not isinstance(row, list) or len(row) != len(target_indices)
+                            for row in block
+                        ):
+                            raise ValueError('Valhalla returned an incomplete matrix block')
+                    except urllib.error.HTTPError as error:
+                        if error.code not in (429, 503) or busy_retries >= 5:
+                            raise RuntimeError(
+                                f'Valhalla matrix service unavailable: HTTP {error.code}'
+                            ) from error
+                        time.sleep(min(2 ** busy_retries, 8))
+                        pending.append(((source_indices, target_indices), depth, busy_retries + 1))
                         continue
-                    for source_offset, row in enumerate(block):
-                        for target_offset, item in enumerate(row):
-                            pair = (source_start + source_offset, target_start + target_offset)
-                            by_pair[pair] = item
-                            if cache is not None and item.get('time') is not None:
-                                cache.put_surface(
-                                    namespace,
-                                    mode.value,
-                                    locations[pair[0]],
-                                    locations[pair[1]],
-                                    int(math.ceil(float(item['time']))),
-                                    int(round(float(item['distance']) * 1000)),
-                                )
+                    except urllib.error.URLError as error:
+                        raise RuntimeError('Valhalla matrix service is unreachable') from error
+                    except (OSError, KeyError, ValueError) as error:
+                        if len(source_indices) * len(target_indices) <= 1:
+                            print(json.dumps({
+                                'event': 'MATRIX_CELL_FALLBACK',
+                                'zone': zone,
+                                'mode': mode.value,
+                                'origin': locations[source_indices[0]].location_id,
+                                'destination': locations[target_indices[0]].location_id,
+                                'error': str(error)[:240],
+                            }), flush=True)
+                            continue
+                        if depth >= 9:
+                            raise RuntimeError(
+                                'Valhalla matrix block failed after adaptive splitting: '
+                                f'{len(source_indices)}x{len(target_indices)} {costing}; {error}'
+                            ) from error
+                        print(json.dumps({
+                            'event': 'MATRIX_BLOCK_SPLIT',
+                            'zone': zone,
+                            'mode': mode.value,
+                            'sources': len(source_indices),
+                            'targets': len(target_indices),
+                            'depth': depth,
+                            'error': str(error)[:240],
+                        }), flush=True)
+                        if len(source_indices) >= len(target_indices) and len(source_indices) > 1:
+                            middle = len(source_indices) // 2
+                            parts = (
+                                (source_indices[:middle], target_indices),
+                                (source_indices[middle:], target_indices),
+                            )
+                        else:
+                            middle = len(target_indices) // 2
+                            parts = (
+                                (source_indices, target_indices[:middle]),
+                                (source_indices, target_indices[middle:]),
+                            )
+                        pending.extend((part, depth + 1, 0) for part in parts)
+                        continue
+                    completed.append(((source_indices, target_indices), block))
+                return completed
+
+            with ThreadPoolExecutor(max_workers=args.matrix_workers) as executor:
+                futures = [executor.submit(fetch, spec) for spec in requests]
+                for completed_count, future in enumerate(as_completed(futures), 1):
+                    fetched = future.result()
+                    for (source_indices, target_indices), block in fetched:
+                        cached_cells = []
+                        for source_index, row in zip(source_indices, block):
+                            for target_index, item in zip(target_indices, row):
+                                pair = (source_index, target_index)
+                                if pair in by_pair or not isinstance(item, dict):
+                                    continue
+                                by_pair[pair] = item
+                                if item.get('time') is not None and item.get('distance') is not None:
+                                    cached_cells.append((
+                                        locations[source_index], locations[target_index],
+                                        int(math.ceil(float(item['time']))),
+                                        int(round(float(item['distance']) * 1000)),
+                                    ))
+                        if cache is not None:
+                            cache.put_surfaces(namespace, mode.value, cached_cells)
+                    if completed_count == len(requests) or completed_count % max(1, len(requests) // 5) == 0:
+                        print(json.dumps({
+                            'event': 'MATRIX_PROGRESS',
+                            'zone': zone,
+                            'mode': mode.value,
+                            'completed_blocks': completed_count,
+                            'total_blocks': len(requests),
+                        }), flush=True)
             missing_pairs = [
                 (source_index, target_index)
                 for source_index in range(len(locations))
@@ -142,21 +276,19 @@ def build(args: argparse.Namespace) -> int:
                         args.timeout_seconds,
                     )
 
+                fallback_cells = []
                 with ThreadPoolExecutor(max_workers=args.fallback_workers) as executor:
                     for pair, (duration_seconds, distance_m) in executor.map(fallback, missing_pairs):
                         by_pair[pair] = {
                             'time': duration_seconds,
                             'distance': distance_m / 1000,
                         }
-                        if cache is not None:
-                            cache.put_surface(
-                                namespace,
-                                mode.value,
-                                locations[pair[0]],
-                                locations[pair[1]],
-                                duration_seconds,
-                                distance_m,
-                            )
+                        fallback_cells.append((
+                            locations[pair[0]], locations[pair[1]],
+                            duration_seconds, distance_m,
+                        ))
+                if cache is not None:
+                    cache.put_surfaces(namespace, mode.value, fallback_cells)
             for source_index, origin in enumerate(locations):
                 for target_index, destination in enumerate(locations):
                     item = by_pair[(source_index, target_index)]
@@ -184,7 +316,12 @@ def build(args: argparse.Namespace) -> int:
                                 response_sha256=response_hash,
                                 fetched_at=fetched_at,
                                 cache_hit=bool(item.get('cache_hit', False)),
-                                provider_metadata={'costing': costing, 'local_service': True},
+                                provider_metadata={
+                                    'costing': costing,
+                                    'local_service': True,
+                                    'tile_revision': tile_revision,
+                                    'runtime_revision': runtime_revision,
+                                },
                             ),
                         )
                     )
@@ -249,14 +386,19 @@ def main() -> int:
         default='http://127.0.0.1:8002/route',
     )
     parser.add_argument('--batch-size', type=int, default=25)
-    parser.add_argument('--timeout-seconds', type=float, default=60)
-    parser.add_argument('--fallback-workers', type=int, default=12)
+    parser.add_argument('--matrix-workers', type=int, default=6)
+    parser.add_argument('--timeout-seconds', type=float, default=130)
+    parser.add_argument('--fallback-workers', type=int, default=3)
+    parser.add_argument('--tile-revision', help='Identifier of the Valhalla tile snapshot.')
     parser.add_argument(
         '--cache',
         type=Path,
         help='Persistent coordinate-keyed cache used for delta matrix builds.',
     )
-    return build(parser.parse_args())
+    args = parser.parse_args()
+    if args.batch_size < 1 or args.matrix_workers < 1 or args.fallback_workers < 1:
+        parser.error('Batch size and worker counts must be positive')
+    return build(args)
 
 
 if __name__ == '__main__':

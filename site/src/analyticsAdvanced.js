@@ -1,4 +1,5 @@
 import { summarizeHistoryDay } from './analyticsHistory.js';
+import { transportCode } from './transport.js';
 
 const numeric = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 const rate = (part, whole) => whole > 0 ? Math.round(part / whole * 1000) / 10 : null;
@@ -193,12 +194,12 @@ export function findOperationalGaps(record, minimumMinutes = 45, transitionMinut
     const proposedStart = earliestArrival == null ? null : Math.ceil(earliestArrival / 5) * 5;
     const earlyBy = proposedStart == null ? 0 : Math.max(0, gap.nextStart - proposedStart);
     const customerCall = earlyBy >= 30
-      ? { title: `Предложить ранний визит для «${gap.nextOrderName}»`, proposedStart, proposedDeparture: gap.start, originalDeparture: gap.end, arrivalAt: earliestArrival, savedMinutes: gap.minutes, action: 'Согласовать сдвиг окна' }
+      ? { title: `Предложить ранний визит для «${gap.nextOrderName}»`, proposedStart, proposedDeparture: gap.start, originalDeparture: gap.end, arrivalAt: earliestArrival, travelMinutes: Math.max(0, earliestArrival - gap.start), savedMinutes: gap.minutes, action: 'Согласовать сдвиг окна' }
       : null;
     const proposal = candidate
       ? { kind: 'insert', title: `Проверить вставку «${candidate.orderName}»`, impact: `Можно попытаться закрыть одну заявку из очереди в ${gap.zone}.`, action: 'Открыть очередь' }
       : customerCall
-        ? { kind: 'call_customer', title: customerCall.title, impact: `Если клиент согласится начать в ${timeText(customerCall.proposedStart)}, бригада выедет в ${timeText(customerCall.proposedDeparture)} вместо ${timeText(customerCall.originalDeparture)}. Свободный интервал до выезда сократится на ${customerCall.savedMinutes} мин.`, action: customerCall.action }
+        ? { kind: 'call_customer', title: customerCall.title, impact: `Сейчас бригада ждёт ${customerCall.savedMinutes} мин до выезда в ${timeText(customerCall.originalDeparture)}. Если клиент согласится, она выедет в ${timeText(customerCall.proposedDeparture)}, потратит ${customerCall.travelMinutes} мин на дорогу и начнёт визит в ${timeText(customerCall.proposedStart)}. Ожидание до выезда сократится на ${customerCall.savedMinutes} мин.`, action: customerCall.action }
       : gap.type === 'before_first'
         ? { kind: 'late_start', title: `Начать смену в ${timeText(Math.max(gap.start, gap.end - 15))}`, impact: `Сократит оплачиваемый простой примерно на ${Math.max(0, gap.minutes - 15)} мин и сохранит 15 мин на подготовку к выезду.`, action: 'Подготовить изменение смены' }
         : gap.type === 'after_last'
@@ -249,7 +250,12 @@ export function analyzeResourceGaps(record) {
     let label;
     let action;
     let reason;
-    if (!localWithSkill.length) {
+    const genericPlannerReason = item.reasonCode === 'STATIC_ELIGIBLE_BUT_UNSERVED';
+    if (genericPlannerReason) {
+      label = 'Подходящие бригады есть, но заявка не помещается в их маршруты';
+      reason = `В зоне «${zone}» есть бригады с навыком «${readableSkill}», однако готовый план не содержит допустимого назначения. Эта запись не указывает, какое именно условие оказалось решающим.`;
+      action = 'Откройте проверку бригад: отдельно сравните навык, зону, окно, дорогу и текущую занятость.';
+    } else if (!localWithSkill.length) {
       label = `В «${zone}» нет свободной компетенции «${readableSkill}»`;
       reason = `В этой зоне нет бригады с навыком «${readableSkill}».`;
       action = `Добавьте или вызовите бригаду с навыком «${readableSkill}» в «${zone}», либо согласуйте с клиентом другое окно.`;
@@ -277,9 +283,11 @@ export function analyzeResourceGaps(record) {
     if (duration) action += ` На работу требуется ${duration} мин.`;
     const orderNumber = String(order.sourceId || order.id || item.orderId).replace(/^.*:/, '');
     const work = String(order.workType || order.serviceType || readableSkill);
-    const detail = `Заявка №${orderNumber} не распределена (${zone}, окно ${window}, ${work}). Причина: ${reason}`;
+    const detail = genericPlannerReason
+      ? `Заявка №${orderNumber} пока без назначения. ${reason}`
+      : `Заявка №${orderNumber} не распределена (${zone}, окно ${window}, ${work}). Причина: ${reason}`;
     const key = `${zone}|${skill}|${label}`;
-    explanations.push({ orderId: item.orderId, label, action, detail, zone, skill });
+    explanations.push({ orderId: item.orderId, reasonCode: item.reasonCode, orderNumber, work, window, label, action, detail, zone, skill });
     const group = groups.get(key) || { key, label, action, count: 0 };
     groups.set(key, { ...group, count: group.count + 1 });
   }
@@ -370,7 +378,7 @@ export function analyzeTeamCapacity(record) {
       engineerName: engineer.name || String(engineer.id),
       zone: zone || 'Без зоны',
       skills: skills.map(skillLabel),
-      transport: String(engineer.transport || 'UNKNOWN'),
+      transport: transportCode(engineer.transport),
       assignments: assignments.length,
       distanceKm: numeric(route?.distanceKm),
       workMinutes,

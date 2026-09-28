@@ -1,3 +1,6 @@
+import exactWorker from './exact-base.js';
+import { transportCode } from '../src/transport.js';
+
 const json = (data, init = {}) => new Response(JSON.stringify(data), {
   ...init,
   headers: {
@@ -209,6 +212,14 @@ const sourceOrderId = (order = {}) => String(
   || "",
 ).trim();
 
+const sourceEngineerId = (engineer = {}) => String(
+  engineer.sourceId
+  || engineer.sourceData?.engineer_id
+  || engineer.sourceData?.ENGINEER_ID
+  || engineer.id
+  || "",
+).trim();
+
 const sameIdSet = (actual, expected) => {
   if (actual.length !== expected.length) return false;
   const actualIds = new Set(actual);
@@ -234,13 +245,23 @@ function buildExactPlan(payload = {}, artifact) {
     throw error;
   }
   const source = artifact.plans[planKey];
+  if (!sameIdSet(engineers.map(sourceEngineerId).filter(Boolean), artifact.canonical.engineerIds || [])) {
+    const error = new Error('Состав инженеров изменился; нужен новый расчёт маршрутов.');
+    error.code = 'UNSEALED_DATASET';
+    throw error;
+  }
+  if (engineers.some(engineer => /снят со смены|недоступ|отпуск|боле/i.test(engineer.status || ''))) {
+    const error = new Error('Доступность инженеров изменилась; нужен новый расчёт маршрутов.');
+    error.code = 'UNSEALED_DATASET';
+    throw error;
+  }
   if (source.status !== "EXACT_VALID" || source.publicationAllowed !== true || source.validationStatus !== "VALID") {
     const error = new Error("Алгоритм вернул план, который не прошёл независимую проверку");
     error.code = "PLAN_NOT_PUBLISHABLE";
     throw error;
   }
   const orderBySourceId = new Map(orders.map((order) => [sourceOrderId(order), order]));
-  const engineerById = new Map(engineers.map((engineer) => [String(engineer.id), engineer]));
+  const engineerById = new Map(engineers.map((engineer) => [sourceEngineerId(engineer), engineer]));
   const missingEngineers = [...new Set(source.routes.filter((route) => route.assignments.length).map((route) => route.engineerId))]
     .filter((engineerId) => !engineerById.has(String(engineerId)));
   if (missingEngineers.length) {
@@ -248,14 +269,31 @@ function buildExactPlan(payload = {}, artifact) {
     error.code = "ENGINEERS_MISSING";
     throw error;
   }
+  const expectedTransports = artifact.canonical.engineerTransports;
+  if (!expectedTransports || typeof expectedTransports !== 'object') {
+    const error = new Error('В проверенном плане отсутствуют исходные виды транспорта инженеров');
+    error.code = 'PLANNING_ARTIFACT_UNAVAILABLE';
+    throw error;
+  }
+  const mismatchedTransports = engineers.filter((engineer) => {
+    const expected = expectedTransports[sourceEngineerId(engineer)];
+    return expected && transportCode(engineer.transport) !== transportCode(expected);
+  });
+  if (mismatchedTransports.length) {
+    const error = new Error(`Транспорт инженеров отличается от проверенного расчёта: ${mismatchedTransports.slice(0, 4).map(sourceEngineerId).join(', ')}${mismatchedTransports.length > 4 ? '…' : ''}`);
+    error.code = 'ENGINEER_TRANSPORT_MISMATCH';
+    throw error;
+  }
   const routes = source.routes.map((route) => {
     const engineer = engineerById.get(String(route.engineerId));
     return {
       ...route,
+      engineerId: engineer?.id ?? route.engineerId,
       engineerName: engineer?.name || route.engineerName,
       assignments: route.assignments.map((assignment) => ({
         ...assignment,
         orderId: orderBySourceId.get(String(assignment.sourceOrderId))?.id,
+        engineerId: engineer?.id ?? route.engineerId,
       })).filter((assignment) => assignment.orderId !== undefined),
     };
   });
@@ -308,13 +346,7 @@ async function api(request, env = {}) {
     return json({ status: "ok", service: "beego-planning-adapter", algorithm: "beeline-planning-ortools-exact", version: 2 });
   }
   if (url.pathname === "/api/plan" && request.method === "POST") {
-    const payload = await request.json().catch(() => ({}));
-    try {
-      return json(buildExactPlan(payload, await planningArtifact(request, env)));
-    } catch (error) {
-      const status = error?.code === "PLANNING_ARTIFACT_UNAVAILABLE" ? 503 : 422;
-      return json({ error: error?.message || "Не удалось построить точный план", code: error?.code || "PLANNING_FAILED" }, { status });
-    }
+    return exactWorker.fetch(request, env);
   }
   if (url.pathname === "/api/scenario/event" && request.method === "GET") {
     const artifact = await planningArtifact(request, env);
@@ -331,7 +363,7 @@ async function api(request, env = {}) {
     const payload = await request.json().catch(() => ({}));
     if (!payload.orderId || !payload.engineerId) return json({ error: "orderId and engineerId are required" }, { status: 400 });
     return json({
-      error: "Ручное назначение должно пройти повторный точный расчёт и валидацию",
+      error: "Ручное назначение должно пройти повторный проверяемый расчёт и валидацию",
       code: "REPLAN_REQUIRED",
       ...payload,
     }, { status: 409 });

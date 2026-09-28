@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from datetime import timedelta
+from itertools import combinations
+from time import monotonic
 from typing import Callable, Mapping
 
 from .domain import PlanningDataset, Priority
@@ -47,6 +49,22 @@ class RepairSearchReport:
     route_checks_by_depth: tuple[int, ...]
     route_checks_by_job: Mapping[str, int]
     zero_travel_rejections: int
+    budget_exhausted: bool
+
+
+@dataclass(frozen=True, slots=True)
+class UrgentExchangeMove:
+    """Assign an urgent job by releasing lower-priority work on one route."""
+
+    inserted_job_id: str
+    routes: Mapping[str, tuple[str, ...]]
+    released_normal_job_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class UrgentExchangeReport:
+    move: UrgentExchangeMove | None
+    route_checks: int
     budget_exhausted: bool
 
 
@@ -123,6 +141,118 @@ def zero_travel_order_feasible(
     )
 
 
+def find_urgent_exchange_move(
+    dataset: PlanningDataset,
+    routes: Mapping[str, tuple[str, ...]],
+    unserved_job_ids: set[str],
+    candidates: CandidateIndex,
+    route_check: RouteCheck,
+    *,
+    max_released_normals: int = 2,
+    max_route_checks: int = 400,
+    max_seconds: float | None = None,
+) -> UrgentExchangeReport:
+    """Prefer an urgent job when exact capacity requires releasing normal work.
+
+    The caller must validate the complete changed plan. A failed bounded search
+    does not prove the urgent job impossible.
+    """
+    if not 1 <= max_released_normals <= 3 or max_route_checks < 1:
+        raise ValueError('Invalid urgent exchange search limits')
+    if max_seconds is not None and max_seconds <= 0:
+        raise ValueError('max_seconds must be positive')
+    urgent_ids = sorted(
+        (job_id for job_id in unserved_job_ids
+         if dataset.jobs[job_id].priority == Priority.URGENT),
+        key=lambda job_id: (
+            dataset.jobs[job_id].window_end,
+            len(candidates.eligible_engineers_by_job[job_id]), job_id,
+        ),
+    )
+    if not urgent_ids:
+        return UrgentExchangeReport(None, 0, False)
+    deadline = monotonic() + max_seconds if max_seconds is not None else None
+    checks = 0
+    committed = {
+        commitment.job_id
+        for commitment in dataset.active_commitments_at(dataset.initial_planning_at)
+    }
+    stock = {
+        (item.zone_id, item.equipment_id): item.quantity_available
+        for item in dataset.shared_inventory
+    }
+    used: Counter[tuple[str, str]] = Counter()
+
+    def shared_needs(job_id: str) -> Counter[tuple[str, str]]:
+        job = dataset.jobs[job_id]
+        needs: Counter[tuple[str, str]] = Counter()
+        for need in job.required_equipment:
+            if dataset.equipment_catalog[need.equipment_id].shared_stock:
+                needs[job.zone_id, need.equipment_id] += need.quantity
+        return needs
+
+    for order in routes.values():
+        for job_id in order:
+            used.update(shared_needs(job_id))
+
+    for release_count in range(1, max_released_normals + 1):
+        for urgent_id in urgent_ids:
+            urgent = dataset.jobs[urgent_id]
+            engineer_ids = sorted(
+                candidates.eligible_engineers_by_job[urgent_id],
+                key=lambda engineer_id: (
+                    len(routes.get(engineer_id, ())), engineer_id,
+                ),
+            )
+            for engineer_id in engineer_ids:
+                if dataset.engineers[engineer_id].zone_id != urgent.zone_id:
+                    continue
+                order = tuple(routes.get(engineer_id, ()))
+                releasable = sorted(
+                    (job_id for job_id in order
+                     if dataset.jobs[job_id].priority == Priority.NORMAL
+                     and job_id not in committed),
+                    key=lambda job_id: (
+                        not (
+                            dataset.jobs[job_id].window_start <= urgent.window_end
+                            and urgent.window_start <= dataset.jobs[job_id].window_end
+                        ),
+                        job_id,
+                    ),
+                )
+                for released in combinations(releasable, release_count):
+                    released_stock: Counter[tuple[str, str]] = Counter()
+                    for job_id in released:
+                        released_stock.update(shared_needs(job_id))
+                    if any(
+                        used[key] - released_stock[key] + quantity
+                        > stock.get(key, 0)
+                        for key, quantity in shared_needs(urgent_id).items()
+                    ):
+                        continue
+                    reduced = tuple(job_id for job_id in order if job_id not in released)
+                    for position in range(len(reduced) + 1):
+                        if deadline is not None and monotonic() >= deadline:
+                            return UrgentExchangeReport(None, checks, True)
+                        proposal = (
+                            reduced[:position] + (urgent_id,) + reduced[position:]
+                        )
+                        if not zero_travel_order_feasible(dataset, engineer_id, proposal):
+                            continue
+                        if checks >= max_route_checks:
+                            return UrgentExchangeReport(None, checks, True)
+                        checks += 1
+                        if route_check(engineer_id, proposal):
+                            return UrgentExchangeReport(
+                                UrgentExchangeMove(
+                                    urgent_id, {engineer_id: proposal},
+                                    tuple(sorted(released)),
+                                ),
+                                checks, False,
+                            )
+    return UrgentExchangeReport(None, checks, False)
+
+
 def find_coverage_move(
     dataset: PlanningDataset,
     routes: Mapping[str, tuple[str, ...]],
@@ -134,6 +264,7 @@ def find_coverage_move(
     max_displacements: int = 2,
     max_checks_by_depth: tuple[int, ...] | None = None,
     reorder_affected_routes: bool = False,
+    max_seconds: float | None = None,
 ) -> RepairSearchReport:
     """Find a direct insert or a bounded exact ejection chain.
 
@@ -143,6 +274,8 @@ def find_coverage_move(
     """
     if max_route_checks < 1:
         raise ValueError('max_route_checks must be positive')
+    if max_seconds is not None and max_seconds <= 0:
+        raise ValueError('max_seconds must be positive')
     if not 0 <= max_displacements <= 4:
         raise ValueError('max_displacements must be between 0 and 4')
     if not unserved_job_ids:
@@ -173,6 +306,7 @@ def find_coverage_move(
     checks_by_job_depth: dict[tuple[int, str], int] = {}
     zero_rejections = 0
     budget_exhausted = False
+    deadline = monotonic() + max_seconds if max_seconds is not None else None
     active_depth = 0
     active_job_id = ''
     checked: dict[tuple[str, tuple[str, ...]], bool] = {
@@ -182,6 +316,9 @@ def find_coverage_move(
 
     def valid(engineer_id: str, order: tuple[str, ...]) -> bool:
         nonlocal exact_checks, zero_rejections, budget_exhausted
+        if deadline is not None and monotonic() >= deadline:
+            budget_exhausted = True
+            raise _BudgetReached
         key = (engineer_id, order)
         if key in checked:
             return checked[key]
@@ -215,7 +352,13 @@ def find_coverage_move(
         checked[key] = route_check(engineer_id, order)
         return checked[key]
 
-    def placements(engineer_id: str, order: tuple[str, ...], job_id: str):
+    def placements(
+        engineer_id: str,
+        order: tuple[str, ...],
+        job_id: str,
+        *,
+        allow_reorder: bool = True,
+    ):
         if engineer_id not in candidates.eligible_engineers_by_job[job_id]:
             return
         # This explicit check protects the geographic rule even if a caller
@@ -231,7 +374,7 @@ def find_coverage_move(
             seen.add(trial)
             if valid(engineer_id, trial):
                 yield trial
-        if not reorder_affected_routes:
+        if not reorder_affected_routes or not allow_reorder:
             return
 
         # A coverage repair can require changing the order of visits that were
@@ -313,8 +456,36 @@ def find_coverage_move(
             remaining_displacements: int,
             displaced_job_ids: tuple[str, ...],
         ) -> tuple[dict[str, tuple[str, ...]], tuple[str, ...]] | None:
+            nonlocal budget_exhausted
+            if deadline is not None and monotonic() >= deadline:
+                budget_exhausted = True
+                raise _BudgetReached
             protected_jobs = {job_id, *displaced_job_ids}
-            for target_id in candidates.eligible_engineers_by_job[pending_job_id]:
+            target_ids = sorted(
+                candidates.eligible_engineers_by_job[pending_job_id],
+                key=lambda engineer_id: (
+                    len(current_routes.get(engineer_id, ())),
+                    engineer_id,
+                ),
+            )
+            if not displaced_job_ids and remaining_displacements == 0:
+                # Give every eligible engineer a cheap direct insertion before
+                # spending the deadline on route reorderings for one engineer.
+                for allow_reorder in (False, True):
+                    if allow_reorder and not reorder_affected_routes:
+                        break
+                    for target_id in target_ids:
+                        target_order = tuple(current_routes.get(target_id, ()))
+                        for new_target in placements(
+                            target_id, target_order, pending_job_id,
+                            allow_reorder=allow_reorder,
+                        ):
+                            completed = dict(current_routes)
+                            completed[target_id] = new_target
+                            return completed, displaced_job_ids
+                return None
+
+            for target_id in target_ids:
                 target_order = tuple(current_routes.get(target_id, ()))
                 # At the root of a positive-depth search, direct insertion was
                 # already exhausted by the preceding depth.  Repeating it here
