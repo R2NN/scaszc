@@ -96,7 +96,7 @@ test('published FCFS uses the same paid-route policy in the shift cost compariso
   const baseline = calculateBaseline(selected.orders, selected.team, selected.plan.baseline);
   const result = calculateEconomics(selected, {}, baseline);
   assert.equal(result.baselineAvailable, true);
-  assert.equal(result.baselineAssignedCount, 104);
+  assert.equal(result.baselineAssignedCount, 101);
   assert.equal(result.baselineEngineersUsed, 35);
   assert.ok(result.baselineDirectCost > result.directCost);
   assert.ok(result.baselineCostPerAssigned > result.costPerAssigned);

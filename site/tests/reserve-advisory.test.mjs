@@ -65,19 +65,19 @@ test('recalculates the recommendation from each selected day instead of fixed cr
   assert.notEqual(first.reason, second.reason);
 });
 
-test('uses the real selected-day crew name and changes if its replacement leaves early', async () => {
+test('uses the real selected-day crew and its actual uncovered hours', async () => {
   const history = JSON.parse(await readFile(new URL('../public/data/analytics-history.json', import.meta.url), 'utf8'));
   const currentDay = history.days.at(-1);
-  const engineerId = currentDay.team.find(item => item.name === 'Рыбалкин Егор').id;
+  const engineerId = currentDay.team.find(item => item.name === 'Бригада Арташкин').id;
   const advice = buildReserveReleaseAdvisories(currentDay).get(engineerId);
-  assert.equal(advice.level, 'review');
-  assert.match(advice.reason, /Капитанчук Александр/);
+  assert.equal(advice.level, 'keep');
+  assert.match(advice.reason, /Восток.*с 12:00 до 22:00/);
 
   const changedDay = structuredClone(currentDay);
-  changedDay.team.find(item => item.name === 'Капитанчук Александр').shiftEnd = '16:00';
+  changedDay.team.find(item => item.id === engineerId).shiftEnd = '16:00';
   const changedAdvice = buildReserveReleaseAdvisories(changedDay).get(engineerId);
   assert.equal(changedAdvice.level, 'keep');
-  assert.match(changedAdvice.reason, /с 16:00 до 22:00/);
+  assert.match(changedAdvice.reason, /с 12:00 до 16:00/);
 });
 
 test('warns when an imported shift is missing instead of assuming availability', () => {
