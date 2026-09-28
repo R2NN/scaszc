@@ -95,6 +95,48 @@ class ExactCoverageRepairTests(unittest.TestCase):
         self.assertTrue(report.budget_exhausted)
         self.assertEqual(report.route_checks, 0)
 
+    def test_idle_engineer_is_checked_before_a_busy_route(self) -> None:
+        self.jobs['C'] = replace(
+            self.jobs['A'], job_id='C', location_id='C',
+        )
+        routes = {'E1': ('A', 'B', 'C'), 'E2': ()}
+        checked = []
+
+        def route_check(engineer_id: str, order: tuple[str, ...]) -> bool:
+            checked.append((engineer_id, order))
+            return engineer_id == 'E2' and order == ('J',)
+
+        report = find_coverage_move(
+            self.dataset, routes, {'J'},
+            self._candidates({'J': ('E1', 'E2')}), route_check,
+            max_route_checks=1, max_displacements=0,
+            reorder_affected_routes=True,
+        )
+        self.assertIsNotNone(report.move)
+        self.assertEqual(report.move.routes, {'E2': ('J',)})
+        self.assertEqual(checked, [('E2', ('J',))])
+
+    def test_direct_insertions_across_engineers_precede_reordering(self) -> None:
+        routes = {'E1': ('A',), 'E2': ('B',)}
+        checked = []
+
+        def route_check(engineer_id: str, order: tuple[str, ...]) -> bool:
+            checked.append((engineer_id, order))
+            return engineer_id == 'E2' and order == ('B', 'J')
+
+        report = find_coverage_move(
+            self.dataset, routes, {'J'},
+            self._candidates({'J': ('E1', 'E2')}), route_check,
+            max_route_checks=4, max_displacements=0,
+            reorder_affected_routes=True,
+        )
+        self.assertIsNotNone(report.move)
+        self.assertEqual(report.move.routes, {'E2': ('B', 'J')})
+        self.assertEqual(checked, [
+            ('E1', ('J', 'A')), ('E1', ('A', 'J')), ('E2', ('J', 'B')),
+            ('E2', ('B', 'J')),
+        ])
+
     def test_relocates_one_job_to_cover_an_unserved_job(self) -> None:
         routes = {'E1': ('A',), 'E2': ()}
         allowed = {('E1', ('J',)), ('E2', ('A',))}

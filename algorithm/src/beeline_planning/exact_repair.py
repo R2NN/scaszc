@@ -223,7 +223,13 @@ def find_coverage_move(
         checked[key] = route_check(engineer_id, order)
         return checked[key]
 
-    def placements(engineer_id: str, order: tuple[str, ...], job_id: str):
+    def placements(
+        engineer_id: str,
+        order: tuple[str, ...],
+        job_id: str,
+        *,
+        allow_reorder: bool = True,
+    ):
         if engineer_id not in candidates.eligible_engineers_by_job[job_id]:
             return
         # This explicit check protects the geographic rule even if a caller
@@ -239,7 +245,7 @@ def find_coverage_move(
             seen.add(trial)
             if valid(engineer_id, trial):
                 yield trial
-        if not reorder_affected_routes:
+        if not reorder_affected_routes or not allow_reorder:
             return
 
         # A coverage repair can require changing the order of visits that were
@@ -326,7 +332,31 @@ def find_coverage_move(
                 budget_exhausted = True
                 raise _BudgetReached
             protected_jobs = {job_id, *displaced_job_ids}
-            for target_id in candidates.eligible_engineers_by_job[pending_job_id]:
+            target_ids = sorted(
+                candidates.eligible_engineers_by_job[pending_job_id],
+                key=lambda engineer_id: (
+                    len(current_routes.get(engineer_id, ())),
+                    engineer_id,
+                ),
+            )
+            if not displaced_job_ids and remaining_displacements == 0:
+                # Give every eligible engineer a cheap direct insertion before
+                # spending the deadline on route reorderings for one engineer.
+                for allow_reorder in (False, True):
+                    if allow_reorder and not reorder_affected_routes:
+                        break
+                    for target_id in target_ids:
+                        target_order = tuple(current_routes.get(target_id, ()))
+                        for new_target in placements(
+                            target_id, target_order, pending_job_id,
+                            allow_reorder=allow_reorder,
+                        ):
+                            completed = dict(current_routes)
+                            completed[target_id] = new_target
+                            return completed, displaced_job_ids
+                return None
+
+            for target_id in target_ids:
                 target_order = tuple(current_routes.get(target_id, ()))
                 # At the root of a positive-depth search, direct insertion was
                 # already exhausted by the preceding depth.  Repeating it here
