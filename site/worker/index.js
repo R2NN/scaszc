@@ -18,15 +18,13 @@ const normalizePlace = (value) => String(value || "").toLocaleLowerCase("ru-RU")
 const normalizeHouseNumber = (value) => String(value || "").toLocaleLowerCase("ru-RU").replace(/^\s*(?:дом|д)\.?\s*/i, "").replace(/[,;]/g, " ").replace(/корпус|корп\.?|к\.?/g, "к").replace(/строение|стр\.?|с\.?/g, "с").replace(/[\s.-]+/g, "");
 const houseNumbersMatch = (requested, candidate) => {
   if (!requested || !candidate) return false;
-  if (requested === candidate) return true;
-  const requestedHasPart = /[кс]/.test(requested);
-  return !requestedHasPart && new RegExp(`^${requested.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[кс].+)$`).test(candidate);
+  return requested === candidate;
 };
 const addressHouseNumber = (value) => {
   const address = normalizeAddress(value);
   const explicit = address.match(/(?:^|[,\s])(?:д|дом)\.?\s*(\d+[а-яa-z]?(?:\s*(?:к|корпус|корп|с|стр|строение)\.?\s*\d+)?(?:\/\d+)?)/i);
   if (explicit) return normalizeHouseNumber(explicit[1]);
-  const numericParts = address.match(/\b\d+[а-яa-z]?(?:\/\d+)?\b/gi) || [];
+  const numericParts = address.match(/\b\d{1,4}[а-яa-z]?(?:\s*(?:к|корпус|корп|с|стр|строение)\.?\s*\d+)?(?:\/\d+)?\b/gi) || [];
   return normalizeHouseNumber(numericParts.at(-1));
 };
 
@@ -39,9 +37,9 @@ const streetTypeLabels = {
 const canonicalStreetType = (value) => streetTypeLabels[String(value || '').toLocaleLowerCase('ru-RU')] || String(value || '').toLocaleLowerCase('ru-RU');
 const streetParts = (value) => {
   const text = normalizeAddress(value).replace(/\s*\([^)]*\)\s*/g, ' ');
-  const typePattern = '(ул|улица|пр-?кт|проспект|пер|переулок|б-?р|бульвар|наб|набережная|проезд|пр-?зд|ш|шоссе)';
-  const before = text.match(new RegExp(`${typePattern}\\.?\\s*([^,]+?)(?=,\\s*(?:дом|д)?\\.?\\s*\\d|,|$)`, 'i'));
-  const after = text.match(new RegExp(`(?:^|,)\\s*([^,]+?)\\s+${typePattern}\\.?(?=\\s*(?:дом|д)\\.?|,|$)`, 'i'));
+  const typePattern = '(улица|ул|проспект|пр-?кт|переулок|пер|бульвар|б-?р|набережная|наб|проезд|пр-?зд|шоссе|ш)';
+  const before = text.match(new RegExp(`(?:^|[\\s,])${typePattern}(?=\\.|\\s|$)\\.?\\s*([^,]+?)(?=,\\s*(?:дом|д)?\\.?\\s*\\d|,|$)`, 'i'));
+  const after = text.match(new RegExp(`(?:^|,)\\s*([^,]+?)\\s+${typePattern}(?=\\.|\\s|,|$)\\.?(?=\\s*(?:дом|д)\\.?|,|$)`, 'i'));
   const type = canonicalStreetType(before?.[1] || after?.[2]);
   const name = normalizePlace(before?.[2] || after?.[1]);
   return { type, name };
@@ -443,6 +441,7 @@ async function api(request, env = {}) {
 }
 
 export { buildExactPlan };
+export { addressHouseNumber, normalizeHouseNumber, houseNumbersMatch, streetParts, streetsMatch, parseRussianAddress };
 
 export default {
   async fetch(request, env) {
