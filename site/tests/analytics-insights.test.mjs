@@ -10,7 +10,7 @@ test('period summary separates planned visits from observed execution', () => {
   assert.equal(model.days.length, 182);
   assert.equal(model.selected.actualAvailable, false);
   assert.equal(model.selected.onTimeRate, null);
-  assert.equal(model.totals.actualDays, history.days.length - 1);
+  assert.equal(model.totals.actualDays, 0);
   assert.equal(model.totals.total, history.days.reduce((sum, day) => sum + day.orders.length, 0));
   assert.equal(model.totals.assigned, history.days.reduce((sum, day) => sum + day.plan.routes.flatMap(route => route.assignments).length, 0));
   assert.equal(model.selected.issues.unassigned.length, model.selected.unassigned);
@@ -44,8 +44,21 @@ test('filtered route aggregates override stale all-region plan metrics', () => {
 });
 
 test('visit drill-down reconciles completed, cancelled, late and missing facts', () => {
-  const day = summarizeHistoryDay(history.days[0]);
+  const record = structuredClone(history.days[0]);
+  const assignments = record.plan.routes.flatMap(route => route.assignments);
+  const completed = assignments[0];
+  const late = assignments[1];
+  const cancelled = assignments[2];
+  record.actual = { visits: [
+    { orderId: completed.orderId, status: 'completed', arrival: completed.arrival, start: completed.plannedStart, finish: completed.plannedFinish, onTime: true },
+    { orderId: late.orderId, status: 'completed', arrival: late.arrival, start: '23:30', finish: '23:50', onTime: false },
+    { orderId: cancelled.orderId, status: 'cancelled', reason: 'Клиент отменил визит' },
+  ] };
+  const day = summarizeHistoryDay(record);
   assert.equal(day.completed + day.cancelled + day.missing, day.assigned);
+  assert.equal(day.completed, 2);
+  assert.equal(day.cancelled, 1);
+  assert.equal(day.late, 1);
   assert.equal(day.late, day.issues.late.length);
   assert.equal(day.cancelled, day.issues.cancelled.length);
   assert.ok(day.issues.late.every(item => item.orderId && item.zone && item.plannedStart && item.actualStart));

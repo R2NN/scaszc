@@ -13,7 +13,7 @@
 5. Индекс общественного транспорта — `data/transit/moscow_2026-08-17.sqlite`.
 6. Уже выполненные точные запросы маршрутизации — `runtime/full-coverage-route-cache.sqlite3`.
 7. Полный офлайн-runtime Valhalla — `valhalla-data/` в корне ZIP.
-8. Полугодовая аналитика — `site/public/data/analytics-history.json`: 180 смен, 19.02.2026–17.08.2026.
+8. Полугодовая аналитика — `site/public/data/analytics-history.json`: 182 смены, 17.02.2026–17.08.2026; 181 исторический день с синтетическими заявками, отдельно проверенными маршрутами оптимизатора и FCFS-бейзлайном.
 9. Обученная ML-модель — `site/models/demand-forecast-catboost.cbm`.
 
 Не возвращать старые частичные результаты. Актуальная исходная смена закрывает 205 из 205 заявок на 28 бригадах; событийный сценарий — 206 из 206 на тех же 28 бригадах. Ограниченный поиск нельзя описывать как доказательство невозможности назначения.
@@ -41,8 +41,9 @@
 
 ### Полугодовые данные и ML
 
-- `site/public/data/analytics-history.json` — 180 последовательных смен.
-- `site/scripts/generate-analytics-history.mjs` — воспроизводимый генератор истории.
+- `site/public/data/analytics-history.json` — 182 последовательные смены.
+- `site/scripts/publish-exact-history.py` — публикация проверенных исторических маршрутов из пакетного расчёта.
+- `site/scripts/generate-analytics-history.mjs` — отдельный генератор демонстрационной истории.
 - `site/public/data/ml-demand-training.csv` — 50 544 подготовленных наблюдения для CatBoost.
 - `site/models/demand-forecast-catboost.cbm` — обученный `CatBoostRegressor`.
 - `site/public/data/ml-demand-forecast.json` — опубликованный прогноз и метрики обучения.

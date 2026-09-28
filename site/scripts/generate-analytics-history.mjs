@@ -258,7 +258,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const fixture = JSON.parse(await readFile(new URL('public/test-data/beego-algorithm-initial.json', ROOT), 'utf8'));
   const artifact = JSON.parse(await readFile(new URL('public/data/beego-exact-plans.json', ROOT), 'utf8'));
   const history = generateHistory({ fixture, artifact, endDate, days });
-  const output = new URL('public/data/analytics-history.json', ROOT);
+  const output = new URL('public/data/analytics-history-preview.json', ROOT);
   await writeFile(output, `${JSON.stringify(history)}\n`);
   process.stdout.write(`История: ${history.period.start}—${history.period.end}, ${history.days.length} дней, ${fileURLToPath(output)}\n`);
 }

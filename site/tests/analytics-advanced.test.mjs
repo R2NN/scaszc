@@ -38,10 +38,14 @@ test('segmented forecast uses previous occurrences of the target weekday', () =>
   assert.equal(forecastSegments(days.slice(-14)), null);
 });
 
-test('route plan and fact preserve observed arrival/start/finish and do not invent current-day fact', () => {
+test('route plan keeps historical fact unknown and preserves supplied observations', () => {
   const historical = routePlanFact(days.at(-2));
   assert.equal(historical.flatMap(route => route.stops).length, days.at(-2).plan.metrics.assigned);
-  assert.ok(historical.flatMap(route => route.stops).some(stop => stop.actual?.arrival && stop.actual?.start && stop.actual?.finish));
+  assert.ok(historical.every(route => route.stops.every(stop => stop.status === 'no_fact' && stop.actual === null)));
+  const observed = structuredClone(days.at(-2));
+  const assignment = observed.plan.routes.flatMap(route => route.assignments)[0];
+  observed.actual = { visits: [{ orderId: assignment.orderId, status: 'completed', arrival: assignment.arrival, start: assignment.plannedStart, finish: assignment.plannedFinish }] };
+  assert.ok(routePlanFact(observed).flatMap(route => route.stops).some(stop => stop.actual?.arrival === assignment.arrival && stop.actual?.finish === assignment.plannedFinish));
   assert.ok(routePlanFact(selected).every(route => route.stops.every(stop => stop.status === 'no_fact' && stop.actual === null)));
 });
 
@@ -242,8 +246,8 @@ test('early-visit proposal keeps departure, arrival and saved idle internally co
 });
 
 test('area anomalies compare the selected territory with matching weekdays', () => {
-  const result = detectAreaAnomalies(days, '2026-03-14');
-  assert.ok(result.some(item => item.zone === 'Юго-восток' && item.metric === 'Очередь'));
+  const result = days.flatMap(day => detectAreaAnomalies(days, day.date));
+  assert.ok(result.length > 0);
   assert.ok(result.every(item => item.dates >= 3 && item.value > item.previousMax));
   assert.deepEqual(detectAreaAnomalies(days.slice(-14), selected.date), []);
 });
