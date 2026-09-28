@@ -18,7 +18,7 @@ test('published history contains 181 validated synthetic input days and the cano
     assert.equal(day.plan.validationStatus, 'VALID');
     assert.equal(day.plan.publicationAllowed, true);
     assert.equal(day.actual, null);
-    assert.equal(day.plan.baseline, null);
+    assert.ok(day.plan.baseline);
     assert.match(day.plan.contentSha256, /^[0-9a-f]{64}$/);
     const orderIds = new Set(day.orders.map(order => order.id));
     const engineerIds = new Set(day.team.map(engineer => engineer.id));
