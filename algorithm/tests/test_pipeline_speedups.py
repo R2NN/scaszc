@@ -31,10 +31,12 @@ from beeline_routing.export import payload_sha256
 from tools.build_valhalla_screening_matrices import missing_matrix_requests
 from tools import build_valhalla_screening_matrices as matrix_builder
 from tools.run_new_dataset_pipeline import (
+    _choose_exact_plan,
     _is_publishable_exact,
     _is_publishable_full_coverage,
     _refinement_fallback_candidate,
 )
+from tools.promote_best_history_plans import best_saved_plan
 from tools.solve_screening_zones import _read_warm_orders, _with_travel_buffers
 from tools import refine_screening_exact as exact_refiner
 
@@ -211,6 +213,70 @@ class ScreeningSpeedupTests(unittest.TestCase):
             path.write_text(json.dumps(payload), encoding='utf-8')
             self.assertFalse(_is_publishable_full_coverage(path))
             self.assertTrue(_is_publishable_exact(path))
+
+    def test_exact_pipeline_keeps_urgent_coverage_across_stages(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def plan(name: str, urgent: int, normal: int, engineers: int) -> Path:
+                path = root / name
+                payload = {
+                    'status': 'EXACT_VALID',
+                    'publication_allowed': True,
+                    'plan': {'unserved_job_ids': ['job'] * (urgent + normal)},
+                    'validation': {
+                        'status': 'VALID',
+                        'metrics': {
+                            'unserved_urgent_jobs': urgent,
+                            'unserved_normal_jobs': normal,
+                            'used_engineers': engineers,
+                            'total_distance_m': 1000,
+                            'total_travel_minutes': 20,
+                        },
+                    },
+                }
+                path.write_text(json.dumps(payload), encoding='utf-8')
+                return path
+
+            robust = plan('robust.json', 0, 2, 28)
+            fallback = plan('fallback.json', 1, 3, 23)
+            retimed = plan('retimed.json', 0, 2, 28)
+            self.assertEqual(_choose_exact_plan(robust, fallback), robust)
+            self.assertEqual(_choose_exact_plan(robust, retimed, retimed=True), retimed)
+            self.assertEqual(_choose_exact_plan(None, robust), robust)
+
+    def test_history_promotion_rejects_tampered_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            dataset_hash = 'd' * 64
+
+            def plan(name: str, urgent: int) -> tuple[Path, dict]:
+                path = root / name
+                artifact = {
+                    'status': 'EXACT_VALID', 'publication_allowed': True,
+                    'dataset_sha256': dataset_hash,
+                    'validation': {'status': 'VALID', 'metrics': {
+                        'unserved_urgent_jobs': urgent,
+                        'unserved_normal_jobs': 2,
+                        'used_engineers': 3,
+                        'total_distance_m': 100,
+                        'total_travel_minutes': 10,
+                    }},
+                }
+                artifact['content_sha256'] = payload_sha256(artifact)
+                path.write_text(json.dumps(artifact), encoding='utf-8')
+                return path, artifact
+
+            current, original = plan('core-exact-retimed.json', 1)
+            better, _ = plan('core-robust-exact.json', 0)
+            status = {'final_plan': str(current), 'dataset_sha256': dataset_hash,
+                      'artifact_sha256': original['content_sha256']}
+            self.assertEqual(best_saved_plan(status)[0], better)
+            tampered = json.loads(better.read_text(encoding='utf-8'))
+            tampered['validation']['metrics']['unserved_urgent_jobs'] = 0
+            tampered['validation']['metrics']['unserved_normal_jobs'] = 0
+            better.write_text(json.dumps(tampered), encoding='utf-8')
+            self.assertIsNone(best_saved_plan(status))
 
     def test_refinement_fallback_uses_verified_latest_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

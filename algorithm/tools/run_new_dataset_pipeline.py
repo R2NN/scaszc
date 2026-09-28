@@ -51,6 +51,41 @@ def _is_publishable_full_coverage(path: Path) -> bool:
     )
 
 
+def _exact_quality_key(path: Path) -> tuple[int, int, int, int, int]:
+    """Rank independently validated plans by the business objective."""
+    payload = json.loads(path.read_text(encoding='utf-8'))
+    if not _is_publishable_exact(path):
+        raise ValueError(f'Exact plan is not publishable: {path}')
+    metrics = payload['validation']['metrics']
+    return (
+        int(metrics['unserved_urgent_jobs']),
+        int(metrics['unserved_normal_jobs']),
+        int(metrics['used_engineers']),
+        int(metrics['total_distance_m']),
+        int(metrics['total_travel_minutes']),
+    )
+
+
+def _choose_exact_plan(current: Path | None, candidate: Path,
+                       *, retimed: bool = False) -> Path:
+    """Keep better coverage; accept later departures at equal coverage."""
+    if not _is_publishable_exact(candidate):
+        if current is None:
+            raise ValueError(f'No publishable exact plan: {candidate}')
+        return current
+    if current is None:
+        return candidate
+    old_key = _exact_quality_key(current)
+    new_key = _exact_quality_key(candidate)
+    if new_key[:2] < old_key[:2]:
+        return candidate
+    if new_key[:2] > old_key[:2]:
+        return current
+    if retimed or new_key < old_key:
+        return candidate
+    return current
+
+
 def _refinement_fallback_candidate(
     checkpoint: Path,
     master: Path,
@@ -567,6 +602,8 @@ def main() -> int:
             '--input-plan', last_plan, '--cache', cache,
             '--transit-index', transit_index, '--output', retimed,
             '--metro-wait-seconds', args.metro_wait_seconds,
+            '--max-total-queries', 128,
+            '--max-queries-per-leg', 8,
             '--execute',
         )))
         last_plan = retimed
@@ -813,7 +850,10 @@ def main() -> int:
             else:
                 checkpoint = planning_stages[stage]
                 if checkpoint.is_file() and _is_publishable_exact(checkpoint):
-                    current_plan = checkpoint
+                    current_plan = _choose_exact_plan(
+                        current_plan, checkpoint,
+                        retimed=stage == 'exact_departure_timing',
+                    )
                     reason = (
                         'time_limit'
                         if isinstance(error, subprocess.TimeoutExpired)
@@ -863,10 +903,21 @@ def main() -> int:
         })
         if stage in planning_stages:
             candidate_plan = planning_stages[stage]
-            if stage != 'materialize_robust_exact' or _is_publishable_full_coverage(
-                candidate_plan
-            ):
-                current_plan = candidate_plan
+            if candidate_plan.is_file() and _is_publishable_exact(candidate_plan):
+                selected_plan = _choose_exact_plan(
+                    current_plan, candidate_plan,
+                    retimed=stage == 'exact_departure_timing',
+                )
+                if selected_plan != candidate_plan:
+                    print(json.dumps({
+                        'event': 'EXACT_CANDIDATE_NOT_SELECTED',
+                        'stage': stage,
+                        'candidate': str(candidate_plan),
+                        'kept': str(selected_plan),
+                        'candidate_quality': _exact_quality_key(candidate_plan),
+                        'kept_quality': _exact_quality_key(selected_plan),
+                    }, ensure_ascii=False), flush=True)
+                current_plan = selected_plan
                 payload = json.loads(current_plan.read_text(encoding='utf-8'))
                 if (
                     first_valid_plan is None
