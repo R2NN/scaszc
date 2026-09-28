@@ -35,7 +35,14 @@ const run = (python, args, input, repositoryRoot, deadlineAt) => new Promise((re
     let result;
     try { result = JSON.parse(last); } catch { /* pipeline may exit before JSON summary */ }
     if (code === 0) resolve(result || {});
-    else reject(new Error(result?.error || stderr.trim() || stdout.trim() || `Exact pipeline exited with code ${code}`));
+    else {
+      const error = new Error(result?.error || stderr.trim() || stdout.trim() || `Exact pipeline exited with code ${code}`);
+      if (result?.status === 'FAILED') {
+        error.code = 'INVALID_INPUT';
+        error.details = Array.isArray(result.details) ? result.details : [];
+      }
+      reject(error);
+    }
   });
   child.stdin.end(input === undefined ? undefined : JSON.stringify(input));
 });

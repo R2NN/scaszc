@@ -18,8 +18,9 @@ test('selects the most common past work date from imported rows',()=>{
   assert.deepEqual([date.getFullYear(),date.getMonth()+1,date.getDate()],[2025,3,14]);
 });
 
-test('does not move the calendar to a future imported date',()=>{
-  assert.equal(resolveImportedDate([{serviceDate:'18.09.2026'}],new Date(2026,8,17)),null);
+test('uses an explicit future work date for a new planning day',()=>{
+  const date=resolveImportedDate([{serviceDate:'18.09.2026'}],new Date(2026,8,17));
+  assert.deepEqual([date.getFullYear(),date.getMonth()+1,date.getDate()],[2026,9,18]);
 });
 
 test('does not interpret durations and time-only fields as dates',()=>{

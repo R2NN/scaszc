@@ -37,10 +37,17 @@ const orderDateValues=order=>{
 
 export function resolveImportedDate(orders=[],today=new Date()){
   const limit=new Date(today.getFullYear(),today.getMonth(),today.getDate()).getTime();
+  const plannedValues=order=>[
+    order?.serviceDate,order?.workDate,order?.scheduledDate,order?.date,
+    ...Object.entries(order?.sourceData||{}).filter(([key])=>/service.?date|scheduled.?date|work.?date|дата.*(?:работ|выполн)|день.*выполн/iu.test(key)).map(([,value])=>value),
+  ];
+  const plannedDates=orders.map(order=>plannedValues(order).map(parseImportedDate).find(Boolean)).filter(Boolean);
   const counts=new Map();
   orders.forEach(order=>{
-    const date=orderDateValues(order).map(parseImportedDate).find(Boolean);
-    if(!date||date.getTime()>limit)return;
+    const date=plannedDates.length
+      ? plannedValues(order).map(parseImportedDate).find(Boolean)
+      : orderDateValues(order).map(parseImportedDate).find(Boolean);
+    if(!date||(!plannedDates.length&&date.getTime()>limit))return;
     const key=date.getTime();
     counts.set(key,(counts.get(key)||0)+1);
   });

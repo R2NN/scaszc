@@ -13,7 +13,7 @@ const python = process.env.BEEGO_PYTHON || 'python';
 const samplePayload = {
   planningDate: '2026-08-17',
   orders: [{ id: 'moscow:JOB-1', sourceId: 'JOB-1', zoneId: 'EAST', start: '10:00', end: '14:00', duration: 60, skill: 'Подключение', coords: [55.700846, 37.7822191], equipment: 'Диагностический комплект · Монтажный комплект' }],
-  engineers: [{ id: 'moscow:ENG-1', sourceId: 'ENG-1', zoneId: 'EAST', shiftStart: '08:00', shiftEnd: '18:00', skills: ['Подключение'], transport: 'Автомобиль', startCoords: [55.7022013, 37.7739593], equipment: 'Диагностический комплект · Монтажный комплект' }],
+  engineers: [{ id: 'moscow:ENG-1', sourceId: 'ENG-1', zoneId: 'EAST', status: 'Доступен', shiftStart: '08:00', shiftEnd: '18:00', skills: ['Подключение'], transport: 'Автомобиль', startCoords: [55.7022013, 37.7739593], equipment: 'Диагностический комплект · Монтажный комплект' }],
 };
 
 test('new UI rows become a strictly loadable checksummed exact dataset', async () => {
@@ -48,6 +48,55 @@ test('public transit engineers are accepted on a different planning date', async
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('new date import normalizes unambiguous date, time and decimal coordinate formats', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'beego-ui-normalized-'));
+  try {
+    const payload = {
+      ...samplePayload,
+      planningDate: '16.08.2026',
+      orders: [{ ...samplePayload.orders[0], start: '9.30', end: '17:00', coords: ['55,700846', '37,7822191'] }],
+      engineers: [{ ...samplePayload.engineers[0], shiftStart: '8.00' }],
+    };
+    const prepared = spawnSync(python, [path.join(repositoryRoot, 'algorithm', 'tools', 'prepare_ui_dataset.py'), path.join(directory, 'dataset')], { cwd: repositoryRoot, env: { ...process.env, PYTHONUTF8: '1' }, input: JSON.stringify(payload), encoding: 'utf8' });
+    assert.equal(prepared.status, 0, prepared.stdout || prepared.stderr);
+    const manifest = JSON.parse(await readFile(path.join(directory, 'dataset', 'manifest.json'), 'utf8'));
+    assert.equal(manifest.planning_date, '2026-08-16');
+    assert.match(await readFile(path.join(directory, 'dataset', 'core', 'jobs.csv'), 'utf8'), /2026-08-16T09:30:00/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('known office id supplies verified start coordinates for a Russian zone label', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'beego-ui-office-'));
+  try {
+    const payload = {
+      ...samplePayload,
+      engineers: [{ ...samplePayload.engineers[0], zoneId: 'Восток', startCoords: null, sourceData: { start_office_id: 'OFFICE-EAST' } }],
+    };
+    const dataset = path.join(directory, 'dataset');
+    const prepared = spawnSync(python, [path.join(repositoryRoot, 'algorithm', 'tools', 'prepare_ui_dataset.py'), dataset], { cwd: repositoryRoot, env: { ...process.env, PYTHONUTF8: '1' }, input: JSON.stringify(payload), encoding: 'utf8' });
+    assert.equal(prepared.status, 0, prepared.stdout || prepared.stderr);
+    assert.match(await readFile(path.join(dataset, 'common', 'engineers.csv'), 'utf8'), /;EAST;/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('missing availability and malformed window return actionable row errors', async () => {
+  const payload = {
+    ...samplePayload,
+    engineers: [{ ...samplePayload.engineers[0], status: '' }],
+    orders: [{ ...samplePayload.orders[0], start: '9:99' }],
+  };
+  await assert.rejects(runExactPlan(payload, repositoryRoot), error => {
+    assert.equal(error.code, 'INVALID_INPUT');
+    assert.ok(error.details.some(detail => detail.includes('Инженеры, строка 1, доступность')));
+    assert.ok(error.details.some(detail => detail.includes('Заявки, строка 1, окно')));
+    return true;
+  });
 });
 
 test('UI import preserves four transport requirements and excludes mismatched engineers', async () => {
@@ -128,6 +177,31 @@ test('new area uses explicitly entered shared stock, including zero', async () =
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('new day never borrows shared stock from the 17 August dataset', async () => {
+  const payload = {
+    ...samplePayload,
+    planningDate: '2026-08-16',
+    orders: [{ ...samplePayload.orders[0], equipment: 'ROUTER' }],
+  };
+  await assert.rejects(runExactPlan(payload, repositoryRoot), error => {
+    assert.equal(error.code, 'INVALID_INPUT');
+    assert.match(error.message, /фактический остаток ROUTER на 2026-08-16/);
+    return true;
+  });
+});
+
+test('malformed sourceData is rejected with a row number', async () => {
+  const payload = {
+    ...samplePayload,
+    orders: [{ ...samplePayload.orders[0], sourceData: 'wrong shape' }],
+  };
+  await assert.rejects(runExactPlan(payload, repositoryRoot), error => {
+    assert.equal(error.code, 'INVALID_INPUT');
+    assert.ok(error.details.some(detail => detail.includes('Заявки, строка 1, sourceData')));
+    return true;
+  });
 });
 
 test('new dataset reaches independently validated exact plan', { skip: process.env.BEEGO_TEST_FULL_PIPELINE !== '1', timeout: 300000 }, async () => {

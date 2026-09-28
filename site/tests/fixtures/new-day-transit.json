@@ -1,0 +1,90 @@
+{
+  "planningDate": "2026-08-16",
+  "orders": [
+    {
+      "id": "moscow:NEW-EAST-TRANSIT-01",
+      "sourceId": "NEW-EAST-TRANSIT-01",
+      "zoneId": "EAST",
+      "address": "Москва, Новогиреевская улица, 37",
+      "coords": [55.752896, 37.7991095],
+      "geocodeStatus": "exact",
+      "geocodeProvider": "OpenStreetMap/Nominatim",
+      "geocodeObjectId": "way/41896557",
+      "start": "11:00",
+      "end": "17:00",
+      "duration": 30,
+      "skill": "Подключение",
+      "transport": "PUBLIC_TRANSIT",
+      "priority": "Обычная"
+    },
+    {
+      "id": "moscow:NEW-SOUTHEAST-TRANSIT-01",
+      "sourceId": "NEW-SOUTHEAST-TRANSIT-01",
+      "zoneId": "SOUTHEAST",
+      "address": "Москва, Люблинская улица, 169",
+      "coords": [55.6488716, 37.7465963],
+      "geocodeStatus": "exact",
+      "geocodeProvider": "OpenStreetMap/Nominatim",
+      "geocodeObjectId": "way/27780681",
+      "start": "11:00",
+      "end": "17:00",
+      "duration": 30,
+      "skill": "Подключение",
+      "transport": "PUBLIC_TRANSIT",
+      "priority": "Обычная"
+    },
+    {
+      "id": "moscow:NEW-SOUTHCENTER-TRANSIT-01",
+      "sourceId": "NEW-SOUTHCENTER-TRANSIT-01",
+      "zoneId": "SOUTHCENTER",
+      "address": "Москва, Варшавское шоссе, 95 корпус 1",
+      "coords": [55.6404163, 37.6217701],
+      "geocodeStatus": "exact",
+      "geocodeProvider": "OpenStreetMap/Nominatim",
+      "start": "11:00",
+      "end": "17:00",
+      "duration": 30,
+      "skill": "Подключение",
+      "transport": "PUBLIC_TRANSIT",
+      "priority": "Обычная"
+    }
+  ],
+  "engineers": [
+    {
+      "id": "moscow:NEW-EAST-ENG-01",
+      "sourceId": "NEW-EAST-ENG-01",
+      "zoneId": "EAST",
+      "status": "Доступен",
+      "shiftStart": "08:00",
+      "shiftEnd": "20:00",
+      "skills": ["Подключение"],
+      "transport": "PUBLIC_TRANSIT",
+      "startCoords": [55.7022013, 37.7739593],
+      "startGeocodeStatus": "provided"
+    },
+    {
+      "id": "moscow:NEW-SOUTHEAST-ENG-01",
+      "sourceId": "NEW-SOUTHEAST-ENG-01",
+      "zoneId": "SOUTHEAST",
+      "status": "Доступен",
+      "shiftStart": "08:00",
+      "shiftEnd": "20:00",
+      "skills": ["Подключение"],
+      "transport": "PUBLIC_TRANSIT",
+      "startCoords": [55.6020854, 37.6653422],
+      "startGeocodeStatus": "provided"
+    },
+    {
+      "id": "moscow:NEW-SOUTHCENTER-ENG-01",
+      "sourceId": "NEW-SOUTHCENTER-ENG-01",
+      "zoneId": "SOUTHCENTER",
+      "status": "Доступен",
+      "shiftStart": "08:00",
+      "shiftEnd": "20:00",
+      "skills": ["Подключение"],
+      "transport": "PUBLIC_TRANSIT",
+      "startCoords": [55.6647568, 37.6158385],
+      "startGeocodeStatus": "provided"
+    }
+  ]
+}

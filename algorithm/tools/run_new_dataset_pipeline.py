@@ -83,6 +83,8 @@ def _configure_valhalla_snapshot(environment: dict[str, str], base_url: str) -> 
     with urllib.request.urlopen(f'{base_url.rstrip("/")}/status', timeout=5) as response:
         status = json.loads(response.read())
     tile_revision = status.get('tile_revision') or environment.get('VALHALLA_TILE_REVISION')
+    if not tile_revision and isinstance(status.get('tileset_last_modified'), int) and status.get('version'):
+        tile_revision = f"valhalla-status:{status['version']}:{status['tileset_last_modified']}"
     if not isinstance(tile_revision, str) or not tile_revision:
         raise RuntimeError(
             'Valhalla must report tile_revision, or VALHALLA_TILE_REVISION '

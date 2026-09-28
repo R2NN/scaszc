@@ -7,6 +7,7 @@ import {
 import { useDropdownPresence } from './useDropdownPresence.js';
 import { regionForCity, resolveImportedCity } from './regions.js';
 import { pushImportHistory, redoImportHistory, undoImportHistory } from './importHistory.js';
+import { parseImportedDate } from './importDate.js';
 import { displayPlanningPriority, normalizePlanningPriority } from './planningPriority.js';
 
 const ORDER_FIELD_GROUPS = [
@@ -278,7 +279,7 @@ const ENGINEER_ALIASES = {
   engineerStartLongitude: ['start longitude', 'start_longitude', 'longitude', 'lon', 'lng', 'долгота старта', 'долгота'],
   engineerZone: ['zone', 'zone name', 'district', 'region', 'зона', 'участок', 'район', 'регион'],
   engineerZoneId: ['zone id', 'zone_id', 'id зоны'],
-  engineerStatus: ['status', 'availability', 'статус', 'доступность'],
+  engineerStatus: ['status', 'availability', 'is_available', 'is available', 'available', 'статус', 'доступность'],
   engineerPhone: ['phone', 'telephone', 'телефон'],
   engineerEmail: ['email', 'e mail', 'почта'],
   engineerNotes: ['notes', 'comment', 'комментарий', 'примечание'],
@@ -356,7 +357,7 @@ const autoMapHeaders = (headers, entityType = 'orders') => {
 };
 
 const asNumber = value => {
-  const text = String(value ?? '').trim();
+  const text = String(value ?? '').trim().replace(/[\s\u00a0]/g, '');
   if (!text) return null;
   const number = Number(text.replace(',', '.'));
   return Number.isFinite(number) ? number : null;
@@ -364,10 +365,10 @@ const asNumber = value => {
 
 const asTime = value => {
   const text = String(value ?? '').trim();
-  const iso = text.match(/T(\d{2}:\d{2})/);
-  const simple = text.match(/^(\d{1,2}):(\d{2})/);
-  if (iso) return iso[1];
-  if (simple) return `${simple[1].padStart(2, '0')}:${simple[2]}`;
+  const match = text.match(/^(?:(?:\d{4}-\d{1,2}-\d{1,2})[T\s])?(\d{1,2})[:.](\d{2})(?::00)?(?:Z|[+-]\d{2}:?\d{2})?$/);
+  if (match && Number(match[1]) < 24 && Number(match[2]) < 60) {
+    return `${match[1].padStart(2, '0')}:${match[2]}`;
+  }
   return '';
 };
 
@@ -528,7 +529,20 @@ export async function parseImportFile(file, preferredEntityType = 'orders') {
     const XLSX = module.default || module;
     // SheetJS interprets values such as "48/2" in CSV address columns as dates
     // unless raw mode is enabled. XLS/XLSX keep their normal formatted-cell path.
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false, raw: extension === 'csv' });
+    const contents = await file.arrayBuffer();
+    let workbook;
+    if (extension === 'csv') {
+      const bytes = new Uint8Array(contents);
+      let decoded;
+      try {
+        decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch {
+        decoded = new TextDecoder('windows-1251').decode(bytes);
+      }
+      workbook = XLSX.read(decoded.replace(/^\uFEFF/, ''), { type: 'string', cellDates: false, raw: true });
+    } else {
+      workbook = XLSX.read(contents, { type: 'array', cellDates: false });
+    }
     for (const [sheetIndex, sheetName] of workbook.SheetNames.entries()) {
       const detectedType = sheetEntityType(sheetName);
       if (!detectedType && sheetIndex > 0) continue;
@@ -682,7 +696,7 @@ export function buildEngineers(headers, rows, mappings, region) {
     const skills = [...new Set(splitList(valueFor(row, 'engineerSkills')).map(translateEngineerSkill))];
     const equipment = [...new Set(splitList(valueFor(row, 'engineerEquipment')).map(translateEquipment).filter(Boolean))];
     const customFields = supplementaryFields(row, mappings, 'engineers', ENGINEER_CORE_FIELDS);
-    const startAddress = valueFor(row, 'engineerStartAddress') || region.name;
+    const startAddress = valueFor(row, 'engineerStartAddress');
     const city = resolveImportedCity(valueFor(row, 'engineerCity'), startAddress, region.name);
     const rowRegion = regionForCity(city, lat !== null && lon !== null ? [lat, lon] : null);
     return {
@@ -700,6 +714,7 @@ export function buildEngineers(headers, rows, mappings, region) {
       startAddress,
       locationId: valueFor(row, 'engineerLocationId'),
       startCoords: lat !== null && lon !== null ? [lat, lon] : null,
+      startGeocodeStatus: lat !== null && lon !== null ? 'provided' : 'needs_geocoding',
       zone: valueFor(row, 'engineerZone'),
       zoneId: valueFor(row, 'engineerZoneId'),
       district: valueFor(row, 'engineerDistrict'),
@@ -721,62 +736,123 @@ function requirementState(mappings, entityType = 'orders') {
     { label: 'Навыки', ok: values.includes('engineerSkills') },
     { label: 'Рабочая смена', ok: values.includes('engineerShiftStart') && values.includes('engineerShiftEnd') },
     { label: 'Транспорт', ok: values.includes('engineerTransport') },
+    { label: 'Доступность', ok: values.includes('engineerStatus') },
+    { label: 'Адрес старта или координаты', ok: values.includes('engineerStartAddress') || (values.includes('engineerStartLatitude') && values.includes('engineerStartLongitude')) },
+    { label: 'Территория', ok: values.includes('engineerZone') || values.includes('engineerZoneId') },
   ];
   return [
     { label: 'ID заявки', ok: values.includes('id') || values.includes('externalId') },
-    { label: 'Адрес или координаты', ok: values.includes('address') || (values.includes('latitude') && values.includes('longitude')) },
+    { label: 'Адрес или координаты', ok: values.includes('address') || (values.includes('street') && values.includes('house')) || (values.includes('latitude') && values.includes('longitude')) },
     { label: 'Окно обслуживания', ok: values.includes('windowStart') && values.includes('windowEnd') },
     { label: 'Норматив работ', ok: values.includes('duration') },
     { label: 'Тип работ или навык', ok: values.includes('workType') || values.includes('skill') },
+    { label: 'Территория', ok: values.includes('zone') || values.includes('zoneId') || values.includes('zoneName') },
   ];
 }
 
-function validateRows(rows, mappings, entityType = 'orders') {
-  const invalid = new Set();
+export function validateImportRows(rows, mappings, entityType = 'orders') {
+  const invalid = new Map();
   const mappedColumn = field => Number(Object.keys(mappings).find(key => mappings[key] === field));
+  const issue = (rowIndex, column, reason) => {
+    if (Number.isInteger(column)) invalid.set(`${rowIndex}:${column}`, reason);
+  };
   const markBlank = (row, rowIndex, field) => {
     const column = mappedColumn(field);
-    if (Number.isInteger(column) && !String(row[column] ?? '').trim()) invalid.add(`${rowIndex}:${column}`);
+    if (Number.isInteger(column) && !String(row[column] ?? '').trim()) issue(rowIndex, column, 'Укажите значение');
+  };
+  const checkCoordinates = (row, rowIndex, latitudeField, longitudeField) => {
+    const latitudeColumn = mappedColumn(latitudeField), longitudeColumn = mappedColumn(longitudeField);
+    const latitudeRaw = Number.isInteger(latitudeColumn) ? String(row[latitudeColumn] ?? '').trim() : '';
+    const longitudeRaw = Number.isInteger(longitudeColumn) ? String(row[longitudeColumn] ?? '').trim() : '';
+    if (latitudeRaw || longitudeRaw) {
+      const latitude = asNumber(latitudeRaw), longitude = asNumber(longitudeRaw);
+      if (latitude === null || latitude <= 40 || latitude >= 70) issue(rowIndex, latitudeColumn, 'Широта должна быть числом от 40 до 70');
+      if (longitude === null || longitude <= 20 || longitude >= 60) issue(rowIndex, longitudeColumn, 'Долгота должна быть числом от 20 до 60');
+    }
+    return Boolean(latitudeRaw && longitudeRaw && asNumber(latitudeRaw) !== null && asNumber(longitudeRaw) !== null);
   };
   if (entityType === 'engineers') {
     const idColumn = mappedColumn('engineerId');
     const seenIds = new Map();
     rows.forEach((row, rowIndex) => {
-      ['engineerId', 'engineerName', 'engineerSkills', 'engineerShiftStart', 'engineerShiftEnd', 'engineerTransport'].forEach(field => markBlank(row, rowIndex, field));
+      ['engineerId', 'engineerName', 'engineerSkills', 'engineerShiftStart', 'engineerShiftEnd', 'engineerTransport', 'engineerStatus'].forEach(field => markBlank(row, rowIndex, field));
       const skillsColumn = mappedColumn('engineerSkills');
-      if (Number.isInteger(skillsColumn) && splitList(row[skillsColumn]).length > 3) invalid.add(`${rowIndex}:${skillsColumn}`);
+      if (Number.isInteger(skillsColumn) && splitList(row[skillsColumn]).length > 3) issue(rowIndex, skillsColumn, 'Укажите не более трёх навыков');
       const id = Number.isInteger(idColumn) ? normalize(row[idColumn]) : '';
       if (id) {
         if (seenIds.has(id)) {
-          invalid.add(`${rowIndex}:${idColumn}`);
-          invalid.add(`${seenIds.get(id)}:${idColumn}`);
+          issue(rowIndex, idColumn, 'ID инженера повторяется');
+          issue(seenIds.get(id), idColumn, 'ID инженера повторяется');
         } else seenIds.set(id, rowIndex);
       }
       ['engineerShiftStart', 'engineerShiftEnd'].forEach(field => {
         const column = mappedColumn(field);
-        if (Number.isInteger(column) && String(row[column] ?? '').trim() && !asTime(row[column])) invalid.add(`${rowIndex}:${column}`);
+        if (Number.isInteger(column) && String(row[column] ?? '').trim() && !asTime(row[column])) issue(rowIndex, column, 'Нужно время ЧЧ:ММ, например 09:30');
       });
+      const start = asTime(row[mappedColumn('engineerShiftStart')]), end = asTime(row[mappedColumn('engineerShiftEnd')]);
+      if (start && end && start >= end) issue(rowIndex, mappedColumn('engineerShiftEnd'), 'Конец смены должен быть позже начала');
+      const transportColumn = mappedColumn('engineerTransport');
+      if (Number.isInteger(transportColumn) && String(row[transportColumn] ?? '').trim() && !/^(?:car|auto|автомобиль|walking|walk|foot|пешком|bicycle|bike|велосипед|public_transit|public transit|общественный транспорт)$/iu.test(String(row[transportColumn]).trim())) issue(rowIndex, transportColumn, 'Неизвестный транспорт: выберите автомобиль, пешком, велосипед или общественный транспорт');
+      const statusColumn = mappedColumn('engineerStatus');
+      if (Number.isInteger(statusColumn) && String(row[statusColumn] ?? '').trim() && !/^(?:доступен(?: сегодня)?|на смене|недоступен|отсутствует|available|unavailable|true|false|да|нет|1|0)$/iu.test(String(row[statusColumn]).trim())) issue(rowIndex, statusColumn, 'Укажите «Доступен» или «Недоступен»');
+      const hasCoords = checkCoordinates(row, rowIndex, 'engineerStartLatitude', 'engineerStartLongitude');
+      const addressColumn = mappedColumn('engineerStartAddress');
+      if (!hasCoords && (!Number.isInteger(addressColumn) || !String(row[addressColumn] ?? '').trim())) issue(rowIndex, addressColumn, 'Укажите адрес старта или обе координаты');
+      if (!['engineerZone', 'engineerZoneId'].some(field => String(row[mappedColumn(field)] ?? '').trim())) ['engineerZone', 'engineerZoneId'].forEach(field => issue(rowIndex, mappedColumn(field), 'Укажите территорию инженера'));
     });
     return invalid;
   }
+  const seenIds = new Map();
+  const seenDates = new Set();
+  const hasDatedRows = Number.isInteger(mappedColumn('serviceDate'))
+    && rows.some(row => String(row[mappedColumn('serviceDate')] ?? '').trim());
   rows.forEach((row, rowIndex) => {
     const hasId = ['id', 'externalId'].some(field => {
       const column = mappedColumn(field);
       return Number.isInteger(column) && String(row[column] ?? '').trim();
     });
     if (!hasId) ['id', 'externalId'].forEach(field => markBlank(row, rowIndex, field));
+    const id = String(row[mappedColumn('id')] || row[mappedColumn('externalId')] || '').trim();
+    if (id) {
+      if (seenIds.has(id)) {
+        const idColumn = Number.isInteger(mappedColumn('id')) ? mappedColumn('id') : mappedColumn('externalId');
+        issue(rowIndex, idColumn, 'ID заявки повторяется');
+        issue(seenIds.get(id), idColumn, 'ID заявки повторяется');
+      } else seenIds.set(id, rowIndex);
+    }
+    const dateColumn = mappedColumn('serviceDate');
+    if (hasDatedRows) markBlank(row, rowIndex, 'serviceDate');
+    if (Number.isInteger(dateColumn) && String(row[dateColumn] ?? '').trim()) {
+      const date = parseImportedDate(row[dateColumn]);
+      if (!date) issue(rowIndex, dateColumn, 'Некорректная дата выполнения');
+      else seenDates.add(date.getTime());
+    }
     const addressColumn = mappedColumn('address');
     const latColumn = mappedColumn('latitude');
     const lonColumn = mappedColumn('longitude');
     const hasAddress = Number.isInteger(addressColumn) && String(row[addressColumn] ?? '').trim();
-    const hasCoords = Number.isInteger(latColumn) && Number.isInteger(lonColumn) && asNumber(row[latColumn]) !== null && asNumber(row[lonColumn]) !== null;
-    if (!hasAddress && !hasCoords) [addressColumn, latColumn, lonColumn].filter(Number.isInteger).forEach(column => invalid.add(`${rowIndex}:${column}`));
+    const hasCoords = checkCoordinates(row, rowIndex, 'latitude', 'longitude');
+    const hasStreetAndHouse = String(row[mappedColumn('street')] ?? '').trim() && String(row[mappedColumn('house')] ?? '').trim();
+    if (!hasAddress && !hasStreetAndHouse && !hasCoords) [addressColumn, latColumn, lonColumn, mappedColumn('street'), mappedColumn('house')].forEach(column => issue(rowIndex, column, 'Укажите адрес, улицу с домом или обе координаты'));
     ['windowStart', 'windowEnd', 'duration'].forEach(field => markBlank(row, rowIndex, field));
+    ['windowStart', 'windowEnd'].forEach(field => {
+      const column = mappedColumn(field);
+      if (Number.isInteger(column) && String(row[column] ?? '').trim() && !asTime(row[column])) issue(rowIndex, column, 'Нужно время ЧЧ:ММ, например 09:30');
+    });
+    const start = asTime(row[mappedColumn('windowStart')]), end = asTime(row[mappedColumn('windowEnd')]);
+    if (start && end && start > end) issue(rowIndex, mappedColumn('windowEnd'), 'Конец окна должен быть не раньше начала');
     const durationColumn = mappedColumn('duration');
-    if (Number.isInteger(durationColumn) && (asNumber(row[durationColumn]) ?? 0) <= 0) invalid.add(`${rowIndex}:${durationColumn}`);
+    if (Number.isInteger(durationColumn) && (!Number.isInteger(asNumber(row[durationColumn])) || asNumber(row[durationColumn]) <= 0)) issue(rowIndex, durationColumn, 'Норматив должен быть целым положительным числом минут');
     const priorityColumn = mappedColumn('priority');
-    if (Number.isInteger(priorityColumn) && !normalizePlanningPriority(row[priorityColumn])) invalid.add(`${rowIndex}:${priorityColumn}`);
+    if (Number.isInteger(priorityColumn) && !normalizePlanningPriority(row[priorityColumn])) issue(rowIndex, priorityColumn, 'Неизвестный приоритет');
+    if (!['zone', 'zoneId', 'zoneName'].some(field => String(row[mappedColumn(field)] ?? '').trim())) ['zone', 'zoneId', 'zoneName'].forEach(field => issue(rowIndex, mappedColumn(field), 'Укажите территорию заявки'));
   });
+  if (seenDates.size > 1) {
+    const dateColumn = mappedColumn('serviceDate');
+    rows.forEach((row, rowIndex) => {
+      if (String(row[dateColumn] ?? '').trim()) issue(rowIndex, dateColumn, 'В одном расчёте должны быть заявки на одну дату');
+    });
+  }
   return invalid;
 }
 
@@ -902,16 +978,16 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
 
   const requirements = useMemo(() => requirementState(mappings, activeType), [mappings, activeType]);
   const mappingReady = requirements.every(item => item.ok);
-  const invalidCells = useMemo(() => validateRows(rows, mappings, activeType), [rows, mappings, activeType]);
-  const rowIssueCount = useMemo(() => new Set([...invalidCells].map(key => key.split(':')[0])).size, [invalidCells]);
+  const invalidCells = useMemo(() => validateImportRows(rows, mappings, activeType), [rows, mappings, activeType]);
+  const rowIssueCount = useMemo(() => new Set([...invalidCells.keys()].map(key => key.split(':')[0])).size, [invalidCells]);
   const mappedCount = Object.values(mappings).filter(Boolean).length;
   const validationByType = useMemo(() => Object.fromEntries(availableTypes.map(entityType => {
     const draft = drafts[entityType];
     const typeRequirements = requirementState(draft.mappings, entityType);
-    const typeInvalidCells = validateRows(draft.rows, draft.mappings, entityType);
+    const typeInvalidCells = validateImportRows(draft.rows, draft.mappings, entityType);
     return [entityType, {
       ready: typeRequirements.every(item => item.ok) && typeInvalidCells.size === 0,
-      rowIssueCount: new Set([...typeInvalidCells].map(key => key.split(':')[0])).size,
+      rowIssueCount: new Set([...typeInvalidCells.keys()].map(key => key.split(':')[0])).size,
     }];
   })), [drafts, availableTypes.join('|')]);
   const allReady = availableTypes.every(entityType => validationByType[entityType].ready);
@@ -1138,17 +1214,17 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
               const filterActive = Object.prototype.hasOwnProperty.call(activeColumnFilters, column);
               return <th key={`${header}-${column}`} className={!field ? 'unmapped' : ''}><button type="button" className="column-mapping-button" onClick={event => openMapping(column, event)} aria-expanded={menuOpen && menuColumn === column}><span><b>{fieldLabel(field, activeType)}</b><small>{groupClass(field, activeType) || 'Тип не выбран'}</small></span><ChevronDown/></button><button type="button" className={`column-filter-button ${filterActive ? 'active' : ''}`} onClick={event => openFilter(column, event)} aria-label={`Фильтр столбца ${header}`} aria-expanded={filterOpen && filterColumn === column}><span title={header}>{header}</span><Filter/></button></th>;
             })}</tr></thead>
-            <tbody>{visibleRows.length ? visibleRows.map(({ row, index }) => <tr key={index} className={[...invalidCells].some(key => key.startsWith(`${index}:`)) ? 'has-error' : ''}>{row.map((cell, column) => {
+            <tbody>{visibleRows.length ? visibleRows.map(({ row, index }) => <tr key={index} className={[...invalidCells.keys()].some(key => key.startsWith(`${index}:`)) ? 'has-error' : ''}>{row.map((cell, column) => {
               const key = `${index}:${column}`;
               const matchesSearch = normalizedSearch && normalize(cell).includes(normalizedSearch);
-              return <td key={column} className={`${invalidCells.has(key) ? 'invalid ' : ''}${editedCells.has(key) ? 'edited ' : ''}${matchesSearch ? 'search-match' : ''}`}><input value={cell} onBlur={() => { editHistoryKeyRef.current = ''; }} onChange={event => editCell(index, column, event.target.value)} aria-label={`Строка ${index + 1}, ${activeDataset.headers[column]}`}/>{invalidCells.has(key) ? <AlertTriangle/> : editedCells.has(key) ? <Check/> : null}</td>;
+              return <td key={column} className={`${invalidCells.has(key) ? 'invalid ' : ''}${editedCells.has(key) ? 'edited ' : ''}${matchesSearch ? 'search-match' : ''}`}><input value={cell} title={invalidCells.get(key) || ''} aria-invalid={invalidCells.has(key)} onBlur={() => { editHistoryKeyRef.current = ''; }} onChange={event => editCell(index, column, event.target.value)} aria-label={`Строка ${index + 1}, ${activeDataset.headers[column]}`}/>{invalidCells.has(key) ? <AlertTriangle/> : editedCells.has(key) ? <Check/> : null}</td>;
             })}</tr>) : <tr className="import-no-results"><td colSpan={activeDataset.headers.length}><Search/><b>Ничего не найдено</b><span>Попробуйте изменить запрос</span></td></tr>}</tbody>
           </table>
         </div>
       </section>
     </main>
 
-    <footer className="import-footer"><div>{!mappingReady ? <><AlertTriangle/><span>Укажите все обязательные поля</span></> : invalidCells.size ? <><AlertTriangle/><span>Исправьте {rowIssueCount} {rowIssueCount === 1 ? 'строку' : 'строки'} с ошибками</span></> : !allReady ? <><AlertTriangle/><span>Проверьте вторую вкладку данных</span></> : <><ShieldCheck/><span>{reviewMode ? 'Все наборы проверены. Изменения можно сохранить.' : 'Все наборы проверены. Можно загружать.'}</span></>}</div><button type="button" onClick={() => setCancelConfirm(true)}>{reviewMode ? 'Закрыть' : 'Отменить'}</button><button type="button" className="primary" disabled={!allReady} onClick={submit}><Check/>{reviewMode ? 'Сохранить изменения' : `Загрузить ${importButtonText}`}</button></footer>
+    <footer className="import-footer"><div>{!mappingReady ? <><AlertTriangle/><span>Не найдены поля: {requirements.filter(item => !item.ok).map(item => item.label).join(', ')}</span></> : invalidCells.size ? <><AlertTriangle/><span>{rowIssueCount} строк с ошибками. Строка {Number(invalidCells.keys().next().value.split(':')[0]) + 1}: {invalidCells.values().next().value}</span></> : !allReady ? <><AlertTriangle/><span>Проверьте вторую вкладку данных</span></> : <><ShieldCheck/><span>{reviewMode ? 'Все наборы проверены. Изменения можно сохранить.' : 'Все наборы проверены. Можно загружать.'}</span></>}</div><button type="button" onClick={() => setCancelConfirm(true)}>{reviewMode ? 'Закрыть' : 'Отменить'}</button><button type="button" className="primary" disabled={!allReady} onClick={submit}><Check/>{reviewMode ? 'Сохранить изменения' : `Загрузить ${importButtonText}`}</button></footer>
 
     {mappingPresence.present && menuColumn !== null ? <MappingMenu column={menuColumn} header={activeDataset.headers[menuColumn]} values={rows.map(row => row[menuColumn])} mappings={mappings} entityType={activeType} onSelect={selectMapping} onClose={() => setMenuOpen(false)} position={menuPosition} visible={mappingPresence.visible}/> : null}
     {filterPresence.present && filterColumn !== null ? <FilterMenu key={`${activeType}-${filterColumn}-${filterMenuVersion}`} header={activeDataset.headers[filterColumn]} values={rows.map(row => row[filterColumn])} selected={activeColumnFilters[filterColumn]} onApply={applyColumnFilter} onReset={resetColumnFilter} onClose={() => setFilterOpen(false)} position={filterPosition} visible={filterPresence.visible}/> : null}

@@ -133,6 +133,20 @@ def main() -> int:
             'runtime_revision': RUNTIME_REVISION,
         }))
         return 0
+    if (
+        current_status is not None
+        and 'bridge_revision' not in current_status
+        and isinstance(current_status.get('version'), str)
+        and 'route' in current_status.get('available_actions', [])
+    ):
+        print(json.dumps({
+            'status': 'READY',
+            'endpoint': args.endpoint,
+            'started': False,
+            'provider': 'DIRECT_VALHALLA',
+            'version': current_status['version'],
+        }))
+        return 0
     try:
         _start_bridge()
     except (OSError, RuntimeError) as error:

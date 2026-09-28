@@ -21,21 +21,8 @@ const ZONES = { 'восток': 'EAST', 'юго-восток': 'SOUTHEAST', 'ю�
 const normalizeZone = value => ZONES[String(value || '').trim().toLocaleLowerCase('ru-RU')] || String(value || '').trim();
 const stockKey = (zoneId, equipmentId) => `${zoneId}|${equipmentId}`;
 
-/** Read verified stock quantities from the dataset shipped with the application. */
-export function parseSharedStockCsv(source) {
-  const [header, ...lines] = String(source).trim().split(/\r?\n/);
-  const columns = header.replace(/^\uFEFF/, '').split(';');
-  const result = {};
-  for (const line of lines) {
-    const cells = line.split(';');
-    const row = Object.fromEntries(columns.map((name, index) => [name, cells[index]]));
-    if (row.scenario === 'CORE' && row.zone_id && row.equipment_id) result[stockKey(row.zone_id, row.equipment_id)] = Number(row.quantity_available);
-  }
-  return result;
-}
-
 /** List only shared equipment actually required by the selected jobs. */
-export function sharedStockRequirements(orders, defaults) {
+export function sharedStockRequirements(orders) {
   const keys = new Set();
   for (const order of orders) {
     const zoneId = normalizeZone(order.zoneId || order.sourceData?.zone_id || order.zone);
@@ -47,7 +34,7 @@ export function sharedStockRequirements(orders, defaults) {
   }
   return [...keys].sort().map(key => {
     const [zoneId, equipmentId] = key.split('|');
-    return { key, zoneId, equipmentId, defaultQuantity: defaults[key], required: defaults[key] === undefined };
+    return { key, zoneId, equipmentId };
   });
 }
 

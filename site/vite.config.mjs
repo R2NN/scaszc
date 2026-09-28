@@ -29,6 +29,17 @@ const loadLocalVariables = () => {
   return variables;
 };
 
+const parseRequestJson = body => {
+  try {
+    return body ? JSON.parse(body.toString('utf8')) : {};
+  } catch {
+    const error = new Error('Некорректный JSON: проверьте запятые, кавычки и скобки');
+    error.code = 'INVALID_INPUT';
+    error.details = ['Тело запроса должно быть корректным JSON'];
+    throw error;
+  }
+};
+
 const localPlanningApi = () => ({
   name: "beego-local-planning-api",
   configureServer(server) {
@@ -40,14 +51,14 @@ const localPlanningApi = () => ({
         for await (const chunk of request) chunks.push(chunk);
         const body = chunks.length ? Buffer.concat(chunks) : undefined;
         if (request.url === '/api/replan' && request.method === 'POST') {
-          const payload = body ? JSON.parse(body.toString('utf8')) : {};
+          const payload = parseRequestJson(body);
           const plan = await runExactReplan(payload, process.cwd());
           response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
           response.end(JSON.stringify(plan));
           return;
         }
         if (request.url === '/api/plan' && request.method === 'POST') {
-          const payload = body ? JSON.parse(body.toString('utf8')) : {};
+          const payload = parseRequestJson(body);
           const artifact = JSON.parse(loadLocalVariables().PLANNING_ARTIFACT_JSON || 'null');
           const sealed = isCanonicalPlanningInput(payload, artifact, process.cwd());
           const plan = sealed ? await worker.fetch(new Request('http://127.0.0.1/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }), { ...loadLocalVariables(), EXACT_PLANNER_URL: '' }) : await runExactPlan(payload, process.cwd());
@@ -70,8 +81,8 @@ const localPlanningApi = () => ({
         response.writeHead(webResponse.status, Object.fromEntries(webResponse.headers));
         response.end(Buffer.from(await webResponse.arrayBuffer()));
       } catch (error) {
-        response.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-        response.end(JSON.stringify({ error: error?.message || "Ошибка локального API" }));
+        response.writeHead(error?.code === 'INVALID_INPUT' ? 422 : 500, { 'content-type': 'application/json; charset=utf-8' });
+        response.end(JSON.stringify({ error: error?.message || 'Ошибка локального API', code: error?.code || 'PLANNING_FAILED', details: error?.details || [] }));
       }
     });
   },

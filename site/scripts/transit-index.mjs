@@ -46,6 +46,7 @@ const validIndex = async (database, planningDate) => {
     const surface = JSON.parse(await readFile(database.replace(/\.sqlite$/, '.surface_walk_transfers.json'), 'utf8'));
     const rapid = JSON.parse(await readFile(database.replace(/\.sqlite$/, '.walk_transfers.json'), 'utf8'));
     return metadata.scenario_date === planningDate && metadata.active_gtfs_trips > 0
+      && metadata.rail_schedule_available === true
       && surface.failed_measurements === 0 && rapid.failed_stops?.length === 0;
   } catch {
     return false;
@@ -156,6 +157,11 @@ export async function ensureTransitIndex(planningDate, repositoryRoot = path.res
   const key = `${repositoryRoot}:${planningDate}`;
   if (builds.has(key)) return builds.get(key);
   const task = (async () => {
+    const suppliedDirectory = process.env.BEEGO_TRANSIT_INDEX_DIR;
+    if (suppliedDirectory) {
+      const supplied = path.join(suppliedDirectory, `moscow_${planningDate}.sqlite`);
+      if (await validIndex(supplied, planningDate)) return supplied;
+    }
     const canonical = path.join(repositoryRoot, 'data', 'transit', `moscow_${canonicalDate}.sqlite`);
     if (planningDate === canonicalDate && await validIndex(canonical, planningDate)) return canonical;
     const directory = path.join(repositoryRoot, 'runtime', 'ui-shared-cache', 'transit');

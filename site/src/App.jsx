@@ -26,9 +26,8 @@ import { displayOrderName, workPointType } from './workTypes.js';
 import { isUrgentPriority } from './planningPriority.js';
 import { ZONE_LABELS, normalizeTerritoryKey, zoneBoundaryName, zoneCode } from './territoryAliases.js';
 import { captureMapCamera, restoredCameraOptions } from './locationPrivacy.js';
-import { resolveImportedDate } from './importDate.js';
-import { parseSharedStockCsv, sharedStockRequirements, SHARED_STOCK_LABELS, stockOverrides } from './sharedInventory.js';
-import sharedStockCsv from '../../data/dataset/core/shared_inventory.csv?raw';
+import { parseImportedDate, resolveImportedDate } from './importDate.js';
+import { sharedStockRequirements, SHARED_STOCK_LABELS, stockOverrides } from './sharedInventory.js';
 import { DEFAULT_REGION, regionCatalog } from './regions.js';
 import depotMarkerPurple from './assets/depot-marker-purple.png';
 import { MAP_SCALE, MAP_UI, groupGeographicMarkers, routeModeForCount, shouldClusterOrders, shouldShowRouteNumbers, stableRouteColor } from './mapDesign.js';
@@ -170,29 +169,35 @@ async function requestGeocodeBatch(batch){
       const response=await fetch('/api/geocode',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({addresses:batch,region:'moscow'})});
       const payload=await response.json().catch(()=>({}));
       if(response.ok)return payload;
+      if(payload.code==='GEOAPIFY_NOT_CONFIGURED'){
+        const error=new Error('Геокодирование не настроено: укажите координаты адресов или настройте GEOAPIFY_API_KEY');
+        error.code=payload.code;
+        throw error;
+      }
       lastError=new Error(payload.error||'Не удалось подключиться к Geoapify');
-    }catch(error){lastError=error}
+    }catch(error){if(error?.code==='GEOAPIFY_NOT_CONFIGURED')throw error;lastError=error}
     if(attempt<2)await wait(700*(attempt+1));
   }
   throw lastError||new Error('Не удалось подключиться к Geoapify');
 }
-async function geocodeImportedOrders(importedOrders,onProgress,onPartial){
+async function geocodeImportedLocations(items,onProgress,onPartial,{addressField,coordsField,statusField,formattedField}){
   const cache=readGeocodeCache();
   const resolved=new globalThis.Map();
   const pending=[];
-  importedOrders.forEach(order=>{
-    if(Array.isArray(order.coords)&&order.coords.length===2&&order.coords.every(Number.isFinite))return;
-    const rawAddress=String(order.address||'').trim(),city=String(order.city||order.regionName||'').trim();
-    const address=city&&rawAddress&&!rawAddress.toLocaleLowerCase('ru-RU').includes(city.toLocaleLowerCase('ru-RU'))?`${city}, ${rawAddress}`:(rawAddress||city);
+  items.forEach(item=>{
+    if(Array.isArray(item[coordsField])&&item[coordsField].length===2&&item[coordsField].every(Number.isFinite)&&!['review','error','needs_geocoding'].includes(item[statusField]))return;
+    const rawAddress=String(item[addressField]||'').trim(),city=String(item.city||item.regionName||'').trim();
+    if(!rawAddress){resolved.set(String(item.id),{status:'error',error:'Не указан адрес: добавьте полный адрес или проверенные координаты'});return}
+    const address=city&&!rawAddress.toLocaleLowerCase('ru-RU').includes(city.toLocaleLowerCase('ru-RU'))?`${city}, ${rawAddress}`:rawAddress;
     const cacheId=geocodeCacheId(address);
-    if(cache[cacheId])resolved.set(String(order.id),{...cache[cacheId],cached:true});
-    else pending.push({id:order.id,address,district:order.district||orderDistrict(order)});
+    if(cache[cacheId]?.status==='exact')resolved.set(String(item.id),{...cache[cacheId],cached:true});
+    else pending.push({id:item.id,address,district:item.district||orderDistrict(item)});
   });
   const total=resolved.size+pending.length;
-  const materialize=()=>importedOrders.map(order=>{
-    const result=resolved.get(String(order.id));
-    if(!result)return order;
-    return {...order,coords:Array.isArray(result.coords)?result.coords:null,geocodeStatus:result.status,geocodeConfidence:result.confidence??null,geocodedAddress:result.formattedAddress||'',geocodeProvider:'geoapify'};
+  const materialize=()=>items.map(item=>{
+    const result=resolved.get(String(item.id));
+    if(!result)return item;
+    return {...item,[coordsField]:Array.isArray(result.coords)?result.coords:null,[statusField]:result.status,[formattedField]:result.formattedAddress||'',geocodeError:result.error||'',geocodeConfidence:result.confidence??null,geocodeProvider:'geoapify'};
   });
   onProgress({status:'active',active:true,done:resolved.size,total,failed:0});
   if(resolved.size)onPartial?.(materialize());
@@ -200,12 +205,12 @@ async function geocodeImportedOrders(importedOrders,onProgress,onPartial){
   for(let index=0;index<pending.length;index+=10){
     const batch=pending.slice(index,index+10);
     let payload;
-    try{payload=await requestGeocodeBatch(batch)}catch{
-      payload={results:batch.map(item=>({...item,status:'error',error:'Временная ошибка Geoapify'}))};
+    try{payload=await requestGeocodeBatch(batch)}catch(error){
+      payload={results:batch.map(item=>({...item,status:'error',error:error?.message||'Временная ошибка Geoapify'}))};
     }
     for(const result of payload.results||[]){
       resolved.set(String(result.id),result);
-      if(result.coords)cache[geocodeCacheId(result.address)]=result;
+      if(result.status==='exact'&&result.coords)cache[geocodeCacheId(result.address)]=result;
       else failed+=1;
     }
     writeGeocodeCache(cache);
@@ -215,6 +220,8 @@ async function geocodeImportedOrders(importedOrders,onProgress,onPartial){
   writeGeocodeCache(cache);
   return materialize();
 }
+const geocodeImportedOrders=(items,onProgress,onPartial)=>geocodeImportedLocations(items,onProgress,onPartial,{addressField:'address',coordsField:'coords',statusField:'geocodeStatus',formattedField:'geocodedAddress'});
+const geocodeImportedEngineers=(items,onProgress,onPartial)=>geocodeImportedLocations(items,onProgress,onPartial,{addressField:'startAddress',coordsField:'startCoords',statusField:'startGeocodeStatus',formattedField:'startGeocodedAddress'});
 function Brand({onHome,staticMark=false,running=false,onAnimationEnd}){const mark=<img className={`beego-mark ${running?'running':''}`} src="/beego-mark.png" alt="" onAnimationEnd={onAnimationEnd}/>;return staticMark?<i className="bee-logo static-logo" aria-hidden="true">{mark}</i>:<button className="bee-logo" onClick={onHome} aria-label="BeeGo! — на главную" data-tooltip="BeeGo! — на главную">{mark}</button>}
 function ProfileAvatar({profile,className=''}){const tone=PROFILE_AVATAR_TONES.find(item=>item.id===(profile.avatarTone||'honey'))||PROFILE_AVATAR_TONES[0];const style={backgroundColor:tone.color,color:'#2b2e32'};return profile.avatar?<img className={`profile-avatar ${className}`} style={style} src={`/avatars/${profile.avatar}.png`} alt=""/>:<span className={`profile-initials ${className}`} style={style}>{profile.name.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join('').toUpperCase()||'ЮК'}</span>}
 function Sidebar({expanded,setExpanded,screen,setScreen,workspacePanelOpen=true,orderCount,theme,setTheme,profile,onProfile,helpOpen,onHelp,settingsOpen,onSettings,region,notificationsOpen,onNotifications,unreadNotifications=0,hasReviewData=false,onOpenReview}){const[logoRunning,setLogoRunning]=useState(false);const[sidebarAnimating,setSidebarAnimating]=useState(false);const[suppressSidebarTooltips,setSuppressSidebarTooltips]=useState(false);const sidebarAnimationTimerRef=useRef(null),tooltipSuppressTimerRef=useRef(null);useEffect(()=>()=>{clearTimeout(sidebarAnimationTimerRef.current);clearTimeout(tooltipSuppressTimerRef.current)},[]);const beginSidebarTransition=()=>{setSidebarAnimating(true);setSuppressSidebarTooltips(true)};const toggleSidebar=event=>{event.currentTarget.blur();setSidebarAnimating(true);setSuppressSidebarTooltips(true);setExpanded(value=>!value);clearTimeout(sidebarAnimationTimerRef.current);clearTimeout(tooltipSuppressTimerRef.current);sidebarAnimationTimerRef.current=setTimeout(()=>setSidebarAnimating(false),560);tooltipSuppressTimerRef.current=setTimeout(()=>setSuppressSidebarTooltips(false),1400)};return <aside className={`sidebar ${expanded?'expanded':''} ${notificationsOpen?'notifications-active':''} ${sidebarAnimating?'is-transitioning':''} ${suppressSidebarTooltips?'suppress-tooltips':''}`}>
@@ -229,7 +236,6 @@ const WEEKDAYS_SHORT=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 const sameDay=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
 const shiftDate=(date,days)=>new Date(date.getFullYear(),date.getMonth(),date.getDate()+days);
 const startOfDay=date=>new Date(date.getFullYear(),date.getMonth(),date.getDate());
-const isAfterDay=(date,limit)=>startOfDay(date).getTime()>startOfDay(limit).getTime();
 const topDateLabel=date=>`${String(date.getDate()).padStart(2,'0')}.${String(date.getMonth()+1).padStart(2,'0')}.${date.getFullYear()}`;
 const fullDateLabel=date=>`${WEEKDAYS_SHORT[date.getDay()]}, ${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]}`;
 
@@ -237,25 +243,18 @@ function DatePicker({value,onChange,onClose,className=''}){
   const[visibleMonth,setVisibleMonth]=useState(()=>new Date(value.getFullYear(),value.getMonth(),1));
   const[calendarMode,setCalendarMode]=useState('days');
   const today=startOfDay(new Date());
-  const currentMonth=new Date(today.getFullYear(),today.getMonth(),1);
   const firstOffset=(visibleMonth.getDay()+6)%7;
   const gridStart=new Date(visibleMonth.getFullYear(),visibleMonth.getMonth(),1-firstOffset);
   const days=Array.from({length:42},(_,index)=>shiftDate(gridStart,index));
-  const years=Array.from({length:12},(_,index)=>today.getFullYear()-11+index);
-  const canMoveNextMonth=visibleMonth.getTime()<currentMonth.getTime();
-  const moveMonth=direction=>setVisibleMonth(current=>{
-    const next=new Date(current.getFullYear(),current.getMonth()+direction,1);
-    return next.getTime()>currentMonth.getTime()?current:next;
-  });
-  const select=date=>{if(isAfterDay(date,today))return;onChange(startOfDay(date));onClose()};
+  const years=Array.from({length:12},(_,index)=>visibleMonth.getFullYear()-5+index);
+  const moveMonth=direction=>setVisibleMonth(current=>new Date(current.getFullYear(),current.getMonth()+direction,1));
+  const select=date=>{onChange(startOfDay(date));onClose()};
   const selectMonth=index=>{
-    if(visibleMonth.getFullYear()===today.getFullYear()&&index>today.getMonth())return;
     setVisibleMonth(current=>new Date(current.getFullYear(),index,1));
     setCalendarMode('days');
   };
   const selectYear=year=>{
-    const month=year===today.getFullYear()?Math.min(visibleMonth.getMonth(),today.getMonth()):visibleMonth.getMonth();
-    setVisibleMonth(new Date(year,month,1));
+    setVisibleMonth(current=>new Date(year,current.getMonth(),1));
     setCalendarMode('days');
   };
   return <section className={`date-popover ${className}`.trim()} role="dialog" aria-label="Выбор даты">
@@ -265,11 +264,11 @@ function DatePicker({value,onChange,onClose,className=''}){
         <button type="button" className={calendarMode==='months'?'calendar-select active':'calendar-select'} onClick={()=>setCalendarMode(mode=>mode==='months'?'days':'months')} aria-expanded={calendarMode==='months'}>{MONTHS[visibleMonth.getMonth()]}<ChevronDown/></button>
         <button type="button" className={calendarMode==='years'?'calendar-select active':'calendar-select'} onClick={()=>setCalendarMode(mode=>mode==='years'?'days':'years')} aria-expanded={calendarMode==='years'}>{visibleMonth.getFullYear()}<ChevronDown/></button>
       </div>
-      <button type="button" disabled={!canMoveNextMonth} onClick={()=>moveMonth(1)} aria-label={canMoveNextMonth?'Следующий месяц':'Будущие месяцы недоступны'} data-tooltip={canMoveNextMonth?'Следующий месяц':'Будущие месяцы недоступны'}><ChevronRight/></button>
+      <button type="button" onClick={()=>moveMonth(1)} aria-label="Следующий месяц" data-tooltip="Следующий месяц"><ChevronRight/></button>
     </div>
-    {calendarMode==='months'?<div className="month-grid">{MONTHS.map((month,index)=>{const disabled=visibleMonth.getFullYear()===today.getFullYear()&&index>today.getMonth();return <button type="button" key={month} disabled={disabled} className={index===visibleMonth.getMonth()?'selected':''} onClick={()=>selectMonth(index)}>{month.slice(0,3)}</button>})}</div>:calendarMode==='years'?<div className="year-grid">{years.map(year=><button type="button" key={year} className={year===visibleMonth.getFullYear()?'selected':''} onClick={()=>selectYear(year)}>{year}</button>)}</div>:<>
+    {calendarMode==='months'?<div className="month-grid">{MONTHS.map((month,index)=><button type="button" key={month} className={index===visibleMonth.getMonth()?'selected':''} onClick={()=>selectMonth(index)}>{month.slice(0,3)}</button>)}</div>:calendarMode==='years'?<div className="year-grid">{years.map(year=><button type="button" key={year} className={year===visibleMonth.getFullYear()?'selected':''} onClick={()=>selectYear(year)}>{year}</button>)}</div>:<>
       <div className="weekday-row">{['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(day=><span key={day}>{day}</span>)}</div>
-      <div className="calendar-grid">{days.map(date=>{const outside=date.getMonth()!==visibleMonth.getMonth();const future=isAfterDay(date,today);const selected=sameDay(date,value);const showToday=selected&&sameDay(date,today);return <button type="button" key={date.toISOString()} disabled={future} className={`${outside?'outside ':''}${future?'future ':''}${showToday?'today ':''}${selected?'selected':''}`} onClick={()=>select(date)} aria-label={`${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]} ${date.getFullYear()}${future?', недоступно':''}`}>{date.getDate()}</button>})}</div>
+      <div className="calendar-grid">{days.map(date=>{const outside=date.getMonth()!==visibleMonth.getMonth();const selected=sameDay(date,value);const showToday=selected&&sameDay(date,today);return <button type="button" key={date.toISOString()} className={`${outside?'outside ':''}${showToday?'today ':''}${selected?'selected':''}`} onClick={()=>select(date)} aria-label={`${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]} ${date.getFullYear()}`}>{date.getDate()}</button>})}</div>
     </>}
     <div className="calendar-footer"><button type="button" onClick={()=>select(today)}><CalendarDays/>Сегодня</button><span>{fullDateLabel(value)}</span></div>
   </section>;
@@ -283,7 +282,7 @@ function DateControl({value,onChange,className=''}){
   const today=startOfDay(new Date());
   const isToday=sameDay(value,today);
   return <div className={`date-control ${className}`.trim()} ref={dateControlRef}>
-    <div className="date-switch"><button type="button" onClick={()=>onChange(date=>shiftDate(date,-1))} aria-label="Предыдущий день" data-tooltip="Предыдущий день"><ChevronLeft size={20}/></button><button type="button" className={calendarOpen?'active':''} onClick={()=>setCalendarOpen(open=>!open)} aria-label={`Выбрать дату: ${topDateLabel(value)}`} aria-expanded={calendarOpen}><CalendarDays size={20}/><strong>{topDateLabel(value)}</strong>{isToday?<span>Сегодня</span>:null}<ChevronDown className="date-chevron" size={16}/></button><button type="button" disabled={isToday} onClick={()=>onChange(date=>isAfterDay(shiftDate(date,1),today)?today:shiftDate(date,1))} aria-label={isToday?'Будущие даты недоступны':'Следующий день'} data-tooltip={isToday?'Будущие даты недоступны':'Следующий день'}><ChevronRight size={20}/></button></div>
+    <div className="date-switch"><button type="button" onClick={()=>onChange(date=>shiftDate(date,-1))} aria-label="Предыдущий день" data-tooltip="Предыдущий день"><ChevronLeft size={20}/></button><button type="button" className={calendarOpen?'active':''} onClick={()=>setCalendarOpen(open=>!open)} aria-label={`Выбрать дату: ${topDateLabel(value)}`} aria-expanded={calendarOpen}><CalendarDays size={20}/><strong>{topDateLabel(value)}</strong>{isToday?<span>Сегодня</span>:null}<ChevronDown className="date-chevron" size={16}/></button><button type="button" onClick={()=>onChange(date=>shiftDate(date,1))} aria-label="Следующий день" data-tooltip="Следующий день"><ChevronRight size={20}/></button></div>
     {calendarPresence.present?<DatePicker value={value} onChange={onChange} onClose={()=>setCalendarOpen(false)} className={`dropdown-transition ${calendarPresence.visible?'is-open':'is-closing'}`}/>:null}
   </div>;
 }
@@ -1193,14 +1192,13 @@ function ProfileModal({profile,onClose,onSave}){
   useEffect(()=>{if(!roleOpen)return undefined;const close=event=>{if(event.key==='Escape'||(event.type==='mousedown'&&!roleRef.current?.contains(event.target)))setRoleOpen(false)};document.addEventListener('mousedown',close);document.addEventListener('keydown',close);return()=>{document.removeEventListener('mousedown',close);document.removeEventListener('keydown',close)}},[roleOpen]);
   return <Modal onClose={onClose} wide><div className="modal-head profile-modal-head"><div><h2>Профиль</h2><p>Настройте данные, которые будут видеть участники команды</p></div><button onClick={onClose} aria-label="Закрыть" data-tooltip="Закрыть"><X/></button></div><div className="profile-editor"><aside className="profile-preview"><ProfileAvatar profile={draft}/><div className="profile-avatar-tones" role="group" aria-label="Фон аватара">{PROFILE_AVATAR_TONES.map(tone=>{const selected=draft.avatarTone===tone.id||(!draft.avatarTone&&tone.id==='honey');return <button type="button" key={tone.id} className={selected?'selected':''} style={{'--avatar-tone':tone.color}} onClick={()=>update('avatarTone',tone.id)} aria-label={`Фон: ${tone.label}`} aria-pressed={selected} title={tone.label}/>})}</div><h3>{draft.name||'Ваше имя'}</h3><p>{PROFILE_ROLES[draft.role]}</p><small>{draft.email||'email@example.ru'}</small></aside><section><div className="profile-fields"><label>Отображаемое имя<input value={draft.name} onChange={event=>update('name',event.target.value)} placeholder="Имя и фамилия"/></label><div className="form-row"><div className="profile-field" ref={roleRef}><span>Роль</span><button type="button" className={`role-select ${roleOpen?'open':''}`} onClick={()=>setRoleOpen(open=>!open)} aria-haspopup="listbox" aria-expanded={roleOpen}><span>{PROFILE_ROLES[draft.role]}</span><ChevronDown/></button>{rolePresence.present?<div className={`role-menu dropdown-transition ${rolePresence.visible?'is-open':'is-closing'}`} role="listbox" aria-label="Роль пользователя">{Object.entries(PROFILE_ROLES).map(([value,label])=><button type="button" role="option" aria-selected={draft.role===value} className={draft.role===value?'selected':''} key={value} onClick={()=>{update('role',value);setRoleOpen(false)}}><span>{label}</span>{draft.role===value?<Check/>:null}</button>)}</div>:null}</div><label>Email<input type="email" value={draft.email} onChange={event=>update('email',event.target.value)} placeholder="name@company.ru"/></label></div></div><div className="avatar-picker-head"><div><h3>Выберите аватар</h3><p>Загрузка своих изображений отключена</p></div><span>{PROFILE_AVATARS.length} вариантов</span></div><div className="avatar-grid">{PROFILE_AVATARS.map(avatar=><button type="button" key={avatar.id} className={draft.avatar===avatar.id?'selected':''} onClick={()=>update('avatar',avatar.id)} aria-label={avatar.label} aria-pressed={draft.avatar===avatar.id}><img src={avatar.src} alt=""/><span>{avatar.label}</span>{draft.avatar===avatar.id?<i><Check/></i>:null}</button>)}</div></section></div><footer className="modal-footer profile-actions"><button onClick={onClose}>Отмена</button><button className="primary" disabled={!valid} onClick={()=>onSave({...draft,name:draft.name.trim(),email:draft.email.trim()})}>Сохранить профиль</button></footer></Modal>
 }
-const VERIFIED_SHARED_STOCK=parseSharedStockCsv(sharedStockCsv);
-function PlanDrawer({orders,team,onClose,onOptimize,optimizing,selectedDate}){
+function PlanDrawer({orders,team,onClose,onOptimize,optimizing,selectedDate,dateNeedsConfirmation}){
   const [stockValues,setStockValues]=useState({});
   const rows=[['Максимум выполненных заявок','Первая цель точного оптимизатора.'],['Минимум активных бригад','Вторая лексикографическая цель без потери покрытия.'],['Реальная дорожная сеть','Valhalla и локальное расписание общественного транспорта.'],['Жёсткие ограничения','Окна, смены, навыки, транспорт и оборудование нельзя нарушать.']];
-  const stockRows=sharedStockRequirements(orders,VERIFIED_SHARED_STOCK);
-  const incompleteStock=stockRows.some(row=>row.required&&stockValues[row.key]===undefined||stockValues[row.key]!==undefined&&(!Number.isSafeInteger(Number(stockValues[row.key]))||Number(stockValues[row.key])<0));
+  const stockRows=sharedStockRequirements(orders);
+  const incompleteStock=stockRows.some(row=>stockValues[row.key]===undefined||!Number.isSafeInteger(Number(stockValues[row.key]))||Number(stockValues[row.key])<0);
   const start=()=>onOptimize(stockOverrides(stockRows,stockValues));
-  return <div className="drawer-backdrop"><aside className="plan-drawer"><div className="modal-head"><div><h2>Спланировать маршруты</h2><p>{fullDateLabel(selectedDate)}</p></div><button onClick={onClose}><X/></button></div><div className="plan-step done"><span>1</span><div><b>Заявки</b><small>{orders.length} готовы к распределению</small></div><Check/></div><div className={`plan-step ${team.length?'done':'warning'}`}><span>2</span><div><b>Команда участка</b><small>{team.length?`${team.length} исполнителей · навыки и транспорт проверены`:'Сначала загрузите инженеров во вкладке «Инженеры»'}</small></div>{team.length?<Check/>:<AlertTriangle/>}</div>{stockRows.length?<section className="plan-stock"><h4>Остатки общего оборудования</h4><p>Показаны только материалы из выбранных заявок. Для известных участков подставлены подтверждённые остатки; изменение числа отправит новое значение в расчёт. Для нового участка введите фактический остаток, в том числе ноль.</p><div>{stockRows.map(row=><label key={row.key}><span>{row.zoneId} · {SHARED_STOCK_LABELS[row.equipmentId]}<small>{row.required?'Укажите фактический остаток':stockValues[row.key]!==undefined?'Изменено для этого расчёта':'Из проверенного набора'}</small></span><input type="number" min="0" step="1" value={stockValues[row.key]??row.defaultQuantity??''} placeholder={row.required?'Обязательно':''} onChange={event=>{const value=event.target.value;setStockValues(current=>{const next={...current};if(value===''||value===String(row.defaultQuantity))delete next[row.key];else next[row.key]=value;return next})}}/></label>)}</div>{incompleteStock?<small className="plan-stock-error">Заполните обязательные остатки целыми неотрицательными числами.</small>:null}</section>:null}<h4>Неизменяемые правила точного расчёта</h4>{rows.map(([title,description])=><div className="setting-line" key={title}><span><b>{title}</b><small>{description}</small></span><Check/></div>)}<div className="plan-info"><ShieldCheck/> Публикация возможна только для EXACT_VALID после независимой проверки.</div><footer><button onClick={onClose}>Отмена</button><button className="primary" onClick={start} disabled={optimizing||!team.length||incompleteStock}>{optimizing?<><span className="spinner"/>Оптимизируем…</>:<><WandSparkles/>Построить план</>}</button></footer></aside></div>;
+  return <div className="drawer-backdrop"><aside className="plan-drawer"><div className="modal-head"><div><h2>Спланировать маршруты</h2><p>{fullDateLabel(selectedDate)}</p></div><button onClick={onClose}><X/></button></div><div className="plan-step done"><span>1</span><div><b>Заявки</b><small>{orders.length} готовы к распределению</small></div><Check/></div><div className={`plan-step ${team.length?'done':'warning'}`}><span>2</span><div><b>Команда участка</b><small>{team.length?`${team.length} исполнителей · навыки и транспорт проверены`:'Сначала загрузите инженеров во вкладке «Инженеры»'}</small></div>{team.length?<Check/>:<AlertTriangle/>}</div>{dateNeedsConfirmation?<div className="plan-stock-error">В загруженных заявках нет даты выполнения. Выберите нужный день в календаре над картой и снова откройте планирование.</div>:null}{stockRows.length?<section className="plan-stock"><h4>Остатки общего оборудования</h4><p>Укажите фактические остатки на выбранный день для материалов, необходимых заявкам, в том числе ноль. Остатки за другую дату автоматически не переносятся.</p><div>{stockRows.map(row=><label key={row.key}><span>{row.zoneId} · {SHARED_STOCK_LABELS[row.equipmentId]}<small>Укажите фактический остаток</small></span><input type="number" min="0" step="1" value={stockValues[row.key]??''} placeholder="Обязательно" onChange={event=>{const value=event.target.value;setStockValues(current=>{const next={...current};if(value==='')delete next[row.key];else next[row.key]=value;return next})}}/></label>)}</div>{incompleteStock?<small className="plan-stock-error">Заполните обязательные остатки целыми неотрицательными числами.</small>:null}</section>:null}<h4>Неизменяемые правила точного расчёта</h4>{rows.map(([title,description])=><div className="setting-line" key={title}><span><b>{title}</b><small>{description}</small></span><Check/></div>)}<div className="plan-info"><ShieldCheck/> Публикация возможна только для EXACT_VALID после независимой проверки.</div><footer><button onClick={onClose}>Отмена</button><button className="primary" onClick={start} disabled={optimizing||!team.length||incompleteStock||dateNeedsConfirmation}>{optimizing?<><span className="spinner"/>Оптимизируем…</>:<><WandSparkles/>Построить план</>}</button></footer></aside></div>;
 }
 function DetailDrawer({order,route,orders,team,plan,onRecalculate,onOpenRoute,onClose}){
   if(!order&&!route)return null;
@@ -1443,6 +1441,8 @@ export function App(){
   const[expanded,setExpanded]=useState(true),[screen,setScreen]=useState('orders'),[workspacePanelOpen,setWorkspacePanelOpen]=useState(true);const[theme,setTheme]=useState(()=>{try{return localStorage.getItem('beego-theme')==='dark'?'dark':'light'}catch{return'light'}});const[profile,setProfile]=useState(()=>{try{return {...{name:'Юлия Кузнецова',role:'dispatcher',email:'y.kuznetsova@beego.ru',avatar:'',avatarTone:'honey'},...JSON.parse(localStorage.getItem('beego-profile')||'{}')}}catch{return{name:'Юлия Кузнецова',role:'dispatcher',email:'y.kuznetsova@beego.ru',avatar:'',avatarTone:'honey'}}}),[profileOpen,setProfileOpen]=useState(false),[helpOpen,setHelpOpen]=useState(false);const[region,setRegion]=useState(DEFAULT_REGION);const[orders,setOrders]=useState([]),[engineers,setEngineers]=useState([]),[importSession,setImportSession]=useState(null),[reviewSession,setReviewSession]=useState(null);const[plan,setPlan]=useState(null),[planOpen,setPlanOpen]=useState(false);const[scheduled,setScheduled]=useState(false),[view,setView]=useState('timeline');const[selectedDate,setSelectedDate]=useState(()=>startOfDay(new Date())),[analyticsDate,setAnalyticsDate]=useState(()=>startOfDay(new Date()));const[selectedOrder,setSelectedOrder]=useState(null),[routeDetail,setRouteDetail]=useState(null),[focusedRoute,setFocusedRoute]=useState(null),[hoveredOrder,setHoveredOrder]=useState(null),[hoveredRouteId,setHoveredRouteId]=useState(null);const[optimizing,setOptimizing]=useState(false),[toast,setToast]=useState(null),[geocodeProgress,setGeocodeProgress]=useState(null);const[notifications,setNotifications]=useState(()=>{try{const stored=JSON.parse(localStorage.getItem('beego-notifications')||'[]');return Array.isArray(stored)?stored:[]}catch{return[]}}),[notificationsOpen,setNotificationsOpen]=useState(false);const toastTimersRef=useRef([]);const[settings,setSettings]=useState(()=>{const defaults={company:'Билайн Бизнес',email:'team@beego.ru',phone:'+7 999 000-00-00',balance:true,prioritizeUrgent:true,lockManual:true,allowLate:false};try{return{...defaults,...JSON.parse(localStorage.getItem('beego-settings')||'{}')}}catch{return defaults}});
   const[replanSnapshot,setReplanSnapshot]=useState(null);
   const[reviewFiles,setReviewFiles]=useState([]);
+  const[dateNeedsConfirmation,setDateNeedsConfirmation]=useState(false);
+  const selectPlanningDate=next=>{setSelectedDate(next);setDateNeedsConfirmation(false)};
   useEffect(()=>{
     let active=true;
     const load=async()=>{
@@ -1492,34 +1492,43 @@ export function App(){
     const importedRegionIds=new Set([...nextOrders,...nextEngineers].map(item=>item.regionId).filter(Boolean));
     const replaceImportedOrders=next=>setOrders(current=>[...current.filter(order=>!importedRegionIds.has(order.regionId)),...next]);
     if(nextOrders.length)replaceImportedOrders(nextOrders);
-    if(nextEngineers.length)setEngineers(current=>[...current.filter(engineer=>!importedRegionIds.has(engineer.regionId)),...nextEngineers]);
+    const replaceImportedEngineers=next=>setEngineers(current=>[...current.filter(engineer=>!importedRegionIds.has(engineer.regionId)),...next]);
+    if(nextEngineers.length)replaceImportedEngineers(nextEngineers);
     const firstImported=nextOrders[0]||nextEngineers[0];
     if(firstImported){const nextRegion=regionCatalog(nextOrders,nextEngineers,region).find(item=>item.id===firstImported.regionId);if(nextRegion)setRegion(nextRegion)}
-    const importedDate=resolveImportedDate(nextOrders);
-    if(importedDate){setSelectedDate(importedDate);setAnalyticsDate(importedDate)}
+    if(nextOrders.length){
+      const hasExplicitDates=nextOrders.every(order=>Boolean(parseImportedDate(order.serviceDate)));
+      const importedDate=hasExplicitDates?resolveImportedDate(nextOrders):null;
+      setDateNeedsConfirmation(!importedDate);
+      if(importedDate){setSelectedDate(importedDate);setAnalyticsDate(importedDate)}
+    }
     setPlan(null);setImportSession(null);setScheduled(false);setSelectedOrder(null);
     const parts=[nextOrders.length?`${nextOrders.length} заявок`:'',nextEngineers.length?`${nextEngineers.length} инженеров`:''].filter(Boolean);
-    const missing=nextOrders.filter(order=>!Array.isArray(order.coords)||order.coords.length!==2||!order.coords.every(Number.isFinite));
-    if(!missing.length){const cityCount=new Set([...nextOrders,...nextEngineers].map(item=>item.regionId)).size;notify(`${parts.join(' и ')} загружено · ${cityCount} ${cityCount===1?'город':'города'}`);return}
+    const needsGeocoding=(item,coordsField,statusField)=>!Array.isArray(item[coordsField])||item[coordsField].length!==2||!item[coordsField].every(Number.isFinite)||['review','error','needs_geocoding'].includes(item[statusField]);
+    const missingOrders=nextOrders.filter(order=>needsGeocoding(order,'coords','geocodeStatus'));
+    const missingEngineers=nextEngineers.filter(engineer=>needsGeocoding(engineer,'startCoords','startGeocodeStatus'));
+    if(!missingOrders.length&&!missingEngineers.length){const cityCount=new Set([...nextOrders,...nextEngineers].map(item=>item.regionId)).size;notify(`${parts.join(' и ')} загружено · ${cityCount} ${cityCount===1?'город':'города'}`);return}
     try{
-      const geocoded=await geocodeImportedOrders(nextOrders,setGeocodeProgress,replaceImportedOrders);
-      replaceImportedOrders(geocoded);
-      const found=geocoded.filter(order=>Array.isArray(order.coords)&&order.coords.length===2).length;
-      const review=geocoded.filter(order=>order.geocodeStatus==='review').length;
-      const failed=geocoded.filter(order=>!Array.isArray(order.coords)||order.coords.length!==2).length;
-      const message=failed?`${found} адресов нанесено · проверить: ${Math.max(review,failed)}`:`Все ${found} адресов успешно обработаны`;
-      setGeocodeProgress({status:failed?'warning':'success',active:false,found,total:nextOrders.length,failed,message});
+      const geocodedOrders=missingOrders.length?await geocodeImportedOrders(nextOrders,setGeocodeProgress,replaceImportedOrders):nextOrders;
+      if(missingOrders.length)replaceImportedOrders(geocodedOrders);
+      const geocodedEngineers=missingEngineers.length?await geocodeImportedEngineers(nextEngineers,setGeocodeProgress,replaceImportedEngineers):nextEngineers;
+      if(missingEngineers.length)replaceImportedEngineers(geocodedEngineers);
+      const found=geocodedOrders.filter(order=>!needsGeocoding(order,'coords','geocodeStatus')).length+geocodedEngineers.filter(engineer=>!needsGeocoding(engineer,'startCoords','startGeocodeStatus')).length;
+      const failed=nextOrders.length+nextEngineers.length-found;
+      const geocodeError=[...geocodedOrders,...geocodedEngineers].find(item=>item.geocodeError)?.geocodeError;
+      const message=failed?`${found} точек подтверждено · проверить: ${failed}${geocodeError?` · ${geocodeError}`:''}`:`Все ${found} точек успешно обработаны`;
+      setGeocodeProgress({status:failed?'warning':'success',active:false,found,total:nextOrders.length+nextEngineers.length,failed,message});
       notify(message,{title:'Импорт завершён',showToast:false});
       setTimeout(()=>setGeocodeProgress(current=>current?{...current,closing:true}:current),4700);setTimeout(()=>setGeocodeProgress(null),5100);
     }catch(error){
       console.error('Ошибка геокодирования Geoapify:',error?.message||error);
       const message='Сервис временно недоступен. Уже найденные метки сохранены — повторите импорт позже.';
-      setGeocodeProgress({status:'warning',active:false,found:0,total:missing.length,failed:missing.length,message});
+      setGeocodeProgress({status:'warning',active:false,found:0,total:missingOrders.length+missingEngineers.length,failed:missingOrders.length+missingEngineers.length,message});
       notify(message,{title:'Ошибка геокодирования',showToast:false});
       setTimeout(()=>setGeocodeProgress(current=>current?{...current,closing:true}:current),5700);setTimeout(()=>setGeocodeProgress(null),6100);
     }
   };
-  const optimize=async(sharedInventory=[])=>{setOptimizing(true);try{const planningDate=selectedDate instanceof Date?`${selectedDate.getFullYear()}-${String(selectedDate.getMonth()+1).padStart(2,'0')}-${String(selectedDate.getDate()).padStart(2,'0')}`:String(selectedDate||'').slice(0,10);const next=await requestPlan(regionOrders,team,region.id,planningDate,sharedInventory);setPlan(next);setPlanOpen(false);setScheduled(true);setFocusedRoute(null);setView('timeline');notify(`План проверен: распределено ${next.metrics.assigned} из ${next.metrics.total}. Для ручного решения: ${next.metrics.unassigned}`,{title:'План готов'})}catch(error){notify(error?.message||'Не удалось построить план',{title:'Планирование не выполнено'})}finally{setOptimizing(false)}};
+  const optimize=async(sharedInventory=[])=>{if(dateNeedsConfirmation){notify('Выберите дату выполнения загруженных заявок в календаре',{title:'Дата не указана'});return}setOptimizing(true);try{const planningDate=selectedDate instanceof Date?`${selectedDate.getFullYear()}-${String(selectedDate.getMonth()+1).padStart(2,'0')}-${String(selectedDate.getDate()).padStart(2,'0')}`:String(selectedDate||'').slice(0,10);const next=await requestPlan(regionOrders,team,region.id,planningDate,sharedInventory);setPlan(next);setPlanOpen(false);setScheduled(true);setFocusedRoute(null);setView('timeline');notify(`План проверен: распределено ${next.metrics.assigned} из ${next.metrics.total}. Для ручного решения: ${next.metrics.unassigned}`,{title:'План готов'})}catch(error){notify(error?.message||'Не удалось построить план',{title:'Планирование не выполнено'})}finally{setOptimizing(false)}};
   const previewReplan=async(model,basePlan)=>{if(!basePlan)throw new Error('Нет опубликованного плана для пересчёта');return requestReplan(model,basePlan)};
   const forceAssignment=async(orderId,engineerId)=>{
     if(!plan)throw new Error('Сначала постройте точный план');
@@ -1552,12 +1561,12 @@ export function App(){
     const openEngineerRoute=route=>{if(!route)return;setSelectedOrder(null);setRouteDetail(null);setFocusedRoute(null);setScheduled(true);setWorkspacePanelOpen(true);setScreen('orders');requestAnimationFrame(()=>setFocusedRoute(route))};
     const mapScreen=screen==='orders'||screen==='engineers';
     const retainedMapScreen=mapScreen?screen:lastMapScreenRef.current;
-    const workspaceProps={mode:retainedMapScreen==='engineers'?'engineers':'orders',panelKey:retainedMapScreen,backgroundOnly:Boolean(overlayScreen)||(overlayPresence.present&&!workspacePanelOpen),calendarOverOverlay:Boolean(overlayScreen)||overlayPresence.present,panelOpen:workspacePanelOpen,onClosePanel:()=>setWorkspacePanelOpen(false),orders:regionOrders,team,region,plan,scheduled,setScheduled,view,setView,openPlan:()=>setPlanOpen(true),onOrder:selectOrder,onRoute:focusRoute,onRouteDetails:openRouteDetails,onOrderHover:setHoveredOrder,onRouteHover:setHoveredRouteId,hoveredOrderId:hoveredOrder?.id,hoveredRouteId,onEmergency:addEmergency,onOpenEngineerRoute:openEngineerRoute,mapping:showMapping,onUploadError:notify,selectedDate,setSelectedDate,uiTheme:theme,geocodeProgress,onClearGeocodeProgress:()=>setGeocodeProgress(null),selectedOrder,activeRoute:focusedRoute};
+    const workspaceProps={mode:retainedMapScreen==='engineers'?'engineers':'orders',panelKey:retainedMapScreen,backgroundOnly:Boolean(overlayScreen)||(overlayPresence.present&&!workspacePanelOpen),calendarOverOverlay:Boolean(overlayScreen)||overlayPresence.present,panelOpen:workspacePanelOpen,onClosePanel:()=>setWorkspacePanelOpen(false),orders:regionOrders,team,region,plan,scheduled,setScheduled,view,setView,openPlan:()=>setPlanOpen(true),onOrder:selectOrder,onRoute:focusRoute,onRouteDetails:openRouteDetails,onOrderHover:setHoveredOrder,onRouteHover:setHoveredRouteId,hoveredOrderId:hoveredOrder?.id,hoveredRouteId,onEmergency:addEmergency,onOpenEngineerRoute:openEngineerRoute,mapping:showMapping,onUploadError:notify,selectedDate,setSelectedDate:selectPlanningDate,uiTheme:theme,geocodeProgress,onClearGeocodeProgress:()=>setGeocodeProgress(null),selectedOrder,activeRoute:focusedRoute};
     let overlay=null;
     if(overlayPresence.present&&renderedOverlayScreen==='analytics')overlay=<AnalyticsPage orders={regionOrders} team={team} plan={plan} analyticsDate={analyticsDate} setAnalyticsDate={setAnalyticsDate} motionClass={overlayMotionClass} onOpenUnassigned={()=>{setScheduled(false);setWorkspacePanelOpen(true);setScreen('orders')}} onOpenRoutes={engineerId=>{const route=plan?.routes?.find(item=>String(item.engineerId)===String(engineerId))||null;if(!route)return;setSelectedOrder(null);setRouteDetail(null);setFocusedRoute(null);setScheduled(Boolean(plan));setView('timeline');setWorkspacePanelOpen(true);setScreen('orders');requestAnimationFrame(()=>setFocusedRoute(route))}} onOpenOrder={orderId=>{const order=regionOrders.find(item=>String(item.id)===String(orderId))||null;if(!order)return;setRouteDetail(null);setFocusedRoute(null);setSelectedOrder(order);setScheduled(Boolean(plan));setView('timeline');setWorkspacePanelOpen(true);setScreen('orders')}} onPreviewReplan={previewReplan} onApplyReplan={applyReplan} onRollbackReplan={rollbackReplan} onForceAssignment={forceAssignment} onStartLiveReplan={()=>{setScheduled(false);setWorkspacePanelOpen(true);setScreen('orders')}}/>;
     else if(overlayPresence.present&&renderedOverlayScreen==='locations')overlay=<LocationsPage regions={regions} region={region} onSelect={setRegion} onOpenOrders={()=>{setWorkspacePanelOpen(true);setScreen('orders')}} onClose={()=>{setWorkspacePanelOpen(false);setScreen(lastMapScreenRef.current)}} motionClass={overlayMotionClass}/>;
     return <><OperationalMapWorkspace {...workspaceProps}/>{overlay}</>;
-  },[screen,workspacePanelOpen,regionOrders,team,plan,scheduled,view,selectedDate,analyticsDate,theme,settings,region,regions,geocodeProgress,selectedOrder,focusedRoute,hoveredOrder,hoveredRouteId,overlayScreen,overlayPresence.present,renderedOverlayScreen,overlayMotionClass,replanSnapshot]);
+  },[screen,workspacePanelOpen,regionOrders,team,plan,scheduled,view,selectedDate,analyticsDate,theme,settings,region,regions,geocodeProgress,selectedOrder,focusedRoute,hoveredOrder,hoveredRouteId,overlayScreen,overlayPresence.present,renderedOverlayScreen,overlayMotionClass,replanSnapshot,dateNeedsConfirmation]);
   const hasMapOverlay=overlayPresence.present;
   useLayoutEffect(()=>{
     const previousExpanded=previousExpandedRef.current;
@@ -1594,5 +1603,5 @@ export function App(){
   },[expanded,hasMapOverlay]);
   const toastPresentation=toast?notificationPresentation(toast):null;
   const navigateScreen=(next,{togglePanel=false}={})=>{if(next!==screen){setSelectedOrder(null);setRouteDetail(null)}if(next==='engineers')setFocusedRoute(null);if(OVERLAY_SCREENS.has(next)&&screen===next){setWorkspacePanelOpen(false);setScreen(lastMapScreenRef.current)}else{if(next==='orders'||next==='engineers')setWorkspacePanelOpen(open=>togglePanel&&screen===next?!open:true);setScreen(next)}setSettingsOpen(false);setNotificationsOpen(false)};
-  return <div ref={appShellRef} className={`app-shell ${theme==='dark'?'dark':''} ${expanded?'sidebar-expanded':''} ${hasMapOverlay?'has-map-overlay':''} ${overlayScreen?`overlay-${overlayScreen}`:''}`} style={{'--accent':ACCENT}}><Sidebar expanded={expanded} setExpanded={setExpanded} screen={screen} workspacePanelOpen={workspacePanelOpen} setScreen={navigateScreen} orderCount={regionOrders.length} theme={theme} setTheme={setTheme} profile={profile} onProfile={()=>{setSettingsOpen(false);setNotificationsOpen(false);setProfileOpen(true)}} helpOpen={helpOpen} onHelp={()=>{setProfileOpen(false);setSettingsOpen(false);setNotificationsOpen(false);setSelectedOrder(null);setRouteDetail(null);setHelpOpen(open=>!open)}} settingsOpen={settingsOpen} onSettings={()=>{setProfileOpen(false);setNotificationsOpen(false);setSettingsOpen(open=>!open)}} region={region} notificationsOpen={notificationsOpen} onNotifications={toggleNotifications} unreadNotifications={unreadNotifications} hasReviewData={Boolean(reviewSession)} onOpenReview={openReview}/>{page}<NotificationCenter items={notifications} open={notificationsOpen} expanded={expanded} onClose={()=>setNotificationsOpen(false)} onClear={clearNotificationGroup} onRead={markNotificationRead}/>{settingsOpen?<SettingsModal settings={settings} setSettings={setSettings} region={region} regions={regions} setRegion={setRegion} onToast={notify} onClose={()=>setSettingsOpen(false)}/>:null}{helpOpen?<HelpCenter profile={profile} onClose={()=>setHelpOpen(false)}/>:null}{profileOpen?<ProfileModal profile={profile} onClose={()=>setProfileOpen(false)} onSave={next=>{setProfile(next);setProfileOpen(false);notify('Профиль сохранён')}}/>:null}{importSession?<ImportWorkspace session={importSession} region={importSession.reviewRegion||region} onCancel={()=>setImportSession(null)} onImport={importRows}/>:null}{planOpen?<PlanDrawer orders={regionOrders} team={team} onClose={()=>setPlanOpen(false)} onOptimize={optimize} optimizing={optimizing} selectedDate={selectedDate}/>:null}<DetailDrawer order={selectedOrder} route={routeDetail} orders={regionOrders} team={team} plan={plan} onRecalculate={()=>{setSelectedOrder(null);setRouteDetail(null);setPlanOpen(true)}} onOpenRoute={nextRoute=>{setSelectedOrder(null);setFocusedRoute(nextRoute);setRouteDetail(nextRoute)}} onClose={()=>{setSelectedOrder(null);setRouteDetail(null)}}/>{toast?<div className={`toast ${toast.closing?'is-closing':''}`} style={{'--toast-exit-x':`${(toast.exitDirection||1)*42}px`}} data-notification-id={toast.id} data-notification-kind={toastPresentation.kind} onPointerDown={event=>{if(event.target.closest('button'))return;event.currentTarget.setPointerCapture?.(event.pointerId);toastSwipeRef.current={id:toast.id,x:event.clientX,y:event.clientY}}} onPointerMove={event=>{const swipe=toastSwipeRef.current;if(!swipe||swipe.id!==toast.id)return;const dx=event.clientX-swipe.x;if(Math.abs(dx)>Math.abs(event.clientY-swipe.y))event.currentTarget.style.transform=`translateX(${dx}px)`}} onPointerUp={event=>{const swipe=toastSwipeRef.current;toastSwipeRef.current=null;if(!swipe)return;const dx=event.clientX-swipe.x;event.currentTarget.style.transform='';if(Math.abs(dx)>=72)dismissToastAsRead(toast.id,dx<0?-1:1)}} onPointerCancel={event=>{toastSwipeRef.current=null;event.currentTarget.style.transform=''}}><span className="toast-artwork"><NotificationArtwork kind={toastPresentation.kind}/></span><div className="toast-copy"><div className="toast-heading"><b>{toastPresentation.title}</b><time>{toast.time}</time></div><p>{toast.message}</p><button type="button" className="toast-mark-read" onClick={()=>dismissToastAsRead(toast.id,1)}><Check/><span>Прочитано</span></button></div></div>:null}</div>
+  return <div ref={appShellRef} className={`app-shell ${theme==='dark'?'dark':''} ${expanded?'sidebar-expanded':''} ${hasMapOverlay?'has-map-overlay':''} ${overlayScreen?`overlay-${overlayScreen}`:''}`} style={{'--accent':ACCENT}}><Sidebar expanded={expanded} setExpanded={setExpanded} screen={screen} workspacePanelOpen={workspacePanelOpen} setScreen={navigateScreen} orderCount={regionOrders.length} theme={theme} setTheme={setTheme} profile={profile} onProfile={()=>{setSettingsOpen(false);setNotificationsOpen(false);setProfileOpen(true)}} helpOpen={helpOpen} onHelp={()=>{setProfileOpen(false);setSettingsOpen(false);setNotificationsOpen(false);setSelectedOrder(null);setRouteDetail(null);setHelpOpen(open=>!open)}} settingsOpen={settingsOpen} onSettings={()=>{setProfileOpen(false);setNotificationsOpen(false);setSettingsOpen(open=>!open)}} region={region} notificationsOpen={notificationsOpen} onNotifications={toggleNotifications} unreadNotifications={unreadNotifications} hasReviewData={Boolean(reviewSession)} onOpenReview={openReview}/>{page}<NotificationCenter items={notifications} open={notificationsOpen} expanded={expanded} onClose={()=>setNotificationsOpen(false)} onClear={clearNotificationGroup} onRead={markNotificationRead}/>{settingsOpen?<SettingsModal settings={settings} setSettings={setSettings} region={region} regions={regions} setRegion={setRegion} onToast={notify} onClose={()=>setSettingsOpen(false)}/>:null}{helpOpen?<HelpCenter profile={profile} onClose={()=>setHelpOpen(false)}/>:null}{profileOpen?<ProfileModal profile={profile} onClose={()=>setProfileOpen(false)} onSave={next=>{setProfile(next);setProfileOpen(false);notify('Профиль сохранён')}}/>:null}{importSession?<ImportWorkspace session={importSession} region={importSession.reviewRegion||region} onCancel={()=>setImportSession(null)} onImport={importRows}/>:null}{planOpen?<PlanDrawer orders={regionOrders} team={team} onClose={()=>setPlanOpen(false)} onOptimize={optimize} optimizing={optimizing} selectedDate={selectedDate} dateNeedsConfirmation={dateNeedsConfirmation}/>:null}<DetailDrawer order={selectedOrder} route={routeDetail} orders={regionOrders} team={team} plan={plan} onRecalculate={()=>{setSelectedOrder(null);setRouteDetail(null);setPlanOpen(true)}} onOpenRoute={nextRoute=>{setSelectedOrder(null);setFocusedRoute(nextRoute);setRouteDetail(nextRoute)}} onClose={()=>{setSelectedOrder(null);setRouteDetail(null)}}/>{toast?<div className={`toast ${toast.closing?'is-closing':''}`} style={{'--toast-exit-x':`${(toast.exitDirection||1)*42}px`}} data-notification-id={toast.id} data-notification-kind={toastPresentation.kind} onPointerDown={event=>{if(event.target.closest('button'))return;event.currentTarget.setPointerCapture?.(event.pointerId);toastSwipeRef.current={id:toast.id,x:event.clientX,y:event.clientY}}} onPointerMove={event=>{const swipe=toastSwipeRef.current;if(!swipe||swipe.id!==toast.id)return;const dx=event.clientX-swipe.x;if(Math.abs(dx)>Math.abs(event.clientY-swipe.y))event.currentTarget.style.transform=`translateX(${dx}px)`}} onPointerUp={event=>{const swipe=toastSwipeRef.current;toastSwipeRef.current=null;if(!swipe)return;const dx=event.clientX-swipe.x;event.currentTarget.style.transform='';if(Math.abs(dx)>=72)dismissToastAsRead(toast.id,dx<0?-1:1)}} onPointerCancel={event=>{toastSwipeRef.current=null;event.currentTarget.style.transform=''}}><span className="toast-artwork"><NotificationArtwork kind={toastPresentation.kind}/></span><div className="toast-copy"><div className="toast-heading"><b>{toastPresentation.title}</b><time>{toast.time}</time></div><p>{toast.message}</p><button type="button" className="toast-mark-read" onClick={()=>dismissToastAsRead(toast.id,1)}><Check/><span>Прочитано</span></button></div></div>:null}</div>
 }
