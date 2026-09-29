@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { staffActiveOn, staffAvailableForShift } from '../src/staffRoster.js';
+import { staffActiveOn, staffAvailableForShift, staffIdleInShift } from '../src/staffRoster.js';
 
 test('effective-dated roster membership preserves archived gaps and shift snapshots', () => {
   const member = { id: 'crew-1', rosterPeriods: [{ from: '2026-08-17', to: '2026-08-19' }, { from: '2026-08-21', to: null }] };
@@ -10,4 +10,14 @@ test('effective-dated roster membership preserves archived gaps and shift snapsh
   assert.equal(staffActiveOn(member, '2026-08-21'), true);
   assert.equal(staffAvailableForShift([member], { team: [{ id: 'crew-1' }] }, '2026-08-21').length, 0);
   assert.equal(staffAvailableForShift([member], { team: [] }, '2026-08-21').length, 1);
+});
+
+test('idle engineers already in the shift remain selectable for manual assignment', () => {
+  const roster = ['idle', 'busy', 'absent', 'outside'].map(id => ({ id, rosterPeriods: [{ from: '2026-08-17', to: null }] }));
+  const shift = {
+    team: [{ id: 'idle', status: 'Доступен' }, { id: 'busy', status: 'Доступен' }, { id: 'absent', status: 'Недоступен' }],
+    plan: { routes: [{ engineerId: 'idle', assignments: [] }, { engineerId: 'busy', assignments: [{ orderId: 'order-1' }] }] },
+  };
+  assert.deepEqual(staffIdleInShift(roster, shift, '2026-08-18').map(member => member.id), ['idle']);
+  assert.deepEqual(staffAvailableForShift(roster, shift, '2026-08-18').map(member => member.id), ['outside']);
 });

@@ -48,7 +48,7 @@ const run = (python, args, input, repositoryRoot, deadlineAt) => new Promise((re
 });
 
 /** Build and independently validate a new plan with the complete exact pipeline. */
-export async function runExactPlan(payload, repositoryRoot = process.cwd()) {
+export async function runExactPlan(payload, repositoryRoot = process.cwd(), onProgress = () => {}) {
   const deadlineAt = Date.now() + PLANNING_DEADLINE_MS;
   repositoryRoot = projectRoot(repositoryRoot);
   const runRoot = path.join(repositoryRoot, 'runtime', 'ui-runs', randomUUID());
@@ -56,11 +56,14 @@ export async function runExactPlan(payload, repositoryRoot = process.cwd()) {
   const results = path.join(runRoot, 'results');
   await mkdir(runRoot, { recursive: true });
   const python = process.env.BEEGO_PYTHON || 'python';
+  onProgress({ phase: 'PREPARING_DATA' });
   await run(python, [path.join(repositoryRoot, 'algorithm', 'tools', 'prepare_ui_dataset.py'), dataset], payload, repositoryRoot, deadlineAt);
   const manifest = JSON.parse(await readFile(path.join(dataset, 'manifest.json'), 'utf8'));
+  onProgress({ phase: 'PREPARING_ROUTES' });
   const transitIndex = await ensureTransitIndex(manifest.requires_public_transit ? manifest.planning_date : '2026-08-17', repositoryRoot, { deadlineAt: deadlineAt - 30_000 });
   const pipelineBudgetSeconds = Math.min(840, Math.floor(remainingMilliseconds(deadlineAt) / 1000) - 15);
   if (pipelineBudgetSeconds <= 0) throw new Error('Не осталось времени на точную проверку плана в пределах 15 минут');
+  onProgress({ phase: 'EXACT_PIPELINE' });
   const pipeline = await run(python, [
     path.join(repositoryRoot, 'algorithm', 'tools', 'run_new_dataset_pipeline.py'),
     '--dataset', dataset,
@@ -73,6 +76,7 @@ export async function runExactPlan(payload, repositoryRoot = process.cwd()) {
     '--execute',
   ], undefined, repositoryRoot, deadlineAt);
   if (pipeline.status !== 'COMPLETE' || !pipeline.final_plan) throw new Error('Новый точный план не прошёл проверку');
+  onProgress({ phase: 'READING_VALIDATED_PLAN' });
   const raw = JSON.parse(await readFile(pipeline.final_plan, 'utf8'));
   return compactExactReplan(raw, { ...payload, team: payload.engineers });
 }

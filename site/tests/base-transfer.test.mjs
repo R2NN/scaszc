@@ -49,3 +49,28 @@ test('canonical input yields 205 exact assignments and altered input never yield
     store.close();
   }
 });
+
+test('background planning job reports its real state and returns the validated plan', async () => {
+  const fixture = await readJson('../public/test-data/beego-algorithm-initial.json');
+  const artifact = await readJson('../public/data/beego-exact-plans.json');
+  const input = canonicalDemoInput(fixture, artifact);
+  const started = await handleExactPlanning(new Request('http://localhost/api/plan/jobs', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ orders: input.orders, engineers: input.engineers, planningDate: input.planningDate }),
+  }));
+  assert.equal(started.status, 202);
+  const task = await started.json();
+  assert.equal(task.status, 'RUNNING');
+  assert.equal(task.progress.phase, 'VALIDATING_INPUT');
+  let result;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const response = await handleExactPlanning(new Request(`http://localhost/api/plan/jobs/${task.id}`));
+    result = await response.json();
+    if (result.status !== 'RUNNING') break;
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  assert.equal(result.status, 'READY', result.error);
+  assert.equal(result.progress.phase, 'READY');
+  assert.equal(result.result.status, 'EXACT_VALID');
+  assert.equal(result.result.metrics.assigned, 205);
+});

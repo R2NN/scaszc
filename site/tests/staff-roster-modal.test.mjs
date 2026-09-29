@@ -21,12 +21,23 @@ test('opening the existing engineer dialog with everyone in the shift shows its 
     const html = renderToStaticMarkup(createElement(StaffRosterModal, {
       mode: 'include',
       roster: [member],
-      shift: { team: [member] },
+      shift: { team: [member], plan: { routes: [{ engineerId: member.id, assignments: [{ orderId: 'order-1' }] }] } },
       date: '2026-08-18',
       onClose() {},
       onAddNew() {},
     }));
-    assert.match(html, /Все инженеры действующего состава уже включены в эту смену/);
+    assert.match(html, /Все бригады действующего состава уже имеют назначения или недоступны/);
+    const idleHtml = renderToStaticMarkup(createElement(StaffRosterModal, {
+      mode: 'include',
+      roster: [member],
+      shift: { team: [member], plan: { routes: [{ engineerId: member.id, assignments: [] }] } },
+      date: '2026-08-18',
+      onClose() {},
+      onAddNew() {},
+      onAssignIdle() {},
+    }));
+    assert.match(idleHtml, /Бригада Комарь/);
+    assert.match(idleHtml, /В смене · без назначенных заявок/);
   } finally {
     await server.close();
   }

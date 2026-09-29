@@ -105,7 +105,7 @@ export async function exactShiftReplan(shift, model, onProgress = () => {}) {
     plan = await runExactReplan({ orders: model.orders, team: model.team, plan: shift.plan, planningDate: shift.date, event });
   } else {
     onProgress({ phase: 'EXACT_FULL_DAY', checkedRoads: 0 });
-    plan = await runExactPlan({ orders: model.orders, engineers: model.team, regionId: shift.regionId, planningDate: shift.date, sharedInventory: await historicalInventory(shift.date) });
+    plan = await runExactPlan({ orders: model.orders, engineers: model.team, regionId: shift.regionId, planningDate: shift.date, sharedInventory: await historicalInventory(shift.date) }, undefined, onProgress);
   }
   if (plan.status !== 'EXACT_VALID' || plan.publicationAllowed !== true || plan.validation?.status !== 'VALID' || plan.approximateTravel === true) {
     throw new Error('Пересчёт не прошёл независимую точную проверку.');
@@ -119,7 +119,7 @@ export async function exactShiftReplan(shift, model, onProgress = () => {}) {
     let fullRebuildStatus = 'NO_SAFE_IMPROVEMENT';
     onProgress({ phase: 'EXACT_FULL_DAY', checkedRoads: Number(plan.exactRouteChecks || 0) });
     try {
-      const rebuilt = await runExactPlan({ orders: model.orders, engineers: model.team, regionId: shift.regionId, planningDate: shift.date, sharedInventory: await historicalInventory(shift.date) });
+      const rebuilt = await runExactPlan({ orders: model.orders, engineers: model.team, regionId: shift.regionId, planningDate: shift.date, sharedInventory: await historicalInventory(shift.date) }, undefined, onProgress);
       if (assignedVisit(rebuilt, order.id)
         && Number(rebuilt.metrics?.assigned || 0) > Number(plan.metrics?.assigned || 0)
         && preservesStartedVisits(shift, rebuilt, model.event.time)) {
