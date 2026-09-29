@@ -11,6 +11,11 @@ let availableDatesPromise;
 const loadHistory = () => historyPromise ||= readFile(path.join(siteRoot, 'public/data/analytics-history.json'), 'utf8').then(JSON.parse);
 const loadFixture = () => fixturePromise ||= readFile(path.join(siteRoot, 'public/test-data/beego-algorithm-initial.json'), 'utf8').then(JSON.parse);
 
+/** List every calculated day in the bundled analytics history. */
+export async function analyticsHistoryDates() {
+  return (await loadHistory()).days.map(day => day.date);
+}
+
 const parseRows = source => {
   const [heading, ...lines] = source.trim().split(/\r?\n/);
   const columns = heading.split(';');
@@ -23,15 +28,15 @@ const parseRows = source => {
 
 /** List historical dates whose operational source files are available. */
 export async function baseHistoryDates() {
-  availableDatesPromise ||= Promise.all((await loadHistory()).days.map(async day => {
-    if (day.date === '2026-08-17') return day.date;
-    const root = path.join(repositoryRoot, 'history', day.date);
+  availableDatesPromise ||= Promise.all((await analyticsHistoryDates()).map(async date => {
+    if (date === '2026-08-17') return date;
+    const root = path.join(repositoryRoot, 'history', date);
     try {
       await Promise.all([
         access(path.join(root, 'final-exact.json')),
         access(path.join(root, 'dataset/core/jobs.csv')),
       ]);
-      return day.date;
+      return date;
     } catch {
       return null;
     }

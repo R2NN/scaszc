@@ -5,7 +5,7 @@ import { createShiftPdf, shiftReportData } from './shiftReport.mjs';
 import { reportMode } from './dispatcherPdf.mjs';
 import { askShiftAi } from './aiStudio.mjs';
 import { seedBaseShift } from './seedBaseShift.mjs';
-import { baseHistoryDates, ensureBaseHistoricalShift } from './baseHistoryStore.mjs';
+import { analyticsHistoryDates, baseHistoryDates, ensureBaseHistoricalShift } from './baseHistoryStore.mjs';
 import { acquirePlanningSlot, planningBusyResponse } from './planningSlot.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -42,9 +42,9 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
     await seedPromise;
     const url = new URL(request.url);
     if (url.pathname === '/api/base-data/status' && request.method === 'GET') {
-      const dates = await baseHistoryDates();
+      const [dates, operationalDates] = await Promise.all([analyticsHistoryDates(), baseHistoryDates()]);
       const storedDays = store.db.prepare("SELECT count(*) AS total FROM shifts WHERE region_id = 'moscow' AND current_plan_id IS NOT NULL").get().total;
-      return json({ source: 'FIRST_ARCHIVE', days: dates.length, firstDate: dates[0], lastDate: dates.at(-1), storedDays });
+      return json({ source: 'FIRST_ARCHIVE', days: dates.length, operationalDays: operationalDates.length, firstDate: dates[0], lastDate: dates.at(-1), storedDays });
     }
     if (url.pathname.startsWith('/api/previews/') && request.method === 'GET') return preview(request);
     if (url.pathname === '/api/staff/engineers' && request.method === 'GET') return json(store.roster(url.searchParams.get('regionId')));
