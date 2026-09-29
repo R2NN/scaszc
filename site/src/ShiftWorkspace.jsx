@@ -89,6 +89,23 @@ const metric = (plan) => ({
     ),
   ),
 });
+
+function UnassignedProposal({ item, order, onRetry, busy }) {
+  if (!order) return null;
+  const fullResult = item.fullRebuildStatus === 'NOT_COMPLETED'
+    ? 'Полный пересчёт не завершился; текущий черновик основан на проверенной перестройке отдельных маршрутов.'
+    : 'Полная перестройка не дала допустимого плана, который добавляет заявку и сохраняет уже начатые работы.';
+  return <div className="replanning-unassigned">
+    <b>{order.name || order.sourceId || 'Заявка'} пока без назначения</b>
+    <p>В клиентское окно {order.start}–{order.end} проверенный план не вместил визит. {fullResult}</p>
+    {item.suggestedWindow ? <div className="replanning-suggestion">
+      <strong>Проверенное альтернативное время</strong>
+      <span>Окно {item.suggestedWindow.start}–{item.suggestedWindow.end} · визит около {item.suggestedWindow.plannedStart} · {item.suggestedWindow.engineerName || 'подходящая бригада'}</span>
+      <small>Согласуйте новое окно с клиентом. После выбора система создаст новый черновик и ещё раз проверит маршруты до публикации.</small>
+      <button type="button" onClick={() => onRetry(item.orderId, item.suggestedWindow)} disabled={busy}>Согласовано — проверить новый план</button>
+    </div> : <p>Проверенное альтернативное окно в этой попытке не найдено. Можно изменить доступность бригад или согласовать другой день. При публикации текущего черновика заявка останется в очереди.</p>}
+  </div>;
+}
 const planChange = (before, after, orders = []) => {
   const index = plan => new Map((plan?.routes || []).flatMap(route => (route.assignments || []).map(item => [String(item.orderId), { ...item, crew: route.engineerName || route.engineerId }])));
   const first = index(before), second = index(after);
@@ -498,6 +515,12 @@ export function ShiftWorkspace({
     ...((shift?.factLog || []).map(fact => Math.min(1439, (minuteOf(fact.time) ?? 0) + 1))),
   )));
   const next = metric(preview?.result?.plan);
+  const previewTargetOrderId = preview?.event?.type === EVENT_TYPES.NEW_ORDER
+    ? preview.event.order?.id
+    : preview?.event?.type === EVENT_TYPES.CLIENT_WINDOW_SHIFT
+      ? preview.event.orderId
+      : preview?.event?.type === EVENT_TYPES.RECALCULATE
+        ? preview.result?.plan?.unassigned?.find(item => item.fullRebuildStatus || item.suggestedWindow)?.orderId : null;
   const change = useMemo(() => planChange(shift?.plan, preview?.result?.plan, preview?.result?.orders || shift?.orders), [shift?.plan, shift?.orders, preview?.result]);
   const assigned = useMemo(
     () =>
@@ -724,8 +747,8 @@ export function ShiftWorkspace({
     }
   };
 
-  const retrySuggestedWindow = async (suggestion) => {
-    if (busy || !preview?.id || preview.event?.type !== EVENT_TYPES.NEW_ORDER) return;
+  const retrySuggestedWindow = async (orderId, suggestion) => {
+    if (busy || !preview?.id) return;
     setBusy(true);
     setError('');
     try {
@@ -734,16 +757,27 @@ export function ShiftWorkspace({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ previewId: preview.id, expectedRevision: shift.revision }),
       });
-      const revisedEvent = {
+      const revisedEvent = preview.event?.type === EVENT_TYPES.NEW_ORDER ? {
         ...preview.event,
         order: { ...preview.event.order, start: suggestion.start, end: suggestion.end, status: 'Ожидается' },
         reason: `Согласовано новое окно ${suggestion.start}–${suggestion.end}: ${preview.event.reason}`,
+      } : {
+        type: EVENT_TYPES.CLIENT_WINDOW_SHIFT,
+        orderId,
+        time: preview.event.time,
+        start: suggestion.start,
+        end: suggestion.end,
+        reason: `Клиент согласовал новое окно ${suggestion.start}–${suggestion.end}`,
       };
       const task = await post(`/api/shifts/${shift.id}/preview`, {
         expectedRevision: shift.revision,
         event: revisedEvent,
       });
       onClearPending?.();
+      setEventType(revisedEvent.type);
+      setTargetId(String(orderId));
+      setEventStart(suggestion.start);
+      setEventEnd(suggestion.end);
       setPreview(task);
     } catch (issue) {
       setPreview(null);
@@ -1220,7 +1254,15 @@ export function ShiftWorkspace({
                         .join("; ")}
                     </p>
                   ) : null}
-                  {preview.event?.type === EVENT_TYPES.NEW_ORDER ? preview.result?.plan?.unassigned?.filter(item => String(item.orderId) === String(preview.event.order?.id)).map(item => <div className="replanning-unassigned" key={item.orderId}><b>Точка найдена, заявка пока без назначения</b><p>В клиентское окно {preview.event.order.start}–{preview.event.order.end} проверенный план не вместил визит. {item.fullRebuildStatus === 'NOT_COMPLETED' ? 'Полный пересчёт не завершился; текущий черновик основан на проверенной перестройке отдельных маршрутов.' : 'Полная перестройка не дала допустимого плана, который добавляет заявку и сохраняет уже начатые работы.'}</p>{item.suggestedWindow ? <div className="replanning-suggestion"><strong>Проверенное альтернативное время</strong><span>Окно {item.suggestedWindow.start}–{item.suggestedWindow.end} · визит около {item.suggestedWindow.plannedStart} · {item.suggestedWindow.engineerName || 'подходящая бригада'}</span><small>Согласуйте новое окно с клиентом. После выбора система создаст новый черновик и ещё раз проверит маршруты до публикации.</small><button type="button" onClick={() => retrySuggestedWindow(item.suggestedWindow)} disabled={busy}>Согласовано — проверить новый план</button></div> : <p>Проверенное альтернативное окно в этой попытке не найдено. Можно изменить доступность бригад или согласовать другой день. При публикации текущего черновика заявка останется в очереди.</p>}</div>) : null}
+                  {previewTargetOrderId ? preview.result?.plan?.unassigned
+                    ?.filter(item => String(item.orderId) === String(previewTargetOrderId))
+                    .map(item => <UnassignedProposal
+                      key={item.orderId}
+                      item={item}
+                      order={preview.result.orders?.find(order => String(order.id) === String(item.orderId))}
+                      onRetry={retrySuggestedWindow}
+                      busy={busy}
+                    />) : null}
                   <button
                     type="button"
                     className="shift-primary"

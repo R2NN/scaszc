@@ -51,3 +51,21 @@ test('an alternative time is shown only after a second exact window check', asyn
     engineerId: 'crew-1', engineerName: undefined, checkedBy: 'EXACT_REPLAN',
   });
 });
+
+test('a queued order is checked through a real client-window event', async () => {
+  const order = { id: 'queued', start: '10:00', end: '12:00' };
+  const shift = { plan: { routes: [] }, facts: [], date: '2026-08-17' };
+  const model = {
+    orders: [order], team: [{ shiftEnd: '18:00' }],
+    event: { type: 'RECALCULATE', time: '08:00' },
+  };
+  const events = [];
+  await findAlternativeWindow(shift, model, order, async payload => {
+    events.push(payload.event);
+    return { routes: [route('queued', '13:30')] };
+  });
+  assert.deepEqual(events.map(event => [event.type, event.orderId, event.start, event.end]), [
+    ['CLIENT_WINDOW_SHIFT', 'queued', '12:01', '18:00'],
+    ['CLIENT_WINDOW_SHIFT', 'queued', '13:30', '15:30'],
+  ]);
+});

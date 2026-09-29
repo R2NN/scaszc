@@ -1721,7 +1721,7 @@ export function App(){
   const[staffRoster,setStaffRoster]=useState([]),[staffDialog,setStaffDialog]=useState('');
   const[shift,setShift]=useState(null),[pendingShiftEvent,setPendingShiftEvent]=useState(null),[replacementFor,setReplacementFor]=useState('');
   const[shiftInitialTab,setShiftInitialTab]=useState('crews');
-  const openReplanning=()=>{setShiftInitialTab('event');setWorkspacePanelOpen(false);setRecalculateRequest(value=>value+1);setScreen('shift')};
+  const openReplanning=()=>{setShiftInitialTab('event');setWorkspacePanelOpen(false);setRecalculateRequest(value=>value+1);setScreen('replanning')};
   const[engineerFocusRequest,setEngineerFocusRequest]=useState(null);
   const shiftTime=useSyncExternalStore(shiftClock.subscribe,shiftClock.getSnapshot);
   const[pendingImport,setPendingImport]=useState(null);

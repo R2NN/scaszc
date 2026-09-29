@@ -50,14 +50,21 @@ export async function findAlternativeWindow(shift, model, order, routing) {
   const timeOf = minute => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
   const widenedEnd = timeOf(Math.min(1439, latestShiftEnd));
   const replaceOrder = (start, end) => model.orders.map(item => String(item.id) === String(order.id) ? { ...item, start, end } : item);
-  const payload = orders => ({ orders, team: model.team, plan: shift.plan, planningDate: shift.date, event: model.event });
-  const widened = await routing(payload(replaceOrder(laterTime(order.end, 1), widenedEnd)));
+  const payload = (orders, start, end) => ({
+    orders, team: model.team, plan: shift.plan, planningDate: shift.date,
+    event: model.event.type === 'NEW_ORDER' ? model.event : {
+      type: 'CLIENT_WINDOW_SHIFT', orderId: order.id, time: model.event.time,
+      reason: 'Проверка альтернативного клиентского окна', start, end,
+    },
+  });
+  const widenedStart = laterTime(order.end, 1);
+  const widened = await routing(payload(replaceOrder(widenedStart, widenedEnd), widenedStart, widenedEnd));
   const possible = assignedVisit(widened, order.id);
   if (!possible || !preservesStartedVisits(shift, widened, model.event.time)) return null;
   const start = possible.plannedStart;
   const end = laterTime(start, span);
   if ((minuteOf(end) ?? 0) <= (minuteOf(start) ?? 0)) return null;
-  const checked = await routing(payload(replaceOrder(start, end)));
+  const checked = await routing(payload(replaceOrder(start, end), start, end));
   const visit = assignedVisit(checked, order.id);
   if (!visit || !preservesStartedVisits(shift, checked, model.event.time)) return null;
   return { start, end, plannedStart: visit.plannedStart, engineerId: visit.engineerId, engineerName: visit.engineerName, checkedBy: 'EXACT_REPLAN' };
@@ -96,8 +103,11 @@ export async function exactShiftReplan(shift, model, onProgress = () => {}) {
     throw new Error('Пересчёт не прошёл независимую точную проверку.');
   }
   if (!preservesStartedVisits(shift, plan, model.event.time)) throw new Error('Точный пересчёт меняет визит до времени события или фактически начатый визит. Публикация запрещена.');
-  if (model.event.type === 'NEW_ORDER' && model.event.orderId && !assignedVisit(plan, model.event.orderId)) {
-    const order = model.orders.find(item => String(item.id) === String(model.event.orderId));
+  const targetOrderId = ['NEW_ORDER', 'CLIENT_WINDOW_SHIFT'].includes(model.event.type)
+    ? model.event.orderId
+    : model.event.type === 'RECALCULATE' ? plan.unassigned?.[0]?.orderId : null;
+  if (targetOrderId && !assignedVisit(plan, targetOrderId)) {
+    const order = model.orders.find(item => String(item.id) === String(targetOrderId));
     let fullRebuildStatus = 'NO_SAFE_IMPROVEMENT';
     onProgress({ phase: 'EXACT_FULL_DAY', checkedRoads: Number(plan.exactRouteChecks || 0) });
     try {
