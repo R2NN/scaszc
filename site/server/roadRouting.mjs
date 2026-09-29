@@ -32,7 +32,7 @@ function decodePolyline6(encoded) {
   return points;
 }
 
-export async function exactLeg(from, to, transport, { endpoint = process.env.VALHALLA_ROUTE_ENDPOINT || 'http://127.0.0.1:8002/route', geoapifyKey = process.env.GEOAPIFY_API_KEY, fetchImpl = fetch } = {}) {
+export async function exactLeg(from, to, transport, { endpoint = process.env.VALHALLA_ROUTE_ENDPOINT || 'http://127.0.0.1:8002/route', geoapifyKey = process.env.GEOAPIFY_ROUTING_API_KEY, fetchImpl = fetch } = {}) {
   if (!Array.isArray(from) || !Array.isArray(to) || from.length !== 2 || to.length !== 2) throw new Error('Для расчёта дороги нужны координаты обеих точек.');
   if (from[0] === to[0] && from[1] === to[1]) return { minutes: 0, distanceM: 0, geometry: [from, to], provider: 'SAME_POINT' };
   const mode = transportCode(transport);

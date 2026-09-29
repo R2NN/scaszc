@@ -284,6 +284,20 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
             1, event_id, event_time, EventType.CAPACITY_ADDED,
             engineer_id, engineers[engineer_id].zone_id, None, {'source': 'UI'},
         )
+    elif event_type in {'SHIFT_BOUNDARY_CHANGED', 'SHIFT_EXTENDED'}:
+        engineer_id = _source_id(event_payload.get('sourceEngineerId') or event_payload.get('engineerId'))
+        engineer = engineers.get(engineer_id)
+        if engineer is None or not engineer.is_available:
+            raise ValueError('Для изменения смены нужна доступная бригада')
+        start = _at(dataset, event_payload.get('shiftStart')) if event_payload.get('shiftStart') else engineer.shift_start
+        end = _at(dataset, event_payload.get('shiftEnd'))
+        if end <= start:
+            raise ValueError('Окончание смены должно быть позже начала')
+        engineers[engineer_id] = replace(engineer, shift_start=start, shift_end=end)
+        event = Event(
+            1, event_id, event_time, EventType.CAPACITY_ADDED,
+            engineer_id, engineer.zone_id, None, {'source': 'UI', 'shift_change': True},
+        )
     elif event_type == 'FORCED_ASSIGNMENT':
         source_job_id = _source_id(event_payload.get('sourceOrderId') or event_payload.get('orderId'))
         job = regular_jobs.get(source_job_id)
@@ -353,6 +367,7 @@ def main() -> int:
     parser.add_argument('--transit-index', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--max-route-checks', type=int, default=400)
+    parser.add_argument('--rebuild-route-checks', type=int, default=5000)
     args = parser.parse_args()
 
     payload = json.load(sys.stdin)
@@ -395,6 +410,8 @@ def main() -> int:
         unavailable_until_by_engineer=unavailable,
         last_event_time=prior_events[-1].event_time if prior_events else None,
     )
+    if event.payload.get('shift_change') and event.target_id in unavailable:
+        raise ValueError('Сначала верните недоступную бригаду в смену, затем измените её график')
     oracle = ExactRoutingOracle(create_route_client(
         RoutingCache(args.cache),
         'valhalla-local-transit',
@@ -415,6 +432,30 @@ def main() -> int:
         ),
         source_dataset=canonical,
     )
+    search_phase = 'INSERT_IN_CURRENT_PLAN'
+    if (
+        event.event_type in {EventType.NEW_JOB, EventType.NEW_URGENT_JOB}
+        and result.state is not None
+        and event.target_id in result.state.plan.unserved_job_ids
+    ):
+        rebuilt = replan_after_event(
+            dataset,
+            state,
+            event,
+            oracle,
+            max_route_checks=args.rebuild_route_checks,
+            source_dataset=canonical,
+            rebuild_future=True,
+        )
+        search_phase = 'REBUILT_FUTURE_PLAN'
+        if rebuilt.state is None:
+            raise ValueError(rebuilt.detail or 'Полный пересчёт не завершился')
+        if rebuilt.budget_exhausted and event.target_id in rebuilt.state.plan.unserved_job_ids:
+            raise ValueError('Полный пересчёт исчерпал поисковый бюджет: назначение новой заявки не проверено до конца')
+        if event.target_id not in rebuilt.state.plan.unserved_job_ids:
+            result = rebuilt
+        elif result.budget_exhausted:
+            result = rebuilt
     if result.state is None:
         print(json.dumps({
             'status': result.status.value,
@@ -451,6 +492,7 @@ def main() -> int:
         'source_plan_content_sha256': source['content_sha256'],
         'dataset_sha256': dataset.dataset_sha256,
         'exact_route_checks': result.exact_route_checks,
+        'search_phase': search_phase,
         'budget_exhausted': result.budget_exhausted,
         'unserved_reasons': dict(result.unserved_reasons),
         'changes': _changes(plan, result.state.plan),

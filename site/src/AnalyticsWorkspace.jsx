@@ -1457,7 +1457,7 @@ function ReplanningView({ record, data, cluster = 'all', isLive = false, plannin
           event: { type: 'SHIFT_EXTENDED', time: engineer?.shiftEnd || '18:00', engineerId: form.resourceEngineerId, previousShiftEnd: engineer?.shiftEnd, shiftEnd: extendedEnd, extensionMinutes },
         };
       }
-      const count = Math.max(1, Math.min(3, Number(form.resourceCount) || 1));
+      const count = 1;
       const regionalReference = baseTeam.find(engineer => clusterOf(engineer) === form.resourceZone && Array.isArray(engineer.startCoords));
       const addedEngineers = Array.from({ length: count }, (_, index) => ({
         id: `${draftIdRef.current}-engineer-${index + 1}`,
@@ -1513,9 +1513,13 @@ function ReplanningView({ record, data, cluster = 'all', isLive = false, plannin
       setPreview({ status: 'error', plan: null, model: null, message: error?.message || 'Не удалось выполнить проверяемый пересчёт.' });
     }
   };
-  const rollbackDraft = () => {
-    if (preview.status === 'applied') onRollback?.();
-    setPreview({ status: 'idle', plan: null, message: '', model: null });
+  const rollbackDraft = async () => {
+    try {
+      if (preview.status === 'applied') await onRollback?.();
+      setPreview({ status: 'idle', plan: null, message: '', model: null });
+    } catch (error) {
+      setPreview(current => ({ ...current, message: error?.message || 'Не удалось восстановить предыдущий план.' }));
+    }
   };
   const afterData = useMemo(() => {
     if (!preview.plan || !preview.model) return null;
@@ -1526,10 +1530,15 @@ function ReplanningView({ record, data, cluster = 'all', isLive = false, plannin
     return { ...result, activeEngineers };
   }, [preview, cluster]);
   const hasPreview = preview.status === 'ready' || preview.status === 'applied';
-  const applyPreview = () => {
+  const applyPreview = async () => {
     if (!preview.plan || !preview.model) return;
-    onApply?.({ ...preview.model, plan: preview.plan });
-    setPreview(current => ({ ...current, status: 'applied', message: 'План принят.' }));
+    setPreview(current => ({ ...current, status: 'publishing', message: 'Публикуем проверенный план…' }));
+    try {
+      await onApply?.({ ...preview.model, plan: preview.plan });
+      setPreview(current => ({ ...current, status: 'applied', message: 'План опубликован.' }));
+    } catch (error) {
+      setPreview(current => ({ ...current, status: 'ready', message: error?.message || 'Публикация не выполнена.' }));
+    }
   };
   const normalizedDelta = value => Math.abs(Number(value) || 0) < 0.05 ? 0 : Math.round(Number(value) * 10) / 10;
   const delta = value => {
@@ -1638,7 +1647,7 @@ function ReplanningView({ record, data, cluster = 'all', isLive = false, plannin
         {form.resourceMode === 'add' ? <div className="replanning-form resource-form">
           <label>Территория<BusinessSelect className="replanning-business-select" ariaLabel="Выбрать территорию бригады" value={form.resourceZone} disabled={cluster !== 'all'} onChange={value => updateForm('resourceZone', value)} options={[{ value: '', label: 'Выберите территорию' }, ...availableClusters.map(item => ({ value: item, label: item, hint: `Новая бригада будет закреплена за зоной` }))]}/></label>
           <label>Навык новой бригады<BusinessSelect className="replanning-business-select" ariaLabel="Выбрать навык новой бригады" value={form.resourceSkill} onChange={value => updateForm('resourceSkill', value)} options={[{ value: 'INSTALL', label: 'Подключение' }, { value: 'LOCAL', label: 'Локальные работы' }, { value: 'EMERGENCY', label: 'Аварийные работы', priority: true }]}/></label>
-          <label>Количество бригад<input type="number" min="1" max="3" value={form.resourceCount} onChange={event => updateForm('resourceCount', event.target.value)}/></label>
+          <label>Количество бригад<input type="number" value="1" readOnly title="Каждая новая бригада проходит отдельную проверку и публикацию"/></label>
           <label>Транспорт<BusinessSelect className="replanning-business-select" ariaLabel="Выбрать транспорт новой бригады" value={form.resourceTransport} onChange={value => updateForm('resourceTransport', value)} options={[{ value: 'CAR', label: 'Автомобиль', hint: 'Оптимально для дальних выездов' }, { value: 'PUBLIC_TRANSIT', label: 'Общ. транспорт' }, { value: 'BICYCLE', label: 'Велосипед' }, { value: 'WALKING', label: 'Пешеход' }]}/></label>
           <ManualTimeField label="Начало смены" value={form.resourceShiftStart} onChange={value => updateForm('resourceShiftStart', value)}/>
           <ManualTimeField label="Завершение смены" value={form.resourceShiftEnd} onChange={value => updateForm('resourceShiftEnd', value)}/>

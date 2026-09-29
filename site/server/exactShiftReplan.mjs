@@ -5,6 +5,7 @@ import { fillExactIdentityGeometry } from './exactPlanGeometry.mjs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { projectRoot } from '../scripts/project-root.mjs';
+import { PLANNING_DEADLINE_MS } from '../scripts/process-deadline.mjs';
 
 const assignmentIndex = plan => new Map((plan?.routes || []).flatMap(route =>
   (route.assignments || []).map(visit => [String(visit.orderId), { engineerId: String(route.engineerId), plannedStart: visit.plannedStart, departureAt: visit.departureAt, arrival: visit.arrival, plannedFinish: visit.plannedFinish }])));
@@ -94,15 +95,17 @@ export const historicalInventory = async (date, root = projectRoot()) => {
 
 /** Replan with the retained exact solver and preserve visits that precede an operational event. */
 export async function exactShiftReplan(shift, model, onProgress = () => {}) {
+  const deadlineAt = Date.now() + PLANNING_DEADLINE_MS;
   const event = { ...model.event };
-  const useEventSolver = ['RECALCULATE', 'NEW_ORDER', 'ORDER_CANCELLED', 'VISIT_CANCELLED', 'ENGINEER_UNAVAILABLE', 'CAPACITY_ADDED', 'MANUAL_ASSIGN', 'CLIENT_WINDOW_SHIFT'].includes(event.type)
-    && shift.plan?.contentSha256;
+  const eventTypes = ['RECALCULATE', 'NEW_ORDER', 'ORDER_CANCELLED', 'VISIT_CANCELLED', 'ENGINEER_UNAVAILABLE', 'CAPACITY_ADDED', 'SHIFT_BOUNDARY_CHANGED', 'SHIFT_EXTENDED', 'MANUAL_ASSIGN', 'CLIENT_WINDOW_SHIFT'];
+  const useEventSolver = eventTypes.includes(event.type);
+  if (useEventSolver && !shift.plan?.contentSha256) throw new Error('У опубликованного плана нет исходного точного артефакта для безопасного перепланирования.');
   let plan;
   if (useEventSolver) {
     if (event.type === 'VISIT_CANCELLED') event.type = 'ORDER_CANCELLED';
     if (event.type === 'MANUAL_ASSIGN') event.type = 'FORCED_ASSIGNMENT';
     onProgress({ phase: 'EXACT_EVENT', checkedRoads: 0 });
-    plan = await runExactReplan({ orders: model.orders, team: model.team, plan: shift.plan, planningDate: shift.date, event });
+    plan = await runExactReplan({ orders: model.orders, team: model.team, plan: shift.plan, planningDate: shift.date, event }, undefined, { deadlineAt });
   } else {
     onProgress({ phase: 'EXACT_FULL_DAY', checkedRoads: 0 });
     plan = await runExactPlan({ orders: model.orders, engineers: model.team, regionId: shift.regionId, planningDate: shift.date, sharedInventory: await historicalInventory(shift.date) }, undefined, onProgress);
@@ -111,34 +114,8 @@ export async function exactShiftReplan(shift, model, onProgress = () => {}) {
     throw new Error('Пересчёт не прошёл независимую точную проверку.');
   }
   if (!preservesStartedVisits(shift, plan, model.event.time)) throw new Error('Точный пересчёт меняет визит до времени события или фактически начатый визит. Публикация запрещена.');
-  const targetOrderId = ['NEW_ORDER', 'CLIENT_WINDOW_SHIFT'].includes(model.event.type)
-    ? model.event.orderId
-    : model.event.type === 'RECALCULATE' ? plan.unassigned?.[0]?.orderId : null;
-  if (targetOrderId && !assignedVisit(plan, targetOrderId)) {
-    const order = model.orders.find(item => String(item.id) === String(targetOrderId));
-    let fullRebuildStatus = 'NO_SAFE_IMPROVEMENT';
-    onProgress({ phase: 'EXACT_FULL_DAY', checkedRoads: Number(plan.exactRouteChecks || 0) });
-    try {
-      const rebuilt = await runExactPlan({ orders: model.orders, engineers: model.team, regionId: shift.regionId, planningDate: shift.date, sharedInventory: await historicalInventory(shift.date) }, undefined, onProgress);
-      if (assignedVisit(rebuilt, order.id)
-        && Number(rebuilt.metrics?.assigned || 0) > Number(plan.metrics?.assigned || 0)
-        && preservesStartedVisits(shift, rebuilt, model.event.time)) {
-        plan = rebuilt;
-        fullRebuildStatus = 'ADOPTED';
-      }
-    } catch {
-      fullRebuildStatus = 'NOT_COMPLETED';
-    }
-    if (!assignedVisit(plan, order.id)) {
-      plan = { ...plan, unassigned: plan.unassigned.map(item => String(item.orderId) === String(order.id) ? { ...item, fullRebuildStatus } : item) };
-    }
-    if (!assignedVisit(plan, order.id) && plan.unassigned?.some(item => String(item.orderId) === String(order.id) && ['NO_EXACT_FEASIBLE_INSERTION_IN_CURRENT_ROUTES', 'SEARCH_BUDGET_EXHAUSTED'].includes(item.reasonCode))) {
-      onProgress({ phase: 'EXACT_ALTERNATIVE_WINDOW', checkedRoads: Number(plan.exactRouteChecks || 0) });
-      try {
-        const suggestedWindow = await findAlternativeWindow(shift, model, order, runExactReplan);
-        if (suggestedWindow) plan = { ...plan, unassigned: plan.unassigned.map(item => String(item.orderId) === String(order.id) ? { ...item, suggestedWindow } : item) };
-      } catch { /* No exact alternative is offered when routing cannot verify one. */ }
-    }
+  if (model.event.type === 'NEW_ORDER' && !model.orders.some(item => String(item.id) === String(model.event.orderId))) {
+    throw new Error('Новая заявка отсутствует в модели проверенного пересчёта.');
   }
   return { ...fillExactIdentityGeometry(plan, model.orders), event: model.event };
 }

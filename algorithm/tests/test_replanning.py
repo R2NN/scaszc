@@ -170,6 +170,31 @@ class ReplanningTests(unittest.TestCase):
         self.assertEqual(result.state.plan.unserved_job_ids, ())
         self.assertEqual(routes['E1'].visits[0], self.source.engineer_plans[0].visits[0])
 
+    def test_full_future_rebuild_assigns_new_job_after_direct_insertion_fails(self) -> None:
+        self.engineers['E1'] = replace(self.engineers['E1'], max_jobs=1, skills=frozenset({'A', 'U'}))
+        self.engineers['E2'] = replace(self.engineers['E2'], max_jobs=1, skills=frozenset({'A', 'B'}))
+        self.engineers['OTHER'] = replace(self.engineers['OTHER'], zone_id='Z1', max_jobs=1, skills=frozenset({'B'}))
+        self.jobs['A'] = replace(self.jobs['A'], required_skill='A')
+        self.jobs['B'] = replace(self.jobs['B'], required_skill='B')
+        self.jobs['U'] = replace(self.job('U', 'Z1', self.at(8)), required_skill='U')
+        source = ProposedPlan(self.t0, (
+            EngineerPlan('E1', (self.visit('A', self.at(9)),)),
+            EngineerPlan('E2', (self.visit('B', self.at(11)),)),
+        ), ())
+        event = self.event(1, EventType.NEW_JOB, 'U', self.at(8))
+        dataset = self.make_dataset((event,))
+        self.assertTrue(validate_initial_plan(dataset, source).is_valid)
+        state = ReplanningState(source)
+        inserted = replan_after_event(dataset, state, event, _Oracle())
+        self.assertIn('U', inserted.state.plan.unserved_job_ids)
+        rebuilt = replan_after_event(dataset, state, event, _Oracle(), rebuild_future=True)
+        self.assertEqual(rebuilt.status, ReplanningStatus.EXACT_VALID)
+        self.assertEqual(rebuilt.state.plan.unserved_job_ids, ())
+        self.assertEqual({route.engineer_id: tuple(visit.job_id for visit in route.visits)
+                          for route in rebuilt.state.plan.engineer_plans if route.visits},
+                         {'E1': ('U',), 'E2': ('A',), 'OTHER': ('B',)})
+        self.assertEqual(rebuilt.validation.status.value, 'VALID')
+
     def test_every_required_mode_is_enforced_by_candidates_and_validator(self) -> None:
         modes = (
             TransportMode.CAR,

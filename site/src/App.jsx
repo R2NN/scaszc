@@ -1930,8 +1930,43 @@ export function App(){
       notify(error?.message||'Не удалось построить план',{title:'Планирование не выполнено'});
     }finally{setOptimizing(false)}
   };
-  const previewReplan=async(model,basePlan)=>{if(!basePlan)throw new Error('Нет опубликованного плана для пересчёта');return requestPlan(model.orders,model.team,region.id,{planningDate:selectedDayKey})};
-  const applyReplan=model=>{
+  const previewReplan=async(model,basePlan)=>{
+    if(!shift?.plan||!basePlan||basePlan.contentSha256!==shift.plan.contentSha256)throw new Error('Для проверки откройте текущий опубликованный план смены.');
+    const source=model.event||{};
+    const latest=shift.versions?.at(-1)?.effectiveAt||'07:00';
+    const time=toTime(Math.max(420,toMinutes(latest),toMinutes(source.time||'07:00')));
+    const event={...source,time,reason:source.reason||'Проверка изменения плана диспетчером'};
+    if(event.type==='NEW_ORDER')event.order=model.orders.find(item=>String(item.id)===String(event.orderId));
+    if(event.type==='CAPACITY_ADDED'&&!event.engineerId){
+      const additions=model.team.filter(item=>!shift.team.some(old=>String(old.id)===String(item.id)));
+      if(additions.length!==1)throw new Error('Добавляйте по одной бригаде: каждый новый состав требует отдельной точной проверки.');
+      event.engineer=additions[0];
+    }
+    if(event.type==='CLIENT_WINDOW_SHIFT'&&!event.end)event.end=model.orders.find(item=>String(item.id)===String(event.orderId))?.end;
+    const response=await fetch(`/api/shifts/${encodeURIComponent(shift.id)}/preview`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({expectedRevision:shift.revision,event})});
+    let job=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(job.error||'Не удалось запустить точный пересчёт');
+    while(job.status==='RUNNING'){
+      await new Promise(resolve=>setTimeout(resolve,1400));
+      const check=await fetch(`/api/previews/${encodeURIComponent(job.id)}`);
+      job=await check.json().catch(()=>({}));
+      if(!check.ok)throw new Error(job.error||'Не удалось получить результат пересчёта');
+    }
+    if(job.status!=='READY'||job.result?.plan?.validation?.status!=='VALID')throw new Error(job.error||'Точный пересчёт не прошёл независимую проверку');
+    return {...job.result.plan,previewId:job.id,baseRevision:shift.revision};
+  };
+  const applyReplan=async model=>{
+    if(model?.plan?.previewId){
+      try{
+        const response=await fetch(`/api/shifts/${encodeURIComponent(shift.id)}/publish`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({previewId:model.plan.previewId,expectedRevision:model.plan.baseRevision,actor:'Диспетчер'})});
+        const saved=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(saved.error||'Не удалось опубликовать проверенный план');
+        setReplanSnapshot({shiftId:shift.id,planId:shift.currentPlanId});
+        applyShift(saved);
+        notify('Проверенный план опубликован и сохранён в истории версий.',{title:'Перепланирование завершено'});
+        return saved;
+      }catch(error){notify(error?.message||'Публикация не выполнена',{title:'План не изменён'});throw error;}
+    }
     const event=model?.event;
     if(!shift?.plan||!event?.type){notify('Для изменения нужен сохранённый план смены.',{title:'План не изменён'});return}
     const supported=['NEW_ORDER','ORDER_CANCELLED','VISIT_CANCELLED','ENGINEER_UNAVAILABLE','ENGINEER_REPLACED','CAPACITY_ADDED','MANUAL_ASSIGN','SHIFT_BOUNDARY_CHANGED','SHIFT_EXTENDED','CLIENT_WINDOW_SHIFT'];
@@ -1942,7 +1977,13 @@ export function App(){
     setPendingShiftEvent(pending);setScreen('shift');setWorkspacePanelOpen(false);
     notify('Откройте черновик в «Ходе смены»: там выполняется точная проверка дороги и только затем публикация.',{title:'Черновик передан диспетчеру'});
   };
-  const rollbackReplan=()=>{if(!replanSnapshot)return;const sameSelectedShift=item=>item.regionId===region.id&&(!item.serviceDate||parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE')===selectedDayKey);setOrders(current=>[...current.filter(order=>!sameSelectedShift(order)),...replanSnapshot.orders]);setEngineers(current=>[...current.filter(engineer=>!(engineer.regionId===region.id&&engineer.serviceDate&&parseImportedDate(engineer.serviceDate)?.toLocaleDateString('sv-SE')===selectedDayKey)),...replanSnapshot.team.map(item=>({...item,serviceDate:item.serviceDate||selectedDayKey}))]);setPlan(replanSnapshot.plan);setScheduled(replanSnapshot.scheduled);setReplanSnapshot(null);notify('Предыдущий опубликованный план восстановлен.',{title:'Изменения отменены'})};
+  const rollbackReplan=async()=>{
+    if(!replanSnapshot||!shift||replanSnapshot.shiftId!==shift.id)return;
+    const response=await fetch(`/api/shifts/${encodeURIComponent(shift.id)}/rollback`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({targetPlanId:replanSnapshot.planId,expectedRevision:shift.revision,actor:'Диспетчер',time:shift.versions?.at(-1)?.effectiveAt||'07:00'})});
+    const saved=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(saved.error||'Не удалось восстановить версию плана');
+    applyShift(saved);setReplanSnapshot(null);notify('Предыдущая версия плана восстановлена.',{title:'Откат выполнен'});
+  };
   const reassign=async(orderId,engineerId)=>{const order=regionOrders.find(item=>String(item.id)===String(orderId));const engineer=team.find(item=>String(item.id)===String(engineerId));if(!order||!engineer||!shift?.plan)return;setPendingShiftEvent({type:'MANUAL_ASSIGN',orderId,engineerId,time:'00:00',reason:'Ручное назначение диспетчера'});setScreen('shift');setWorkspacePanelOpen(false);notify(`${order.name}: проверьте вставку в маршрут ${engineer.name}.`,{title:'Черновик назначения'})};
   const addEmergency=async()=>{if(!shift?.plan){notify('Сначала постройте и сохраните исходный план.',{title:'Смена не готова'});return}try{const response=await fetch('/api/scenario/event');const payload=await response.json().catch(()=>({}));if(!response.ok||!payload.order)throw new Error(payload.error||'Контрольное событие недоступно');const emergency={...payload.order,id:`${region.id}:event:${Date.now()}`,regionId:region.id,serviceDate:selectedDayKey};setPendingShiftEvent({type:'NEW_ORDER',order:emergency,time:'00:00',reason:'Срочная заявка'});setScreen('shift');setWorkspacePanelOpen(false);notify('Срочная заявка подготовлена. Проверьте маршруты и опубликуйте только после точной проверки.',{title:'Черновик события'})}catch(error){notify(error?.message||'Не удалось создать черновик события',{title:'Событие не добавлено'})}};
   const applyShift=saved=>{if(!saved)return;const sameDay=item=>item.regionId===region.id&&(!item.serviceDate||parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE')===selectedDayKey);setShift(saved);setPlan(saved.plan);setScheduled(Boolean(saved.plan));setOrders(current=>[...current.filter(item=>!sameDay(item)),...saved.orders.map(item=>({...item,regionId:region.id,serviceDate:selectedDayKey}))]);setEngineers(current=>[...current.filter(item=>!sameDay(item)),...saved.team.map(item=>({...item,regionId:region.id,serviceDate:selectedDayKey}))]);setSelectedOrder(null);setFocusedRoute(null)};

@@ -194,6 +194,7 @@ def replan_after_event(
     forced_engineer_by_job: Mapping[str, str] | None = None,
     source_dataset: PlanningDataset | None = None,
     progress_callback: Callable[[int], None] | None = None,
+    rebuild_future: bool = False,
 ) -> ReplanningResult:
     """Apply one ordered event and return an exactly validated full-day plan.
 
@@ -325,7 +326,7 @@ def replan_after_event(
             ).visits if visit.departure_at > event.event_time
             and visit.job_id in active_job_ids
             and forced_assignments.get(visit.job_id, engineer_id) == engineer_id
-        )
+        ) if not rebuild_future else ()
         for engineer_id in dataset.engineers
     }
     exact_checks = 0
@@ -406,7 +407,8 @@ def replan_after_event(
                 unavailable.get(engineer_id, event.event_time),
                 previous_completion or event.event_time,
                 original_departure.get(job_id, event.event_time)
-                if original_owner.get(job_id) == engineer_id else event.event_time,
+                if not rebuild_future and original_owner.get(job_id) == engineer_id
+                else event.event_time,
             )
             if departure > job.window_end or departure >= engineer.shift_end:
                 result = _RouteTrial(None, job_id, 'TIME_WINDOW_OR_SHIFT')
@@ -546,6 +548,8 @@ def replan_after_event(
     pending = sorted(
         active_job_ids - assigned_jobs(),
         key=lambda job_id: (
+            not (rebuild_future and job_id == event.target_id
+                 and event.event_type in {EventType.NEW_JOB, EventType.NEW_URGENT_JOB}),
             dataset.jobs[job_id].priority != Priority.URGENT,
             dataset.jobs[job_id].window_end,
             job_id,
@@ -646,7 +650,8 @@ def replan_after_event(
                 minutes=dataset.jobs[previous.job_id].service_duration_min
             ) if previous else event.event_time,
             original_departure.get(job_id, event.event_time)
-            if original_owner.get(job_id) == engineer_id else event.event_time,
+            if not rebuild_future and original_owner.get(job_id) == engineer_id
+            else event.event_time,
         )
         earliest_finish = max(earliest_departure, job.window_start) + timedelta(
             minutes=job.service_duration_min

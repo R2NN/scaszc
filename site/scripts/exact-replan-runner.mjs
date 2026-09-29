@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ensureTransitIndex } from './transit-index.mjs';
 import { projectRoot } from './project-root.mjs';
+import { PLANNING_DEADLINE_MS, remainingMilliseconds, stopProcessTree } from './process-deadline.mjs';
 
 const clock = value => String(value || '').match(/T(\d{2}:\d{2})/)?.[1] || String(value || '').slice(0, 5);
 
@@ -22,7 +23,8 @@ const inProject = (root, file) => {
 };
 const fromProject = (root, file) => path.isAbsolute(file) ? file : path.join(root, file);
 
-const runPython = ({ python, script, args, payload, env }) => new Promise((resolve, reject) => {
+const runPython = ({ python, script, args, payload, env, deadlineAt }) => new Promise((resolve, reject) => {
+  const timeoutMs = remainingMilliseconds(deadlineAt);
   const child = spawn(python, [script, ...args], {
     cwd: env.BEEGO_REPOSITORY_ROOT,
     env,
@@ -31,12 +33,17 @@ const runPython = ({ python, script, args, payload, env }) => new Promise((resol
   });
   let stdout = '';
   let stderr = '';
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; stopProcessTree(child); }, timeoutMs);
+  timer.unref();
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
   child.stdout.on('data', chunk => { stdout += chunk; });
   child.stderr.on('data', chunk => { stderr += chunk; });
-  child.on('error', reject);
+  child.on('error', error => { clearTimeout(timer); reject(error); });
   child.on('close', code => {
+    clearTimeout(timer);
+    if (timedOut) { reject(new Error('Перепланирование остановлено после 15 минут: проверенный план не получен')); return; }
     const lastLine = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
     let result = null;
     try { result = lastLine ? JSON.parse(lastLine) : null; } catch { /* handled below */ }
@@ -46,7 +53,8 @@ const runPython = ({ python, script, args, payload, env }) => new Promise((resol
   child.stdin.end(JSON.stringify(payload));
 });
 
-const ensureExactRouting = ({ python, repositoryRoot, env }) => new Promise((resolve, reject) => {
+const ensureExactRouting = ({ python, repositoryRoot, env, deadlineAt }) => new Promise((resolve, reject) => {
+  const timeoutMs = remainingMilliseconds(deadlineAt);
   const script = path.join(repositoryRoot, 'algorithm', 'tools', 'ensure_local_valhalla.py');
   const endpoint = String(env.VALHALLA_ROUTE_ENDPOINT || 'http://127.0.0.1:8002/route').replace(/\/route\/?$/, '');
   const child = spawn(python, [script, '--endpoint', endpoint], {
@@ -57,12 +65,17 @@ const ensureExactRouting = ({ python, repositoryRoot, env }) => new Promise((res
   });
   let stdout = '';
   let stderr = '';
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; stopProcessTree(child); }, timeoutMs);
+  timer.unref();
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
   child.stdout.on('data', chunk => { stdout += chunk; });
   child.stderr.on('data', chunk => { stderr += chunk; });
-  child.on('error', reject);
+  child.on('error', error => { clearTimeout(timer); reject(error); });
   child.on('close', code => {
+    clearTimeout(timer);
+    if (timedOut) { reject(new Error('Перепланирование остановлено после 15 минут: дорожный сервис не готов')); return; }
     const lastLine = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
     let result = null;
     try { result = lastLine ? JSON.parse(lastLine) : null; } catch { /* handled below */ }
@@ -189,6 +202,7 @@ export function compactExactReplan(raw, payload) {
     changes: raw.changes || null,
     assignmentExplanations,
     exactRouteChecks: raw.exact_route_checks,
+    searchPhase: raw.search_phase || null,
     metrics: {
       total: (payload.orders || []).length,
       assigned: routes.reduce((sum, route) => sum + route.assignments.length, 0),
@@ -206,7 +220,7 @@ export function compactExactReplan(raw, payload) {
 /**
  * Runs the Python exact replanner. Missing routing evidence is an error; no estimate is substituted.
  */
-export async function runExactReplan(payload, repositoryRoot = process.cwd()) {
+export async function runExactReplan(payload, repositoryRoot = process.cwd(), { deadlineAt = Date.now() + PLANNING_DEADLINE_MS } = {}) {
   repositoryRoot = projectRoot(repositoryRoot);
   const output = path.join(tmpdir(), `beego-exact-replan-${randomUUID()}.json`);
   const python = process.env.BEEGO_PYTHON || 'python';
@@ -275,6 +289,7 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd()) {
   const retainedTransitIndex = savedTransitIndex && await access(savedTransitIndex).then(() => savedTransitIndex, () => '');
   const transitIndex = retainedTransitIndex || await ensureTransitIndex(
     requiresTransit ? datasetManifest.planning_date : '2026-08-17', repositoryRoot,
+    { deadlineAt },
   );
   const args = [
     '--dataset', dataset,
@@ -284,8 +299,8 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd()) {
     '--output', output,
   ];
   try {
-    await ensureExactRouting({ python, repositoryRoot, env });
-    await runPython({ python, script, args, payload, env });
+    await ensureExactRouting({ python, repositoryRoot, env, deadlineAt });
+    await runPython({ python, script, args, payload, env, deadlineAt });
     const raw = JSON.parse(await readFile(output, 'utf8'));
     const result = compactExactReplan(raw, payload);
     const retainedRoot = path.join(repositoryRoot, 'runtime', 'exact-replans');

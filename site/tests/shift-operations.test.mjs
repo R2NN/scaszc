@@ -232,6 +232,26 @@ test('unreachable transit stop reports an actionable routing failure', async () 
   await assert.rejects(exactLeg([55.75, 37.62], [55.76, 37.63], 'Общественный транспорт', { geoapifyKey: 'test-key', fetchImpl }), /не нашёл доступный путь/);
 });
 
+test('geocoding key alone does not switch road validation away from local Valhalla', async () => {
+  const previousGeocoding = process.env.GEOAPIFY_API_KEY;
+  const previousRouting = process.env.GEOAPIFY_ROUTING_API_KEY;
+  process.env.GEOAPIFY_API_KEY = 'geocoding-only-key';
+  delete process.env.GEOAPIFY_ROUTING_API_KEY;
+  try {
+    await assert.rejects(exactLeg([55.731, 37.601], [55.741, 37.611], 'CAR', {
+      fetchImpl: async url => {
+        assert.equal(url, 'http://127.0.0.1:8002/route');
+        return new Response(null, { status: 503 });
+      },
+    }), /маршрутизации вернул ошибку 503/);
+  } finally {
+    if (previousGeocoding === undefined) delete process.env.GEOAPIFY_API_KEY;
+    else process.env.GEOAPIFY_API_KEY = previousGeocoding;
+    if (previousRouting === undefined) delete process.env.GEOAPIFY_ROUTING_API_KEY;
+    else process.env.GEOAPIFY_ROUTING_API_KEY = previousRouting;
+  }
+});
+
 test('operational publication rejects an estimated baseline even after changed roads are checked', async () => {
   const extraOrder = { ...order, id: 'job-2', sourceId: 'JOB-2', coords: [55.76, 37.63] };
   const extraEngineer = { ...engineer, id: 'crew-2', name: 'Бригада 2' };
