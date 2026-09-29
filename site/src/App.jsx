@@ -576,7 +576,7 @@ function MapHierarchyPanel({onClose,mode,onModeChange,routeCount,activeRoute,ord
         {playback?<><div><i className="legend-planned-completed"/><span><b>По плану завершена</b><small>Светло-зелёная точка — запланированное время работы прошло</small></span></div><div><i className="legend-completed"/><span><b>Выполнена</b><small>Тёмно-зелёная точка — есть фактическая отметка диспетчера</small></span></div></>:null}
         {urgentCount?<div><i className="legend-urgent">⚡</i><span><b>Срочная заявка · {urgentCount}</b><small>Красный ромб — аварийный приоритет</small></span></div>:null}
         {unassignedCount?<div><i className="legend-unassigned">!</i><span><b>В очереди · {unassignedCount}</b><small>Пунктирный круг — не вошла в план</small></span></div>:null}
-        {reviewCount?<div><i className="legend-review">?</i><span><b>Проверить адрес · {reviewCount}</b><small>Координаты требуют уточнения</small></span></div>:null}
+        {reviewCount?<div><i className="legend-review">≈</i><span><b>Примерная точка · {reviewCount}</b><small>Маршрут рассчитывается по наиболее вероятному адресу; дом можно уточнить позже</small></span></div>:null}
         <div><i className="legend-start"><House/></i><span><b>Старт бригады</b><small>Общая исходная точка маршрута</small></span></div>
       </div>
     </div>
@@ -823,7 +823,7 @@ function MapCanvas({orders,team=[],scheduled,onOrder,onRoute,onOpenPlanning,onOr
         item.element.classList.toggle('is-route-muted',Boolean(focusedRoute)&&!isActive&&!item.isUnassigned);
         item.element.classList.toggle('is-sequence-visible',showNumbers&&isActive);
         item.element.classList.toggle('is-list-hovered',String(hoveredOrderId??'')===item.orderId);
-        item.pin.textContent=item.isUnassigned?'!':item.isInvalid?'!':item.manualReview?'?':showNumbers&&isActive?String(item.position||''):item.isUrgent?'⚡':'';
+        item.pin.textContent=item.isUnassigned?'!':item.isInvalid?'!':item.manualReview?'≈':showNumbers&&isActive?String(item.position||''):item.isUrgent?'⚡':'';
       });
     };
     markerPresentationRef.current=updateMarkerPresentation;
@@ -853,13 +853,14 @@ function MapCanvas({orders,team=[],scheduled,onOrder,onRoute,onOpenPlanning,onOr
         element.setAttribute('aria-label',baseLabel);
         const pin=document.createElement('span');
         pin.className=`map-order-pin ${scheduled||isUnassigned?'is-scheduled':''}`;
-        pin.textContent=isUnassigned||isInvalid?'!':manualReview?'?':isUrgent?'⚡':'';
+        pin.textContent=isUnassigned||isInvalid?'!':manualReview?'≈':isUrgent?'⚡':'';
         element.append(pin);
         element.addEventListener('mouseenter',()=>{
           onOrderHoverRef.current?.(order);
           if(String(selectedOrderRef.current?.id??'')===String(order.id))return;
           scheduleShiftHoverInfo(order.coords,()=>hoverCard(displayOrderName(order),[
             ['Адрес',order.address||'Адрес не указан'],
+            ...(manualReview?[['Точка расчёта',order.geocodedAddress||'Наиболее вероятная точка по адресу']]:[]),
             ['Состояние',visitStatusLabel(element.dataset.visitStatus||'planned',crewPlaybackRef.current?.mode)],
             ['Окно',order.start&&order.end?`${order.start}–${order.end}`:'Гибкое'],
           ]));
@@ -1858,10 +1859,12 @@ export function App(){
     try{
       const geocoded=await geocodeImportedOrders(preparedOrders,setGeocodeProgress,upsertOrders);
       upsertOrders(geocoded);
-      const found=geocoded.filter(order=>Array.isArray(order.coords)&&order.coords.length===2&&order.geocodeStatus!=='review').length;
-      const needsReview=geocoded.filter(order=>order.geocodeStatus==='review'||!Array.isArray(order.coords)||order.coords.length!==2).length;
-      const message=needsReview?`Точно найдено ${found} · проверить адреса: ${needsReview}`:`Все ${found} адресов точно найдены`;
-      setGeocodeProgress({status:needsReview?'warning':'success',active:false,found,total:preparedOrders.length,failed:needsReview,message});
+      const located=geocoded.filter(order=>Array.isArray(order.coords)&&order.coords.length===2);
+      const found=located.filter(order=>order.geocodeStatus!=='review').length;
+      const approximate=located.length-found;
+      const missing=geocoded.length-located.length;
+      const message=`Точно найдено: ${found} · примерная точка: ${approximate}${missing?` · без координат: ${missing}`:''}. Примерные точки участвуют в расчёте.`;
+      setGeocodeProgress({status:approximate||missing?'warning':'success',active:false,found:located.length,total:preparedOrders.length,failed:missing,message});
       notify(message,{title:'Импорт завершён',showToast:false});
       setTimeout(()=>setGeocodeProgress(current=>current?{...current,closing:true}:current),4700);setTimeout(()=>setGeocodeProgress(null),5100);
     }catch(error){
@@ -1916,7 +1919,8 @@ export function App(){
       if(!response.ok)throw new Error(saved.error||'Не удалось сохранить смену');
       setShift(saved);setPlan(next);setScheduled(true);setFocusedRoute(null);setView('timeline');
       setAlgorithmActivity(current=>current?.startedAt===startedAt?{...current,status:'READY',progress:{phase:'READY'},finishedAt:Date.now()}:current);
-      notify(`Точный план сохранён: распределено ${next.metrics.assigned} из ${next.metrics.total}. Для ручного решения: ${next.metrics.unassigned}.`,{title:'Точный план готов'});
+      const approximate=planningOrders.filter(order=>order.geocodeStatus==='review'&&Array.isArray(order.coords)&&order.coords.length===2).length;
+      notify(`План сохранён: распределено ${next.metrics.assigned} из ${next.metrics.total}. Для ручного решения: ${next.metrics.unassigned}.${approximate?` ${approximate} адресов рассчитано по примерной точке.`:''}`,{title:'План готов'});
     }catch(error){
       setAlgorithmActivity(current=>current?.startedAt===startedAt?{...current,status:'FAILED',error:error?.message||'Не удалось построить план',finishedAt:Date.now()}:current);
       notify(error?.message||'Не удалось построить план',{title:'Планирование не выполнено'});

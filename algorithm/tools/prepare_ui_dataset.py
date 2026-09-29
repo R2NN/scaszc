@@ -199,7 +199,7 @@ def preflight_ui_rows(orders: list[Any], team: list[Any], planning_date: date,
                     engineer_availability(item, item_id)
                 except ValueError as error:
                     issues.append(f'{label}, доступность: {error}')
-                if str(item.get('startGeocodeStatus') or '').casefold() in {'review', 'error', 'needs_geocoding'}:
+                if str(item.get('startGeocodeStatus') or '').casefold() in {'error', 'needs_geocoding'}:
                     issues.append(f'{label}, адрес старта: {item.get("geocodeError") or "подтвердите точный адрес или укажите проверенные координаты"}')
                 point = item.get('startCoords')
                 if point is None:
@@ -248,7 +248,7 @@ def preflight_ui_rows(orders: list[Any], team: list[Any], planning_date: date,
                             issues.append(f'{label}, дата выполнения: отличается от даты расчёта {planning_date}')
                     except ValueError as error:
                         issues.append(f'{label}, дата выполнения: {error}')
-                if str(item.get('geocodeStatus') or '').casefold() in {'review', 'error', 'needs_geocoding'}:
+                if str(item.get('geocodeStatus') or '').casefold() in {'error', 'needs_geocoding'}:
                     issues.append(f'{label}, адрес: {item.get("geocodeError") or "подтвердите точный дом или укажите проверенные координаты"}')
                 try:
                     coordinates(item, 'coords')
@@ -377,7 +377,7 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         zone_id = zone(item)
         if zone_id not in zones:
             raise ValueError(f'Для территории {zone_id} нет инженеров')
-        if str(item.get('geocodeStatus') or '').casefold() in {'review', 'needs_geocoding', 'error'}:
+        if str(item.get('geocodeStatus') or '').casefold() in {'needs_geocoding', 'error'}:
             raise ValueError(f'Координаты заявки {job_id} требуют подтверждения')
         lat, lon = coordinates(item, 'coords')
         location_id = f'LOC-JOB-UI-{index}'

@@ -147,11 +147,41 @@ async function geocodeAddress(item, apiKey) {
   })[0];
   if (!match) {
     const suggestions = (payload.results || []).filter((candidate) => !requestedLocality || [candidate.city, candidate.town, candidate.village, candidate.municipality, candidate.county, candidate.formatted].filter(Boolean).join(" ").toLocaleLowerCase("ru-RU").replace(/ё/g, "е").includes(requestedLocality));
-    const suggestion = suggestions.sort((a,b)=>{
+    let suggestion = suggestions.sort((a,b)=>{
       const score=candidate=>Number(streetsMatch(requestedStreet,streetParts(candidate.street||candidate.formatted)))*12+Number(requestedDistrict&&normalizePlace(candidate.formatted).includes(requestedDistrict))*6+Number(candidate.result_type==='building')*3+Number(candidate.result_type==='street')*2+Number(candidate.rank?.confidence||0);
       return score(b)-score(a);
     })[0];
-    const suggestionLat=Number(suggestion?.lat),suggestionLon=Number(suggestion?.lon),hasSuggestionCoords=Number.isFinite(suggestionLat)&&Number.isFinite(suggestionLon);
+    if (!(Number(suggestion?.lat) > 40 && Number(suggestion?.lat) < 70 && Number(suggestion?.lon) > 20 && Number(suggestion?.lon) < 60)) {
+      const locality = parsed.locality || 'Москва';
+      const fallbackQueries = [
+        requestedStreet.name && {
+          text: `${locality}, ${requestedStreet.name} ${requestedStreet.type}`,
+          matches: candidate => streetsMatch(requestedStreet, streetParts(candidate.street || candidate.formatted)),
+        },
+        requestedDistrict && {
+          text: `${locality}, район ${item.district}`,
+          matches: candidate => normalizePlace(candidate.formatted).includes(requestedDistrict),
+        },
+      ].filter(Boolean);
+      for (const fallback of fallbackQueries) {
+        const fallbackParams = new URLSearchParams(params);
+        fallbackParams.set('text', fallback.text);
+        const fallbackResponse = await fetch(`https://api.geoapify.com/v1/geocode/search?${fallbackParams}`).catch(() => null);
+        if (!fallbackResponse?.ok) continue;
+        const fallbackPayload = await fallbackResponse.json().catch(() => ({}));
+        suggestion = (fallbackPayload.results || [])
+          .filter(candidate => {
+            const latitude = Number(candidate.lat), longitude = Number(candidate.lon);
+            const localityText = [candidate.city, candidate.town, candidate.village, candidate.municipality, candidate.county, candidate.formatted]
+              .filter(Boolean).join(' ').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
+            return latitude > 40 && latitude < 70 && longitude > 20 && longitude < 60
+              && (!requestedLocality || localityText.includes(requestedLocality)) && fallback.matches(candidate);
+          })
+          .sort((a, b) => Number(b.rank?.confidence || 0) - Number(a.rank?.confidence || 0))[0];
+        if (suggestion) break;
+      }
+    }
+    const suggestionLat=Number(suggestion?.lat),suggestionLon=Number(suggestion?.lon),hasSuggestionCoords=suggestionLat>40&&suggestionLat<70&&suggestionLon>20&&suggestionLon<60;
     const result = { address, status: "review", error: "Точный дом не найден", formattedAddress: suggestion?.formatted || "", coords:hasSuggestionCoords?[suggestionLat,suggestionLon]:null, confidence:Number(suggestion?.rank?.confidence||0), precision:suggestion?.result_type||"unknown", provider: "geoapify" };
     geocodeMemoryCache.set(cacheKey, result);
     return { ...result, id: item.id };

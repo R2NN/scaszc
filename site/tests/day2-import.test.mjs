@@ -59,3 +59,30 @@ test('geocoder accepts the same exact street before or after its type and reject
     globalThis.fetch = originalFetch;
   }
 });
+
+test('geocoder finds an approximate street point when the house number is missing', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async url => {
+      const text = new URL(url).searchParams.get('text');
+      const results = text.includes('волжский бульвар') ? [{
+        street: 'Волжский бульвар', city: 'Москва', country_code: 'ru',
+        result_type: 'street', lat: 55.71656, lon: 37.74212,
+        formatted: 'Волжский бульвар, Москва, Россия', rank: { confidence: 0.7 },
+      }] : [];
+      return new Response(JSON.stringify({ results }), { status: 200 });
+    };
+    const response = await worker.fetch(new Request('http://localhost/api/geocode', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ addresses: [{
+        id: 'missing-house', address: 'Город Москва, б-р.Волжский, к 2', district: 'Кузьминки',
+      }] }),
+    }), { GEOAPIFY_API_KEY: 'test' });
+    const { results } = await response.json();
+    assert.equal(results[0].status, 'review');
+    assert.deepEqual(results[0].coords, [55.71656, 37.74212]);
+    assert.equal(results[0].precision, 'street');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

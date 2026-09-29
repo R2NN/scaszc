@@ -26,7 +26,9 @@ class ImportEquipmentTests(unittest.TestCase):
             'planningDate': '2026-08-16',
             'orders': [{
                 'id': 'moscow:JOB-1', 'sourceId': 'JOB-1', 'zoneId': 'EAST',
-                'coords': [55.75, 37.61], 'start': '10:00', 'end': '12:00',
+                'coords': [55.75, 37.61], 'geocodeStatus': 'review',
+                'geocodeError': 'Точный дом не найден',
+                'start': '10:00', 'end': '12:00',
                 'duration': 60, 'skill': 'INSTALL', 'priority': 'NORMAL',
                 'equipment': 'Аварийный комплект',
             }],
@@ -43,3 +45,8 @@ class ImportEquipmentTests(unittest.TestCase):
             self.assertEqual(result['status'], 'PREPARED')
             self.assertIn('DIAG_SET', (target / 'common' / 'work_equipment_matrix.csv').read_text(encoding='utf-8-sig'))
             self.assertIn('DIAG_SET', (target / 'common' / 'engineer_equipment.csv').read_text(encoding='utf-8-sig'))
+
+        payload['orders'][0]['coords'] = None
+        with TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, 'нужны проверенные координаты'):
+                prepare(payload, Path(directory) / 'dataset')
