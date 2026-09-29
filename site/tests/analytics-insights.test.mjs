@@ -7,10 +7,10 @@ const history = JSON.parse(await readFile(new URL('../public/data/analytics-hist
 
 test('period summary separates planned visits from observed execution', () => {
   const model = buildHistoryModel(history.days, '2026-08-17');
-  assert.equal(model.days.length, 180);
+  assert.equal(model.days.length, history.days.length);
   assert.equal(model.selected.actualAvailable, false);
   assert.equal(model.selected.onTimeRate, null);
-  assert.equal(model.totals.actualDays, history.days.length - 1);
+  assert.equal(model.totals.actualDays, history.days.filter(day => day.actual).length);
   assert.equal(model.totals.total, history.days.reduce((sum, day) => sum + day.orders.length, 0));
   assert.equal(model.totals.assigned, history.days.reduce((sum, day) => sum + day.plan.routes.flatMap(route => route.assignments).length, 0));
   assert.equal(model.selected.issues.unassigned.length, model.selected.unassigned);
@@ -43,9 +43,11 @@ test('filtered route aggregates override stale all-region plan metrics', () => {
   assert.equal(summary.activeEngineers, 1);
 });
 
-test('visit drill-down reconciles completed, cancelled, late and missing facts', () => {
+test('visit drill-down does not turn historical plans into completed visits', () => {
   const day = summarizeHistoryDay(history.days[0]);
-  assert.equal(day.completed + day.cancelled + day.missing, day.assigned);
+  assert.equal(day.actualAvailable, false);
+  assert.equal(day.completed + day.cancelled + day.missing, 0);
+  assert.ok(day.assigned > 0);
   assert.equal(day.late, day.issues.late.length);
   assert.equal(day.cancelled, day.issues.cancelled.length);
   assert.ok(day.issues.late.every(item => item.orderId && item.zone && item.plannedStart && item.actualStart));

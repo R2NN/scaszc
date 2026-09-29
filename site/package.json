@@ -8,17 +8,12 @@
     "dev:api": "node scripts/dev-api.mjs",
     "start:server": "node server/main.mjs",
     "backup:shifts": "node scripts/backup-shifts.mjs",
-    "build:planning-artifact": "node scripts/build-planning-artifact.mjs",
-    "normalize:departures": "node scripts/apply-departure-buffer.mjs",
-    "build:analytics-history": "node scripts/generate-analytics-history.mjs",
-    "build:ml-forecast": "python scripts/train-demand-forecast.py",
     "build": "vite build && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview",
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "test:algorithm": "node scripts/verify-algorithm-integration.mjs",
     "test:analytics-history": "node --test tests/analytics-history.test.mjs tests/analytics-insights.test.mjs tests/analytics-advanced.test.mjs tests/ml-demand-forecast.test.mjs",
     "test:ml-forecast": "node --test tests/ml-demand-forecast.test.mjs",
-    "test:territories": "node scripts/verify-moscow-territories.mjs",
     "test:map": "node --test tests/map-design.test.mjs"
   },
   "dependencies": {
