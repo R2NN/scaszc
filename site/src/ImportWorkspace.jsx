@@ -10,6 +10,7 @@ import { pushImportHistory, redoImportHistory, undoImportHistory } from './impor
 import { importedEquipmentRequirements, importedEquipmentTokens } from './importEquipment.js';
 import { parseWorkNorms, workDurationFor, workNormFor } from './workNorms.js';
 import { parseImportedDate } from './importDate.js';
+import { territoryFromImportFile } from './importTerritory.js';
 
 const ORDER_FIELD_GROUPS = [
   {
@@ -191,7 +192,7 @@ const ENGINEER_FIELD_META = new Map(
 );
 
 const ORDER_ALIASES = {
-  id: ['job id', 'order id', 'request id', 'ticket id', 'ticket number', 'ticket', 'request number', 'order number', 'incident id', 'crm id', 'id', 'ид заявки', 'номер заявки', '№ заявки', 'номер обращения', '№ обращения', 'номер заказа', '№ заказа', 'номер наряда', 'номер тикета', 'код заявки', 'код обращения', 'идентификатор', 'идентификатор обращения', 'номер', '№'],
+  id: ['job id', 'order id', 'request id', 'ticket id', 'ticket number', 'ticket', 'request number', 'order number', 'incident id', 'crm id', 'id', 'ид заявки', 'номер заявки', '№ заявки', 'заявка', 'номер обращения', '№ обращения', 'номер заказа', '№ заказа', 'номер наряда', 'номер тикета', 'код заявки', 'код обращения', 'идентификатор', 'идентификатор обращения', 'номер', '№'],
   externalId: ['source job id', 'external id', 'source id', 'внешний id', 'исходный id'],
   customerId: ['customer id', 'client id', 'id клиента', 'ид клиента'],
   objectId: ['object id', 'site id', 'id объекта', 'ид объекта'],
@@ -713,7 +714,7 @@ export async function parseReplanningOrderFile(file, region) {
   if (validateRows(dataset.rows, mappings, 'orders', session.workNorms).size) {
     throw new Error('Проверьте ID, время окна и вид работ. Для неизвестного вида работ укажите длительность.');
   }
-  return buildOrders(dataset.headers, dataset.rows, mappings, region, session.workNorms);
+  return buildOrders(dataset.headers, dataset.rows, mappings, region, session.workNorms, session.fileName);
 }
 
 const ORDER_CORE_FIELDS = new Set([
@@ -739,8 +740,9 @@ const supplementaryFields = (row, mappings, entityType, coreFields) => {
   }));
 };
 
-export function buildOrders(headers, rows, mappings, region, workNorms = null) {
+export function buildOrders(headers, rows, mappings, region, workNorms = null, sourceFileName = '') {
   const columnFor = fieldId => Number(Object.keys(mappings).find(key => mappings[key] === fieldId));
+  const sourceFileColumn = headers.findIndex(header => header === 'Файл импорта');
   const valueFor = (row, fieldId) => {
     const column = columnFor(fieldId);
     return Number.isInteger(column) ? String(row[column] ?? '').trim() : '';
@@ -759,6 +761,10 @@ export function buildOrders(headers, rows, mappings, region, workNorms = null) {
     const lat = asNumber(valueFor(row, 'latitude'));
     const lon = asNumber(valueFor(row, 'longitude'));
     const customFields = supplementaryFields(row, mappings, 'orders', ORDER_CORE_FIELDS);
+    const rowSourceFile = sourceFileColumn >= 0 ? String(row[sourceFileColumn] || '') : sourceFileName;
+    const explicitZone = valueFor(row, 'zoneName') || valueFor(row, 'zone');
+    const explicitZoneId = valueFor(row, 'zoneId');
+    const inferredTerritory = !explicitZone && !explicitZoneId ? territoryFromImportFile(rowSourceFile) : null;
     const detailedAddress = [
       valueFor(row, 'street'),
       valueFor(row, 'house') ? `д. ${valueFor(row, 'house')}` : '',
@@ -792,8 +798,8 @@ export function buildOrders(headers, rows, mappings, region, workNorms = null) {
       equipment: importedEquipmentRequirements(valueFor(row, 'equipment')),
       transport: valueFor(row, 'transport'),
       district: valueFor(row, 'district'),
-      zone: valueFor(row, 'zoneName') || valueFor(row, 'zone'),
-      zoneId: valueFor(row, 'zoneId'),
+      zone: explicitZone || inferredTerritory?.label || '',
+      zoneId: explicitZoneId || inferredTerritory?.id || '',
       serviceType,
       connectionType: valueFor(row, 'connectionType'),
       gigabitRequired: valueFor(row, 'gigabitRequired'),
@@ -1328,7 +1334,7 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
       editedCells: [...drafts[entityType].editedCells],
     }]));
     onImport({
-      orders: drafts.orders ? buildOrders(datasets.orders.headers, drafts.orders.rows, drafts.orders.mappings, region, session.workNorms) : [],
+      orders: drafts.orders ? buildOrders(datasets.orders.headers, drafts.orders.rows, drafts.orders.mappings, region, session.workNorms, session.fileName) : [],
       engineers: drafts.engineers ? buildEngineers(datasets.engineers.headers, drafts.engineers.rows, drafts.engineers.mappings, region) : [],
     }, { ...session, datasets: reviewedDatasets, editHistory: draftHistory, reviewRegion: session.reviewRegion || region, mode: 'review' });
   };

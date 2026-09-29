@@ -40,9 +40,9 @@ const streetTypeLabels = {
 const canonicalStreetType = (value) => streetTypeLabels[String(value || '').toLocaleLowerCase('ru-RU')] || String(value || '').toLocaleLowerCase('ru-RU');
 const streetParts = (value) => {
   const text = normalizeAddress(value).replace(/\s*\([^)]*\)\s*/g, ' ');
-  const typePattern = '(ул|улица|пр-?кт|проспект|пер|переулок|б-?р|бульвар|наб|набережная|проезд|пр-?зд|ш|шоссе)';
-  const before = text.match(new RegExp(`${typePattern}\\.?\\s*([^,]+?)(?=,\\s*(?:дом|д)?\\.?\\s*\\d|,|$)`, 'i'));
-  const after = text.match(new RegExp(`(?:^|,)\\s*([^,]+?)\\s+${typePattern}\\.?(?=\\s*(?:дом|д)\\.?|,|$)`, 'i'));
+  const typePattern = '(улица|ул|проспект|пр-?кт|переулок|пер|бульвар|б-?р|набережная|наб|проезд|пр-?зд|шоссе|ш)';
+  const before = text.match(new RegExp(`(?:^|[\\s,])${typePattern}(?=\\.|\\s|$)\\.?\\s*([^,]+?)(?=,\\s*(?:дом|д)?\\.?\\s*\\d|,|$)`, 'i'));
+  const after = text.match(new RegExp(`(?:^|,)\\s*([^,]+?)\\s+${typePattern}(?=\\.|\\s|,|$)\\.?(?=\\s*(?:дом|д)\\.?|,|$)`, 'i'));
   const type = canonicalStreetType(before?.[1] || after?.[2]);
   const name = normalizePlace(before?.[2] || after?.[1]);
   return { type, name };
@@ -92,7 +92,7 @@ const parseRussianAddress = (value) => {
   }
   return { original, locality, query: geocodeQuery(original, locality) };
 };
-const geocodeCacheKey = (address) => `russia-v5:${normalizeAddress(address).toLocaleLowerCase("ru-RU")}`;
+const geocodeCacheKey = (address) => `russia-v6:${normalizeAddress(address).toLocaleLowerCase("ru-RU")}`;
 
 async function geocodeAddress(item, apiKey) {
   const address = normalizeAddress(item.address);

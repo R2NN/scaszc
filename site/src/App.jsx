@@ -172,7 +172,7 @@ function SiteSelect({value,options,onChange,disabled=false,placeholder='Выбе
   </div>
 }
 
-const GEOCODE_CACHE_KEY='beego-geoapify-cache-russia-v5';
+const GEOCODE_CACHE_KEY='beego-geoapify-cache-russia-v6';
 const geocodeCacheId=address=>String(address||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU');
 const readGeocodeCache=()=>{try{return JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY)||'{}')}catch{return{}}};
 const writeGeocodeCache=cache=>{try{const entries=Object.entries(cache).slice(-3000);localStorage.setItem(GEOCODE_CACHE_KEY,JSON.stringify(Object.fromEntries(entries)))}catch{}};
@@ -209,7 +209,7 @@ async function geocodeImportedOrders(importedOrders,onProgress,onPartial){
   const materialize=()=>importedOrders.map(order=>{
     const result=resolved.get(String(order.id));
     if(!result)return order;
-    return {...order,coords:Array.isArray(result.coords)?result.coords:null,geocodeStatus:result.status,geocodeConfidence:result.confidence??null,geocodedAddress:result.formattedAddress||'',geocodeProvider:'geoapify'};
+    return {...order,coords:Array.isArray(result.coords)?result.coords:null,geocodeStatus:result.status,geocodeError:result.error||'',geocodeConfidence:result.confidence??null,geocodedAddress:result.formattedAddress||'',geocodeProvider:'geoapify'};
   });
   onProgress({status:'active',active:true,done:resolved.size,total,failed:0,remainingSeconds:null});
   if(resolved.size)onPartial?.(materialize());
@@ -1858,11 +1858,10 @@ export function App(){
     try{
       const geocoded=await geocodeImportedOrders(preparedOrders,setGeocodeProgress,upsertOrders);
       upsertOrders(geocoded);
-      const found=geocoded.filter(order=>Array.isArray(order.coords)&&order.coords.length===2).length;
-      const review=geocoded.filter(order=>order.geocodeStatus==='review').length;
-      const failed=geocoded.filter(order=>!Array.isArray(order.coords)||order.coords.length!==2).length;
-      const message=failed?`${found} адресов нанесено · проверить: ${Math.max(review,failed)}`:`Все ${found} адресов успешно обработаны`;
-      setGeocodeProgress({status:failed?'warning':'success',active:false,found,total:nextOrders.length,failed,message});
+      const found=geocoded.filter(order=>Array.isArray(order.coords)&&order.coords.length===2&&order.geocodeStatus!=='review').length;
+      const needsReview=geocoded.filter(order=>order.geocodeStatus==='review'||!Array.isArray(order.coords)||order.coords.length!==2).length;
+      const message=needsReview?`Точно найдено ${found} · проверить адреса: ${needsReview}`:`Все ${found} адресов точно найдены`;
+      setGeocodeProgress({status:needsReview?'warning':'success',active:false,found,total:preparedOrders.length,failed:needsReview,message});
       notify(message,{title:'Импорт завершён',showToast:false});
       setTimeout(()=>setGeocodeProgress(current=>current?{...current,closing:true}:current),4700);setTimeout(()=>setGeocodeProgress(null),5100);
     }catch(error){
@@ -1880,9 +1879,16 @@ export function App(){
       importRows(payload,reviewSnapshot,'merge');
       return;
     }
-    const fileDates=new Set([...(payload.orders||[]),...(payload.engineers||[])]
-      .map(item=>parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE')).filter(Boolean));
-    if(fileDates.size>1){notify(`В файлах найдены разные рабочие даты: ${[...fileDates].join(', ')}. Загрузите файлы одного дня вместе.`,{title:'Проверьте даты импорта'});return}
+    const datedRows=[...(payload.orders||[]),...(payload.engineers||[])]
+      .map(item=>({date:parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE'),file:item.sourceData?.['Файл импорта']}))
+      .filter(item=>item.date);
+    const fileDates=new Set(datedRows.map(item=>item.date));
+    if(fileDates.size>1){
+      const byFile=new globalThis.Map(datedRows.filter(item=>item.file).map(item=>[item.file,item.date]));
+      const details=byFile.size?[...byFile].map(([file,date])=>`${file}: ${date}`).join('; '):[...fileDates].join(', ');
+      notify(`В загрузке разные рабочие даты — ${details}. Загрузите файлы каждого дня отдельно.`,{title:'Проверьте даты импорта'});
+      return;
+    }
     if(!orders.length&&!engineers.length){importRows(payload,reviewSnapshot,'merge');return}
     setImportSession(null);
     setReviewClosing(false);
