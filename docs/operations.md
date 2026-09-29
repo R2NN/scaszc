@@ -4,17 +4,7 @@
 
 ## Компоненты
 
-```mermaid
-flowchart TB
-  B[Браузер] --> N[Nginx]
-  N --> A[Один Node.js API]
-  A --> DB[(SQLite вне релиза)]
-  A --> PY[Python-ядро OR-Tools]
-  PY --> V[Valhalla / OSM]
-  PY --> T[(Локальный транспортный индекс)]
-  A --> AI[Yandex AI Studio]
-  A --> PDF[PDF]
-```
+![Архитектура BeeGo: интерфейс, Node API, операции, Python и данные маршрутизации](assets/system-architecture.svg)
 
 Клиент — React/Vite с картой MapLibre. Node.js API выдаёт данные, хранит смены и запускает Python-расчёт. SQLite работает с WAL и транзакционными версиями планов. Valhalla запущена локально. AI и Geoapify используют серверные переменные окружения; секреты не попадают в репозиторий или клиентскую сборку. PDF строится детерминированно из сохранённых данных и доступен без AI.
 

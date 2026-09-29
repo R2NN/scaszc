@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="910" viewBox="0 0 1200 910" role="img" aria-labelledby="title description">
+  <title id="title">Архитектура BeeGo</title>
+  <desc id="description">Браузер через Nginx обращается к одному процессу Node API. API управляет сменами в SQLite, одним слотом расчёта Python, поиском адресов Geoapify и отчётом с AI. Python использует локальную Valhalla и транспортный индекс.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1"><stop stop-color="#F8FAFF"/><stop offset="1" stop-color="#EDF5FF"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="6" stdDeviation="9" flood-color="#173362" flood-opacity="0.10"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#59718E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <style>
+      text { font-family: Arial, Helvetica, sans-serif; }
+      .title { font-size: 38px; font-weight: 700; fill: #10213B; }
+      .subtitle { font-size: 19px; fill: #52647D; }
+      .phase { font-size: 17px; font-weight: 700; letter-spacing: 1.4px; }
+      .name { font-size: 23px; font-weight: 700; fill: #14243D; }
+      .note { font-size: 16px; fill: #52647D; }
+      .small { font-size: 14px; fill: #64748B; }
+    </style>
+  </defs>
+  <rect width="1200" height="910" rx="28" fill="url(#background)"/>
+  <path d="M0 125H1200" stroke="#DCE7F5"/>
+  <rect x="48" y="43" width="123" height="34" rx="17" fill="#DBEAFE"/>
+  <text x="109.5" y="66" text-anchor="middle" font-size="15" font-weight="700" fill="#1D4ED8">BEEGO!</text>
+  <text class="title" x="191" y="71">Архитектура системы</text>
+  <text class="subtitle" x="49" y="107">Интерфейс, сервер, расчёт и источники данных</text>
+
+  <text class="phase" x="55" y="164" fill="#1D4ED8">01  ПУТЬ ЗАПРОСА</text>
+  <rect x="53" y="188" width="326" height="133" rx="19" fill="#FFFFFF" stroke="#C8DAF5" filter="url(#shadow)"/>
+  <rect x="53" y="188" width="8" height="133" rx="4" fill="#2563EB"/>
+  <text class="name" x="79" y="235">Браузер</text>
+  <text class="note" x="79" y="266">React · MapLibre · аналитика</text>
+  <text class="small" x="79" y="292">Карта, списки и действия диспетчера</text>
+
+  <path d="M389 254H422" stroke="#59718E" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="437" y="188" width="326" height="133" rx="19" fill="#FFFFFF" stroke="#C8DAF5" filter="url(#shadow)"/>
+  <rect x="437" y="188" width="8" height="133" rx="4" fill="#2563EB"/>
+  <text class="name" x="463" y="235">Nginx</text>
+  <text class="note" x="463" y="266">Статические файлы и /api</text>
+  <text class="small" x="463" y="292">Интерфейс и сводки аналитики</text>
+
+  <path d="M773 254H806" stroke="#59718E" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="821" y="188" width="326" height="133" rx="19" fill="#FFFFFF" stroke="#C8DAF5" filter="url(#shadow)"/>
+  <rect x="821" y="188" width="8" height="133" rx="4" fill="#2563EB"/>
+  <text class="name" x="847" y="235">Node API</text>
+  <text class="note" x="847" y="266">Один процесс на стенде</text>
+  <text class="small" x="847" y="292">Запись, версии, слот расчёта</text>
+
+  <path d="M984 326V353H600V384" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="48" y="395" width="1104" height="216" rx="24" fill="#FFFFFF" stroke="#D6E5F5" filter="url(#shadow)"/>
+  <circle cx="85" cy="431" r="20" fill="#DBEAFE"/>
+  <text x="85" y="438" text-anchor="middle" font-size="17" font-weight="700" fill="#1D4ED8">02</text>
+  <text class="phase" x="119" y="438" fill="#1D4ED8">СЕРВЕРНЫЕ ОПЕРАЦИИ</text>
+  <text class="small" x="1120" y="438" text-anchor="end">Управляет Node API</text>
+
+  <rect x="72" y="463" width="252" height="123" rx="16" fill="#F8FBFF" stroke="#C8DAF5"/>
+  <text class="name" x="94" y="505">Смены</text>
+  <text class="note" x="94" y="534">SQLite: планы, версии,</text>
+  <text class="note" x="94" y="557">события, факты</text>
+
+  <rect x="340" y="463" width="252" height="123" rx="16" fill="#F5FCFA" stroke="#BFE5DD"/>
+  <text class="name" x="362" y="505">Планирование</text>
+  <text class="note" x="362" y="534">Один слот расчёта,</text>
+  <text class="note" x="362" y="557">запуск Python</text>
+
+  <rect x="608" y="463" width="252" height="123" rx="16" fill="#FFFBEB" stroke="#F8E3A1"/>
+  <text class="name" x="630" y="505">Адреса</text>
+  <text class="note" x="630" y="534">Поиск и геокодирование</text>
+  <text class="note" x="630" y="557">Geoapify · внешний API</text>
+
+  <rect x="876" y="463" width="252" height="123" rx="16" fill="#F7F5FF" stroke="#D9D0FA"/>
+  <text class="name" x="898" y="505">Отчёт и AI</text>
+  <text class="note" x="898" y="534">PDF локально, ответы</text>
+  <text class="note" x="898" y="557">Yandex AI · внешний API</text>
+
+  <path d="M466 615V644H600V676" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="48" y="686" width="1104" height="181" rx="24" fill="#FFFFFF" stroke="#D4EAE7" filter="url(#shadow)"/>
+  <circle cx="85" cy="722" r="20" fill="#CCFBF1"/>
+  <text x="85" y="729" text-anchor="middle" font-size="17" font-weight="700" fill="#0F766E">03</text>
+  <text class="phase" x="119" y="729" fill="#0F766E">РАСЧЁТ И ЛОКАЛЬНЫЕ ДАННЫЕ</text>
+  <text class="small" x="1120" y="729" text-anchor="end">На той же VM</text>
+
+  <rect x="71" y="755" width="318" height="88" rx="16" fill="#F5FCFA" stroke="#BFE5DD"/>
+  <text class="name" x="93" y="794">Valhalla · OSM</text>
+  <text class="note" x="93" y="820">Дороги и пешие подходы</text>
+
+  <rect x="441" y="755" width="318" height="88" rx="16" fill="#E8F8F4" stroke="#A8DCCE"/>
+  <text class="name" x="463" y="794">Python · OR-Tools</text>
+  <text class="note" x="463" y="820">Поиск и валидатор</text>
+
+  <rect x="811" y="755" width="318" height="88" rx="16" fill="#F5FCFA" stroke="#BFE5DD"/>
+  <text class="name" x="833" y="794">Транспортный индекс</text>
+  <text class="note" x="833" y="820">GTFS · МЦК/МЦД · метро</text>
+
+  <path d="M435 799H400" stroke="#0F766E" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M765 799H800" stroke="#0F766E" stroke-width="3" marker-end="url(#arrow)"/>
+</svg>

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="312" viewBox="0 0 1200 312" role="img" aria-labelledby="title description">
+  <title id="title">Скринкаст BeeGo</title>
+  <desc id="description">Видеодемонстрация: заявки, маршрут, смена, перепланирование, отчёт.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#111B33"/>
+      <stop offset="1" stop-color="#243F70"/>
+    </linearGradient>
+    <linearGradient id="play" x2="1" y2="1">
+      <stop stop-color="#FFE873"/>
+      <stop offset="1" stop-color="#F7C900"/>
+    </linearGradient>
+    <pattern id="grid" width="38" height="38" patternUnits="userSpaceOnUse">
+      <path d="M38 0H0V38" fill="none" stroke="#FFFFFF" stroke-opacity="0.07"/>
+    </pattern>
+    <style>text { font-family: Arial, Helvetica, sans-serif; }</style>
+  </defs>
+  <rect width="1200" height="312" rx="24" fill="url(#background)"/>
+  <rect width="1200" height="312" rx="24" fill="url(#grid)"/>
+  <circle cx="1060" cy="149" r="137" fill="#82ABFF" opacity="0.07"/>
+  <circle cx="1060" cy="149" r="93" fill="#82ABFF" opacity="0.08"/>
+  <rect x="56" y="44" width="152" height="34" rx="17" fill="#F7C900"/>
+  <text x="132" y="67" text-anchor="middle" font-size="15" font-weight="700" fill="#17203C" letter-spacing="1.1">ВИДЕООБЗОР</text>
+  <text x="56" y="140" font-size="45" font-weight="700" fill="#FFFFFF">Скринкаст BeeGo!</text>
+  <text x="57" y="184" font-size="23" fill="#DCE8FF">Полный сценарий работы системы</text>
+  <path d="M57 235H780" stroke="#718BAF" stroke-width="2"/>
+  <g font-size="17" font-weight="600" fill="#F3F7FF">
+    <text x="57" y="267">Заявки</text>
+    <text x="215" y="267">План</text>
+    <text x="348" y="267">Смена</text>
+    <text x="494" y="267">Перепланирование</text>
+    <text x="723" y="267">Отчёт</text>
+  </g>
+  <g fill="#F7C900">
+    <circle cx="171" cy="261" r="3"/>
+    <circle cx="306" cy="261" r="3"/>
+    <circle cx="452" cy="261" r="3"/>
+    <circle cx="680" cy="261" r="3"/>
+  </g>
+  <circle cx="1000" cy="155" r="77" fill="url(#play)"/>
+  <circle cx="1000" cy="155" r="88" fill="none" stroke="#F7C900" stroke-opacity="0.43" stroke-width="2"/>
+  <path d="M980 119L1036 155L980 191Z" fill="#152544"/>
+</svg>

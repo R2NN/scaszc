@@ -1,128 +1,136 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="960" viewBox="0 0 1200 960" role="img" aria-labelledby="title description">
-  <title id="title">Как BeeGo строит и проверяет план</title>
-  <desc id="description">Входные данные проходят отбор допустимых пар и подготовку матриц. CP-SAT строит назначение и порядок, после чего уточняются поездки и ремонтируется план. Независимый валидатор разрешает подготовить черновик либо запрещает публикацию с указанием причины.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1260" viewBox="0 0 1200 1260" role="img" aria-labelledby="title description">
+  <title id="title">Первичный расчёт и перепланирование BeeGo</title>
+  <desc id="description">Первичный расчёт проходит через отбор пар, поисковые матрицы, CP-SAT, точные поездки и коррекцию. Перепланирование начинается с опубликованной версии и события, сохраняет начатую часть дня; новая заявка сначала вставляется в существующий план, затем при необходимости перестраивается будущая часть. Оба пути проходят независимую проверку и серверный контроль публикации.</desc>
   <defs>
-    <linearGradient id="background" x2="1" y2="1">
-      <stop stop-color="#F8FAFF"/>
-      <stop offset="1" stop-color="#EDF5FF"/>
-    </linearGradient>
-    <linearGradient id="blue" x2="1" y2="1">
-      <stop stop-color="#2563EB"/>
-      <stop offset="1" stop-color="#1D4ED8"/>
-    </linearGradient>
-    <linearGradient id="teal" x2="1" y2="1">
-      <stop stop-color="#0D9488"/>
-      <stop offset="1" stop-color="#0F766E"/>
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%">
-      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#123265" flood-opacity="0.10"/>
-    </filter>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
-      <path d="M1 1 9 5 1 9" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
-    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
-      <path d="M1 1 9 5 1 9" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
-    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
-      <path d="M1 1 9 5 1 9" fill="none" stroke="#0F766E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
-    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
-      <path d="M1 1 9 5 1 9" fill="none" stroke="#B42318" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
+    <linearGradient id="background" x2="1" y2="1"><stop stop-color="#F8FAFF"/><stop offset="1" stop-color="#EDF5FF"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-25%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="9" flood-color="#173362" flood-opacity="0.10"/></filter>
+    <marker id="blueArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="tealArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#0F766E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="greyArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="greenArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <marker id="redArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#D92D20" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
     <style>
       text { font-family: Arial, Helvetica, sans-serif; }
-      .title { font-size: 37px; font-weight: 700; fill: #0F172A; }
+      .title { font-size: 38px; font-weight: 700; fill: #0F172A; }
       .subtitle { font-size: 19px; fill: #475569; }
-      .phase { font-size: 17px; font-weight: 700; letter-spacing: 1.5px; }
-      .cardTitle { font-size: 23px; font-weight: 700; fill: #10213B; }
-      .cardNote { font-size: 16px; fill: #52647D; }
-      .outcomeTitle { font-size: 22px; font-weight: 700; }
+      .lane { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+      .cardTitle { font-size: 22px; font-weight: 700; fill: #13243D; }
+      .cardNote { font-size: 15.5px; fill: #52647D; }
+      .smallTitle { font-size: 18px; font-weight: 700; fill: #17324D; }
+      .smallNote { font-size: 15px; fill: #52647D; }
+      .outcomeTitle { font-size: 23px; font-weight: 700; }
       .outcomeNote { font-size: 16px; }
     </style>
   </defs>
 
-  <rect width="1200" height="960" rx="28" fill="url(#background)"/>
-  <path d="M0 125H1200" stroke="#DCE7F5"/>
-  <rect x="48" y="43" width="123" height="34" rx="17" fill="#DBEAFE"/>
-  <text x="109.5" y="66" text-anchor="middle" font-size="15" font-weight="700" fill="#1D4ED8">BEEGO!</text>
-  <text class="title" x="191" y="71">Как строится проверенный план</text>
-  <text class="subtitle" x="49" y="107">От исходных заявок до результата, который можно показать диспетчеру</text>
+  <rect width="1200" height="1260" rx="28" fill="url(#background)"/>
+  <path d="M0 126H1200" stroke="#DCE7F5"/>
+  <rect x="48" y="42" width="123" height="34" rx="17" fill="#DBEAFE"/>
+  <text x="109.5" y="65" text-anchor="middle" font-size="15" font-weight="700" fill="#1D4ED8">BEEGO!</text>
+  <text class="title" x="191" y="71">Как строится и меняется план</text>
+  <text class="subtitle" x="49" y="108">Два пути расчёта, одна независимая проверка</text>
 
-  <!-- 01: Preparation -->
-  <rect x="48" y="145" width="1104" height="188" rx="24" fill="#FFFFFF" stroke="#D9E7F7" filter="url(#shadow)"/>
-  <circle cx="85" cy="181" r="20" fill="#DBEAFE"/>
-  <text x="85" y="188" text-anchor="middle" font-size="17" font-weight="700" fill="#1D4ED8">01</text>
-  <text class="phase" x="119" y="188" fill="#1D4ED8">ПОДГОТОВКА</text>
+  <!-- Primary planning lane -->
+  <rect x="48" y="153" width="536" height="732" rx="24" fill="#FFFFFF" stroke="#D2E2F8" filter="url(#shadow)"/>
+  <circle cx="82" cy="190" r="20" fill="#DBEAFE"/>
+  <text x="82" y="197" text-anchor="middle" font-size="17" font-weight="700" fill="#1D4ED8">01</text>
+  <text class="lane" x="116" y="197" fill="#1D4ED8">ПЕРВИЧНЫЙ РАСЧЁТ</text>
+  <text x="80" y="222" font-size="16" fill="#52647D">Новый набор заявок и бригад</text>
 
-  <rect x="72" y="208" width="322" height="98" rx="17" fill="#F8FBFF" stroke="#C8DAF5"/>
-  <rect x="72" y="208" width="7" height="98" rx="3" fill="url(#blue)"/>
-  <text class="cardTitle" x="96" y="250">Входные данные</text>
-  <text class="cardNote" x="96" y="280">Импорт и нормализация</text>
+  <g fill="#F8FBFF" stroke="#C8DAF5">
+    <rect x="72" y="244" width="488" height="83" rx="16"/>
+    <rect x="72" y="347" width="488" height="83" rx="16"/>
+    <rect x="72" y="450" width="488" height="83" rx="16"/>
+    <rect x="72" y="553" width="488" height="83" rx="16"/>
+    <rect x="72" y="656" width="488" height="83" rx="16"/>
+    <rect x="72" y="759" width="488" height="83" rx="16"/>
+  </g>
+  <g fill="#2563EB"><rect x="72" y="244" width="7" height="83" rx="3"/><rect x="72" y="347" width="7" height="83" rx="3"/><rect x="72" y="450" width="7" height="83" rx="3"/><rect x="72" y="553" width="7" height="83" rx="3"/><rect x="72" y="656" width="7" height="83" rx="3"/><rect x="72" y="759" width="7" height="83" rx="3"/></g>
+  <text class="cardTitle" x="96" y="279">Импорт и нормализация</text>
+  <text class="cardNote" x="96" y="306">Заявки, смены, координаты, нормативы</text>
+  <text class="cardTitle" x="96" y="382">Допустимые пары</text>
+  <text class="cardNote" x="96" y="409">Зона, навык, транспорт, оснащение, окно</text>
+  <text class="cardTitle" x="96" y="485">Поисковые матрицы</text>
+  <text class="cardNote" x="96" y="512">Оценка дороги и общественного транспорта</text>
+  <text class="cardTitle" x="96" y="588">CP-SAT</text>
+  <text class="cardNote" x="96" y="615">Назначение, порядок, приоритеты целей</text>
+  <text class="cardTitle" x="96" y="691">Детальные поездки</text>
+  <text class="cardNote" x="96" y="718">По времени отправления каждого участка</text>
+  <text class="cardTitle" x="96" y="794">Локальная коррекция</text>
+  <text class="cardNote" x="96" y="821">Перестановки и переносы с повторной проверкой</text>
+  <g stroke="#2563EB" stroke-width="3" marker-end="url(#blueArrow)"><path d="M316 331V339"/><path d="M316 434V442"/><path d="M316 537V545"/><path d="M316 640V648"/><path d="M316 743V751"/></g>
 
-  <path d="M400 257H430" stroke="#64748B" stroke-width="3" marker-end="url(#arrow)"/>
-  <rect x="440" y="208" width="322" height="98" rx="17" fill="#F8FBFF" stroke="#C8DAF5"/>
-  <rect x="440" y="208" width="7" height="98" rx="3" fill="url(#blue)"/>
-  <text class="cardTitle" x="464" y="250">Допустимые пары</text>
-  <text class="cardNote" x="464" y="280">Зона, навык, транспорт, оснащение</text>
+  <!-- Event replanning lane -->
+  <rect x="616" y="153" width="536" height="732" rx="24" fill="#FFFFFF" stroke="#CCE8E1" filter="url(#shadow)"/>
+  <circle cx="650" cy="190" r="20" fill="#CCFBF1"/>
+  <text x="650" y="197" text-anchor="middle" font-size="17" font-weight="700" fill="#0F766E">02</text>
+  <text class="lane" x="684" y="197" fill="#0F766E">ПЕРЕПЛАНИРОВАНИЕ</text>
+  <text x="648" y="222" font-size="16" fill="#52647D">Опубликованный план · общий лимит 15 минут</text>
 
-  <path d="M768 257H798" stroke="#64748B" stroke-width="3" marker-end="url(#arrow)"/>
-  <rect x="808" y="208" width="320" height="98" rx="17" fill="#F8FBFF" stroke="#C8DAF5"/>
-  <rect x="808" y="208" width="7" height="98" rx="3" fill="url(#blue)"/>
-  <text class="cardTitle" x="832" y="250">Поисковые матрицы</text>
-  <text class="cardNote" x="832" y="280">Оценки времени в пути</text>
+  <g fill="#F5FCFA" stroke="#BFE5DD">
+    <rect x="640" y="244" width="488" height="83" rx="16"/>
+    <rect x="640" y="347" width="488" height="83" rx="16"/>
+    <rect x="640" y="450" width="488" height="83" rx="16"/>
+    <rect x="640" y="759" width="488" height="83" rx="16"/>
+  </g>
+  <g fill="#0D9488"><rect x="640" y="244" width="7" height="83" rx="3"/><rect x="640" y="347" width="7" height="83" rx="3"/><rect x="640" y="450" width="7" height="83" rx="3"/><rect x="640" y="759" width="7" height="83" rx="3"/></g>
+  <text class="cardTitle" x="664" y="279">Версия плана и событие</text>
+  <text class="cardNote" x="664" y="306">Новая заявка, отмена, ресурс, окно и другое</text>
+  <text class="cardTitle" x="664" y="382">Сохраняем прошедшую часть</text>
+  <text class="cardNote" x="664" y="409">Начатые и завершённые визиты неизменны</text>
+  <text class="cardTitle" x="664" y="485">Применяем изменение</text>
+  <text class="cardNote" x="664" y="512">Пересматриваем только будущие визиты</text>
+  <g stroke="#0F766E" stroke-width="3" marker-end="url(#tealArrow)"><path d="M884 331V339"/><path d="M884 434V442"/></g>
+  <path d="M884 537V543H757V548" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#tealArrow)"/>
+  <path d="M884 537V543H1011V548" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#tealArrow)"/>
 
-  <path d="M600 339V373" stroke="#2563EB" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <rect x="640" y="553" width="234" height="177" rx="16" fill="#EAF9F5" stroke="#A9DBCF"/>
+  <text class="smallTitle" x="658" y="586">Новая заявка</text>
+  <text class="smallNote" x="658" y="613">1. Точная вставка</text>
+  <path d="M660 628H851" stroke="#B7D7D0" stroke-width="1.5"/>
+  <text class="smallNote" x="658" y="654">Если слот не найден:</text>
+  <text class="smallNote" x="658" y="679">2. Перестройка всех</text>
+  <text class="smallNote" x="658" y="702">будущих визитов</text>
 
-  <!-- 02: Search and refinement -->
-  <rect x="48" y="386" width="1104" height="188" rx="24" fill="#FFFFFF" stroke="#D4EAE7" filter="url(#shadow)"/>
-  <circle cx="85" cy="422" r="20" fill="#CCFBF1"/>
-  <text x="85" y="429" text-anchor="middle" font-size="17" font-weight="700" fill="#0F766E">02</text>
-  <text class="phase" x="119" y="429" fill="#0F766E">ПОИСК И УТОЧНЕНИЕ</text>
+  <rect x="894" y="553" width="234" height="177" rx="16" fill="#EAF9F5" stroke="#A9DBCF"/>
+  <text class="smallTitle" x="912" y="586">Другие события</text>
+  <text class="smallNote" x="912" y="613">Отмена, доступность,</text>
+  <text class="smallNote" x="912" y="637">смена, окно, ресурс</text>
+  <path d="M914 650H1105" stroke="#B7D7D0" stroke-width="1.5"/>
+  <text class="smallNote" x="912" y="678">Точная коррекция</text>
+  <text class="smallNote" x="912" y="702">будущей части дня</text>
 
-  <rect x="72" y="449" width="322" height="98" rx="17" fill="#F5FCFA" stroke="#BFE5DD"/>
-  <rect x="72" y="449" width="7" height="98" rx="3" fill="url(#teal)"/>
-  <text class="cardTitle" x="96" y="491">CP-SAT</text>
-  <text class="cardNote" x="96" y="521">Назначение и порядок визитов</text>
+  <path d="M757 734V746" stroke="#0F766E" stroke-width="3" marker-end="url(#tealArrow)"/>
+  <path d="M1011 734V746" stroke="#0F766E" stroke-width="3" marker-end="url(#tealArrow)"/>
+  <text class="cardTitle" x="664" y="794">Детальная проверка поездок</text>
+  <text class="cardNote" x="664" y="821">Новый порядок с реальным временем отправления</text>
 
-  <path d="M400 498H430" stroke="#64748B" stroke-width="3" marker-end="url(#arrow)"/>
-  <rect x="440" y="449" width="322" height="98" rx="17" fill="#F5FCFA" stroke="#BFE5DD"/>
-  <rect x="440" y="449" width="7" height="98" rx="3" fill="url(#teal)"/>
-  <text class="cardTitle" x="464" y="491">Детальные поездки</text>
-  <text class="cardNote" x="464" y="521">По времени отправления</text>
+  <!-- Shared publication gate -->
+  <path d="M316 850V898H323V916" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#blueArrow)"/>
+  <path d="M884 850V898H877V916" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#tealArrow)"/>
+  <rect x="48" y="926" width="1104" height="151" rx="24" fill="#FFFFFF" stroke="#D2DCF5" filter="url(#shadow)"/>
+  <circle cx="84" cy="963" r="20" fill="#E0E7FF"/>
+  <text x="84" y="970" text-anchor="middle" font-size="17" font-weight="700" fill="#4338CA">03</text>
+  <text class="lane" x="118" y="970" fill="#4338CA">ОБЩИЙ КОНТРОЛЬ РЕЗУЛЬТАТА</text>
+  <rect x="72" y="990" width="497" height="63" rx="15" fill="#F4F6FF" stroke="#C7D2FE"/>
+  <text class="smallTitle" x="93" y="1018">Независимый валидатор Python</text>
+  <text class="smallNote" x="93" y="1040">Весь план, ограничения и доказательства поездок</text>
+  <path d="M576 1022H611" stroke="#64748B" stroke-width="3" marker-end="url(#greyArrow)"/>
+  <rect x="625" y="990" width="503" height="63" rx="15" fill="#F4F6FF" stroke="#C7D2FE"/>
+  <text class="smallTitle" x="646" y="1018">Контроль публикации в Node API</text>
+  <text class="smallNote" x="646" y="1040">VALID · EXACT_VALID · SHA-256 · точная дорога</text>
 
-  <path d="M768 498H798" stroke="#64748B" stroke-width="3" marker-end="url(#arrow)"/>
-  <rect x="808" y="449" width="320" height="98" rx="17" fill="#F5FCFA" stroke="#BFE5DD"/>
-  <rect x="808" y="449" width="7" height="98" rx="3" fill="url(#teal)"/>
-  <text class="cardTitle" x="832" y="491">Локальная коррекция</text>
-  <text class="cardNote" x="832" y="521">Уточнение маршрутов</text>
+  <path d="M876 1080V1102H323V1120" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#greenArrow)"/>
+  <path d="M876 1080V1120" fill="none" stroke="#D92D20" stroke-width="3" marker-end="url(#redArrow)"/>
+  <rect x="72" y="1130" width="497" height="105" rx="19" fill="#ECFDF5" stroke="#A7E8C7" filter="url(#shadow)"/>
+  <circle cx="111" cy="1165" r="17" fill="#059669"/>
+  <path d="m103 1165 5 5 10-11" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="outcomeTitle" x="143" y="1170" fill="#065F46">План прошёл проверку</text>
+  <text class="outcomeNote" x="143" y="1200" fill="#28705A">Первичный план или черновик события</text>
 
-  <path d="M600 580V614" stroke="#0F766E" stroke-width="3" marker-end="url(#arrowGreen)"/>
-
-  <!-- 03: Independent gate -->
-  <rect x="48" y="627" width="1104" height="144" rx="24" fill="#FFFFFF" stroke="#D9E7F7" filter="url(#shadow)"/>
-  <circle cx="85" cy="663" r="20" fill="#E0E7FF"/>
-  <text x="85" y="670" text-anchor="middle" font-size="17" font-weight="700" fill="#4338CA">03</text>
-  <text class="phase" x="119" y="670" fill="#4338CA">НЕЗАВИСИМАЯ ПРОВЕРКА</text>
-  <rect x="72" y="688" width="1056" height="61" rx="16" fill="#F4F6FF" stroke="#C7D2FE"/>
-  <text x="600" y="714" text-anchor="middle" font-size="23" font-weight="700" fill="#312E81">Валидатор повторно проверяет готовый план</text>
-  <text x="600" y="738" text-anchor="middle" font-size="16" fill="#55558C">По исходным данным, ограничениям и доказательствам поездок</text>
-
-  <path d="M600 774V795H331V810" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#arrowGreen)"/>
-  <path d="M600 774V795H869V810" fill="none" stroke="#B42318" stroke-width="3" marker-end="url(#arrowRed)"/>
-  <rect x="242" y="774" width="76" height="30" rx="15" fill="#D1FAE5"/>
-  <text x="280" y="795" text-anchor="middle" font-size="14" font-weight="700" fill="#047857">VALID</text>
-  <rect x="861" y="774" width="98" height="30" rx="15" fill="#FEE4E2"/>
-  <text x="910" y="795" text-anchor="middle" font-size="14" font-weight="700" fill="#B42318">ОШИБКА</text>
-
-  <rect x="72" y="821" width="518" height="104" rx="19" fill="#ECFDF5" stroke="#A7E8C7" filter="url(#shadow)"/>
-  <circle cx="111" cy="857" r="17" fill="#059669"/>
-  <path d="m103 857 5 5 10-11" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <text class="outcomeTitle" x="143" y="863" fill="#065F46">План прошёл проверку</text>
-  <text class="outcomeNote" x="143" y="894" fill="#28705A">Черновик; публикация отдельным действием</text>
-
-  <rect x="610" y="821" width="518" height="104" rx="19" fill="#FFF4F2" stroke="#FAC5BF" filter="url(#shadow)"/>
-  <circle cx="649" cy="857" r="17" fill="#D92D20"/>
-  <path d="M649 848V858M649 864V865" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
-  <text class="outcomeTitle" x="681" y="863" fill="#912018">Публикация запрещена</text>
-  <text class="outcomeNote" x="681" y="894" fill="#A24138">Возвращается конкретная причина</text>
+  <rect x="631" y="1130" width="497" height="105" rx="19" fill="#FFF4F2" stroke="#FAC5BF" filter="url(#shadow)"/>
+  <circle cx="670" cy="1165" r="17" fill="#D92D20"/>
+  <path d="M670 1156V1166M670 1172V1173" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  <text class="outcomeTitle" x="702" y="1170" fill="#912018">Публикация запрещена</text>
+  <text class="outcomeNote" x="702" y="1200" fill="#A24138">Причина ошибки; текущая версия сохранена</text>
 </svg>
