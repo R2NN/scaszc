@@ -6,6 +6,7 @@ import worker from "./worker/index.js";
 import { runExactReplan } from './scripts/exact-replan-runner.mjs';
 import { runExactPlan } from './scripts/exact-plan-runner.mjs';
 import { isCanonicalPlanningInput } from './scripts/is-canonical-planning-input.mjs';
+import { withPlanningSlot } from './scripts/planning-slot.mjs';
 
 const loadLocalVariables = () => {
   const variables = { ...process.env };
@@ -52,7 +53,7 @@ const localPlanningApi = () => ({
         const body = chunks.length ? Buffer.concat(chunks) : undefined;
         if (request.url === '/api/replan' && request.method === 'POST') {
           const payload = parseRequestJson(body);
-          const plan = await runExactReplan(payload, process.cwd());
+          const plan = await withPlanningSlot(() => runExactReplan(payload, process.cwd()));
           response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
           response.end(JSON.stringify(plan));
           return;
@@ -61,7 +62,7 @@ const localPlanningApi = () => ({
           const payload = parseRequestJson(body);
           const artifact = JSON.parse(loadLocalVariables().PLANNING_ARTIFACT_JSON || 'null');
           const sealed = isCanonicalPlanningInput(payload, artifact, process.cwd());
-          const plan = sealed ? await worker.fetch(new Request('http://127.0.0.1/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }), { ...loadLocalVariables(), EXACT_PLANNER_URL: '' }) : await runExactPlan(payload, process.cwd());
+          const plan = sealed ? await worker.fetch(new Request('http://127.0.0.1/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }), { ...loadLocalVariables(), EXACT_PLANNER_URL: '' }) : await withPlanningSlot(() => runExactPlan(payload, process.cwd()));
           if (sealed) {
             response.writeHead(plan.status, Object.fromEntries(plan.headers));
             response.end(Buffer.from(await plan.arrayBuffer()));
@@ -81,7 +82,11 @@ const localPlanningApi = () => ({
         response.writeHead(webResponse.status, Object.fromEntries(webResponse.headers));
         response.end(Buffer.from(await webResponse.arrayBuffer()));
       } catch (error) {
-        response.writeHead(error?.code === 'INVALID_INPUT' ? 422 : 500, { 'content-type': 'application/json; charset=utf-8' });
+        response.writeHead(error?.code === 'PLANNING_BUSY' ? 429 : error?.code === 'INVALID_INPUT' ? 422 : 500, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+          ...(error?.code === 'PLANNING_BUSY' ? { 'retry-after': '30' } : {}),
+        });
         response.end(JSON.stringify({ error: error?.message || 'Ошибка локального API', code: error?.code || 'PLANNING_FAILED', details: error?.details || [] }));
       }
     });

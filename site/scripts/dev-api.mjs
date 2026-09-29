@@ -5,9 +5,11 @@ import worker from '../worker/index.js';
 import { runExactReplan } from './exact-replan-runner.mjs';
 import { runExactPlan } from './exact-plan-runner.mjs';
 import { isCanonicalPlanningInput } from './is-canonical-planning-input.mjs';
+import { withPlanningSlot } from './planning-slot.mjs';
 
 const variablesFile = resolve('.dev.vars');
 const planningArtifactFile = resolve('public/data/beego-exact-plans.json');
+const apiPort = Number(process.env.BEEGO_API_PORT || 8787);
 const loadVariables = () => {
   const variables = { ...process.env };
   if (existsSync(variablesFile)) {
@@ -43,7 +45,7 @@ const server = createServer(async (request, response) => {
     const body = chunks.length ? Buffer.concat(chunks) : undefined;
     if (request.url === '/api/replan' && request.method === 'POST') {
       const payload = parseRequestJson(body);
-      const plan = await runExactReplan(payload, process.cwd());
+      const plan = await withPlanningSlot(() => runExactReplan(payload, process.cwd()));
       response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
       response.end(JSON.stringify(plan));
       return;
@@ -53,7 +55,7 @@ const server = createServer(async (request, response) => {
       const artifact = JSON.parse(loadVariables().PLANNING_ARTIFACT_JSON || 'null');
       const sealed = isCanonicalPlanningInput(payload, artifact, process.cwd());
       if (!sealed) {
-        const plan = await runExactPlan(payload, process.cwd());
+        const plan = await withPlanningSlot(() => runExactPlan(payload, process.cwd()));
         response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
         response.end(JSON.stringify(plan));
         return;
@@ -69,11 +71,15 @@ const server = createServer(async (request, response) => {
     response.writeHead(webResponse.status, Object.fromEntries(webResponse.headers));
     response.end(Buffer.from(await webResponse.arrayBuffer()));
   } catch (error) {
-    response.writeHead(error?.code === 'INVALID_INPUT' ? 422 : 500, { 'content-type': 'application/json; charset=utf-8' });
+    response.writeHead(error?.code === 'PLANNING_BUSY' ? 429 : error?.code === 'INVALID_INPUT' ? 422 : 500, {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      ...(error?.code === 'PLANNING_BUSY' ? { 'retry-after': '30' } : {}),
+    });
     response.end(JSON.stringify({ error: error?.message || 'Ошибка локального API', code: error?.code || 'PLANNING_FAILED', details: error?.details || [] }));
   }
 });
 
-server.listen(8787, '127.0.0.1', () => {
-  console.log(`BeeGo API: http://127.0.0.1:8787${loadVariables().GEOAPIFY_API_KEY ? ' · Geoapify подключён' : ' · добавьте GEOAPIFY_API_KEY в .dev.vars'}`);
+server.listen(apiPort, '127.0.0.1', () => {
+  console.log(`BeeGo API: http://127.0.0.1:${apiPort}${loadVariables().GEOAPIFY_API_KEY ? ' · Geoapify подключён' : ' · добавьте GEOAPIFY_API_KEY в .dev.vars'}`);
 });

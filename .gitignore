@@ -20,3 +20,15 @@ data/transit/*.sqlite
 Thumbs.db
 .idea/
 .vscode/
+
+# Generated bundles, local runtimes and secrets
+node_modules/
+dist/
+offline-assets/
+valhalla-data/
+.env.routing.local
+credentials/
+.venv/
+site/.dev.vars
+site/.venv/
+.codex-finalizer/
