@@ -20,12 +20,14 @@ const TRANSPORT = [
 ];
 const timeMinutes = value => { const [hours, minutes] = String(value || '').split(':').map(Number); return hours * 60 + minutes; };
 
-export function ManualEntryModal({ type, zones = [], region, date, existingIds = [], onClose, onSave }) {
+export function ManualEntryModal({ type, zones = [], region, date, existingIds = [], replanning = false, onClose, onSave }) {
   const [form, setForm] = useState({ sourceId: '', name: '', address: '', coords: null, locationSource: '', zone: zones[0] || '', skill: 'Подключение', skills: ['Подключение'], equipment: '', priority: 'Обычная', transport: 'Автомобиль', start: '10:00', end: '12:00', duration: '60', shiftStart: '08:00', shiftEnd: '18:00', activeFrom: date?.toLocaleDateString?.('sv-SE') || new Date().toLocaleDateString('sv-SE') });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [importedOrders, setImportedOrders] = useState([]);
+  const [importedFileName, setImportedFileName] = useState('');
+  const [draggingFile, setDraggingFile] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -92,6 +94,7 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
     try {
       const orders = await parseReplanningOrderFile(file, region);
       setImportedOrders(orders);
+      setImportedFileName(file.name);
       loadOrder(orders[0]);
     } catch (issue) { setError(issue.message || 'Не удалось прочитать файл заявки.'); }
   };
@@ -114,9 +117,9 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
       setSaving(false);
     }
   };
-  return <div className="manual-entry-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}><section className="manual-entry-modal" role="dialog" aria-modal="true" aria-label={isOrder ? 'Добавить заявку вручную' : 'Добавить инженера вручную'}>
-    <header><div><small>{isOrder ? 'РУЧНОЕ ДОБАВЛЕНИЕ' : 'ПОСТОЯННЫЙ СОСТАВ'}</small><h2>{isOrder ? 'Новая заявка' : 'Новый инженер'}</h2><p>{region?.name || 'Текущий регион'} · {isOrder ? date?.toLocaleDateString?.('ru-RU') || 'текущая смена' : `в составе с ${date?.toLocaleDateString?.('ru-RU') || 'выбранной даты'}`}</p></div><button type="button" aria-label="Закрыть" onClick={onClose}><X/></button></header>
-    <form onSubmit={submit}>{isOrder ? <div className="manual-entry-import"><label><FileUp size={17}/>Загрузить заявку из CSV, JSON, XLS или XLSX<input type="file" accept=".csv,.json,.xls,.xlsx,application/json" onChange={event => { importFile(event.target.files?.[0]); event.target.value = ''; }}/></label>{importedOrders.length > 1 ? <label>Заявка из файла<select onChange={event => loadOrder(importedOrders[Number(event.target.value)])}>{importedOrders.map((order, index) => <option value={index} key={`${order.id}-${index}`}>{order.name} · {order.sourceId}</option>)}</select></label> : null}</div> : null}<div className="manual-entry-grid">
+  return <div className="manual-entry-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}><section className={`manual-entry-modal${isOrder ? ' manual-order-modal' : ''}`} role="dialog" aria-modal="true" aria-label={isOrder ? 'Добавить заявку вручную' : 'Добавить инженера вручную'}>
+    <header><div><small>{isOrder ? 'РУЧНОЕ ДОБАВЛЕНИЕ' : replanning ? 'ДОБАВЛЕНИЕ В СМЕНУ' : 'ПОСТОЯННЫЙ СОСТАВ'}</small><h2>{isOrder ? 'Новая заявка' : 'Новый инженер'}</h2><p>{region?.name || 'Текущий регион'} · {isOrder ? date?.toLocaleDateString?.('ru-RU') || 'текущая смена' : `в составе с ${date?.toLocaleDateString?.('ru-RU') || 'выбранной даты'}`}</p></div><button type="button" aria-label="Закрыть" onClick={onClose}><X/></button></header>
+    <form onSubmit={submit}>{isOrder ? <div className="manual-entry-import"><div className={`manual-entry-dropzone${draggingFile ? ' dragging' : ''}`} onDragOver={event => { event.preventDefault(); setDraggingFile(true); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDraggingFile(false); }} onDrop={event => { event.preventDefault(); setDraggingFile(false); importFile(event.dataTransfer.files?.[0]); }}><span className="manual-entry-upload-icon"><FileUp size={25}/></span><div><strong>{importedFileName || 'Загрузить заявку из файла'}</strong><span>Перетащите файл сюда или выберите на компьютере</span><small>CSV · JSON · XLS · XLSX</small></div><label className="manual-entry-file-button">Выбрать файл<input type="file" accept=".csv,.json,.xls,.xlsx,application/json" onChange={event => { importFile(event.target.files?.[0]); event.target.value = ''; }}/></label></div>{importedOrders.length > 1 ? <label>Заявка из файла<select onChange={event => loadOrder(importedOrders[Number(event.target.value)])}>{importedOrders.map((order, index) => <option value={index} key={`${order.id}-${index}`}>{order.name} · {order.sourceId}</option>)}</select></label> : null}</div> : null}<div className="manual-entry-grid">
       <label>ID {isOrder ? 'заявки' : 'инженера'}<input value={form.sourceId} onChange={event => update('sourceId', event.target.value)} placeholder={isOrder ? 'CRM-12345' : 'ENG-123'} required/></label>
       <label>{isOrder ? 'Название заявки' : 'Имя / название бригады'}<input value={form.name} onChange={event => update('name', event.target.value)} placeholder={isOrder ? 'Подключение абонента' : 'Бригада Иванов'} required/></label>
       <label>Зона{zones.length ? <BusinessSelect ariaLabel="Зона" value={form.zone} onChange={value => update('zone', value)} options={zones.map(zone => ({ value: zone, label: zone }))}/> : <input value={form.zone} onChange={event => update('zone', event.target.value)} placeholder="Название зоны" required/>}</label>
@@ -135,6 +138,6 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
         <label>В составе с<input type="date" value={form.activeFrom} onChange={event => update('activeFrom', event.target.value)} required/></label>
         <TimePicker label="Начало смены" value={form.shiftStart} onChange={value => update('shiftStart', value)}/><TimePicker label="Конец смены" value={form.shiftEnd} onChange={value => update('shiftEnd', value)}/>
       </>}
-    </div><p className="manual-entry-hint">{isOrder ? 'Укажите адрес с домом, выберите подсказку или точку на карте. Заявка станет черновиком для точного перепланирования.' : 'Точный адрес старта будет проверен автоматически. Если дом не найдётся, инженер не будет добавлен. Добавление в состав не меняет опубликованный план смены.'}</p>{error ? <p className="manual-entry-error" role="alert">{error}</p> : null}<footer><button type="button" onClick={onClose}>Отмена</button><button type="submit" className="primary" disabled={saving}><Plus/>{saving ? 'Проверяем адрес…' : `Добавить ${isOrder ? 'заявку' : 'инженера в состав'}`}</button></footer></form>
+    </div><p className="manual-entry-hint">{isOrder ? 'Укажите адрес с домом, выберите подсказку или точку на карте. Заявка станет черновиком для точного перепланирования.' : replanning ? 'Адрес старта будет проверен. После сохранения инженер войдёт в состав, а изменение плана появится как черновик. Маршрут появится только после расчёта и публикации.' : 'Точный адрес старта будет проверен автоматически. Если дом не найдётся, инженер не будет добавлен. Добавление в состав не меняет опубликованный план смены.'}</p>{error ? <p className="manual-entry-error" role="alert">{error}</p> : null}<footer><button type="button" onClick={onClose}>Отмена</button><button type="submit" className="primary" disabled={saving}><Plus/>{saving ? 'Проверяем адрес…' : isOrder ? 'Добавить заявку' : replanning ? 'Подготовить инженера для плана' : 'Добавить инженера в состав'}</button></footer></form>
   </section></div>;
 }

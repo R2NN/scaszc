@@ -262,6 +262,7 @@ export function ShiftWorkspace({
   const [recalculateScope, setRecalculateScope] = useState('before');
   const [reason, setReason] = useState(standaloneReplanning ? 'Повторный расчёт плана до начала смены' : '');
   const [preview, setPreview] = useState(null);
+  const [publishedNotice, setPublishedNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [restoreTargetId, setRestoreTargetId] = useState("");
@@ -622,8 +623,9 @@ export function ShiftWorkspace({
         });
       }
       setPreview(null);
+      setPublishedNotice('');
       onClearPending?.();
-      setEventType(EVENT_TYPES.ENGINEER_UNAVAILABLE);
+      setEventType(standaloneReplanning ? EVENT_TYPES.RECALCULATE : EVENT_TYPES.ENGINEER_UNAVAILABLE);
       setTargetId('');
       setEventEngineerId('');
       setEventStart('');
@@ -652,6 +654,7 @@ export function ShiftWorkspace({
     }
     setBusy(true);
     setError("");
+    setPublishedNotice('');
     setPreview(null);
     try {
       const task = await post(`/api/shifts/${shift.id}/preview`, {
@@ -677,6 +680,13 @@ export function ShiftWorkspace({
       });
       onApply(result);
       setPreview(null);
+      if (standaloneReplanning) {
+        const affectedOrderId = String(publishedEvent?.order?.id || '');
+        const assigned = affectedOrderId && result.plan?.routes?.some(route => route.assignments?.some(assignment => String(assignment.orderId) === affectedOrderId));
+        setPublishedNotice(affectedOrderId
+          ? assigned ? 'Новая версия плана опубликована. Заявка получила маршрут; проверьте его на карте.' : 'Новая версия опубликована, но заявка осталась в очереди. Проверьте окно клиента или добавьте бригаду и снова пересчитайте план.'
+          : 'Новая версия плана опубликована. Изменения сохранены в истории версий.');
+      }
       setReason("");
       setTargetId("");
       onClearPending?.();
@@ -690,7 +700,7 @@ export function ShiftWorkspace({
         setCrewTransportFilter('all');
         setCrewStatusFilter('all');
         shiftClock.set({ selectedEngineerId: String(addedEngineerId), follow: false, focusToken: Date.now() });
-        setTab('crews');
+        if (!standaloneReplanning) setTab('crews');
       } else if (publishedEvent?.type === EVENT_TYPES.NEW_ORDER) {
         setOrderQuery('');
         const addedOrderId = String(publishedEvent.order?.id || '');
@@ -703,12 +713,41 @@ export function ShiftWorkspace({
         setOrderEquipmentFilter([]);
         const addedOrder = result.orders?.find(order => String(order.id) === addedOrderId);
         if (addedOrder) onSelectOrder?.(addedOrder);
-        setTab('orders');
+        if (!standaloneReplanning) setTab('orders');
       } else {
-        setTab('events');
+        if (!standaloneReplanning) setTab('events');
       }
     } catch (issue) {
       setError(issue.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const retrySuggestedWindow = async (suggestion) => {
+    if (busy || !preview?.id || preview.event?.type !== EVENT_TYPES.NEW_ORDER) return;
+    setBusy(true);
+    setError('');
+    try {
+      await json(`/api/shifts/${shift.id}/preview`, {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ previewId: preview.id, expectedRevision: shift.revision }),
+      });
+      const revisedEvent = {
+        ...preview.event,
+        order: { ...preview.event.order, start: suggestion.start, end: suggestion.end, status: 'Ожидается' },
+        reason: `Согласовано новое окно ${suggestion.start}–${suggestion.end}: ${preview.event.reason}`,
+      };
+      const task = await post(`/api/shifts/${shift.id}/preview`, {
+        expectedRevision: shift.revision,
+        event: revisedEvent,
+      });
+      onClearPending?.();
+      setPreview(task);
+    } catch (issue) {
+      setPreview(null);
+      setError(issue.message || 'Не удалось проверить новое окно.');
     } finally {
       setBusy(false);
     }
@@ -835,25 +874,26 @@ export function ShiftWorkspace({
     }
   };
   return (
-    <div className={`shift-layer${reportOnly ? ' report-layer' : ''}${assistantOnly ? ' assistant-layer' : ''} ${motionClass}`}>
-      <aside className={`shift-panel${!reportOnly && (tab === 'crews' || tab === 'orders') ? ' shift-list-panel' : ''}`}>
+    <div className={`shift-layer${reportOnly ? ' report-layer' : ''}${assistantOnly ? ' assistant-layer' : ''}${standaloneReplanning ? ' replanning-layer' : ''} ${motionClass}`}>
+      <aside className={`shift-panel${!reportOnly && (tab === 'crews' || tab === 'orders') ? ' shift-list-panel' : ''}${standaloneReplanning ? ' replanning-panel' : ''}`}>
         <header>
-          {!assistantOnly ? <small>{reportOnly ? 'ИТОГИ СМЕНЫ' : 'ОПЕРАТИВНОЕ УПРАВЛЕНИЕ'}</small> : null}
+          {!assistantOnly ? <small>{reportOnly ? 'ИТОГИ СМЕНЫ' : standaloneReplanning ? 'УПРАВЛЕНИЕ ПЛАНОМ' : 'ОПЕРАТИВНОЕ УПРАВЛЕНИЕ'}</small> : null}
           <h2>{assistantOnly ? 'AI‑помощник' : reportOnly ? 'Отчёт PDF' : standaloneReplanning ? 'Перепланирование' : 'Ход смены'}</h2>
           <span>
             {displayDate(shift?.date || selectedDate)}
           </span>
+          {standaloneReplanning ? <p>Измените состав или заявки, рассчитайте черновик и сравните маршруты перед публикацией.</p> : null}
           {assistantOnly ? <button type="button" className="assistant-close" onClick={onClose} aria-label="Закрыть AI‑помощника"><X size={20}/></button> : null}
         </header>
-        {!reportOnly ? <nav ref={shiftTabsRef} className="shift-tabs" aria-label="Разделы смены">
+        {!reportOnly ? <nav ref={shiftTabsRef} className={`shift-tabs${standaloneReplanning ? ' replanning-tabs' : ''}`} aria-label={standaloneReplanning ? 'Разделы перепланирования' : 'Разделы смены'}>
           {tabIndicator ? <span className="shift-tab-indicator" aria-hidden="true" style={{ width: tabIndicator.width, height: tabIndicator.height, transform: `translate3d(${tabIndicator.x}px, ${tabIndicator.y}px, 0)` }} /> : null}
-          {[
+          {(standaloneReplanning ? [['event', 'Изменить план'], ['events', 'История версий']] : [
             ["crews", "Бригады"],
             ["orders", "Заявки"],
             ["event", "Изменить план"],
             ["fact", "Факт визита"],
             ["events", "Журнал"],
-          ].map(([id, label]) => (
+          ]).map(([id, label]) => (
             <button
               type="button"
               key={id}
@@ -868,6 +908,8 @@ export function ShiftWorkspace({
           ))}
         </nav> : null}
         <div className="shift-panel-body">
+          {standaloneReplanning && shift?.plan ? <section className="replanning-overview" aria-label="Текущий план"><div><small>ОПУБЛИКОВАННЫЙ ПЛАН</small><strong>Версия {shift.versions?.at(-1)?.version || 1}</strong></div><div><b>{current.assigned}</b><span>назначено</span></div><div><b>{current.unassigned}</b><span>в очереди</span></div><div><b>{shift.team?.length || 0}</b><span>бригад</span></div></section> : null}
+          {standaloneReplanning && publishedNotice ? <div className="replanning-published" role="status"><Check size={19}/><span>{publishedNotice}</span><button type="button" onClick={() => setTab('events')}>История</button></div> : null}
           {shift?.plan &&
           tab === "event" &&
           !pendingEvent &&
@@ -1029,6 +1071,7 @@ export function ShiftWorkspace({
           ) : null}
           {shift?.plan && tab === "event" ? (
             <div className="shift-form">
+              {standaloneReplanning && !pendingEvent && !preview ? <section className="replanning-intake"><div><small>ИЗМЕНЕНИЯ СОСТАВА И ЗАЯВОК</small><h3>Что изменилось в смене?</h3><p>Добавление откроет форму. После сохранения запись станет черновиком и попадёт в расчёт только после публикации.</p></div><div className="replanning-intake-actions"><button type="button" onClick={() => onOpenManualAdd?.('orders')}><Plus size={18}/>Новая заявка <small>Вручную или из файла</small></button><button type="button" onClick={() => onOpenManualAdd?.('engineers')}><Plus size={18}/>Новый инженер <small>В состав и в план смены</small></button><button type="button" onClick={onOpenIncludeCrew}><Plus size={18}/>Из состава <small>Включить действующую бригаду</small></button></div></section> : null}
               {preview ? <div className="shift-pending shift-saved-draft"><b>Непубликованный черновик</b><span>Этот расчёт сохранён на сервере, поэтому появляется после обновления страницы. Действующий план и списки не изменились. Чтобы изменить исходные данные, сначала отмените черновик.</span><button type="button" onClick={discardDraft} disabled={busy}><X size={15}/>Отменить черновик</button></div> : null}
               <label>
                 Сценарий
@@ -1040,16 +1083,22 @@ export function ShiftWorkspace({
                     setEventType(value);
                     setTargetId("");
                     setEventEngineerId('');
+                    setError('');
+                    setPublishedNotice('');
                     if (value === EVENT_TYPES.RECALCULATE) {
                       setRecalculateScope(beforeReplanningAvailable ? 'before' : 'during');
                       setTime(beforeReplanningAvailable ? '07:00' : timeOf(Math.max(420, lastPublicationMinute, Math.floor(clock.minute))));
+                      setReason(beforeReplanningAvailable ? 'Повторный расчёт плана до начала смены' : 'Перестроение оставшейся части дня');
+                    } else {
+                      setTime(timeOf(Math.max(420, lastPublicationMinute, Math.floor(clock.minute))));
+                      setReason('');
                     }
                     setPreview(null);
                   }}
                   options={eventOptions.map(type=>({value:type,label:EVENT_LABELS[type]}))}
                 />
               </label>
-              {!preview && !pendingEvent ? <button type="button" className="shift-add-replanning-order" onClick={() => onOpenManualAdd?.('orders')}><Plus size={16}/>Новая заявка: вручную или из файла</button> : null}
+              {!standaloneReplanning && !preview && !pendingEvent ? <button type="button" className="shift-add-replanning-order" onClick={() => onOpenManualAdd?.('orders')}><Plus size={16}/>Новая заявка: вручную или из файла</button> : null}
               {!pendingEvent && eventType === EVENT_TYPES.RECALCULATE ? <div className="shift-recalculate-mode" role="group" aria-label="Когда перестроить план">
                 <b>Когда перестроить план</b>
                 <button type="button" className={recalculateScope === 'before' ? 'selected' : ''} disabled={Boolean(preview) || !beforeReplanningAvailable} onClick={() => { setRecalculateScope('before'); setTime('07:00'); setReason(current => !current || current === 'Перестроение оставшейся части дня' ? 'Повторный расчёт плана до начала смены' : current); setPreview(null); }}>До начала смены <small>Все заявки и маршруты доступны для расчёта</small></button>
@@ -1067,8 +1116,8 @@ export function ShiftWorkspace({
                       ? `Бригада уже есть в постоянном составе, но ещё не включена в опубликованный план этой смены. ${preview ? 'Опубликуйте проверенный расчёт или отмените черновик.' : 'Рассчитайте черновик и опубликуйте проверенные изменения.'}`
                       : `Заявка ещё не добавлена в общий список. ${preview ? 'Опубликуйте проверенный расчёт или отмените черновик.' : 'Рассчитайте черновик и опубликуйте проверенные изменения.'}`}
                   </span>
-                  {(pendingEvent || restoredManualAddition).type === EVENT_TYPES.CAPACITY_ADDED ? <span>Бригада уже есть в постоянном составе. Время публикации плана и служебная причина заполняются автоматически.</span> : null}
-                  {(pendingEvent || restoredManualAddition).type === EVENT_TYPES.NEW_ORDER ? <span>Заявке не нужны время оперативного события и причина. Новая версия плана будет рассчитана с учётом уже опубликованных изменений смены.</span> : null}
+                  {(pendingEvent || restoredManualAddition).type === EVENT_TYPES.CAPACITY_ADDED ? <span>Бригада уже есть в постоянном составе. Новая версия плана будет рассчитана с её участием.</span> : null}
+                  {(pendingEvent || restoredManualAddition).type === EVENT_TYPES.NEW_ORDER ? <span>Адрес или точка подтверждены. Расчёт отдельно проверит, успевает ли бригада в окно клиента.</span> : null}
                   {(pendingEvent || restoredManualAddition).type === EVENT_TYPES.NEW_ORDER && (minuteOf((pendingEvent || restoredManualAddition).order?.end) ?? 1440) <= (minuteOf(shift.versions?.at(-1)?.effectiveAt) ?? 0) ? <span>Окно этой заявки завершилось до последней версии плана. Заявка сохранится в смене, но не сможет получить маршрут в прошлом времени.</span> : null}
                   {!preview ? <button type="button" onClick={discardDraft} disabled={busy}><X size={15}/>Отменить черновик</button> : null}
                 </div>
@@ -1078,30 +1127,27 @@ export function ShiftWorkspace({
                   EVENT_TYPES.ENGINEER_REPLACED,
                 ].includes(eventType) ? (
                 <div className="shift-pending">
-                  Для добавления используйте кнопку «+» в «Заявках» или
-                  «Инженерах»; данные попадут сюда как черновик. Для замены
-                  сначала отметьте исходную бригаду недоступной, затем добавьте
-                  новую.
+                  Добавьте запись через блок выше. Она станет черновиком изменения плана. Для замены сначала выберите исходную бригаду, затем создайте новую.
                 </div>
               ) : eventType !== EVENT_TYPES.RECALCULATE ? (
                 <label>
                   {eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE
                     ? "Бригада"
                     : "Заявка"}
-                  <BusinessSelect ariaLabel={eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?'Бригада':'Заявка'} value={targetId} disabled={Boolean(preview)} onChange={value=>{setTargetId(value);setPreview(null)}} searchable options={[{value:'',label:'Выберите…'},...(eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?shift.team:eventOrders).map(item=>({value:String(item.id),label:item.name||item.sourceId||String(item.id)}))]}/>
+                  <BusinessSelect ariaLabel={eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?'Бригада':'Заявка'} value={targetId} disabled={Boolean(preview)} onChange={value=>{setTargetId(value);setPreview(null);setError('')}} searchable options={[{value:'',label:'Выберите…'},...(eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?shift.team:eventOrders).map(item=>({value:String(item.id),label:item.name||item.sourceId||String(item.id)}))]}/>
                 </label>
               ) : null}
               {!pendingEvent && eventType === EVENT_TYPES.MANUAL_ASSIGN ? <label>Новая бригада<BusinessSelect ariaLabel="Новая бригада для заявки" value={eventEngineerId} disabled={Boolean(preview)} onChange={value=>{setEventEngineerId(value);setPreview(null)}} searchable options={[{value:'',label:'Выберите бригаду…'},...shift.team.map(item=>({value:String(item.id),label:item.name||String(item.id)}))]}/></label> : null}
               {!pendingEvent && eventType === EVENT_TYPES.CLIENT_WINDOW_SHIFT ? <div className="shift-window-edit"><TimePicker label="Начало нового окна" value={eventStart} disabled={Boolean(preview)} onChange={value=>{setEventStart(value);setPreview(null)}}/><TimePicker label="Конец нового окна" value={eventEnd} disabled={Boolean(preview)} onChange={value=>{setEventEnd(value);setPreview(null)}}/><small>После проверки время визита может отличаться от начала окна: учитываются дорога, занятость и ограничения.</small></div> : null}
               {!pendingEvent && eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE && !preview ? <div className="shift-absence-presets" role="group" aria-label="Причина отсутствия">{['Больничный', 'Отпуск', 'Не вышел на смену'].map(label=><button key={label} type="button" onClick={()=>setReason(label)}>{label}</button>)}</div> : null}
-              {![EVENT_TYPES.CAPACITY_ADDED, EVENT_TYPES.NEW_ORDER].includes((pendingEvent || restoredManualAddition)?.type || eventType) && (eventType !== EVENT_TYPES.RECALCULATE || recalculateScope === 'during') ? <TimePicker label={eventType === EVENT_TYPES.RECALCULATE ? 'Перестроить с' : 'Время события'} value={time} disabled={Boolean(preview)} onChange={value=>{setTime(value);setPreview(null)}}/> : null}
+              {![EVENT_TYPES.CAPACITY_ADDED, EVENT_TYPES.NEW_ORDER].includes((pendingEvent || restoredManualAddition)?.type || eventType) && (eventType !== EVENT_TYPES.RECALCULATE || recalculateScope === 'during') ? <div className="replanning-effective-time"><TimePicker label={eventType === EVENT_TYPES.RECALCULATE ? 'Перестроить с' : [EVENT_TYPES.ORDER_CANCELLED, EVENT_TYPES.VISIT_CANCELLED].includes(eventType) ? 'Отменить с' : eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE ? 'Недоступна с' : 'Применить изменение с'} value={time} disabled={Boolean(preview)} onChange={value=>{setTime(value);setPreview(null);setError('')}}/>{standaloneReplanning ? <small>План до этого момента сохранится. Алгоритм изменит только оставшуюся часть дня.</small> : null}</div> : null}
               {![EVENT_TYPES.CAPACITY_ADDED, EVENT_TYPES.NEW_ORDER].includes((pendingEvent || restoredManualAddition)?.type || eventType) ? <label>
                 Причина
                 <textarea
                   value={reason}
                   disabled={Boolean(preview)}
-                  onChange={(event) => { setReason(event.target.value); setPreview(null); }}
-                  placeholder="Почему нужен пересчёт"
+                  onChange={(event) => { setReason(event.target.value); setPreview(null); setError(''); }}
+                  placeholder={eventType === EVENT_TYPES.ORDER_CANCELLED ? 'Например: клиент отменил заявку' : 'Почему нужно изменить план'}
                 />
               </label> : null}
               <button
@@ -1174,6 +1220,7 @@ export function ShiftWorkspace({
                         .join("; ")}
                     </p>
                   ) : null}
+                  {preview.event?.type === EVENT_TYPES.NEW_ORDER ? preview.result?.plan?.unassigned?.filter(item => String(item.orderId) === String(preview.event.order?.id)).map(item => <div className="replanning-unassigned" key={item.orderId}><b>Точка найдена, заявка пока без назначения</b><p>В клиентское окно {preview.event.order.start}–{preview.event.order.end} проверенный план не вместил визит. {item.fullRebuildStatus === 'NOT_COMPLETED' ? 'Полный пересчёт не завершился; текущий черновик основан на проверенной перестройке отдельных маршрутов.' : 'Полная перестройка не дала допустимого плана, который добавляет заявку и сохраняет уже начатые работы.'}</p>{item.suggestedWindow ? <div className="replanning-suggestion"><strong>Проверенное альтернативное время</strong><span>Окно {item.suggestedWindow.start}–{item.suggestedWindow.end} · визит около {item.suggestedWindow.plannedStart} · {item.suggestedWindow.engineerName || 'подходящая бригада'}</span><small>Согласуйте новое окно с клиентом. После выбора система создаст новый черновик и ещё раз проверит маршруты до публикации.</small><button type="button" onClick={() => retrySuggestedWindow(item.suggestedWindow)} disabled={busy}>Согласовано — проверить новый план</button></div> : <p>Проверенное альтернативное окно в этой попытке не найдено. Можно изменить доступность бригад или согласовать другой день. При публикации текущего черновика заявка останется в очереди.</p>}</div>) : null}
                   <button
                     type="button"
                     className="shift-primary"
@@ -1307,7 +1354,7 @@ export function ShiftWorkspace({
           ) : null}
         </div>
       </aside>
-      {!reportOnly ? <ShiftPlaybackBar shift={shift} selectedOrderId={selectedOrderId} onSelectOrder={order=>{if(order)onSelectOrder?.(order)}} onEditOrder={orderId=>editOrder(orderId, EVENT_TYPES.CLIENT_WINDOW_SHIFT)}/> : null}
+      {!reportOnly && !standaloneReplanning ? <ShiftPlaybackBar shift={shift} selectedOrderId={selectedOrderId} onSelectOrder={order=>{if(order)onSelectOrder?.(order)}} onEditOrder={orderId=>editOrder(orderId, EVENT_TYPES.CLIENT_WINDOW_SHIFT)}/> : null}
     </div>
   );
 }

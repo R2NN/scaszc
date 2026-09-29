@@ -152,6 +152,24 @@ class ReplanningTests(unittest.TestCase):
             sum(option.selected for option in result.candidate_evaluations['U']), 1
         )
 
+    def test_new_normal_job_rebuilds_two_routes_without_losing_existing_jobs(self) -> None:
+        self.engineers['E1'] = replace(
+            self.engineers['E1'], max_jobs=2, skills=frozenset({'INSTALL', 'SPECIAL'})
+        )
+        self.jobs['U'] = replace(
+            self.job('U', 'Z1', self.at(10)),
+            required_skill='SPECIAL', window_start=self.at(10), window_end=self.at(10, 30),
+        )
+        event = self.event(1, EventType.NEW_JOB, 'U', self.at(10))
+        dataset = self.make_dataset((event,))
+        result = replan_after_event(dataset, ReplanningState(self.source), event, _Oracle())
+        self.assertEqual(result.status, ReplanningStatus.EXACT_VALID)
+        routes = {route.engineer_id: route for route in result.state.plan.engineer_plans}
+        self.assertEqual([visit.job_id for visit in routes['E1'].visits], ['A', 'U'])
+        self.assertEqual([visit.job_id for visit in routes['E2'].visits], ['B'])
+        self.assertEqual(result.state.plan.unserved_job_ids, ())
+        self.assertEqual(routes['E1'].visits[0], self.source.engineer_plans[0].visits[0])
+
     def test_every_required_mode_is_enforced_by_candidates_and_validator(self) -> None:
         modes = (
             TransportMode.CAR,

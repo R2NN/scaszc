@@ -701,10 +701,16 @@ def replan_after_event(
         # A large delay justifies looking for a faster response that displaces
         # at most one future normal job. Try to restore that job elsewhere first.
         direct_start = selected.urgent_start if selected is not None else None
-        should_try_ejection = is_urgent and (
-            selected is None
-            or direct_start - event.event_time
-            > timedelta(minutes=urgent_ejection_gain_minutes)
+        should_try_ejection = (
+            is_urgent and (
+                selected is None
+                or direct_start - event.event_time
+                > timedelta(minutes=urgent_ejection_gain_minutes)
+            )
+        ) or (
+            event.event_type == EventType.NEW_JOB
+            and job_id == event.target_id
+            and selected is None
         )
         ejection_options: list[_InsertionCandidate] = []
         if should_try_ejection and not budget_exhausted:
@@ -775,9 +781,11 @@ def replan_after_event(
                             engineer_id, old_order, candidate_order, trial, job_id,
                             displaced=displaced, restoration=restoration,
                         )
-                        if direct_start is None or restoration is not None or (
-                            direct_start - urgent_start
-                            >= timedelta(minutes=2 * urgent_ejection_gain_minutes)
+                        if (not is_urgent and restoration is not None) or (
+                            is_urgent and (direct_start is None or restoration is not None or (
+                                direct_start - urgent_start
+                                >= timedelta(minutes=2 * urgent_ejection_gain_minutes)
+                            ))
                         ):
                             ejection_options.append(option)
                         if budget_exhausted:
@@ -787,7 +795,16 @@ def replan_after_event(
                 if budget_exhausted:
                     break
         if ejection_options:
-            selected = choose_urgent(ejection_options)
+            selected = choose_urgent(ejection_options) if is_urgent else min(
+                ejection_options,
+                key=lambda item: (
+                    item.shifted_minutes,
+                    item.added_engineers,
+                    item.added_distance_m,
+                    item.engineer_id,
+                    item.order,
+                ),
+            )
         if is_urgent:
             all_options = direct_options + ejection_options
             ranked = sorted(all_options, key=lambda item: (
