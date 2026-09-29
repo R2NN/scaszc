@@ -8,13 +8,14 @@ import { useDropdownPresence } from './useDropdownPresence.js';
 import { regionForCity, resolveImportedCity } from './regions.js';
 import { pushImportHistory, redoImportHistory, undoImportHistory } from './importHistory.js';
 import { importedEquipmentRequirements, importedEquipmentTokens } from './importEquipment.js';
+import { parseWorkNorms, workDurationFor, workNormFor } from './workNorms.js';
 
 const ORDER_FIELD_GROUPS = [
   {
     id: 'identity',
     label: 'Идентификация',
     fields: [
-      ['id', 'ID заявки', true],
+      ['id', 'ID заявки', false],
       ['externalId', 'Внешний ID', false],
       ['customerId', 'ID клиента', false],
       ['objectId', 'ID объекта', false],
@@ -54,9 +55,10 @@ const ORDER_FIELD_GROUPS = [
     id: 'planning',
     label: 'Параметры заявки',
     fields: [
-      ['windowStart', 'Начало окна', true],
-      ['windowEnd', 'Конец окна', true],
-      ['duration', 'Норматив, мин', true],
+      ['windowStart', 'Начало окна', false],
+      ['windowEnd', 'Конец окна', false],
+      ['windowRange', 'Окно целиком', false],
+      ['duration', 'Длительность из файла, мин', false],
       ['workType', 'Тип работ', false],
       ['serviceType', 'Подтип / операция', false],
       ['skill', 'Требуемый навык', false],
@@ -188,7 +190,7 @@ const ENGINEER_FIELD_META = new Map(
 );
 
 const ORDER_ALIASES = {
-  id: ['job id', 'order id', 'request id', 'id', 'ид заявки', 'номер заявки', 'идентификатор'],
+  id: ['job id', 'order id', 'request id', 'ticket id', 'ticket number', 'ticket', 'request number', 'order number', 'incident id', 'crm id', 'id', 'ид заявки', 'номер заявки', '№ заявки', 'номер обращения', '№ обращения', 'номер заказа', '№ заказа', 'номер наряда', 'номер тикета', 'код заявки', 'код обращения', 'идентификатор', 'идентификатор обращения', 'номер', '№'],
   externalId: ['source job id', 'external id', 'source id', 'внешний id', 'исходный id'],
   customerId: ['customer id', 'client id', 'id клиента', 'ид клиента'],
   objectId: ['object id', 'site id', 'id объекта', 'ид объекта'],
@@ -216,8 +218,9 @@ const ORDER_ALIASES = {
   zone: ['zone', 'зона', 'участок'],
   zoneId: ['zone id', 'id зоны', 'код зоны'],
   zoneName: ['zone name', 'название зоны'],
-  windowStart: ['window start', 'time window start', 'start', 'начало окна', 'окно с'],
-  windowEnd: ['window end', 'time window end', 'end', 'конец окна', 'окно до'],
+  windowStart: ['window start', 'time window start', 'appointment start', 'visit start', 'start time', 'start', 'начало окна', 'начало интервала', 'время начала', 'время начала окна', 'окно с', 'время с', 'визит с', 'от', 'с'],
+  windowEnd: ['window end', 'time window end', 'appointment end', 'visit end', 'end time', 'end', 'конец окна', 'конец интервала', 'время окончания', 'время окончания окна', 'окно до', 'время до', 'визит до', 'до', 'по'],
+  windowRange: ['time window', 'appointment window', 'visit window', 'окно заявки', 'окно обслуживания', 'интервал', 'время визита'],
   duration: ['service duration min', 'duration', 'длительность', 'норматив', 'норматив мин'],
   workType: ['bk type', 'work type', 'тип работ', 'тип заявки'],
   serviceType: ['hd type', 'service type', 'подтип работ', 'операция'],
@@ -297,7 +300,7 @@ const FIELD_VALUE_TYPES = {
   street: ['text'], house: ['text', 'number'], building: ['text', 'number'], apartment: ['text', 'number'],
   postalCode: ['text', 'number'], entrance: ['text', 'number'], floor: ['text', 'number'], latitude: ['number'], longitude: ['number'],
   coordinateAccuracy: ['text', 'number'], geocodeProvider: ['text'], geocodeObjectId: ['text', 'number'],
-  zone: ['text'], zoneId: ['text', 'number'], zoneName: ['text'], windowStart: ['time', 'date'], windowEnd: ['time', 'date'],
+  zone: ['text'], zoneId: ['text', 'number'], zoneName: ['text'], windowStart: ['time', 'date'], windowEnd: ['time', 'date'], windowRange: ['text', 'time'],
   duration: ['number'], workType: ['text'], serviceType: ['text'], skill: ['text', 'list'], priority: ['text', 'number'], status: ['text'],
   category: ['text'], subcategory: ['text'], source: ['text'], channel: ['text'], slaMinutes: ['number'], requiredEngineers: ['number'],
   preferredEngineerId: ['text', 'number'], teamId: ['text', 'number'], connectionType: ['text'], isEventJob: ['boolean', 'number', 'text'],
@@ -334,16 +337,23 @@ const normalize = value => String(value ?? '')
   .replace(/[_./\\-]+/g, ' ')
   .replace(/\s+/g, ' ');
 
-const autoMapHeaders = (headers, entityType = 'orders') => {
+const countNoun = (count, one, few, many) => {
+  const remainder = count % 10;
+  return count % 100 >= 11 && count % 100 <= 14 ? many : remainder === 1 ? one : remainder >= 2 && remainder <= 4 ? few : many;
+};
+const countLabel = (count, one, few, many) => `${count} ${countNoun(count, one, few, many)}`;
+
+export const autoMapHeaders = (headers, entityType = 'orders') => {
   const aliasesByField = FIELD_CONFIG[entityType]?.aliases || ORDER_ALIASES;
   const used = new Set();
+  const exactOnly = new Set(['номер', 'ticket']);
   return Object.fromEntries(headers.map((header, index) => {
     const normalized = normalize(header);
     const matches = Object.entries(aliasesByField).filter(([field]) => !used.has(field)).map(([field, aliases]) => {
       const normalizedAliases = aliases.map(normalize);
       const exact = normalizedAliases.includes(normalized);
       const fuzzyLength = normalizedAliases.reduce((best, alias) => {
-        if (alias.length < 4 || normalized.length < 4) return best;
+        if (alias.length < 4 || normalized.length < 4 || exactOnly.has(alias)) return best;
         return normalized.includes(alias) || alias.includes(normalized) ? Math.max(best, Math.min(alias.length, normalized.length)) : best;
       }, 0);
       return { field, score: exact ? 1000 : fuzzyLength };
@@ -364,11 +374,22 @@ const asNumber = value => {
 
 const asTime = value => {
   const text = String(value ?? '').trim();
+  const excelFraction = Number(text.replace(',', '.'));
+  if (/^0[.,]\d+$/.test(text) && excelFraction >= 0 && excelFraction < 1) {
+    const minutes = Math.round(excelFraction * 24 * 60);
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  }
   const iso = text.match(/T(\d{2}:\d{2})/);
-  const simple = text.match(/^(\d{1,2}):(\d{2})/);
+  const simple = text.match(/^(\d{1,2})[:.](\d{2})/);
   if (iso) return iso[1];
   if (simple) return `${simple[1].padStart(2, '0')}:${simple[2]}`;
   return '';
+};
+
+const windowFromRange = value => {
+  const times = [...String(value ?? '').matchAll(/(?:^|\D)([01]?\d|2[0-3])[:.]([0-5]\d)(?=\D|$)/g)]
+    .map(match => `${match[1].padStart(2, '0')}:${match[2]}`);
+  return times.length === 2 ? times : ['', ''];
 };
 
 export function inferImportColumnProfile(values = [], header = '') {
@@ -493,6 +514,26 @@ const detectSuggestedRegion = (headers, rows) => {
   return /москва|moscow/.test(locationSample) ? 'moscow' : '';
 };
 
+let workNormsPromise;
+const configuredWorkNorms = () => {
+  if (!workNormsPromise) workNormsPromise = (async () => {
+    let response;
+    try { response = await fetch('/data/work-norms.xlsx'); }
+    catch { throw new Error('Не удалось загрузить системный файл нормативов работ.'); }
+    if (!response.ok) throw new Error('Не удалось открыть системный файл нормативов работ.');
+    const module = await import('xlsx');
+    const XLSX = module.default || module;
+    const workbook = XLSX.read(await response.arrayBuffer(), { type: 'array' });
+    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!firstSheet) throw new Error('Системный файл нормативов пуст.');
+    return parseWorkNorms(XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '', raw: true }));
+  })().catch(error => {
+    workNormsPromise = null;
+    throw error;
+  });
+  return workNormsPromise;
+};
+
 export async function parseImportFile(file, preferredEntityType = 'orders') {
   if (!file) throw new Error('Файл не выбран');
   if (file.size > 20 * 1024 * 1024) throw new Error('Файл больше 20 МБ. Разделите его на несколько файлов.');
@@ -543,6 +584,66 @@ export async function parseImportFile(file, preferredEntityType = 'orders') {
     fileName: file.name,
     suggestedRegionId: detectSuggestedRegion(locationDataset.headers, locationDataset.rows),
     sourceFormat: extension,
+    workNorms: datasets.orders ? await configuredWorkNorms() : null,
+  };
+}
+
+/** Combine district files into one review while retaining a source-file column. */
+export async function parseImportFiles(inputFiles, preferredEntityType = 'orders') {
+  const files = inputFiles?.arrayBuffer ? [inputFiles] : Array.from(inputFiles || []);
+  if (!files.length) throw new Error('Файлы не выбраны.');
+  if (files.length === 1) return parseImportFile(files[0], preferredEntityType);
+  const sessions = [];
+  for (const file of files) {
+    try { sessions.push(await parseImportFile(file, preferredEntityType)); }
+    catch (error) { throw new Error(`${file.name}: ${error?.message || 'не удалось прочитать файл'}`); }
+  }
+  const datasets = {};
+  for (const entityType of ['orders', 'engineers']) {
+    const sources = sessions.filter(session => session.datasets[entityType]).map(session => ({
+      fileName: session.fileName,
+      dataset: session.datasets[entityType],
+    }));
+    if (!sources.length) continue;
+    const columns = new Map();
+    const mappedSources = sources.map(source => ({ ...source, mapping: autoMapHeaders(source.dataset.headers, entityType) }));
+    mappedSources.forEach(({ dataset, mapping }) => dataset.headers.forEach((header, index) => {
+      const field = mapping[index];
+      const key = field.startsWith('custom:') ? `custom:${normalize(header)}` : field;
+      if (!columns.has(key)) columns.set(key, {
+        header: field.startsWith('custom:') ? header : FIELD_CONFIG[entityType].meta.get(field)?.label || header,
+        field,
+      });
+    }));
+    columns.set('__sourceFile', { header: 'Файл импорта', field: 'custom:Файл импорта' });
+    const keys = [...columns.keys()];
+    datasets[entityType] = {
+      entityType,
+      headers: keys.map(key => columns.get(key).header),
+      rows: mappedSources.flatMap(({ dataset, mapping, fileName }) => dataset.rows.map(row => {
+        const values = new Map(dataset.headers.map((header, index) => {
+          const field = mapping[index];
+          return [field.startsWith('custom:') ? `custom:${normalize(header)}` : field, row[index]];
+        }));
+        values.set('__sourceFile', fileName);
+        return keys.map(key => values.get(key) ?? '');
+      })),
+      savedMappings: Object.fromEntries(keys.map((key, index) => [index, columns.get(key).field])),
+      sheetName: 'Объединённые данные',
+      fileName: countLabel(files.length, 'файл', 'файла', 'файлов'),
+      sourceFormat: 'mixed',
+    };
+  }
+  const primary = datasets[preferredEntityType] || Object.values(datasets)[0];
+  return {
+    ...primary,
+    entityType: primary.entityType,
+    datasets,
+    fileName: countLabel(files.length, 'файл', 'файла', 'файлов'),
+    sourceFiles: sessions,
+    suggestedRegionId: sessions.find(session => session.suggestedRegionId)?.suggestedRegionId || '',
+    workNorms: sessions.find(session => session.workNorms)?.workNorms || null,
+    sourceFormat: 'mixed',
   };
 }
 
@@ -554,16 +655,19 @@ export async function parseReplanningOrderFile(file, region) {
   const mappings = autoMapHeaders(dataset.headers, 'orders');
   const mapped = new Set(Object.values(mappings));
   if (!mapped.has('id') && !mapped.has('externalId')) throw new Error('Для новой заявки нужен ID.');
-  for (const required of ['windowStart', 'windowEnd', 'duration']) {
-    if (!mapped.has(required)) throw new Error('Для новой заявки нужны ID, начало и конец окна, длительность работы.');
+  if (!(mapped.has('windowStart') && mapped.has('windowEnd')) && !mapped.has('windowRange')) {
+    throw new Error('Для новой заявки нужны начало и конец окна или столбец с полным интервалом.');
   }
-  return buildOrders(dataset.headers, dataset.rows, mappings, region);
+  if (validateRows(dataset.rows, mappings, 'orders', session.workNorms).size) {
+    throw new Error('Проверьте ID, время окна и вид работ. Для неизвестного вида работ укажите длительность.');
+  }
+  return buildOrders(dataset.headers, dataset.rows, mappings, region, session.workNorms);
 }
 
 const ORDER_CORE_FIELDS = new Set([
   'id', 'externalId', 'name', 'scenario', 'address', 'locationId', 'city', 'region', 'district', 'street', 'house', 'building',
   'apartment', 'postalCode', 'entrance', 'floor', 'latitude', 'longitude', 'coordinateAccuracy', 'geocodeProvider', 'geocodeObjectId',
-  'zone', 'zoneId', 'zoneName', 'windowStart', 'windowEnd', 'duration', 'workType', 'serviceType', 'skill', 'priority', 'status',
+  'zone', 'zoneId', 'zoneName', 'windowStart', 'windowEnd', 'windowRange', 'duration', 'workType', 'serviceType', 'skill', 'priority', 'status',
   'connectionType', 'isEventJob', 'transport', 'equipment', 'gigabitRequired', 'phone', 'email', 'createdAt', 'serviceDate',
   'geocodeStatus', 'notes', 'ignore',
 ]);
@@ -583,7 +687,7 @@ const supplementaryFields = (row, mappings, entityType, coreFields) => {
   }));
 };
 
-export function buildOrders(headers, rows, mappings, region) {
+export function buildOrders(headers, rows, mappings, region, workNorms = null) {
   const columnFor = fieldId => Number(Object.keys(mappings).find(key => mappings[key] === fieldId));
   const valueFor = (row, fieldId) => {
     const column = columnFor(fieldId);
@@ -595,6 +699,9 @@ export function buildOrders(headers, rows, mappings, region) {
     const serviceType = valueFor(row, 'serviceType');
     const serviceLabel = translateServiceLabel(serviceType);
     const skill = valueFor(row, 'skill');
+    const name = valueFor(row, 'name');
+    const [rangeStart, rangeEnd] = windowFromRange(valueFor(row, 'windowRange'));
+    const duration = workDurationFor({ workType, serviceType, skill, name }, workNorms, valueFor(row, 'duration'));
     const informational = isInformationalOrder({ serviceType, workType, name: valueFor(row, 'name') });
     const lat = asNumber(valueFor(row, 'latitude'));
     const lon = asNumber(valueFor(row, 'longitude'));
@@ -611,7 +718,7 @@ export function buildOrders(headers, rows, mappings, region) {
     return {
       id: `${rowRegion.id}:${sourceId}`,
       sourceId,
-      name: valueFor(row, 'name') || `${serviceLabel || workType || 'Заявка'} ${sourceId}`,
+      name: name || `${serviceLabel || workType || 'Заявка'} ${sourceId}`,
       address,
       city: rowRegion.name,
       regionName: rowRegion.name,
@@ -621,9 +728,10 @@ export function buildOrders(headers, rows, mappings, region) {
       floor: valueFor(row, 'floor'),
       phone: valueFor(row, 'phone'),
       email: valueFor(row, 'email'),
-      start: asTime(valueFor(row, 'windowStart')),
-      end: asTime(valueFor(row, 'windowEnd')),
-      duration: asNumber(valueFor(row, 'duration')) || 60,
+      start: asTime(valueFor(row, 'windowStart')) || rangeStart,
+      end: asTime(valueFor(row, 'windowEnd')) || rangeEnd,
+      duration,
+      durationSource: workNormFor({ workType, serviceType, skill, name }, workNorms) ? 'Нормативы.xlsx' : 'Файл заявки',
       priority: informational ? 'Обычная' : translatePriority(valueFor(row, 'priority')),
       workType,
       skill: informational && /emerg|авар/i.test(skill) ? '' : translateSkill(skill, workType || serviceType),
@@ -720,7 +828,7 @@ export function buildEngineers(headers, rows, mappings, region) {
   });
 }
 
-function requirementState(mappings, entityType = 'orders') {
+function requirementState(mappings, entityType = 'orders', workNorms = null) {
   const values = Object.values(mappings);
   if (entityType === 'engineers') return [
     { label: 'ID инженера', ok: values.includes('engineerId') },
@@ -732,13 +840,13 @@ function requirementState(mappings, entityType = 'orders') {
   return [
     { label: 'ID заявки', ok: values.includes('id') || values.includes('externalId') },
     { label: 'Адрес или координаты', ok: values.includes('address') || (values.includes('latitude') && values.includes('longitude')) },
-    { label: 'Окно обслуживания', ok: values.includes('windowStart') && values.includes('windowEnd') },
-    { label: 'Норматив работ', ok: values.includes('duration') },
-    { label: 'Тип работ или навык', ok: values.includes('workType') || values.includes('skill') },
+    { label: 'Окно обслуживания', ok: (values.includes('windowStart') && values.includes('windowEnd')) || values.includes('windowRange') },
+    { label: workNorms ? 'Норматив из системного файла' : 'Норматив работ', ok: Boolean(workNorms) || values.includes('duration') },
+    { label: 'Тип работ или навык', ok: ['workType', 'serviceType', 'skill', 'name'].some(field => values.includes(field)) },
   ];
 }
 
-function validateRows(rows, mappings, entityType = 'orders') {
+export function validateRows(rows, mappings, entityType = 'orders', workNorms = null) {
   const invalid = new Set();
   const mappedColumn = field => Number(Object.keys(mappings).find(key => mappings[key] === field));
   const markBlank = (row, rowIndex, field) => {
@@ -766,21 +874,56 @@ function validateRows(rows, mappings, entityType = 'orders') {
     });
     return invalid;
   }
+  const seenIds = new Map();
   rows.forEach((row, rowIndex) => {
     const hasId = ['id', 'externalId'].some(field => {
       const column = mappedColumn(field);
       return Number.isInteger(column) && String(row[column] ?? '').trim();
     });
     if (!hasId) ['id', 'externalId'].forEach(field => markBlank(row, rowIndex, field));
+    else {
+      const sourceId = ['id', 'externalId'].map(field => {
+        const column = mappedColumn(field);
+        return Number.isInteger(column) ? normalize(row[column]) : '';
+      }).find(Boolean);
+      if (seenIds.has(sourceId)) {
+        const idColumn = Number.isInteger(mappedColumn('id')) ? mappedColumn('id') : mappedColumn('externalId');
+        invalid.add(`${rowIndex}:${idColumn}`);
+        invalid.add(`${seenIds.get(sourceId)}:${idColumn}`);
+      } else seenIds.set(sourceId, rowIndex);
+    }
     const addressColumn = mappedColumn('address');
     const latColumn = mappedColumn('latitude');
     const lonColumn = mappedColumn('longitude');
-    const hasAddress = Number.isInteger(addressColumn) && String(row[addressColumn] ?? '').trim();
+    const streetColumn = mappedColumn('street');
+    const houseColumn = mappedColumn('house');
+    const hasAddress = (Number.isInteger(addressColumn) && String(row[addressColumn] ?? '').trim())
+      || (Number.isInteger(streetColumn) && String(row[streetColumn] ?? '').trim()
+        && Number.isInteger(houseColumn) && String(row[houseColumn] ?? '').trim());
     const hasCoords = Number.isInteger(latColumn) && Number.isInteger(lonColumn) && asNumber(row[latColumn]) !== null && asNumber(row[lonColumn]) !== null;
     if (!hasAddress && !hasCoords) [addressColumn, latColumn, lonColumn].filter(Number.isInteger).forEach(column => invalid.add(`${rowIndex}:${column}`));
-    ['windowStart', 'windowEnd', 'duration'].forEach(field => markBlank(row, rowIndex, field));
+    const rangeColumn = mappedColumn('windowRange');
+    const [rangeStart, rangeEnd] = Number.isInteger(rangeColumn) ? windowFromRange(row[rangeColumn]) : ['', ''];
+    const startColumn = mappedColumn('windowStart');
+    const endColumn = mappedColumn('windowEnd');
+    const start = (Number.isInteger(startColumn) ? asTime(row[startColumn]) : '') || rangeStart;
+    const end = (Number.isInteger(endColumn) ? asTime(row[endColumn]) : '') || rangeEnd;
+    if (!start || !end || start >= end) {
+      [!start || start >= end ? startColumn : null, !end || start >= end ? endColumn : null, rangeColumn].filter(Number.isInteger)
+        .forEach(column => invalid.add(`${rowIndex}:${column}`));
+    }
     const durationColumn = mappedColumn('duration');
-    if (Number.isInteger(durationColumn) && (asNumber(row[durationColumn]) ?? 0) <= 0) invalid.add(`${rowIndex}:${durationColumn}`);
+    const fieldValue = field => {
+      const column = mappedColumn(field);
+      return Number.isInteger(column) ? row[column] : '';
+    };
+    const duration = workDurationFor({ workType: fieldValue('workType'), serviceType: fieldValue('serviceType'),
+      skill: fieldValue('skill'), name: fieldValue('name') }, workNorms, fieldValue('duration'));
+    if (duration === null) {
+      const column = [durationColumn, mappedColumn('workType'), mappedColumn('serviceType'),
+        mappedColumn('skill'), mappedColumn('name')].find(Number.isInteger);
+      if (Number.isInteger(column)) invalid.add(`${rowIndex}:${column}`);
+    }
   });
   return invalid;
 }
@@ -889,7 +1032,7 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
   const activeColumnFilters = columnFilters[activeType] || {};
   const sourceFiles = useMemo(() => {
     const unique = new Map();
-    [...(files.length ? files : session.reviewFiles || []), session].forEach((item, index) => {
+    [...files, ...(session.reviewFiles || []), ...(session.sourceFiles || []), session].forEach((item, index) => {
       if (!item) return;
       const key = item.fileId || `${item.fileName || 'Файл'}:${item.importedAt || index}`;
       unique.set(key, item);
@@ -906,22 +1049,22 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
     return () => document.removeEventListener('pointerdown', close);
   }, [fileMenuOpen]);
 
-  const requirements = useMemo(() => requirementState(mappings, activeType), [mappings, activeType]);
+  const requirements = useMemo(() => requirementState(mappings, activeType, session.workNorms), [mappings, activeType, session.workNorms]);
   const mappingReady = requirements.every(item => item.ok);
-  const invalidCells = useMemo(() => validateRows(rows, mappings, activeType), [rows, mappings, activeType]);
+  const invalidCells = useMemo(() => validateRows(rows, mappings, activeType, session.workNorms), [rows, mappings, activeType, session.workNorms]);
   const rowIssueCount = useMemo(() => new Set([...invalidCells].map(key => key.split(':')[0])).size, [invalidCells]);
   const mappedCount = Object.values(mappings).filter(Boolean).length;
   const validationByType = useMemo(() => Object.fromEntries(availableTypes.map(entityType => {
     const draft = drafts[entityType];
-    const typeRequirements = requirementState(draft.mappings, entityType);
-    const typeInvalidCells = validateRows(draft.rows, draft.mappings, entityType);
+    const typeRequirements = requirementState(draft.mappings, entityType, session.workNorms);
+    const typeInvalidCells = validateRows(draft.rows, draft.mappings, entityType, session.workNorms);
     return [entityType, {
       ready: typeRequirements.every(item => item.ok) && typeInvalidCells.size === 0,
       rowIssueCount: new Set([...typeInvalidCells].map(key => key.split(':')[0])).size,
       missing: typeRequirements.filter(item => !item.ok).map(item => item.label),
       invalidCellCount: typeInvalidCells.size,
     }];
-  })), [drafts, availableTypes.join('|')]);
+  })), [drafts, availableTypes.join('|'), session.workNorms]);
   const allReady = availableTypes.every(entityType => validationByType[entityType].ready);
   const validationMessages = useMemo(() => {
     const messages = requirements.filter(item => !item.ok).map(item => `Не сопоставлено обязательное поле: ${item.label}.`);
@@ -931,7 +1074,10 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
       const field = mappings[column] || '';
       const raw = String(rows[rowIndex]?.[column] ?? '').trim();
       let reason = raw ? 'значение имеет неверный формат' : 'значение не заполнено';
-      if (field === 'duration') reason = 'нужно положительное число минут';
+      if (field === 'duration') reason = 'нужно положительное число минут для неизвестного вида работ';
+      else if (field === 'id' || field === 'externalId') reason = raw ? 'ID повторяется в другом файле или строке' : 'ID не заполнен';
+      else if (['windowStart', 'windowEnd', 'windowRange'].includes(field)) reason = 'укажите корректный интервал: начало раньше конца';
+      else if (['workType', 'serviceType', 'skill', 'name'].includes(field)) reason = 'вид работ не найден в нормативах; укажите длительность отдельно';
       else if (field === 'engineerSkills') reason = raw ? 'разрешено не более трёх навыков' : 'навыки не заполнены';
       else if (field === 'engineerId') reason = raw ? 'ID повторяется в другой строке' : 'ID не заполнен';
       else if (field === 'engineerShiftStart' || field === 'engineerShiftEnd') reason = raw ? 'время должно быть в формате ЧЧ:ММ' : 'время смены не заполнено';
@@ -1102,7 +1248,7 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
       editedCells: [...drafts[entityType].editedCells],
     }]));
     onImport({
-      orders: drafts.orders ? buildOrders(datasets.orders.headers, drafts.orders.rows, drafts.orders.mappings, region) : [],
+      orders: drafts.orders ? buildOrders(datasets.orders.headers, drafts.orders.rows, drafts.orders.mappings, region, session.workNorms) : [],
       engineers: drafts.engineers ? buildEngineers(datasets.engineers.headers, drafts.engineers.rows, drafts.engineers.mappings, region) : [],
     }, { ...session, datasets: reviewedDatasets, editHistory: draftHistory, reviewRegion: session.reviewRegion || region, mode: 'review' });
   };
@@ -1113,11 +1259,11 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
     extraFileInputRef.current?.click();
   };
 
-  const addAdditionalFile = async file => {
-    if (!file) return;
+  const addAdditionalFile = async files => {
+    if (!files?.length) return;
     try {
-      const nextSession = await parseImportFile(file, extraFileTypeRef.current);
-      (onAddFile || session.onAddFile)?.({ ...nextSession, fileId: `${file.name}:${file.lastModified}:${file.size}`, importedAt: Date.now() });
+      const nextSession = await parseImportFiles(files, extraFileTypeRef.current);
+      (onAddFile || session.onAddFile)?.({ ...nextSession, fileId: `${nextSession.fileName}:${Date.now()}`, importedAt: Date.now() });
     } catch (error) {
       (onFileError || session.onFileError)?.(error?.message || 'Не удалось прочитать дополнительный файл');
     }
@@ -1132,16 +1278,18 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
   };
 
   const importButtonText = [
-    drafts.orders ? `${drafts.orders.rows.length} заявок` : '',
-    drafts.engineers ? `${drafts.engineers.rows.length} инженеров` : '',
+    drafts.orders ? countLabel(drafts.orders.rows.length, 'заявка', 'заявки', 'заявок') : '',
+    drafts.engineers ? countLabel(drafts.engineers.rows.length, 'инженер', 'инженера', 'инженеров') : '',
   ].filter(Boolean).join(' и ');
-  const entityLabel = activeType === 'engineers' ? 'инженеров' : 'заявок';
+  const entityLabel = activeType === 'engineers'
+    ? countNoun(rows.length, 'инженер', 'инженера', 'инженеров')
+    : countNoun(rows.length, 'заявка', 'заявки', 'заявок');
   const readyRequirementCount = requirements.filter(item => item.ok).length;
   return <div className={`import-workspace${reviewMode ? ' is-review' : ''}${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-label="Проверка и загрузка данных">
     <header className="import-header">
       <div className="import-title">{!reviewMode ? <img src="/beego-mark.png" alt="BeeGo"/> : null}<div><h1>Данные</h1><p>{activeDataset.fileName || session.fileName} · {rows.length} {entityLabel} · участок «{region.name}» · лист «{activeDataset.sheetName}»</p></div></div>
       {reviewMode ? <div className="import-file-picker" ref={fileMenuRef}>
-        <button type="button" className="import-file-picker-trigger" aria-label="Открыть загруженные файлы" title="Загруженные файлы" aria-haspopup="menu" aria-expanded={fileMenuOpen} onClick={() => setFileMenuOpen(open => !open)}><Files/><span><small>{sourceFiles.length > 1 ? `${sourceFiles.length} файла` : 'Исходный файл'}</small><b>{session.fileName || activeDataset.fileName}</b></span><ChevronDown/></button>
+        <button type="button" className="import-file-picker-trigger" aria-label="Открыть загруженные файлы" title="Загруженные файлы" aria-haspopup="menu" aria-expanded={fileMenuOpen} onClick={() => setFileMenuOpen(open => !open)}><Files/><span><small>{sourceFiles.length > 1 ? countLabel(sourceFiles.length, 'файл', 'файла', 'файлов') : 'Исходный файл'}</small><b>{session.fileName || activeDataset.fileName}</b></span><ChevronDown/></button>
         {fileMenuPresence.present ? <div className={`import-file-menu dropdown-transition ${fileMenuPresence.visible ? 'is-open' : 'is-closing'}`} role="menu">
           <header><span><Files/></span><div><b>Загруженные файлы</b><small>Выберите набор для просмотра</small></div></header>
           <div className="import-file-menu-list">{sourceFiles.map((file, index) => {
@@ -1152,7 +1300,7 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
           })}</div>
           <div className="import-file-menu-add"><b>Добавить ещё</b><button type="button" onClick={() => requestAdditionalFile('orders')}><FilePlus2/><span>Файл заявок<small>CSV, JSON, XLS или XLSX</small></span></button><button type="button" onClick={() => requestAdditionalFile('engineers')}><FilePlus2/><span>Файл инженеров<small>CSV, JSON, XLS или XLSX</small></span></button></div>
         </div> : null}
-        <input ref={extraFileInputRef} className="workspace-file-input" type="file" accept=".csv,.json,.xls,.xlsx,application/json" onChange={event => { addAdditionalFile(event.target.files?.[0]); event.target.value = ''; }}/>
+        <input ref={extraFileInputRef} className="workspace-file-input" type="file" multiple accept=".csv,.json,.xls,.xlsx,application/json" onChange={event => { addAdditionalFile(event.target.files); event.target.value = ''; }}/>
       </div> : null}
       {availableTypes.length > 1 ? <nav className="import-dataset-tabs" aria-label="Наборы данных">{availableTypes.map(entityType => <button type="button" key={entityType} className={activeType === entityType ? 'active' : ''} onClick={() => switchDataset(entityType)}><span>{entityType === 'orders' ? 'Заявки' : 'Инженеры'}</span><b>{drafts[entityType].rows.length}</b>{validationByType[entityType].ready ? <Check/> : <AlertTriangle/>}</button>)}</nav> : null}
       <button className="import-header-close" type="button" onClick={requestClose} aria-label={reviewMode ? 'Закрыть проверку данных' : 'Отменить загрузку'}><X/></button>
@@ -1160,7 +1308,7 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
 
     <main className="import-main">
       <section className="import-table-area">
-        <div className="import-table-toolbar"><div><h2>Сопоставление и редактирование</h2><p>Выберите назначение столбцов и проверьте значения.</p></div><div className="import-table-tools"><div className="import-status-summary" aria-label="Состояние файла"><span className={mappedCount === activeDataset.headers.length ? 'ok' : 'warning'}><small>Столбцы</small><b>{mappedCount}/{activeDataset.headers.length}</b></span><span className={mappingReady ? 'ok' : 'warning'}><small>Обязательные</small><b>{readyRequirementCount}/{requirements.length}</b></span><span><small>Изменено</small><b>{editedCells.size}</b></span><span className={rowIssueCount ? 'warning' : 'ok'}><small>Ошибки</small><b>{rowIssueCount}</b></span></div><div className="import-history-actions" aria-label="История изменений"><button type="button" disabled={!canUndo} onClick={undoDraftChange} aria-label="Отменить изменение" title="Назад · Ctrl+Z"><Undo2/></button><button type="button" disabled={!canRedo} onClick={redoDraftChange} aria-label="Вернуть изменение" title="Вперёд · Ctrl+Y"><Redo2/></button></div><label><Search/><input value={search} onChange={changeSearch} placeholder="Найти в таблице"/><kbd aria-live="polite">{visibleRows.length}/{rows.length}</kbd>{search ? <button type="button" onClick={() => setSearch('')} aria-label="Очистить поиск"><X/></button> : null}</label></div></div>
+        <div className="import-table-toolbar"><div><h2>Сопоставление и редактирование</h2><p>Выберите назначение столбцов и проверьте значения. Для известных видов работ берётся «Нормативы.xlsx»: технические работы + документы; дорогу рассчитывает маршрут.</p></div><div className="import-table-tools"><div className="import-status-summary" aria-label="Состояние файла"><span className={mappedCount === activeDataset.headers.length ? 'ok' : 'warning'}><small>Столбцы</small><b>{mappedCount}/{activeDataset.headers.length}</b></span><span className={mappingReady ? 'ok' : 'warning'}><small>Обязательные</small><b>{readyRequirementCount}/{requirements.length}</b></span><span><small>Изменено</small><b>{editedCells.size}</b></span><span className={rowIssueCount ? 'warning' : 'ok'}><small>Ошибки</small><b>{rowIssueCount}</b></span></div><div className="import-history-actions" aria-label="История изменений"><button type="button" disabled={!canUndo} onClick={undoDraftChange} aria-label="Отменить изменение" title="Назад · Ctrl+Z"><Undo2/></button><button type="button" disabled={!canRedo} onClick={redoDraftChange} aria-label="Вернуть изменение" title="Вперёд · Ctrl+Y"><Redo2/></button></div><label><Search/><input value={search} onChange={changeSearch} placeholder="Найти в таблице"/><kbd aria-live="polite">{visibleRows.length}/{rows.length}</kbd>{search ? <button type="button" onClick={() => setSearch('')} aria-label="Очистить поиск"><X/></button> : null}</label></div></div>
         <div className="import-table-scroll" ref={tableRef} onScroll={() => { setMenuOpen(false); setFilterOpen(false); }}>
           <table className="import-grid">
             <thead><tr>{activeDataset.headers.map((header, column) => {
