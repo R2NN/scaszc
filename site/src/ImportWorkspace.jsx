@@ -7,6 +7,7 @@ import {
 import { useDropdownPresence } from './useDropdownPresence.js';
 import { regionForCity, resolveImportedCity } from './regions.js';
 import { pushImportHistory, redoImportHistory, undoImportHistory } from './importHistory.js';
+import { importedEquipmentRequirements, importedEquipmentTokens } from './importEquipment.js';
 
 const ORDER_FIELD_GROUPS = [
   {
@@ -416,14 +417,6 @@ const translateSkill = (skill, workType) => {
   return String(workType || skill || 'Локальные работы');
 };
 
-const translateEquipment = value => {
-  const text = normalize(value);
-  if (!text || text === 'any' || text === 'нет') return '';
-  if (/emergency|diag set|авар/.test(text)) return 'Аварийный комплект';
-  if (/ont|router|роутер|install set|cable pack/.test(text)) return 'Роутер';
-  return String(value).split('|')[0];
-};
-
 const groupClass = (fieldId, entityType = 'orders') => {
   if (!fieldId) return '';
   if (fieldId.startsWith('custom:')) return 'Своё поле';
@@ -634,7 +627,7 @@ export function buildOrders(headers, rows, mappings, region) {
       priority: informational ? 'Обычная' : translatePriority(valueFor(row, 'priority')),
       workType,
       skill: informational && /emerg|авар/i.test(skill) ? '' : translateSkill(skill, workType || serviceType),
-      equipment: translateEquipment(valueFor(row, 'equipment')),
+      equipment: importedEquipmentRequirements(valueFor(row, 'equipment')),
       transport: valueFor(row, 'transport'),
       district: valueFor(row, 'district'),
       zone: valueFor(row, 'zoneName') || valueFor(row, 'zone'),
@@ -694,7 +687,7 @@ export function buildEngineers(headers, rows, mappings, region) {
     const lat = asNumber(valueFor(row, 'engineerStartLatitude'));
     const lon = asNumber(valueFor(row, 'engineerStartLongitude'));
     const skills = [...new Set(splitList(valueFor(row, 'engineerSkills')).map(translateEngineerSkill))];
-    const equipment = [...new Set(splitList(valueFor(row, 'engineerEquipment')).map(translateEquipment).filter(Boolean))];
+    const equipment = [...new Set(importedEquipmentTokens(valueFor(row, 'engineerEquipment')))];
     const customFields = supplementaryFields(row, mappings, 'engineers', ENGINEER_CORE_FIELDS);
     const startAddress = valueFor(row, 'engineerStartAddress') || region.name;
     const city = resolveImportedCity(valueFor(row, 'engineerCity'), startAddress, region.name);

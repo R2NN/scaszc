@@ -18,7 +18,8 @@ from typing import Any
 ROOT = Path(__file__).parents[2]
 REFERENCE = ROOT / 'data' / 'dataset'
 EQUIPMENT_LABELS = {
-    'диагностический комплект': 'DIAG_SET', 'монтажный комплект': 'INSTALL_SET',
+    'диагностический комплект': 'DIAG_SET', 'аварийный комплект': 'DIAG_SET',
+    'монтажный комплект': 'INSTALL_SET',
     'кабельный комплект': 'CABLE_SET', 'кабель': 'CABLE_PACK',
     'роутер': 'ROUTER', 'ont': 'ONT_GIGABIT', 'гигабитный ont': 'ONT_GIGABIT',
     'тв приставка': 'TV_BOX', 'тв-приставка': 'TV_BOX',

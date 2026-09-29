@@ -41,6 +41,7 @@ import { filterLabel, matchesAnySelection, matchesSearch, orderSearchValues, ord
 import { completedFactOrderIds, crewOperationalSummary, minuteOf, playbackFrame, playbackRouteSegments, shiftDisplayAt, visitStatusLabel } from './shiftDomain.js';
 import { shiftClock } from './shiftClock.js';
 import { PROFILE_AVATAR_TONES, profileAvatarColor } from './profileAvatar.js';
+import { notificationPresentation } from './notificationPresentation.js';
 
 maplibregl.setWorkerUrl(mapLibreWorkerUrl);
 const MAP_WORKER_COUNT=Math.min(4,Math.max(2,Math.ceil((navigator.hardwareConcurrency||4)/2)));
@@ -120,13 +121,6 @@ function pointInRing([x,y],ring){let inside=false;for(let i=0,j=ring.length-1;i<
 function pointInPolygon(point,polygon){return Boolean(polygon?.length)&&pointInRing(point,polygon[0])&&!polygon.slice(1).some(ring=>pointInRing(point,ring))}
 function geometryContainsPoint(geometry,point){if(geometry?.type==='Polygon')return pointInPolygon(point,geometry.coordinates);if(geometry?.type==='MultiPolygon')return geometry.coordinates.some(polygon=>pointInPolygon(point,polygon));return false}
 
-function parseCSV(text) {
-  const rows=[]; let row=[],cell='',quoted=false;
-  for(let i=0;i<text.length;i+=1){const c=text[i],next=text[i+1];if(c==='"'&&quoted&&next==='"'){cell+='"';i+=1}else if(c==='"')quoted=!quoted;else if(c===','&&!quoted){row.push(cell);cell=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&next==='\n')i+=1;row.push(cell);if(row.some(Boolean))rows.push(row);row=[];cell=''}else cell+=c}
-  if(cell||row.length){row.push(cell);rows.push(row)} if(rows.length<2)return [];
-  const h=rows[0].map(x=>x.trim().toLowerCase()); const get=(r,names)=>{const idx=h.findIndex(x=>names.includes(x));return idx>=0?(r[idx]||'').trim():''};
-  return rows.slice(1).filter(r=>r.some(Boolean)).map((r,i)=>{const lat=Number(get(r,['latitude','lat','широта']).replace(',','.')),lon=Number(get(r,['longitude','lon','lng','долгота']).replace(',','.'));const hasCoords=Number.isFinite(lat)&&Number.isFinite(lon)&&lat!==0&&lon!==0;return {id:i+1,name:get(r,['name','customer name','имя'])||`Заявка ${i+1}`,address:get(r,['address','адрес'])||'Адрес не указан',phone:get(r,['phone','телефон']),email:get(r,['email']),start:get(r,['time window start','window start']),end:get(r,['time window end','window end']),duration:Number(get(r,['duration','длительность']))||60,priority:i%9===0?'Авария':'Обычная',skill:['Локальные работы','Подключение','Дозаказ','Аварийные работы'][i%4],equipment:['Роутер','ТВ-приставка','Умная колонка','Аварийный комплект'][i%4],regionId:'moscow',status:'Новая',coords:hasCoords?[lat,lon]:null,geocodeStatus:hasCoords?'provided':'needs_geocoding'}});
-}
 const toMinutes=value=>{const[h,m]=String(value||'08:00').split(':').map(Number);return h*60+m};
 const toTime=value=>`${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}`;
 const durationLabel=value=>`${Math.floor(value/60)?`${Math.floor(value/60)} ч `:''}${value%60?`${value%60} мин`:''}`.trim();
@@ -304,7 +298,7 @@ function NotificationHub({items=[],open=false,onToggle=()=>{},onClose=()=>{},onC
 }
 function NotificationGlyph({item}){
   const text=`${item?.title||''} ${item?.message||''}`.toLocaleLowerCase('ru-RU');
-  const kind=/авари|ошиб|не выполн/.test(text)?'alert':/импорт|загруж|адрес/.test(text)?'import':/план|маршрут|распредел/.test(text)?'route':'success';
+  const kind=/ошиб|не выполн|не удалось|недоступ/.test(text)?'alert':/импорт|загруж|адрес/.test(text)?'import':/план|маршрут|распредел/.test(text)?'route':'success';
   if(kind==='alert')return <svg className={`notification-glyph ${kind}`} viewBox="0 0 32 32" aria-hidden="true"><path className="glyph-wash" d="M16 3.8 29 27H3z"/><path d="M16 5.5 28 26.5H4z"/><path d="M16 12v7"/><circle className="glyph-dot" cx="16" cy="23" r="1.35"/></svg>;
   if(kind==='import')return <svg className={`notification-glyph ${kind}`} viewBox="0 0 32 32" aria-hidden="true"><path className="glyph-wash" d="M7 3h13l6 6v20H7z"/><path d="M8 3.8h11.5L25 9.3V28H8z"/><path d="M19.5 4v5.5H25M12 14h9M12 18h9M12 22h5"/><path className="glyph-accent" d="m18.5 23.5 2.8 2.8 5.2-6"/></svg>;
   if(kind==='route')return <svg className={`notification-glyph ${kind}`} viewBox="0 0 32 32" aria-hidden="true"><circle className="glyph-wash" cx="8" cy="24" r="4.7"/><circle className="glyph-wash" cx="24" cy="8" r="4.7"/><circle cx="8" cy="24" r="3.4"/><circle cx="24" cy="8" r="3.4"/><path d="M11.5 23.5c7.5-.3 2.7-10.8 10-12.2"/><path className="glyph-accent" d="m18.8 8.8 3.2 2.6-2.7 3.1"/></svg>;
@@ -324,22 +318,6 @@ const NOTIFICATION_ARTWORK={
 function NotificationArtwork({kind}){
   if(kind==='alert')return <svg className="notification-alert-artwork" viewBox="0 0 64 64" role="img" aria-label="Ошибка"><path className="alert-shadow" d="M32 7 58 53H6Z"/><path className="alert-body" d="M32 8.5 56.5 52H7.5Z"/><path className="alert-mark" d="M32 23v13"/><circle className="alert-dot" cx="32" cy="43" r="2.7"/><circle className="alert-badge" cx="50" cy="49" r="10"/><path className="alert-cross" d="m46.5 45.5 7 7m0-7-7 7"/></svg>;
   return <img src={NOTIFICATION_ARTWORK[kind]||NOTIFICATION_ARTWORK.system} alt=""/>;
-}
-
-function notificationPresentation(item){
-  const suppliedTitle=(item?.title||'').trim();
-  const text=`${suppliedTitle} ${item?.message||''}`.toLocaleLowerCase('ru-RU');
-  if(/авари/.test(text))return{kind:'alert',title:/не выполн|ошиб|недоступ/.test(text)?'Аварийный план не построен':'Аварийный маршрут обновлён'};
-  if(/ошиб|не выполн|не удалось|недоступ/.test(text))return{kind:'alert',title:suppliedTitle&&suppliedTitle!=='BeeGo!'?suppliedTitle:'Требуется внимание'};
-  if(/участ|регион|адресам файла/.test(text))return{kind:'location',title:'Рабочий участок определён'};
-  if(/импорт|загруж|файл|геокод/.test(text))return{kind:'import',title:/ошиб|не найден/.test(text)?'Проверьте адреса':'Данные успешно загружены'};
-  if(/настройки планирования/.test(text))return{kind:'system',title:'Планирование сохранено'};
-  if(/настройки ограничений/.test(text))return{kind:'system',title:'Ограничения сохранены'};
-  if(/переплан/.test(text))return{kind:'route',title:'Маршруты перестроены'};
-  if(/план|маршрут|распредел/.test(text))return{kind:'route',title:'Маршруты построены'};
-  if(/назначен|инженер|команд/.test(text))return{kind:'assignment',title:/сохран/.test(text)?'Назначение сохранено':'Команда обновлена'};
-  if(/профил|настрой/.test(text))return{kind:'profile',title:'Профиль обновлён'};
-  return{kind:'system',title:suppliedTitle&&suppliedTitle!=='BeeGo!'?suppliedTitle:'Системное событие'};
 }
 
 function NotificationCenter({items=[],open=false,expanded=false,onClose=()=>{},onClear=()=>{},onRead=()=>{}}){

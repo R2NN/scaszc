@@ -5,6 +5,7 @@ import { isCanonicalPlanningInput } from '../scripts/is-canonical-planning-input
 import { projectRoot } from '../scripts/project-root.mjs';
 import exactWorker from '../worker/exact-base.js';
 import { fillExactIdentityGeometry } from './exactPlanGeometry.mjs';
+import { historicalInventory } from './exactShiftReplan.mjs';
 
 const siteRoot = path.resolve(import.meta.dirname, '..');
 const repositoryRoot = projectRoot(siteRoot);
@@ -37,7 +38,10 @@ export async function handleExactPlanning(request) {
       if (!response.ok) return response;
       plan = await response.json();
     } else {
-      plan = await runExactPlan(input, repositoryRoot);
+      const sharedInventory = Array.isArray(input.sharedInventory)
+        ? input.sharedInventory
+        : await historicalInventory(planningDate, repositoryRoot);
+      plan = await runExactPlan({ ...input, sharedInventory }, repositoryRoot);
     }
     if (plan.status !== 'EXACT_VALID' || plan.publicationAllowed !== true || plan.validation?.status !== 'VALID' || plan.approximateTravel === true) {
       throw new Error('Точный план не прошёл независимую проверку и не может быть опубликован.');
