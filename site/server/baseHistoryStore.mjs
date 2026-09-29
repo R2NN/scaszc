@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { seedBaseShift } from './seedBaseShift.mjs';
 
@@ -6,6 +6,7 @@ const siteRoot = path.resolve(import.meta.dirname, '..');
 const repositoryRoot = path.dirname(siteRoot);
 let historyPromise;
 let fixturePromise;
+let availableDatesPromise;
 
 const loadHistory = () => historyPromise ||= readFile(path.join(siteRoot, 'public/data/analytics-history.json'), 'utf8').then(JSON.parse);
 const loadFixture = () => fixturePromise ||= readFile(path.join(siteRoot, 'public/test-data/beego-algorithm-initial.json'), 'utf8').then(JSON.parse);
@@ -20,15 +21,29 @@ const parseRows = source => {
   });
 };
 
-/** List every date supplied by the retained planning base. */
+/** List historical dates whose operational source files are available. */
 export async function baseHistoryDates() {
-  return (await loadHistory()).days.map(day => day.date);
+  availableDatesPromise ||= Promise.all((await loadHistory()).days.map(async day => {
+    if (day.date === '2026-08-17') return day.date;
+    const root = path.join(repositoryRoot, 'history', day.date);
+    try {
+      await Promise.all([
+        access(path.join(root, 'final-exact.json')),
+        access(path.join(root, 'dataset/core/jobs.csv')),
+      ]);
+      return day.date;
+    } catch {
+      return null;
+    }
+  })).then(dates => dates.filter(Boolean));
+  return availableDatesPromise;
 }
 
 /** Load a validated historical day from the first archive into the operational store. */
 export async function ensureBaseHistoricalShift(store, date) {
   const existing = store.byDate('moscow', date);
   if (existing) return existing;
+  if (!(await baseHistoryDates()).includes(date)) return null;
   if (date === '2026-08-17') {
     await seedBaseShift(store);
     return store.byDate('moscow', date);
