@@ -29,7 +29,7 @@ import PdfPreview from "./PdfPreview.jsx";
 import { BusinessSelect } from "./BusinessSelect.jsx";
 import { TimePicker } from "./TimePicker.jsx";
 import { WorkspaceFilters } from "./WorkspaceFilters.jsx";
-import { filterLabel, matchesAnySelection, matchesSearch } from './filterPresentation.js';
+import { filterLabel, matchesAnySelection, matchesSearch, orderSearchValues, orderWorkValues } from './filterPresentation.js';
 import { profileAvatarColor } from "./profileAvatar.js";
 import "./shift-workspace.css";
 
@@ -44,6 +44,7 @@ const reportFileName = item => {
 };
 
 const EVENT_LABELS = {
+  [EVENT_TYPES.RECALCULATE]: 'Пересчитать план',
   [EVENT_TYPES.ENGINEER_UNAVAILABLE]: "Бригада недоступна",
   [EVENT_TYPES.VISIT_CANCELLED]: "Отмена визита",
   [EVENT_TYPES.ORDER_CANCELLED]: "Отмена заявки",
@@ -57,7 +58,7 @@ const EVENT_LABELS = {
   PLAN_REBUILT: "Исходный план пересчитан",
   PLAN_ROLLBACK: "Восстановлен план",
 };
-const DIRECT_EVENTS = [EVENT_TYPES.ENGINEER_UNAVAILABLE, EVENT_TYPES.VISIT_CANCELLED, EVENT_TYPES.ORDER_CANCELLED, EVENT_TYPES.MANUAL_ASSIGN, EVENT_TYPES.CLIENT_WINDOW_SHIFT, EVENT_TYPES.ENGINEER_REPLACED];
+const DIRECT_EVENTS = [EVENT_TYPES.RECALCULATE, EVENT_TYPES.ENGINEER_UNAVAILABLE, EVENT_TYPES.VISIT_CANCELLED, EVENT_TYPES.ORDER_CANCELLED, EVENT_TYPES.MANUAL_ASSIGN, EVENT_TYPES.CLIENT_WINDOW_SHIFT, EVENT_TYPES.ENGINEER_REPLACED];
 const json = async (path, options) => {
   const response = await fetch(path, options);
   const payload = await response.json().catch(() => ({}));
@@ -71,7 +72,6 @@ const post = (path, body) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const estimatedLegsLabel = count => `${count} ${count % 100 >= 11 && count % 100 <= 14 ? 'оценочных переездов' : count % 10 === 1 ? 'оценочный переезд' : count % 10 >= 2 && count % 10 <= 4 ? 'оценочных переезда' : 'оценочных переездов'}`;
 const displayDate = value => value instanceof Date ? (Number.isNaN(value.getTime()) ? 'Выберите дату' : value.toLocaleDateString('ru-RU')) : /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value.split('-').reverse().join('.') : value || 'Выберите дату';
 const metric = (plan) => ({
@@ -96,7 +96,13 @@ const planChange = (before, after, orders = []) => {
   const moved = [...second].filter(([id, next]) => first.has(id) && (first.get(id).crew !== next.crew || first.get(id).plannedStart !== next.plannedStart)).map(([id, next]) => `${names.get(id) || id}: ${first.get(id).crew} ${first.get(id).plannedStart} → ${next.crew} ${next.plannedStart}`);
   const inserted = [...second].filter(([id]) => !first.has(id)).map(([id, next]) => `${names.get(id) || id} → ${next.crew} ${next.plannedStart}`);
   const removed = [...first].filter(([id]) => !second.has(id)).map(([id]) => names.get(id) || id);
-  const risky = [...second].filter(([id, item]) => { const end = minuteOf(orders.find(order => String(order.id) === id)?.end); const start = minuteOf(item.plannedStart); return end != null && start != null && end - start <= 15; }).map(([id]) => names.get(id) || id);
+  const risky = [...second].filter(([id, item]) => {
+    const earlier = first.get(id);
+    if (earlier && earlier.crew === item.crew && earlier.plannedStart === item.plannedStart) return false;
+    const end = minuteOf(orders.find(order => String(order.id) === id)?.end);
+    const start = minuteOf(item.plannedStart);
+    return end != null && start != null && end - start <= 15;
+  }).map(([id]) => names.get(id) || id);
   return { moved, inserted, removed, risky };
 };
 
@@ -231,6 +237,8 @@ export function ShiftWorkspace({
   onRefresh,
   onOpenOrders,
   onTabChange,
+  standaloneReplanning = false,
+  recalculateRequest = 0,
   onSelectOrder,
   selectedOrderId,
   onClose,
@@ -245,13 +253,14 @@ export function ShiftWorkspace({
   const lastSelectedOrderIdRef = useRef(selectedOrderId);
   const lastSelectedCrewIdRef = useRef(clock.selectedEngineerId);
   useEffect(() => { if (!reportOnly) onTabChange?.(tab); }, [tab, reportOnly, onTabChange]);
-  const [eventType, setEventType] = useState(EVENT_TYPES.ENGINEER_UNAVAILABLE);
+  const [eventType, setEventType] = useState(standaloneReplanning ? EVENT_TYPES.RECALCULATE : EVENT_TYPES.ENGINEER_UNAVAILABLE);
   const [targetId, setTargetId] = useState("");
   const [factOrderId, setFactOrderId] = useState("");
   const [factTime, setFactTime] = useState("12:00");
   const [correctionReason, setCorrectionReason] = useState("");
-  const [time, setTime] = useState("12:00");
-  const [reason, setReason] = useState("");
+  const [time, setTime] = useState(standaloneReplanning ? '07:00' : '12:00');
+  const [recalculateScope, setRecalculateScope] = useState('before');
+  const [reason, setReason] = useState(standaloneReplanning ? 'Повторный расчёт плана до начала смены' : '');
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -314,6 +323,25 @@ export function ShiftWorkspace({
     chatThreadRef.current.scrollTop = chatThreadRef.current.scrollHeight;
   }, [chat, busy, reportSection]);
   useEffect(() => { setTab(initialTab); }, [initialTab]);
+  useEffect(() => {
+    if (!standaloneReplanning || !shift?.plan) return;
+    const lastPublished = minuteOf(shift.versions?.at(-1)?.effectiveAt) ?? 0;
+    if (lastPublished <= 420 && !(shift.facts || []).some(fact => ['started', 'completed'].includes(fact.status))) return;
+    setRecalculateScope('during');
+    setTime(timeOf(Math.max(420, lastPublished, Math.floor(shiftClock.getSnapshot().minute))));
+    setReason('Перестроение оставшейся части дня');
+  }, [standaloneReplanning, shift?.id, shift?.revision]);
+  useEffect(() => {
+    if (!recalculateRequest) return;
+    const lastPublished = minuteOf(shift?.versions?.at(-1)?.effectiveAt) ?? 0;
+    const beforeDay = lastPublished <= 420 && !(shift?.facts || []).some(fact => ['started', 'completed'].includes(fact.status));
+    setTab('event');
+    setEventType(EVENT_TYPES.RECALCULATE);
+    setRecalculateScope(beforeDay ? 'before' : 'during');
+    setTime(beforeDay ? '07:00' : timeOf(Math.max(420, lastPublished, Math.floor(shiftClock.getSnapshot().minute))));
+    setReason(beforeDay ? 'Повторный расчёт плана до начала смены' : 'Перестроение оставшейся части дня');
+    setError('');
+  }, [recalculateRequest]);
   useEffect(() => {
     if (reportOnly || String(selectedOrderId || '') === String(lastSelectedOrderIdRef.current || '')) return;
     lastSelectedOrderIdRef.current = selectedOrderId;
@@ -395,19 +423,32 @@ export function ShiftWorkspace({
       setEventStart(saved.event?.start || '');
       setEventEnd(saved.event?.end || '');
       setPreview(saved);
-      if (saved.status === 'RUNNING') {
-        for (let attempt = 0; attempt < 60 && live; attempt += 1) {
-          await wait(900);
-          const updated = await json(`/api/previews/${saved.id}`).catch(() => null);
-          if (!live || !updated) break;
-          setPreview(updated);
-          if (updated.status !== 'RUNNING') break;
-        }
-      }
     };
     restorePreview();
     return () => { live = false; };
   }, [shift?.id, shift?.revision, reportOnly]);
+  useEffect(() => {
+    if (preview?.status !== 'RUNNING' || !preview.id) return undefined;
+    let live = true;
+    let timer;
+    const poll = async () => {
+      try {
+        const updated = await json(`/api/previews/${preview.id}`);
+        if (!live) return;
+        if (updated.status === 'FAILED') {
+          setPreview(null);
+          setError(updated.error || 'Точный расчёт не прошёл проверку.');
+          return;
+        }
+        setPreview(updated);
+        if (updated.status === 'RUNNING') timer = setTimeout(poll, 1500);
+      } catch (issue) {
+        if (live) timer = setTimeout(poll, 3000);
+      }
+    };
+    timer = setTimeout(poll, 1200);
+    return () => { live = false; clearTimeout(timer); };
+  }, [preview?.id, preview?.status]);
   useEffect(
     () => () => {
       if (reportUrl) URL.revokeObjectURL(reportUrl);
@@ -447,6 +488,8 @@ export function ShiftWorkspace({
     [point, clock.minute, clock.mode],
   );
   const current = metric(shift?.plan);
+  const lastPublicationMinute = minuteOf(shift?.versions?.at(-1)?.effectiveAt) ?? 0;
+  const beforeReplanningAvailable = lastPublicationMinute <= 420 && !(shift?.facts || []).some(fact => ['started', 'completed'].includes(fact.status));
   // A restored plan is a new publication, not a one-minute movement of the
   // playback clock. Keep it after the latest publication and recorded fact.
   const restoreEffectiveTime = timeOf(Math.min(1439, Math.max(
@@ -478,7 +521,7 @@ export function ShiftWorkspace({
     return statuses;
   }, [shift?.factLog, shift?.facts, clock.minute]);
   const visitStatusFor = orderId => factStatusByOrder.get(String(orderId)) || visitByOrder.get(String(orderId))?.status || 'unassigned';
-  const orderWorkOptions = [...new Set((point?.orders || []).map(order => String(order.workType || order.skill || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const orderWorkOptions = [...new Set((point?.orders || []).flatMap(order => orderWorkValues(order)))].sort((a,b)=>filterLabel(a).localeCompare(filterLabel(b),'ru'));
   const orderTerritoryOptions = [...new Set((point?.orders || []).map(order => String(order.zone || order.district || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
   const orderPriorityOptions = [...new Set((point?.orders || []).map(order => String(order.priority || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
   const orderEquipmentOptions = [...new Set((point?.orders || []).flatMap(order => filterTokens(order.equipment)))].sort((a,b)=>a.localeCompare(b,'ru'));
@@ -504,6 +547,8 @@ export function ShiftWorkspace({
     ['status', 'Доступность', [['', 'Любая доступность'], ...crewStatusOptions.map(value => [value, filterLabel(value)])]],
   ];
   const orderAdvanced = { skill: orderWorkFilter, equipment: orderEquipmentFilter, priority: orderPriorityFilter === 'all' ? '' : orderPriorityFilter, status: orderStateFilter === 'all' ? '' : orderStateFilter, location: orderTerritoryFilter === 'all' ? '' : orderTerritoryFilter };
+  const hasOrderAdvanced = orderWorkFilter.length || orderEquipmentFilter.length || orderPriorityFilter !== 'all' || orderStateFilter !== 'all' || orderTerritoryFilter !== 'all';
+  const clearOrderAdvanced = () => { setOrderWorkFilter([]); setOrderEquipmentFilter([]); setOrderPriorityFilter('all'); setOrderStateFilter('all'); setOrderTerritoryFilter('all'); };
   const updateOrderAdvanced = update => {
     const next = typeof update === 'function' ? update(orderAdvanced) : update;
     setOrderWorkFilter(next.skill);
@@ -521,9 +566,9 @@ export function ShiftWorkspace({
   ];
   const shiftOrders = (point?.orders || []).filter(order => {
     const assigned = assignedRouteByOrder.has(String(order.id));
-    const matchesQuery = matchesSearch(orderQuery, [order.sourceId, order.id, order.name, order.address, order.workType, order.skill, order.priority]);
+    const matchesQuery = matchesSearch(orderQuery, orderSearchValues(order));
     const status = visitStatusFor(order.id);
-    return (orderView === 'assigned' ? assigned : !assigned) && matchesQuery && (orderStateFilter === 'all' || status === orderStateFilter) && matchesAnySelection(orderWorkFilter, filterTokens(order.workType || order.skill)) && (orderTerritoryFilter === 'all' || String(order.zone || order.district || '').trim() === orderTerritoryFilter) && (orderPriorityFilter === 'all' || order.priority === orderPriorityFilter) && matchesAnySelection(orderEquipmentFilter, filterTokens(order.equipment));
+    return (orderView === 'assigned' ? assigned : !assigned) && matchesQuery && (orderStateFilter === 'all' || status === orderStateFilter) && matchesAnySelection(orderWorkFilter, orderWorkValues(order)) && (orderTerritoryFilter === 'all' || String(order.zone || order.district || '').trim() === orderTerritoryFilter) && (orderPriorityFilter === 'all' || order.priority === orderPriorityFilter) && matchesAnySelection(orderEquipmentFilter, filterTokens(order.equipment));
   });
   const visibleCrews = (point?.team || []).filter(engineer => {
     const route = point?.plan?.routes?.find(item => String(item.engineerId) === String(engineer.id));
@@ -539,6 +584,10 @@ export function ShiftWorkspace({
       time,
       reason: reason.trim(),
     };
+    if (eventType === EVENT_TYPES.RECALCULATE && !pendingEvent) {
+      base.time = recalculateScope === 'before' ? '07:00' : time;
+      base.reason = reason.trim() || (recalculateScope === 'before' ? 'Повторный расчёт плана до начала смены' : 'Перестроение оставшейся части дня');
+    }
     if (pendingEvent) return { ...pendingEvent, ...base };
     if (
       eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE ||
@@ -609,19 +658,7 @@ export function ShiftWorkspace({
         expectedRevision: shift.revision,
         event: buildEvent(),
       });
-      for (let attempt = 0; attempt < 60; attempt += 1) {
-        await wait(900);
-        const result = await json(`/api/previews/${task.id}`);
-        setPreview(result);
-        if (result.status === "FAILED") {
-          setPreview(null);
-          throw new Error(result.error || "Точный расчёт не прошёл проверку.");
-        }
-        if (result.status === "READY") return;
-      }
-      throw new Error(
-        "Расчёт ещё выполняется. Черновик сохранён; повторите проверку позже.",
-      );
+      setPreview(task);
     } catch (issue) {
       setError(issue.message);
     } finally {
@@ -802,7 +839,7 @@ export function ShiftWorkspace({
       <aside className={`shift-panel${!reportOnly && (tab === 'crews' || tab === 'orders') ? ' shift-list-panel' : ''}`}>
         <header>
           {!assistantOnly ? <small>{reportOnly ? 'ИТОГИ СМЕНЫ' : 'ОПЕРАТИВНОЕ УПРАВЛЕНИЕ'}</small> : null}
-          <h2>{assistantOnly ? 'AI‑помощник' : reportOnly ? 'Отчёт PDF' : 'Ход смены'}</h2>
+          <h2>{assistantOnly ? 'AI‑помощник' : reportOnly ? 'Отчёт PDF' : standaloneReplanning ? 'Перепланирование' : 'Ход смены'}</h2>
           <span>
             {displayDate(shift?.date || selectedDate)}
           </span>
@@ -911,7 +948,8 @@ export function ShiftWorkspace({
           ) : null}
           {shift?.plan && tab === "orders" ? <section className="shift-orders-readonly" aria-label="Заявки смены">
             <div className="shift-list-actions shift-order-switch"><div className="status-tabs" role="group" aria-label="Статус заявок"><button type="button" className={orderView==='assigned'?'selected':''} onClick={()=>setOrderView('assigned')}>Назначены <b>{current.assigned}</b></button><button type="button" className={orderView==='unassigned'?'selected':''} onClick={()=>setOrderView('unassigned')}>Не назначены <b>{current.unassigned}</b></button></div><button type="button" className="manual-add-trigger shift-manual-add" onClick={()=>onOpenManualAdd?.('orders')} aria-label="Добавить заявку вручную" title="Добавить заявку вручную"><Plus aria-hidden="true"/></button></div>
-            <div className="shift-search-row panel-search-row"><label className="panel-search"><Search size={17} aria-hidden="true"/><input type="search" value={orderQuery} onChange={event => setOrderQuery(event.target.value)} placeholder="Номер, тип работ или адрес…" aria-label="Поиск заявок"/>{orderQuery?<button type="button" onClick={()=>setOrderQuery('')} aria-label="Очистить поиск"><X size={15}/></button>:null}</label><WorkspaceFilters title="Отобрать заявки" sections={orderSections} value={orderAdvanced} onChange={updateOrderAdvanced} multiKeys={['skill','equipment']}/></div>
+            <div className="shift-search-row panel-search-row"><label className="panel-search"><Search size={17} aria-hidden="true"/><input type="search" value={orderQuery} onChange={event => { setOrderQuery(event.target.value); if (event.target.value.trim()) clearOrderAdvanced(); }} placeholder="Номер, тип работ или адрес…" aria-label="Поиск заявок"/>{orderQuery?<button type="button" onClick={()=>setOrderQuery('')} aria-label="Очистить поиск"><X size={15}/></button>:null}</label><WorkspaceFilters title="Отобрать заявки" sections={orderSections} value={orderAdvanced} onChange={updateOrderAdvanced} multiKeys={['skill','equipment']}/></div>
+            {orderQuery || hasOrderAdvanced ? <div className="shift-filter-summary"><span>Показано {shiftOrders.length} из {orderView === 'assigned' ? current.assigned : current.unassigned}</span>{hasOrderAdvanced ? <button type="button" onClick={clearOrderAdvanced}>Сбросить фильтры</button> : null}</div> : null}
             {pendingEvent?.order ? <div className="shift-manual-draft"><b>{pendingEvent.order.name}</b><span>Черновик заявки · ещё не в опубликованном плане</span><button type="button" onClick={()=>setTab('event')}>Рассчитать и опубликовать</button></div> : null}
             <div className="shift-order-list order-list"><div className="table-head"><span>ЗАЯВКА</span><span>ОКНО</span></div>
             {shiftOrders.length ? shiftOrders.map(order => {
@@ -1002,12 +1040,22 @@ export function ShiftWorkspace({
                     setEventType(value);
                     setTargetId("");
                     setEventEngineerId('');
+                    if (value === EVENT_TYPES.RECALCULATE) {
+                      setRecalculateScope(beforeReplanningAvailable ? 'before' : 'during');
+                      setTime(beforeReplanningAvailable ? '07:00' : timeOf(Math.max(420, lastPublicationMinute, Math.floor(clock.minute))));
+                    }
                     setPreview(null);
                   }}
                   options={eventOptions.map(type=>({value:type,label:EVENT_LABELS[type]}))}
                 />
               </label>
-              {pendingEvent || restoredManualAddition ? (
+              {!preview && !pendingEvent ? <button type="button" className="shift-add-replanning-order" onClick={() => onOpenManualAdd?.('orders')}><Plus size={16}/>Новая заявка: вручную или из файла</button> : null}
+              {!pendingEvent && eventType === EVENT_TYPES.RECALCULATE ? <div className="shift-recalculate-mode" role="group" aria-label="Когда перестроить план">
+                <b>Когда перестроить план</b>
+                <button type="button" className={recalculateScope === 'before' ? 'selected' : ''} disabled={Boolean(preview) || !beforeReplanningAvailable} onClick={() => { setRecalculateScope('before'); setTime('07:00'); setReason(current => !current || current === 'Перестроение оставшейся части дня' ? 'Повторный расчёт плана до начала смены' : current); setPreview(null); }}>До начала смены <small>Все заявки и маршруты доступны для расчёта</small></button>
+                <button type="button" className={recalculateScope === 'during' ? 'selected' : ''} disabled={Boolean(preview)} onClick={() => { setRecalculateScope('during'); setTime(timeOf(Math.max(420, lastPublicationMinute, Math.floor(clock.minute)))); setReason(current => !current || current === 'Повторный расчёт плана до начала смены' ? 'Перестроение оставшейся части дня' : current); setPreview(null); }}>В течение дня <small>Прошедшие и начатые визиты сохраняются</small></button>
+                {!beforeReplanningAvailable ? <small>План уже менялся или есть факты визитов. Доступно перестроение оставшейся части дня.</small> : null}
+              </div> : pendingEvent || restoredManualAddition ? (
                 <div className="shift-pending">
                   <b>
                     Черновик: {(pendingEvent || restoredManualAddition).order?.name || (pendingEvent || restoredManualAddition).engineer?.name || (pendingEvent || restoredManualAddition).replacement?.name || shift.team.find(member=>String(member.id)===String((pendingEvent || restoredManualAddition).engineerId))?.name || EVENT_LABELS[(pendingEvent || restoredManualAddition).type]}
@@ -1035,18 +1083,18 @@ export function ShiftWorkspace({
                   сначала отметьте исходную бригаду недоступной, затем добавьте
                   новую.
                 </div>
-              ) : (
+              ) : eventType !== EVENT_TYPES.RECALCULATE ? (
                 <label>
                   {eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE
                     ? "Бригада"
                     : "Заявка"}
                   <BusinessSelect ariaLabel={eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?'Бригада':'Заявка'} value={targetId} disabled={Boolean(preview)} onChange={value=>{setTargetId(value);setPreview(null)}} searchable options={[{value:'',label:'Выберите…'},...(eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?shift.team:eventOrders).map(item=>({value:String(item.id),label:item.name||item.sourceId||String(item.id)}))]}/>
                 </label>
-              )}
+              ) : null}
               {!pendingEvent && eventType === EVENT_TYPES.MANUAL_ASSIGN ? <label>Новая бригада<BusinessSelect ariaLabel="Новая бригада для заявки" value={eventEngineerId} disabled={Boolean(preview)} onChange={value=>{setEventEngineerId(value);setPreview(null)}} searchable options={[{value:'',label:'Выберите бригаду…'},...shift.team.map(item=>({value:String(item.id),label:item.name||String(item.id)}))]}/></label> : null}
               {!pendingEvent && eventType === EVENT_TYPES.CLIENT_WINDOW_SHIFT ? <div className="shift-window-edit"><TimePicker label="Начало нового окна" value={eventStart} disabled={Boolean(preview)} onChange={value=>{setEventStart(value);setPreview(null)}}/><TimePicker label="Конец нового окна" value={eventEnd} disabled={Boolean(preview)} onChange={value=>{setEventEnd(value);setPreview(null)}}/><small>После проверки время визита может отличаться от начала окна: учитываются дорога, занятость и ограничения.</small></div> : null}
               {!pendingEvent && eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE && !preview ? <div className="shift-absence-presets" role="group" aria-label="Причина отсутствия">{['Больничный', 'Отпуск', 'Не вышел на смену'].map(label=><button key={label} type="button" onClick={()=>setReason(label)}>{label}</button>)}</div> : null}
-              {![EVENT_TYPES.CAPACITY_ADDED, EVENT_TYPES.NEW_ORDER].includes((pendingEvent || restoredManualAddition)?.type || eventType) ? <TimePicker label="Время события" value={time} disabled={Boolean(preview)} onChange={value=>{setTime(value);setPreview(null)}}/> : null}
+              {![EVENT_TYPES.CAPACITY_ADDED, EVENT_TYPES.NEW_ORDER].includes((pendingEvent || restoredManualAddition)?.type || eventType) && (eventType !== EVENT_TYPES.RECALCULATE || recalculateScope === 'during') ? <TimePicker label={eventType === EVENT_TYPES.RECALCULATE ? 'Перестроить с' : 'Время события'} value={time} disabled={Boolean(preview)} onChange={value=>{setTime(value);setPreview(null)}}/> : null}
               {![EVENT_TYPES.CAPACITY_ADDED, EVENT_TYPES.NEW_ORDER].includes((pendingEvent || restoredManualAddition)?.type || eventType) ? <label>
                 Причина
                 <textarea
@@ -1072,7 +1120,7 @@ export function ShiftWorkspace({
               >
                 {busy
                   ? "Проверяем дороги и ограничения…"
-                  : pendingEvent?.type === EVENT_TYPES.CAPACITY_ADDED ? 'Рассчитать план с бригадой' : "Рассчитать черновик"}
+                  : pendingEvent?.type === EVENT_TYPES.CAPACITY_ADDED ? 'Рассчитать план с бригадой' : eventType === EVENT_TYPES.RECALCULATE ? 'Пересчитать и сохранить черновик' : "Рассчитать черновик"}
               </button>
               {!preview && !pendingEvent && (eventType !== EVENT_TYPES.ENGINEER_UNAVAILABLE || targetId || reason.trim() || eventStart || eventEnd) ? <button type="button" className="shift-draft-reset" onClick={discardDraft} disabled={busy}><X size={15}/>Сбросить несохранённые изменения</button> : null}
               {preview?.status === "RUNNING" ? (
@@ -1107,9 +1155,11 @@ export function ShiftWorkspace({
                       </b>
                     </span>
                   </div>
-                  {change.moved.length ? <p><b>Перенесены:</b> {change.moved.slice(0, 4).join('; ')}{change.moved.length > 4 ? `; ещё ${change.moved.length - 4}` : ''}</p> : null}
-                  {change.inserted.length ? <p><b>Добавлены в маршруты:</b> {change.inserted.slice(0, 4).join('; ')}{change.inserted.length > 4 ? `; ещё ${change.inserted.length - 4}` : ''}</p> : null}
-                  {change.removed.length ? <p><b>Убраны из маршрутов:</b> {change.removed.slice(0, 4).join('; ')}{change.removed.length > 4 ? `; ещё ${change.removed.length - 4}` : ''}</p> : null}
+                  {change.moved.length || change.inserted.length || change.removed.length ? <div className="shift-change-list">
+                    {change.moved.length ? <details open><summary>Изменены бригада или время · {change.moved.length}</summary><ul>{change.moved.map((item, index) => <li key={`moved-${index}`}>{item}</li>)}</ul></details> : null}
+                    {change.inserted.length ? <details open><summary>Добавлены в маршруты · {change.inserted.length}</summary><ul>{change.inserted.map((item, index) => <li key={`inserted-${index}`}>{item}</li>)}</ul></details> : null}
+                    {change.removed.length ? <details open><summary>Убраны из маршрутов · {change.removed.length}</summary><ul>{change.removed.map((item, index) => <li key={`removed-${index}`}>{item}</li>)}</ul></details> : null}
+                  </div> : <p>Назначения и время визитов не изменились. Сравните общие показатели перед публикацией.</p>}
                   {(preview.result?.team || []).filter(item => { const old = shift.team.find(teamItem => String(teamItem.id) === String(item.id)); return !old || old.shiftStart !== item.shiftStart || old.shiftEnd !== item.shiftEnd || old.status !== item.status; }).length ? <p><b>Часы и состав:</b> {(preview.result.team || []).filter(item => { const old = shift.team.find(teamItem => String(teamItem.id) === String(item.id)); return !old || old.shiftStart !== item.shiftStart || old.shiftEnd !== item.shiftEnd || old.status !== item.status; }).slice(0, 4).map(item => `${item.name || item.id} ${item.shiftStart || '—'}–${item.shiftEnd || '—'}${item.status ? ` · ${item.status}` : ''}`).join('; ')}</p> : null}
                   {change.risky.length ? <p className="shift-risk"><b>Риск по клиентским окнам:</b> запас до конца окна не более 15 минут у {change.risky.slice(0, 4).join(', ')}.</p> : null}
                   {preview.result?.plan?.unassigned?.length ? (

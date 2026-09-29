@@ -204,6 +204,32 @@ async function geocodeBatch(payload = {}, env = {}) {
   return { results, provider: "geoapify", attribution: "Powered by Geoapify" };
 }
 
+async function suggestMoscowAddresses(query, env = {}) {
+  if (!env.GEOAPIFY_API_KEY) return { error: 'Geoapify не настроен', code: 'GEOAPIFY_NOT_CONFIGURED' };
+  const text = normalizeAddress(query).slice(0, 160);
+  if (text.length < 3) return { results: [], provider: 'geoapify' };
+  const params = new URLSearchParams({
+    text: /москв/i.test(text) ? text : `Москва, ${text}`,
+    format: 'json',
+    lang: 'ru',
+    limit: '8',
+    bias: 'proximity:37.6173,55.7558',
+    filter: 'rect:36.95,55.55,38.15,56.05',
+    apiKey: env.GEOAPIFY_API_KEY,
+  });
+  const response = await fetch(`https://api.geoapify.com/v1/geocode/autocomplete?${params}`);
+  if (!response.ok) return { error: 'Geoapify временно недоступен', code: 'GEOAPIFY_UNAVAILABLE' };
+  const payload = await response.json();
+  const results = (payload.results || []).filter(item => /москв/i.test([
+    item.city, item.municipality, item.county, item.formatted,
+  ].filter(Boolean).join(' '))).map(item => ({
+    address: item.formatted,
+    coords: [Number(item.lat), Number(item.lon)],
+    precision: item.result_type || '',
+  })).filter(item => item.address && item.coords.every(Number.isFinite));
+  return { results, provider: 'geoapify' };
+}
+
 const sourceOrderId = (order = {}) => String(
   order.sourceId
   || order.sourceData?.job_id
@@ -358,6 +384,10 @@ async function api(request, env = {}) {
     const result = await geocodeBatch(payload, env);
     if (result.code === "GEOAPIFY_NOT_CONFIGURED") return json(result, { status: 503 });
     return json(result);
+  }
+  if (url.pathname === '/api/geocode/suggest' && request.method === 'GET') {
+    const result = await suggestMoscowAddresses(url.searchParams.get('q'), env);
+    return json(result, { status: result.error ? 503 : 200 });
   }
   if (url.pathname === "/api/reassign" && request.method === "POST") {
     const payload = await request.json().catch(() => ({}));

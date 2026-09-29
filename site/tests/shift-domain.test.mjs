@@ -5,7 +5,7 @@ import { completedFactOrderIds, crewOperationalSummary, eventModel, nextFact, no
 
 const order = { id: 'a', coords: [55.75, 37.62], start: '10:00', end: '12:00' };
 const engineer = { id: 'e', shiftStart: '08:00', shiftEnd: '18:00', startCoords: [55.7, 37.6] };
-const plan = { publicationAllowed: true, validation: { status: 'VALID' }, provider: 'LOCAL_VALHALLA', routes: [{ engineerId: 'e', shiftStart: '08:00', shiftEnd: '18:00', assignments: [{ orderId: 'a', departureAt: '09:00', arrivalAt: '09:30', plannedStart: '10:00', plannedFinish: '11:00', geometry: [[55.7, 37.6], [55.75, 37.62]] }] }], unassigned: [] };
+const plan = { status: 'EXACT_VALID', contentSha256: 'test-validated-plan', publicationAllowed: true, validation: { status: 'VALID' }, provider: 'LOCAL_VALHALLA', routes: [{ engineerId: 'e', shiftStart: '08:00', shiftEnd: '18:00', assignments: [{ orderId: 'a', departureAt: '09:00', arrivalAt: '09:30', plannedStart: '10:00', plannedFinish: '11:00', geometry: [[55.7, 37.6], [55.75, 37.62]] }] }], unassigned: [] };
 
 test('an event does not erase a cancelled order from the shift history', () => {
   const shift = { orders: [order], team: [engineer], plan, facts: [] };
@@ -13,6 +13,15 @@ test('an event does not erase a cancelled order from the shift history', () => {
   assert.equal(change.orders.length, 0);
   assert.equal(shift.orders.length, 1);
   assert.throws(() => eventModel({ ...shift, facts: [{ orderId: 'a', status: 'completed' }] }, { type: 'ORDER_CANCELLED', time: '12:00', orderId: 'a', reason: 'Отмена' }), /Выполненную/);
+});
+
+test('recalculation keeps source records and validates the planning boundary', () => {
+  const shift = { orders: [order], team: [engineer], plan, facts: [] };
+  const before = eventModel(shift, { type: 'RECALCULATE', time: '07:00', reason: 'Пересчитать до смены' });
+  const during = eventModel(shift, { type: 'RECALCULATE', time: '12:00', reason: 'Пересчитать остаток дня' });
+  assert.strictEqual(before.orders, shift.orders);
+  assert.strictEqual(during.team, shift.team);
+  assert.throws(() => eventModel(shift, { type: 'RECALCULATE', time: '06:59', reason: 'Слишком рано' }), /07:00/);
 });
 
 test('fact transitions require confirmation, reasons and correction audit', () => {
@@ -64,6 +73,7 @@ test('newly added day records stay visible before a later route-plan version tak
   const normalized = normalizeDataAdditionEvent(shift, { type: 'NEW_ORDER', order: request, time: '17:00' });
   assert.equal(normalized.time, '19:43');
   assert.match(normalized.reason, /добавлена вручную/);
+  assert.equal(normalizeDataAdditionEvent({ ...shift, versions: [shift.versions[0]] }, { type: 'NEW_ORDER', order: { ...request, status: 'Черновик' }, time: '00:00' }).time, '07:00');
 });
 
 test('map completion follows the latest dispatcher fact at the playback time', () => {

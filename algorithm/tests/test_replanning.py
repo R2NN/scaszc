@@ -504,12 +504,11 @@ class ReplanningTests(unittest.TestCase):
         self.assertIn(ViolationCode.FROZEN_ACTIVITY_CHANGED, {item.code for item in report.violations})
 
     def test_published_core_artifact_round_trips_with_route_evidence(self) -> None:
-        root = Path(__file__).parents[1]
-        dataset = load_planning_dataset(
-            root / 'work/dataset_v21/beeline_synthetic_dataset_v2_1', 'core'
-        )
+        root = Path(__file__).parents[2]
+        dataset = load_planning_dataset(root / 'data/dataset', 'core')
         plan, payload = load_exact_plan_artifact(
-            root / 'work/planning/normatives-exact-improved.json', dataset.dataset_sha256
+            root / 'algorithm/artifacts/current/initial-exact-205-of-205-retimed.json',
+            dataset.dataset_sha256,
         )
         self.assertEqual(payload['status'], 'EXACT_VALID')
         self.assertTrue(validate_initial_plan(dataset, plan).is_valid)

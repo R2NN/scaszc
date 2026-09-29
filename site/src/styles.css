@@ -791,7 +791,7 @@ html[data-theme="dark"],html[data-theme="dark"] body{background:#15171a}
   .app-shell.has-map-overlay>.sidebar{
     transition:box-shadow .3s ease,background-color .2s ease,color .2s ease,border-color .2s ease;
   }
-  .app-shell.has-map-overlay:is(.overlay-shift,.overlay-report)>.sidebar{
+  .app-shell.has-map-overlay:is(.overlay-shift,.overlay-replanning,.overlay-report)>.sidebar{
     transition:width .42s cubic-bezier(.4,0,.2,1),box-shadow .3s ease,background-color .2s ease,color .2s ease,border-color .2s ease;
   }
   .app-shell.has-map-overlay>.map-overlay-page{
@@ -4122,8 +4122,6 @@ html[data-theme="dark"]{
 .app-shell.dark .development-banner p{color:#e0d4a8}
 .app-shell.dark .development-banner em{background:#51431c;border-color:#9e8230;color:#ffe68e}
 @media(max-width:700px){.development-banner{margin:16px 12px;padding:16px;align-items:flex-start}.development-banner-icon{width:42px;height:42px}.development-banner strong{font-size:17px}.development-banner em{display:none}}
-.app-shell .map-plan-action:has(.map-plan-development){min-width:350px}
-.map-plan-development{position:relative;z-index:1;display:inline-flex;align-items:center;margin-left:8px;padding:4px 8px;border:1px solid rgba(71,49,0,.3);border-radius:7px;background:#fff9d8;color:#654700;font-size:10px;font-style:normal;font-weight:850;white-space:nowrap;box-shadow:0 2px 4px rgba(85,59,0,.12)}
 .development-modal-backdrop{z-index:5000;display:grid;place-items:center;padding:18px}
 .development-modal{position:relative;display:grid;justify-items:start;gap:10px;width:min(490px,100%);padding:34px;border:1px solid #e2bd38;border-radius:22px;background:linear-gradient(145deg,#fff9dd,#fff 65%);box-shadow:0 30px 80px rgba(21,27,36,.3);color:#2d3035}
 .development-modal-close{position:absolute;top:16px;right:16px;width:36px;height:36px;border:1px solid #e3e5e8;border-radius:10px;background:#fff;cursor:pointer}

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, readdir, unlink } from 'node:fs/promises';
+import { access, copyFile, mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -15,6 +15,12 @@ const addMinutes = (value, amount) => {
 };
 
 const sourceId = item => String(item?.sourceId || item?.sourceData?.job_id || item?.sourceData?.engineer_id || item?.id || '').split(':').at(-1);
+
+const inProject = (root, file) => {
+  const relative = path.relative(root, file);
+  return relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? relative : file;
+};
+const fromProject = (root, file) => path.isAbsolute(file) ? file : path.join(root, file);
 
 const runPython = ({ python, script, args, payload, env }) => new Promise((resolve, reject) => {
   const child = spawn(python, [script, ...args], {
@@ -213,15 +219,41 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd()) {
     PYTHONUTF8: '1',
   };
   const sourceHash = String(payload.basePlanContentSha256 || payload.plan?.contentSha256 || '');
+  if (!/^[a-f0-9]{64}$/.test(sourceHash)) throw new Error('У исходного плана нет корректной контрольной суммы');
   const canonicalPlan = path.join(repositoryRoot, 'algorithm', 'artifacts', 'current', 'initial-exact-205-of-205-retimed.json');
   const canonical = JSON.parse(await readFile(canonicalPlan, 'utf8'));
   let dataset = path.join(repositoryRoot, 'data', 'dataset');
   let inputPlan = canonicalPlan;
   let cache = path.join(repositoryRoot, 'runtime', 'full-coverage-route-cache.sqlite3');
+  let savedTransitIndex = '';
   if (sourceHash !== canonical.content_sha256) {
     let matched = false;
+    const retainedPlan = path.join(repositoryRoot, 'runtime', 'exact-replans', `${sourceHash}.json`);
+    const retained = JSON.parse(await readFile(retainedPlan, 'utf8').catch(() => 'null'));
+    if (retained?.content_sha256 === sourceHash && retained?.publication_allowed === true) {
+      const metadata = JSON.parse(await readFile(`${retainedPlan}.meta.json`, 'utf8').catch(() => 'null'));
+      if (!metadata?.dataset || !metadata?.cache) throw new Error('Исходные данные сохранённого плана не найдены');
+      dataset = fromProject(repositoryRoot, metadata.dataset);
+      cache = fromProject(repositoryRoot, metadata.cache);
+      savedTransitIndex = metadata.transitIndex ? fromProject(repositoryRoot, metadata.transitIndex) : '';
+      inputPlan = retainedPlan;
+      matched = true;
+    }
+    if (!matched && /^\d{4}-\d{2}-\d{2}$/.test(payload.planningDate || '')) {
+      const dayRoot = path.join(repositoryRoot, 'history', payload.planningDate);
+      const historicalPlan = path.join(dayRoot, 'final-exact.json');
+      const historical = JSON.parse(await readFile(historicalPlan, 'utf8').catch(() => 'null'));
+      if (historical?.content_sha256 === sourceHash && historical?.publication_allowed === true) {
+        const status = JSON.parse(await readFile(path.join(dayRoot, 'status.json'), 'utf8').catch(() => 'null'));
+        dataset = path.join(dayRoot, 'dataset');
+        inputPlan = historicalPlan;
+        cache = path.join(repositoryRoot, 'runtime', 'ui-shared-cache', 'routing-cache.sqlite3');
+        savedTransitIndex = status?.transit_index || '';
+        matched = true;
+      }
+    }
     const runRoot = path.join(repositoryRoot, 'runtime', 'ui-runs');
-    for (const entry of await readdir(runRoot, { withFileTypes: true }).catch(() => [])) {
+    for (const entry of matched ? [] : await readdir(runRoot, { withFileTypes: true }).catch(() => [])) {
       if (!entry.isDirectory()) continue;
       const candidateRoot = path.join(runRoot, entry.name);
       const manifest = JSON.parse(await readFile(path.join(candidateRoot, 'results', 'pipeline-run.json'), 'utf8').catch(() => 'null'));
@@ -240,9 +272,9 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd()) {
   const requiresTransit = typeof datasetManifest.requires_public_transit === 'boolean'
     ? datasetManifest.requires_public_transit
     : (await readFile(path.join(dataset, 'common', 'engineers.csv'), 'utf8')).includes('PUBLIC_TRANSIT');
-  const transitIndex = await ensureTransitIndex(
-    requiresTransit ? datasetManifest.planning_date : '2026-08-17',
-    repositoryRoot,
+  const retainedTransitIndex = savedTransitIndex && await access(savedTransitIndex).then(() => savedTransitIndex, () => '');
+  const transitIndex = retainedTransitIndex || await ensureTransitIndex(
+    requiresTransit ? datasetManifest.planning_date : '2026-08-17', repositoryRoot,
   );
   const args = [
     '--dataset', dataset,
@@ -255,7 +287,17 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd()) {
     await ensureExactRouting({ python, repositoryRoot, env });
     await runPython({ python, script, args, payload, env });
     const raw = JSON.parse(await readFile(output, 'utf8'));
-    return compactExactReplan(raw, payload);
+    const result = compactExactReplan(raw, payload);
+    const retainedRoot = path.join(repositoryRoot, 'runtime', 'exact-replans');
+    await mkdir(retainedRoot, { recursive: true });
+    const retainedPlan = path.join(retainedRoot, `${raw.content_sha256}.json`);
+    await copyFile(output, retainedPlan);
+    await writeFile(`${retainedPlan}.meta.json`, JSON.stringify({
+      dataset: inProject(repositoryRoot, dataset),
+      cache: inProject(repositoryRoot, cache),
+      transitIndex: inProject(repositoryRoot, transitIndex),
+    }));
+    return result;
   } finally {
     await unlink(output).catch(() => {});
   }

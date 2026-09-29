@@ -193,7 +193,7 @@ const ORDER_ALIASES = {
   objectId: ['object id', 'site id', 'id объекта', 'ид объекта'],
   contractNumber: ['contract number', 'contract no', 'номер договора', 'договор'],
   accountNumber: ['account number', 'billing account', 'лицевой счет', 'лицевой счёт'],
-  name: ['customer name', 'client name', 'name', 'имя клиента', 'клиент', 'наименование'],
+  name: ['customer name', 'client name', 'name', 'имя клиента', 'клиент', 'наименование', 'название'],
   scenario: ['scenario', 'сценарий'],
   address: ['address', 'адрес'],
   locationId: ['location id', 'location_id', 'address id', 'id локации', 'id адреса'],
@@ -524,7 +524,10 @@ export async function parseImportFile(file, preferredEntityType = 'orders') {
     const XLSX = module.default || module;
     // SheetJS interprets values such as "48/2" in CSV address columns as dates
     // unless raw mode is enabled. XLS/XLSX keep their normal formatted-cell path.
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false, raw: extension === 'csv' });
+    const bytes = await file.arrayBuffer();
+    const csvText = extension === 'csv' ? new TextDecoder('utf-8').decode(bytes) : '';
+    const decodedCsv = csvText.includes('\uFFFD') ? new TextDecoder('windows-1251').decode(bytes) : csvText;
+    const workbook = XLSX.read(extension === 'csv' ? decodedCsv.replace(/^\uFEFF/, '') : bytes, { type: extension === 'csv' ? 'string' : 'array', cellDates: false, raw: extension === 'csv' });
     for (const [sheetIndex, sheetName] of workbook.SheetNames.entries()) {
       const detectedType = sheetEntityType(sheetName);
       if (!detectedType && sheetIndex > 0) continue;
@@ -548,6 +551,20 @@ export async function parseImportFile(file, preferredEntityType = 'orders') {
     suggestedRegionId: detectSuggestedRegion(locationDataset.headers, locationDataset.rows),
     sourceFormat: extension,
   };
+}
+
+/** Read request rows with the same column aliases used by the full import screen. */
+export async function parseReplanningOrderFile(file, region) {
+  const session = await parseImportFile(file, 'orders');
+  const dataset = session.datasets.orders;
+  if (!dataset?.rows?.length) throw new Error('В файле не найдены заявки.');
+  const mappings = autoMapHeaders(dataset.headers, 'orders');
+  const mapped = new Set(Object.values(mappings));
+  if (!mapped.has('id') && !mapped.has('externalId')) throw new Error('Для новой заявки нужен ID.');
+  for (const required of ['windowStart', 'windowEnd', 'duration']) {
+    if (!mapped.has(required)) throw new Error('Для новой заявки нужны ID, начало и конец окна, длительность работы.');
+  }
+  return buildOrders(dataset.headers, dataset.rows, mappings, region);
 }
 
 const ORDER_CORE_FIELDS = new Set([

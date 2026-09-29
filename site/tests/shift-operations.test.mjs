@@ -13,8 +13,22 @@ import { askShiftAi } from '../server/aiStudio.mjs';
 
 const order = { id: 'job-1', sourceId: 'JOB-1', name: 'Подключение', regionId: 'moscow', zone: 'Центр', skill: 'Подключение', equipment: '', coords: [55.75,37.62], start: '09:00', end: '13:00', duration: 60 };
 const engineer = { id: 'crew-1', name: 'Бригада 1', regionId: 'moscow', zone: 'Центр', skills: ['Подключение'], equipment: [], transport: 'CAR', shiftStart: '08:00', shiftEnd: '18:00', startCoords: [55.7,37.6] };
-const plan = { provider: 'LOCAL_VALHALLA', publicationAllowed: true, validation: { status: 'VALID' }, routes: [{ engineerId: engineer.id, engineerName: engineer.name, shiftStart: '08:00', shiftEnd: '18:00', assignments: [{ orderId: order.id, departureAt: '08:30', arrivalAt: '09:00', plannedStart: '09:00', plannedFinish: '10:00', travelMinutes: 30, distanceM: 15000, geometry: [engineer.startCoords, order.coords] }], distanceKm: 15, travelMinutes: 30 }], unassigned: [], metrics: { total: 1, assigned: 1, unassigned: 0 } };
+const plan = { status: 'EXACT_VALID', contentSha256: 'test-validated-plan', provider: 'LOCAL_VALHALLA', publicationAllowed: true, validation: { status: 'VALID' }, routes: [{ engineerId: engineer.id, engineerName: engineer.name, shiftStart: '08:00', shiftEnd: '18:00', assignments: [{ orderId: order.id, departureAt: '08:30', arrivalAt: '09:00', plannedStart: '09:00', plannedFinish: '10:00', travelMinutes: 30, distanceM: 15000, geometry: [engineer.startCoords, order.coords] }], distanceKm: 15, travelMinutes: 30 }], unassigned: [], metrics: { total: 1, assigned: 1, unassigned: 0 } };
 const request = (path, method = 'GET', body) => new Request(`http://localhost${path}`, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+
+const testExactRouting = async (shift, model, onProgress = () => {}) => {
+  onProgress({ phase: 'EXACT_EVENT', checkedRoads: 1 });
+  const candidate = buildDynamicReplan(model.orders, model.team, shift.plan, model.event);
+  return {
+    ...candidate,
+    status: 'EXACT_VALID',
+    contentSha256: 'test-validated-preview',
+    provider: 'TEST_EXACT_ROAD',
+    publicationAllowed: true,
+    approximateTravel: false,
+    validation: { status: 'VALID', exactCheckedVisits: 1 },
+  };
+};
 
 test('staff roster addition and archiving do not change published shift history', async () => {
   const store = new ShiftStore(':memory:');
@@ -39,7 +53,7 @@ test('staff roster addition and archiving do not change published shift history'
 
 test('adding a staff member to a shift and taking them off duty are separate publications', async () => {
   const store = new ShiftStore(':memory:');
-  const api = createOperationsApi({ store, routing: async candidate => ({ ...candidate, provider: 'TEST_EXACT_ROAD', publicationAllowed: true, approximateTravel: false, validation: { status: 'VALID' } }) });
+  const api = createOperationsApi({ store, routing: testExactRouting });
   try {
     const initial = await (await api.handle(request('/api/shifts', 'POST', { regionId: 'moscow', date: '2026-08-17', orders: [order], team: [engineer], plan }))).json();
     const newcomer = { ...engineer, id: 'crew-new', sourceId: 'CREW-NEW', name: 'Новая бригада' };
@@ -72,7 +86,7 @@ test('adding a staff member to a shift and taking them off duty are separate pub
 
 test('manual request addition needs no event time or reason after an earlier publication', async () => {
   const store = new ShiftStore(':memory:');
-  const api = createOperationsApi({ store, routing: async candidate => ({ ...candidate, provider: 'TEST_EXACT_ROAD', publicationAllowed: true, approximateTravel: false, validation: { status: 'VALID' } }) });
+  const api = createOperationsApi({ store, routing: testExactRouting });
   try {
     const initial = await (await api.handle(request('/api/shifts', 'POST', { regionId: 'moscow', date: '2026-08-17', orders: [order], team: [engineer], plan }))).json();
     const first = await (await api.handle(request(`/api/shifts/${initial.id}/preview`, 'POST', { expectedRevision: 1, event: { type: 'VISIT_CANCELLED', time: '19:43', reason: 'Клиент отменил визит', orderId: order.id } }))).json();
@@ -92,7 +106,7 @@ test('manual request addition needs no event time or reason after an earlier pub
 
 test('discarding an unpublished preview survives reload without changing the published shift', async () => {
   const store = new ShiftStore(':memory:');
-  const api = createOperationsApi({ store, routing: async candidate => ({ ...candidate, provider: 'TEST_EXACT_ROAD', publicationAllowed: true, approximateTravel: false, validation: { status: 'VALID' } }) });
+  const api = createOperationsApi({ store, routing: testExactRouting });
   try {
     const shift = await (await api.handle(request('/api/shifts', 'POST', { regionId: 'moscow', date: '2026-08-17', orders: [order], team: [engineer], plan }))).json();
     const extraEngineer = { ...engineer, id: 'crew-new', name: 'Тестовая бригада', sourceId: 'CREW-NEW' };
@@ -113,7 +127,7 @@ test('discarding an unpublished preview survives reload without changing the pub
 
 test('event preview, exact validation gate, atomic publish, replay and PDF', async () => {
   const store = new ShiftStore(':memory:');
-  const api = createOperationsApi({ store, routing: async candidate => ({ ...candidate, provider: 'TEST_EXACT_ROAD', publicationAllowed: true, approximateTravel: false, validation: { status: 'VALID' } }) });
+  const api = createOperationsApi({ store, routing: testExactRouting });
   try {
     let response = await api.handle(request('/api/shifts', 'POST', { regionId: 'moscow', date: '2026-08-17', orders: [order], team: [engineer], plan }));
     const initial = await response.json();
@@ -218,7 +232,7 @@ test('unreachable transit stop reports an actionable routing failure', async () 
   await assert.rejects(exactLeg([55.75, 37.62], [55.76, 37.63], 'Общественный транспорт', { geoapifyKey: 'test-key', fetchImpl }), /не нашёл доступный путь/);
 });
 
-test('operational publication keeps estimated baseline provenance while checking changed roads', async () => {
+test('operational publication rejects an estimated baseline even after changed roads are checked', async () => {
   const extraOrder = { ...order, id: 'job-2', sourceId: 'JOB-2', coords: [55.76, 37.63] };
   const extraEngineer = { ...engineer, id: 'crew-2', name: 'Бригада 2' };
   const base = { ...plan, status: 'HYBRID_VALID', routes: plan.routes };
@@ -236,10 +250,7 @@ test('operational publication keeps estimated baseline provenance while checking
   assert.equal(validated.routes[1].assignments[0].claimLevel, 'EXACT_ROAD_VALIDATED');
   const store = new ShiftStore(':memory:');
   try {
-    const shift = store.ensure({ regionId: 'moscow', date: '2026-08-17', orders: [order], team: [engineer], plan: base });
-    const previewId = store.startPreview(shift.id, 1, candidate.event);
-    store.completePreview(previewId, { plan: validated, orders: [order, extraOrder], team: [engineer, extraEngineer] });
-    assert.equal(store.publish(shift.id, previewId, 1).revision, 2);
+    assert.throws(() => store.ensure({ regionId: 'moscow', date: '2026-08-17', orders: [order], team: [engineer], plan: base }), /точного плана/);
   } finally { store.close(); }
 });
 
@@ -263,7 +274,7 @@ test('an assigned visit keeps its verified route when its new window still conta
   assert.equal(checked.routes[0].assignments[0].plannedStart, '09:00');
 });
 
-test('an unavailable engineer can be removed while road routing is down, with future jobs queued', async () => {
+test('road routing failure leaves an unavailable engineer change unpublished', async () => {
   const store = new ShiftStore(':memory:');
   const reserve = { ...engineer, id: 'crew-reserve', name: 'Резерв' };
   const future = { ...order, id: 'future', sourceId: 'FUTURE', start: '12:00', end: '17:00', coords: [55.76, 37.63] };
@@ -271,21 +282,17 @@ test('an unavailable engineer can be removed while road routing is down, with fu
     plan.routes[0].assignments[0],
     { ...plan.routes[0].assignments[0], orderId: future.id, plannedStart: '13:00', plannedFinish: '14:00' },
   ] }] };
-  const api = createOperationsApi({ store, routing: async (candidate, previous, orders, team, options) => {
-    if (candidate.routes.some(route => route.engineerId === reserve.id && route.assignments.length)) throw new Error('Дорожный сервис вернул 400. Черновик не публикуется.');
-    return validateRoadPlan(candidate, previous, orders, team, { ...options, fetchImpl: () => { throw new Error('Network must not be needed for deferred assignments'); } });
-  } });
+  const api = createOperationsApi({ store, routing: async () => { throw new Error('Дорожный сервис вернул 400. Черновик не публикуется.'); } });
   try {
     const shift = store.ensure({ regionId: 'moscow', date: '2026-08-17', orders: [order, future], team: [engineer, reserve], plan: base });
     const queued = await (await api.handle(request(`/api/shifts/${shift.id}/preview`, 'POST', { expectedRevision: 1, event: { type: 'ENGINEER_UNAVAILABLE', engineerId: engineer.id, time: '11:00', reason: 'Больничный' } }))).json();
     await new Promise(resolve => setImmediate(resolve));
     const preview = await (await api.handle(request(`/api/previews/${queued.id}`))).json();
-    assert.equal(preview.status, 'READY', preview.error);
-    assert.equal(preview.result.plan.validation.deferredAssignments, true);
-    assert.equal(preview.result.plan.unassigned.find(item => item.orderId === future.id)?.reasonCode, 'ENGINEER_UNAVAILABLE');
-    const published = await (await api.handle(request(`/api/shifts/${shift.id}/publish`, 'POST', { previewId: queued.id, expectedRevision: 1 }))).json();
-    assert.equal(published.revision, 2);
-    assert.equal(published.team.find(item => item.id === engineer.id).status, 'Недоступен');
+    assert.equal(preview.status, 'FAILED');
+    assert.match(preview.error, /Дорожный сервис вернул 400/);
+    const publication = await api.handle(request(`/api/shifts/${shift.id}/publish`, 'POST', { previewId: queued.id, expectedRevision: 1 }));
+    assert.equal(publication.status, 422);
+    assert.equal(store.get(shift.id).revision, 1);
   } finally { store.close(); }
 });
 
@@ -356,10 +363,10 @@ test('AI monthly token reservation survives reads and enforces the configured ce
 test('background preview exposes real road-check progress before publication', async () => {
   let releaseRouting;
   const store = new ShiftStore(':memory:');
-  const api = createOperationsApi({ store, routing: async (candidate, _base, _orders, _team, options) => {
-    options.onProgress({ checkedRoads: 2 });
+  const api = createOperationsApi({ store, routing: async (shift, model, onProgress) => {
+    onProgress({ phase: 'ROAD_CHECK', checkedRoads: 2 });
     await new Promise(resolve => { releaseRouting = resolve; });
-    return { ...candidate, provider: 'TEST_EXACT_ROAD', publicationAllowed: true, approximateTravel: false, validation: { status: 'VALID', exactCheckedVisits: 2 } };
+    return { ...await testExactRouting(shift, model), validation: { status: 'VALID', exactCheckedVisits: 2 } };
   } });
   try {
     const shift = store.ensure({ regionId: 'moscow', date: '2026-08-17', orders: [order], team: [engineer], plan });
@@ -391,7 +398,7 @@ for (const [datasetName, prefix] of [['исходной', 'base'], ['импор�
     ];
     for (const [index, scenario] of cases.entries()) {
       const store = new ShiftStore(':memory:');
-      const api = createOperationsApi({ store, routing: async candidate => ({ ...candidate, provider: 'TEST_EXACT_ROAD', publicationAllowed: true, approximateTravel: false, validation: { status: 'VALID' } }) });
+      const api = createOperationsApi({ store, routing: testExactRouting });
       try {
         const shift = store.ensure({ regionId: `moscow-${prefix}-${index}`, date: '2026-08-17', orders: [baseOrder], team: [baseEngineer], plan: basePlan });
         const event = { ...scenario, check: undefined, time: '08:15', reason: 'Приёмочный сценарий' };

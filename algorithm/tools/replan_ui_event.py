@@ -11,6 +11,7 @@ from typing import Any
 
 from beeline_planning import (
     EquipmentNeed,
+    Engineer,
     Event,
     Job,
     Priority,
@@ -20,14 +21,15 @@ from beeline_planning import (
     load_planning_dataset,
     replan_after_event,
 )
-from beeline_planning.domain import EventType, JobStatus
+from beeline_planning.domain import EventType, JobStatus, Office
 from beeline_planning.export import load_exact_plan_artifact, materialization_result_dict
 from beeline_planning.materialize import MaterializationResult, MaterializationStatus
 from beeline_routing.cache import RoutingCache
 from beeline_routing.cli import create_route_client
 from beeline_routing.export import payload_sha256, write_json_atomic
-from beeline_routing.models import Coordinate
+from beeline_routing.models import Coordinate, TransportMode
 from beeline_routing.oracle import ExactRoutingOracle
+from prepare_ui_dataset import equipment as parse_equipment, priority as parse_priority
 
 
 def _source_id(value: Any) -> str:
@@ -86,7 +88,7 @@ def _equipment(order: dict[str, Any], catalog) -> tuple[EquipmentNeed, ...]:
         or order.get('sourceData', {}).get('required_equipment')
         or ''
     )
-    values = [item.strip() for item in str(raw).replace(',', '|').split('|') if item.strip()]
+    values = parse_equipment(raw)
     unknown = [item for item in values if item not in catalog]
     if unknown:
         raise ValueError('Неизвестные коды оборудования: ' + ', '.join(unknown))
@@ -117,6 +119,37 @@ def _zone_id(payload: dict[str, Any], order: dict[str, Any], dataset) -> str:
     raise ValueError('Для новой заявки не определена территория')
 
 
+def _add_ui_engineer(dataset, candidate, zone_id, template, locations, offices, engineers, digest):
+    engineer_id = _source_id(candidate.get('sourceId') or candidate.get('id'))
+    if not engineer_id or engineer_id in engineers:
+        raise ValueError('Новой бригаде нужен уникальный ID')
+    coords = candidate.get('startCoords')
+    if not isinstance(coords, list) or len(coords) != 2:
+        raise ValueError('Для новой бригады нужна подтверждённая стартовая точка')
+    location_id = f'UI-ENGINEER-LOC-{digest}'
+    office_id = f'UI-ENGINEER-OFFICE-{digest}'
+    locations[location_id] = Coordinate(location_id, float(coords[0]), float(coords[1]))
+    offices[office_id] = Office(office_id, zone_id, location_id)
+    equipment_codes = parse_equipment(candidate.get('equipment'))
+    unknown = sorted(set(equipment_codes) - set(dataset.equipment_catalog))
+    if unknown:
+        raise ValueError('Неизвестное оборудование новой бригады: ' + ', '.join(unknown))
+    engineers[engineer_id] = Engineer(
+        engineer_id=engineer_id,
+        zone_id=zone_id,
+        shift_start=_at(dataset, candidate.get('shiftStart')),
+        shift_end=_at(dataset, candidate.get('shiftEnd')),
+        start_office_id=office_id,
+        transport_mode=TransportMode(_transport(candidate.get('transport')).value),
+        is_available=True,
+        max_jobs=template.max_jobs,
+        max_route_minutes=template.max_route_minutes,
+        skills=frozenset(_skill(value) for value in candidate.get('skills', [])),
+        equipment=tuple(EquipmentNeed(code, 1) for code in equipment_codes),
+    )
+    return engineer_id
+
+
 def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
     event_payload = payload.get('event') or {}
     event_type = str(event_payload.get('type') or '').strip()
@@ -124,13 +157,23 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
     regular_jobs = {
         job_id: job for job_id, job in dataset.jobs.items() if not job.is_event_job
     }
+    engineers = dict(dataset.engineers)
+    offices = dict(dataset.offices)
     locations = dict(dataset.locations)
     digest = hashlib.sha256(
         json.dumps(event_payload, ensure_ascii=False, sort_keys=True).encode('utf-8')
     ).hexdigest()[:16]
     event_id = f'UI-EVT-{digest}'
 
-    if event_type == 'NEW_ORDER':
+    if event_type == 'RECALCULATE':
+        if not regular_jobs:
+            raise ValueError('Для пересчёта нужны заявки смены')
+        target = next(iter(regular_jobs.values()))
+        event = Event(
+            1, event_id, event_time, EventType.REPLAN_REQUEST,
+            target.job_id, target.zone_id, None, {'source': 'UI'},
+        )
+    elif event_type == 'NEW_ORDER':
         ui_id = str(event_payload.get('orderId') or '')
         order = next(
             (item for item in payload.get('orders', []) if str(item.get('id')) == ui_id),
@@ -152,6 +195,7 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
         location_id = f'UI-LOC-{digest}'
         locations[location_id] = Coordinate(location_id, float(coords[0]), float(coords[1]))
         zone_id = _zone_id(payload, order, dataset)
+        priority = Priority(parse_priority(order.get('priority') or order.get('sourceData', {}).get('priority')))
         job = Job(
             job_id=source_job_id,
             zone_id=zone_id,
@@ -160,21 +204,22 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
             window_end=_at(dataset, order.get('end')),
             created_at=event_time,
             service_duration_min=int(order.get('duration') or 0),
-            priority=Priority.URGENT,
+            priority=priority,
             required_skill=_skill(order.get('skill') or order.get('workType')),
             required_transport=_transport(
                 order.get('requiredTransport')
                 or order.get('sourceData', {}).get('required_transport')
             ),
             required_equipment=_equipment(order, dataset.equipment_catalog),
-            is_event_job=True,
+            is_event_job=False,
             status=JobStatus.PENDING,
         )
         if job.service_duration_min < 1 or job.window_end <= job.window_start:
             raise ValueError('Проверьте длительность и клиентское окно новой заявки')
         regular_jobs[source_job_id] = job
         event = Event(
-            1, event_id, event_time, EventType.NEW_URGENT_JOB,
+            1, event_id, event_time,
+            EventType.NEW_URGENT_JOB if priority == Priority.URGENT else EventType.NEW_JOB,
             source_job_id, zone_id, None, {'source': 'UI'},
         )
     elif event_type == 'ORDER_CANCELLED':
@@ -186,6 +231,20 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
             1, event_id, event_time, EventType.CANCEL_JOB,
             source_job_id, job.zone_id, None, {'source': 'UI'},
         )
+    elif event_type == 'CLIENT_WINDOW_SHIFT':
+        source_job_id = _source_id(event_payload.get('sourceOrderId') or event_payload.get('orderId'))
+        job = regular_jobs.get(source_job_id)
+        if job is None:
+            raise ValueError(f'Заявка для изменения окна не найдена: {source_job_id}')
+        start = _at(dataset, event_payload.get('start'))
+        end = _at(dataset, event_payload.get('end'))
+        if end <= start:
+            raise ValueError('Новое клиентское окно должно завершаться после начала')
+        regular_jobs[source_job_id] = replace(job, window_start=start, window_end=end)
+        event = Event(
+            1, event_id, event_time, EventType.WINDOW_SHIFT,
+            source_job_id, job.zone_id, None, {'source': 'UI'},
+        )
     elif event_type == 'ENGINEER_UNAVAILABLE':
         engineer_id = _source_id(
             event_payload.get('sourceEngineerId') or event_payload.get('engineerId')
@@ -193,9 +252,37 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
         engineer = dataset.engineers.get(engineer_id)
         if engineer is None:
             raise ValueError(f'Инженер не найден: {engineer_id}')
+        replacement = event_payload.get('replacement')
+        if replacement:
+            replacement_zone = str(replacement.get('zoneId') or engineer.zone_id)
+            if replacement_zone != engineer.zone_id:
+                raise ValueError('Заменяющая бригада должна работать в той же территории')
+            _add_ui_engineer(dataset, replacement, replacement_zone, engineer, locations, offices, engineers, digest)
         event = Event(
             1, event_id, event_time, EventType.ENGINEER_UNAVAILABLE,
             engineer_id, engineer.zone_id, engineer.shift_end, {'source': 'UI'},
+        )
+    elif event_type == 'CAPACITY_ADDED':
+        new_engineer = event_payload.get('engineer')
+        if new_engineer:
+            zone_id = str(new_engineer.get('zoneId') or '').strip()
+            if not zone_id:
+                zone_label = str(new_engineer.get('zone') or '').casefold()
+                source_member = next((member for member in payload.get('team', [])
+                    if str(member.get('zone') or '').casefold() == zone_label
+                    and _source_id(member.get('sourceId') or member.get('id')) in engineers), None)
+                zone_id = engineers[_source_id(source_member.get('sourceId') or source_member.get('id'))].zone_id if source_member else ''
+            template = next((member for member in engineers.values() if member.zone_id == zone_id), None)
+            if template is None:
+                raise ValueError('Для новой бригады не определена территория смены')
+            engineer_id = _add_ui_engineer(dataset, new_engineer, zone_id, template, locations, offices, engineers, digest)
+        else:
+            engineer_id = _source_id(event_payload.get('sourceEngineerId') or event_payload.get('engineerId'))
+            if engineer_id not in engineers:
+                raise ValueError('Возвращаемая бригада не найдена')
+        event = Event(
+            1, event_id, event_time, EventType.CAPACITY_ADDED,
+            engineer_id, engineers[engineer_id].zone_id, None, {'source': 'UI'},
         )
     elif event_type == 'FORCED_ASSIGNMENT':
         source_job_id = _source_id(event_payload.get('sourceOrderId') or event_payload.get('orderId'))
@@ -223,6 +310,8 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
         dataset,
         dataset_sha256=event_hash,
         jobs=regular_jobs,
+        engineers=engineers,
+        offices=offices,
         locations=locations,
         events=(event,),
     ), event
@@ -268,11 +357,44 @@ def main() -> int:
 
     payload = json.load(sys.stdin)
     canonical = load_planning_dataset(args.dataset, 'core')
+    source_manifest = json.loads(args.input_plan.read_text(encoding='utf-8'))
+    source_dataset_hash = source_manifest.get('dataset_sha256')
+    history = source_manifest.get('ui_history', [])
+    if source_dataset_hash != canonical.dataset_sha256:
+        if source_manifest.get('artifact_type') != 'EXACT_PLAN_REPLANNING' or not history:
+            raise ValueError('План относится к другому набору данных')
+        applied_events = []
+        for item in history:
+            canonical, prior_event = _event_dataset(canonical, item)
+            applied_events.append(replace(prior_event, apply_order=len(applied_events) + 1))
+            canonical = replace(canonical, events=tuple(applied_events))
+        if canonical.dataset_sha256 != source_dataset_hash:
+            raise ValueError('История изменений не соответствует контрольной сумме плана')
     plan, source = load_exact_plan_artifact(args.input_plan, canonical.dataset_sha256)
     expected_hash = str(payload.get('basePlanContentSha256') or '')
     if expected_hash and expected_hash != source['content_sha256']:
         raise ValueError('Перепланирование разрешено только от актуального точного плана')
     dataset, event = _event_dataset(canonical, payload)
+    prior_events = tuple(canonical.events) if history else ()
+    event = replace(event, apply_order=len(prior_events) + 1)
+    dataset = replace(dataset, events=prior_events + (event,))
+    unavailable = {}
+    for previous in prior_events:
+        if previous.event_type == EventType.ENGINEER_UNAVAILABLE:
+            unavailable[previous.target_id] = previous.unavailable_until
+        elif previous.event_type == EventType.CAPACITY_ADDED:
+            unavailable.pop(previous.target_id, None)
+    canceled = frozenset(
+        previous.target_id for previous in prior_events
+        if previous.event_type == EventType.CANCEL_JOB
+    )
+    state = ReplanningState(
+        plan=plan,
+        applied_event_ids=tuple(previous.event_id for previous in prior_events),
+        canceled_job_ids=canceled,
+        unavailable_until_by_engineer=unavailable,
+        last_event_time=prior_events[-1].event_time if prior_events else None,
+    )
     oracle = ExactRoutingOracle(create_route_client(
         RoutingCache(args.cache),
         'valhalla-local-transit',
@@ -283,7 +405,7 @@ def main() -> int:
     ))
     result = replan_after_event(
         dataset,
-        ReplanningState(plan=plan),
+        state,
         event,
         oracle,
         max_route_checks=args.max_route_checks,
@@ -291,6 +413,7 @@ def main() -> int:
             {event.target_id: str(event.payload['engineer_id'])}
             if event.event_type == EventType.MANUAL_ASSIGNMENT else None
         ),
+        source_dataset=canonical,
     )
     if result.state is None:
         print(json.dumps({
@@ -351,6 +474,11 @@ def main() -> int:
             'transit_index': str(args.transit_index),
         },
         'global_optimality_proven': False,
+        'ui_history': [*history, {
+            'event': payload.get('event'),
+            'orders': payload.get('orders', []),
+            'team': payload.get('team', []),
+        }],
     })
     artifact['content_sha256'] = payload_sha256(artifact)
     write_json_atomic(args.output, artifact)

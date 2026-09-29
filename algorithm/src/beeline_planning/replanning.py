@@ -133,6 +133,8 @@ def _check_next_event(dataset: PlanningDataset, state: ReplanningState, event: E
                 applied.unavailable_until,
                 expected_unavailability.get(applied.target_id, applied.event_time),
             )
+        elif applied.event_type == EventType.CAPACITY_ADDED:
+            expected_unavailability.pop(applied.target_id, None)
     if dict(state.unavailable_until_by_engineer) != expected_unavailability:
         raise InvalidPlanningData('Unavailability state differs from applied events')
     if index >= len(ordered) or ordered[index] != event:
@@ -143,11 +145,13 @@ def _check_next_event(dataset: PlanningDataset, state: ReplanningState, event: E
         raise InvalidPlanningData('Source plan was created after the event')
     if event.zone_id not in {engineer.zone_id for engineer in dataset.engineers.values()}:
         raise InvalidPlanningData('Event references an unknown zone')
-    if event.event_type == EventType.ENGINEER_UNAVAILABLE:
+    if event.event_type in {EventType.ENGINEER_UNAVAILABLE, EventType.CAPACITY_ADDED}:
         engineer = dataset.engineers.get(event.target_id)
         if engineer is None or engineer.zone_id != event.zone_id:
-            raise InvalidPlanningData('Unavailable engineer and event zone differ')
-        if event.unavailable_until is None or event.unavailable_until <= event.event_time:
+            raise InvalidPlanningData('Engineer and event zone differ')
+        if event.event_type == EventType.ENGINEER_UNAVAILABLE and (
+            event.unavailable_until is None or event.unavailable_until <= event.event_time
+        ):
             raise InvalidPlanningData('Engineer unavailability requires a later end time')
     else:
         job = dataset.jobs.get(event.target_id)
@@ -155,10 +159,11 @@ def _check_next_event(dataset: PlanningDataset, state: ReplanningState, event: E
             raise InvalidPlanningData('Event job and event zone differ')
         if event.event_type == EventType.CANCEL_JOB and job.created_at > event.event_time:
             raise InvalidPlanningData('Cannot cancel a job before it exists')
-        if event.event_type == EventType.NEW_URGENT_JOB and (
-            job.priority != Priority.URGENT or job.created_at != event.event_time
-        ):
-            raise InvalidPlanningData('New urgent job must be urgent and created at event time')
+        if event.event_type in {EventType.NEW_JOB, EventType.NEW_URGENT_JOB}:
+            if job.created_at != event.event_time:
+                raise InvalidPlanningData('New job must be created at event time')
+            if event.event_type == EventType.NEW_URGENT_JOB and job.priority != Priority.URGENT:
+                raise InvalidPlanningData('New urgent job must be urgent')
 
 
 def _static_eligible(dataset: PlanningDataset, engineer_id: str, job_id: str) -> bool:
@@ -187,6 +192,7 @@ def replan_after_event(
     urgent_slack_minutes: int = 15,
     urgent_ejection_gain_minutes: int = 45,
     forced_engineer_by_job: Mapping[str, str] | None = None,
+    source_dataset: PlanningDataset | None = None,
     progress_callback: Callable[[int], None] | None = None,
 ) -> ReplanningResult:
     """Apply one ordered event and return an exactly validated full-day plan.
@@ -211,11 +217,11 @@ def replan_after_event(
             )
     _check_next_event(dataset, state, event)
     if not state.applied_event_ids:
-        source_validation = validate_initial_plan(dataset, state.plan)
+        source_validation = validate_initial_plan(source_dataset or dataset, state.plan)
     else:
         previous_event = dataset.events[len(state.applied_event_ids) - 1]
         source_validation = validate_replanned_plan(
-            dataset,
+            source_dataset or dataset,
             state.plan,
             state.plan,
             event_time=previous_event.event_time,
@@ -263,6 +269,8 @@ def replan_after_event(
             event.unavailable_until,
             unavailable.get(event.target_id, event.event_time),
         )
+    elif event.event_type == EventType.CAPACITY_ADDED:
+        unavailable.pop(event.target_id, None)
 
     active_job_ids = {
         job.job_id for job in dataset.active_jobs_at(event.event_time)
@@ -344,9 +352,18 @@ def replan_after_event(
                 for visit in original_route.visits
             )
         ) if original_route else False
+        shifted_window = (
+            event.event_type == EventType.WINDOW_SHIFT
+            and original_route is not None
+            and any(
+                visit.job_id == event.target_id
+                and not dataset.jobs[visit.job_id].window_start <= visit.service_start_at <= dataset.jobs[visit.job_id].window_end
+                for visit in original_route.visits
+            )
+        )
         # The source plan is independently validated above. An untouched route
         # has the same job order and exact route evidence after this event.
-        if order == original_suffix and not newly_unavailable:
+        if order == original_suffix and not newly_unavailable and not shifted_window:
             result = _RouteTrial(original_route.visits if original_route else ())
             trial_cache[key] = result
             return result

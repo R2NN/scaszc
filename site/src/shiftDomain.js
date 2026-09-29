@@ -1,5 +1,6 @@
 // Shared, deterministic rules for operational events and the day playback.
 export const EVENT_TYPES = Object.freeze({
+  RECALCULATE: 'RECALCULATE',
   NEW_ORDER: 'NEW_ORDER',
   ORDER_CANCELLED: 'ORDER_CANCELLED',
   VISIT_CANCELLED: 'VISIT_CANCELLED',
@@ -29,7 +30,7 @@ export function normalizeDataAdditionEvent(shift, event) {
   const manualOrder = newOrder && event.order.status === 'Черновик';
   const latest = minuteOf(shift?.versions?.at(-1)?.effectiveAt) ?? 0;
   const shiftStart = newCrew ? minuteOf(event.engineer.shiftStart) ?? 0 : 0;
-  const time = timeOf(manualOrder ? latest : Math.max(latest, shiftStart, minuteOf(event.time) ?? 0));
+  const time = timeOf(Math.max(latest, manualOrder ? 420 : shiftStart, minuteOf(event.time) ?? 0));
   const automaticReason = newOrder ? `Заявка добавлена вручную: ${event.order.name || event.order.id}` : `Бригада включена в смену: ${event.engineer.name || event.engineer.id}`;
   const reason = manualOrder ? automaticReason : String(event.reason || '').trim() || automaticReason;
   return { ...event, time, reason };
@@ -48,7 +49,9 @@ export function eventModel(shift, event) {
   let nextOrders = orders;
   let nextTeam = team;
   let planningEvent = { ...event };
-  if ([EVENT_TYPES.ORDER_CANCELLED, EVENT_TYPES.VISIT_CANCELLED].includes(event.type)) {
+  if (event.type === EVENT_TYPES.RECALCULATE) {
+    if (event.time < '07:00') throw new Error('Пересчёт до начала смены начинается с 07:00.');
+  } else if ([EVENT_TYPES.ORDER_CANCELLED, EVENT_TYPES.VISIT_CANCELLED].includes(event.type)) {
     if (!order) throw new Error('Заявка не найдена.');
     if (completed.has(String(order.id))) throw new Error('Выполненную заявку нельзя отменить.');
     if ((shift.facts || []).some(item => String(item.orderId) === String(order.id) && item.status === 'started')) throw new Error('Начатый визит нельзя отменить без фактической отметки о невыполнении.');

@@ -35,3 +35,17 @@ export const matchesSearch = (query, values) => {
   return !needle || values.flatMap(value => Array.isArray(value) ? value : [value])
     .some(value => normalize(value).includes(needle) || normalize(filterLabel(value)).includes(needle));
 };
+
+/** Preserve separate work category and required skill when filtering a request. */
+export const orderWorkValues = order => [order?.workType, order?.skill, order?.sourceData?.bk_type, order?.sourceData?.required_skill]
+  .flatMap(value => Array.isArray(value) ? value : [value])
+  .map(value => String(value || '').trim())
+  .filter(Boolean);
+
+/** Include source IDs and original fields in request search. */
+export const orderSearchValues = order => [
+  order?.id, order?.sourceId, order?.sourceData?.source_job_id,
+  order?.name, order?.address, order?.formattedAddress,
+  order?.workType, order?.serviceType, order?.skill,
+  order?.priority, order?.equipment, order?.zone, order?.district,
+];
