@@ -72,8 +72,16 @@ export async function findAlternativeWindow(shift, model, order, routing) {
 
 const historicalInventory = async date => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return [];
-  const file = path.join(projectRoot(), 'history', date, 'dataset', 'core', 'shared_inventory.csv');
-  const csv = await readFile(file, 'utf8').catch(() => '');
+  const root = projectRoot();
+  const historical = path.join(root, 'history', date, 'dataset');
+  const base = path.join(root, 'data', 'dataset');
+  let csv = '';
+  for (const dataset of [historical, base]) {
+    const manifest = JSON.parse(await readFile(path.join(dataset, 'manifest.json'), 'utf8').catch(() => 'null'));
+    if (manifest?.planning_date !== date) continue;
+    csv = await readFile(path.join(dataset, 'core', 'shared_inventory.csv'), 'utf8').catch(() => '');
+    if (csv) break;
+  }
   const [header, ...rows] = csv.trim().split(/\r?\n/);
   if (!header || !rows.length) return [];
   const fields = header.split(';');
