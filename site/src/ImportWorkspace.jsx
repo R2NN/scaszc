@@ -9,6 +9,7 @@ import { regionForCity, resolveImportedCity } from './regions.js';
 import { pushImportHistory, redoImportHistory, undoImportHistory } from './importHistory.js';
 import { importedEquipmentRequirements, importedEquipmentTokens } from './importEquipment.js';
 import { parseWorkNorms, workDurationFor, workNormFor } from './workNorms.js';
+import { parseImportedDate } from './importDate.js';
 
 const ORDER_FIELD_GROUPS = [
   {
@@ -218,8 +219,8 @@ const ORDER_ALIASES = {
   zone: ['zone', 'зона', 'участок'],
   zoneId: ['zone id', 'id зоны', 'код зоны'],
   zoneName: ['zone name', 'название зоны'],
-  windowStart: ['window start', 'time window start', 'appointment start', 'visit start', 'start time', 'start', 'начало окна', 'начало интервала', 'время начала', 'время начала окна', 'окно с', 'время с', 'визит с', 'от', 'с'],
-  windowEnd: ['window end', 'time window end', 'appointment end', 'visit end', 'end time', 'end', 'конец окна', 'конец интервала', 'время окончания', 'время окончания окна', 'окно до', 'время до', 'визит до', 'до', 'по'],
+  windowStart: ['window start', 'time window start', 'appointment start', 'visit start', 'start time', 'start', 'начало', 'начало окна', 'начало интервала', 'время начала', 'время начала окна', 'окно с', 'время с', 'визит с', 'от', 'с'],
+  windowEnd: ['window end', 'time window end', 'appointment end', 'visit end', 'end time', 'end', 'окончание', 'конец', 'конец окна', 'конец интервала', 'время окончания', 'время окончания окна', 'окно до', 'время до', 'визит до', 'до', 'по'],
   windowRange: ['time window', 'appointment window', 'visit window', 'окно заявки', 'окно обслуживания', 'интервал', 'время визита'],
   duration: ['service duration min', 'duration', 'длительность', 'норматив', 'норматив мин'],
   workType: ['bk type', 'work type', 'тип работ', 'тип заявки'],
@@ -365,6 +366,52 @@ export const autoMapHeaders = (headers, entityType = 'orders') => {
   }));
 };
 
+const mappedValue = (row, mappings, field) => {
+  const column = Object.keys(mappings).find(key => mappings[key] === field);
+  return column === undefined ? '' : String(row[Number(column)] ?? '').trim();
+};
+
+const mappedWork = (row, mappings) => ({
+  workType: mappedValue(row, mappings, 'workType'),
+  serviceType: mappedValue(row, mappings, 'serviceType'),
+  skill: mappedValue(row, mappings, 'skill'),
+  name: mappedValue(row, mappings, 'name'),
+});
+
+/** Add an editable planned duration while keeping any incoming duration visible for audit. */
+export function withWorkNormDefaults(dataset, norms) {
+  const mappings = { ...(dataset.savedMappings || autoMapHeaders(dataset.headers, 'orders')) };
+  const sourceDuration = Object.keys(mappings).find(key => mappings[key] === 'duration');
+  const headers = [...dataset.headers];
+  if (sourceDuration !== undefined) {
+    headers[Number(sourceDuration)] = `Исходная длительность: ${headers[Number(sourceDuration)]}`;
+    mappings[sourceDuration] = `custom:${headers[Number(sourceDuration)]}`;
+  }
+  const durationColumn = headers.length;
+  headers.push('Норматив, мин');
+  mappings[durationColumn] = 'duration';
+  return {
+    ...dataset,
+    headers,
+    rows: dataset.rows.map(row => {
+      const norm = workNormFor(mappedWork(row, mappings), norms);
+      return [...row, String(norm?.serviceMinutes ?? 60)];
+    }),
+    savedMappings: mappings,
+  };
+}
+
+/** List rows whose work type has no entry in the configured norms. */
+export function unmatchedWorkNorms(rows, mappings, norms) {
+  if (!norms) return [];
+  return rows.flatMap((row, index) => {
+    const work = mappedWork(row, mappings);
+    if (workNormFor(work, norms)) return [];
+    return [{ index, type: work.workType || work.serviceType || work.skill || work.name || 'Вид работ не указан',
+      duration: mappedValue(row, mappings, 'duration') }];
+  });
+}
+
 const asNumber = value => {
   const text = String(value ?? '').trim();
   if (!text) return null;
@@ -379,9 +426,10 @@ const asTime = value => {
     const minutes = Math.round(excelFraction * 24 * 60);
     return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
   }
-  const iso = text.match(/T(\d{2}:\d{2})/);
-  const simple = text.match(/^(\d{1,2})[:.](\d{2})/);
-  if (iso) return iso[1];
+  const dated = parseImportedDate(text);
+  const dateTime = dated && text.match(/(?:T|\s+)([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d{1,3})?)?(?:\s*(?:Z|[+-]\d{2}:?\d{2}))?$/i);
+  const simple = text.match(/^([01]?\d|2[0-3])[:.]([0-5]\d)(?::[0-5]\d)?$/);
+  if (dateTime) return `${dateTime[1].padStart(2, '0')}:${dateTime[2]}`;
   if (simple) return `${simple[1].padStart(2, '0')}:${simple[2]}`;
   return '';
 };
@@ -575,6 +623,8 @@ export async function parseImportFile(file, preferredEntityType = 'orders') {
     }
     if (!Object.keys(datasets).length) throw new Error('В файле должны быть заголовки и хотя бы одна строка данных.');
   }
+  const workNorms = datasets.orders ? await configuredWorkNorms() : null;
+  if (datasets.orders) datasets.orders = withWorkNormDefaults(datasets.orders, workNorms);
   const primary = datasets[preferredEntityType] || Object.values(datasets)[0];
   const locationDataset = datasets.orders || datasets.engineers || primary;
   return {
@@ -584,7 +634,7 @@ export async function parseImportFile(file, preferredEntityType = 'orders') {
     fileName: file.name,
     suggestedRegionId: detectSuggestedRegion(locationDataset.headers, locationDataset.rows),
     sourceFormat: extension,
-    workNorms: datasets.orders ? await configuredWorkNorms() : null,
+    workNorms,
   };
 }
 
@@ -606,7 +656,9 @@ export async function parseImportFiles(inputFiles, preferredEntityType = 'orders
     }));
     if (!sources.length) continue;
     const columns = new Map();
-    const mappedSources = sources.map(source => ({ ...source, mapping: autoMapHeaders(source.dataset.headers, entityType) }));
+    const mappedSources = sources.map(source => ({
+      ...source, mapping: source.dataset.savedMappings || autoMapHeaders(source.dataset.headers, entityType),
+    }));
     mappedSources.forEach(({ dataset, mapping }) => dataset.headers.forEach((header, index) => {
       const field = mapping[index];
       const key = field.startsWith('custom:') ? `custom:${normalize(header)}` : field;
@@ -701,6 +753,7 @@ export function buildOrders(headers, rows, mappings, region, workNorms = null) {
     const skill = valueFor(row, 'skill');
     const name = valueFor(row, 'name');
     const [rangeStart, rangeEnd] = windowFromRange(valueFor(row, 'windowRange'));
+    const windowDate = parseImportedDate(valueFor(row, 'windowStart') || valueFor(row, 'windowRange'));
     const duration = workDurationFor({ workType, serviceType, skill, name }, workNorms, valueFor(row, 'duration'));
     const informational = isInformationalOrder({ serviceType, workType, name: valueFor(row, 'name') });
     const lat = asNumber(valueFor(row, 'latitude'));
@@ -731,7 +784,8 @@ export function buildOrders(headers, rows, mappings, region, workNorms = null) {
       start: asTime(valueFor(row, 'windowStart')) || rangeStart,
       end: asTime(valueFor(row, 'windowEnd')) || rangeEnd,
       duration,
-      durationSource: workNormFor({ workType, serviceType, skill, name }, workNorms) ? 'Нормативы.xlsx' : 'Файл заявки',
+      durationSource: workNormFor({ workType, serviceType, skill, name }, workNorms)
+        ? 'Нормативы.xlsx' : workNorms ? (duration === 60 ? 'Без норматива · 60 мин' : 'Изменено оператором') : 'Файл заявки',
       priority: informational ? 'Обычная' : translatePriority(valueFor(row, 'priority')),
       workType,
       skill: informational && /emerg|авар/i.test(skill) ? '' : translateSkill(skill, workType || serviceType),
@@ -747,7 +801,7 @@ export function buildOrders(headers, rows, mappings, region, workNorms = null) {
       scenario: valueFor(row, 'scenario'),
       notes: valueFor(row, 'notes'),
       createdAt: valueFor(row, 'createdAt'),
-      serviceDate: valueFor(row, 'serviceDate'),
+      serviceDate: valueFor(row, 'serviceDate') || windowDate?.toLocaleDateString('sv-SE') || '',
       regionId: rowRegion.id,
       status: valueFor(row, 'status') || 'Новая',
       coords: lat !== null && lon !== null ? [lat, lon] : null,
@@ -908,8 +962,12 @@ export function validateRows(rows, mappings, entityType = 'orders', workNorms = 
     const endColumn = mappedColumn('windowEnd');
     const start = (Number.isInteger(startColumn) ? asTime(row[startColumn]) : '') || rangeStart;
     const end = (Number.isInteger(endColumn) ? asTime(row[endColumn]) : '') || rangeEnd;
-    if (!start || !end || start >= end) {
-      [!start || start >= end ? startColumn : null, !end || start >= end ? endColumn : null, rangeColumn].filter(Number.isInteger)
+    const startDate = Number.isInteger(startColumn) ? parseImportedDate(row[startColumn]) : null;
+    const endDate = Number.isInteger(endColumn) ? parseImportedDate(row[endColumn]) : null;
+    const differentDays = startDate && endDate && startDate.getTime() !== endDate.getTime();
+    if (!start || !end || start >= end || differentDays) {
+      [!start || start >= end || differentDays ? startColumn : null,
+        !end || start >= end || differentDays ? endColumn : null, rangeColumn].filter(Number.isInteger)
         .forEach(column => invalid.add(`${rowIndex}:${column}`));
     }
     const durationColumn = mappedColumn('duration');
@@ -1013,6 +1071,7 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [search, setSearch] = useState('');
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const [acceptedUnknownNorms, setAcceptedUnknownNorms] = useState(false);
   const tableRef = useRef(null);
   const fileMenuRef = useRef(null);
   const extraFileInputRef = useRef(null);
@@ -1022,6 +1081,10 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
   const filterPresence = useDropdownPresence(filterOpen);
   const fileMenuPresence = useDropdownPresence(fileMenuOpen, 180);
   const drafts = draftHistory.present;
+  useEffect(() => setAcceptedUnknownNorms(false), [session]);
+  const unknownNormRows = useMemo(() => drafts.orders
+    ? unmatchedWorkNorms(drafts.orders.rows, drafts.orders.mappings, session.workNorms)
+    : [], [drafts.orders, session.workNorms]);
   const canUndo = draftHistory.past.length > 0;
   const canRedo = draftHistory.future.length > 0;
   const activeDataset = datasets[activeType];
@@ -1066,6 +1129,7 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
     }];
   })), [drafts, availableTypes.join('|'), session.workNorms]);
   const allReady = availableTypes.every(entityType => validationByType[entityType].ready);
+  const canSubmit = allReady && (!unknownNormRows.length || acceptedUnknownNorms);
   const validationMessages = useMemo(() => {
     const messages = requirements.filter(item => !item.ok).map(item => `Не сопоставлено обязательное поле: ${item.label}.`);
     [...invalidCells].sort((left, right) => left.localeCompare(right, 'ru', { numeric: true })).forEach(key => {
@@ -1214,6 +1278,7 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
 
   const selectMapping = field => {
     editHistoryKeyRef.current = '';
+    if (activeType === 'orders') setAcceptedUnknownNorms(false);
     commitDrafts(current => {
       const nextMappings = { ...current[activeType].mappings };
       if (field !== 'ignore') Object.keys(nextMappings).forEach(key => { if (nextMappings[key] === field) nextMappings[key] = ''; });
@@ -1229,18 +1294,33 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
   };
 
   const editCell = (rowIndex, columnIndex, value) => {
+    if (activeType === 'orders' && ['duration', 'workType', 'serviceType', 'skill', 'name'].includes(mappings[columnIndex])) {
+      setAcceptedUnknownNorms(false);
+    }
     commitDrafts(current => {
       const draft = current[activeType];
+      const nextRows = draft.rows.map((row, index) => {
+        if (index !== rowIndex) return row;
+        const nextRow = row.map((cell, column) => column === columnIndex ? value : cell);
+        if (activeType === 'orders' && session.workNorms
+          && ['workType', 'serviceType', 'skill', 'name'].includes(draft.mappings[columnIndex])) {
+          const durationColumn = Object.keys(draft.mappings).find(key => draft.mappings[key] === 'duration');
+          if (durationColumn !== undefined && !draft.editedCells.has(`${rowIndex}:${durationColumn}`)) {
+            nextRow[Number(durationColumn)] = String(workNormFor(mappedWork(nextRow, draft.mappings), session.workNorms)?.serviceMinutes ?? 60);
+          }
+        }
+        return nextRow;
+      });
       return { ...current, [activeType]: {
         ...draft,
-        rows: draft.rows.map((row, index) => index === rowIndex ? row.map((cell, column) => column === columnIndex ? value : cell) : row),
+        rows: nextRows,
         editedCells: new Set(draft.editedCells).add(`${rowIndex}:${columnIndex}`),
       } };
     }, `cell:${activeType}:${rowIndex}:${columnIndex}`);
   };
 
   const submit = () => {
-    if (!allReady) return;
+    if (!canSubmit) return;
     const reviewedDatasets = Object.fromEntries(availableTypes.map(entityType => [entityType, {
       ...datasets[entityType],
       rows: drafts[entityType].rows.map(row => [...row]),
@@ -1285,6 +1365,7 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
     ? countNoun(rows.length, 'инженер', 'инженера', 'инженеров')
     : countNoun(rows.length, 'заявка', 'заявки', 'заявок');
   const readyRequirementCount = requirements.filter(item => item.ok).length;
+  const unknownWorkTypes = [...new Set(unknownNormRows.map(item => item.type))];
   return <div className={`import-workspace${reviewMode ? ' is-review' : ''}${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-label="Проверка и загрузка данных">
     <header className="import-header">
       <div className="import-title">{!reviewMode ? <img src="/beego-mark.png" alt="BeeGo"/> : null}<div><h1>Данные</h1><p>{activeDataset.fileName || session.fileName} · {rows.length} {entityLabel} · участок «{region.name}» · лист «{activeDataset.sheetName}»</p></div></div>
@@ -1307,8 +1388,9 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
     </header>
 
     <main className="import-main">
-      <section className="import-table-area">
+      <section className={`import-table-area${unknownNormRows.length ? ' has-unknown-norms' : ''}`}>
         <div className="import-table-toolbar"><div><h2>Сопоставление и редактирование</h2><p>Выберите назначение столбцов и проверьте значения. Для известных видов работ берётся «Нормативы.xlsx»: технические работы + документы; дорогу рассчитывает маршрут.</p></div><div className="import-table-tools"><div className="import-status-summary" aria-label="Состояние файла"><span className={mappedCount === activeDataset.headers.length ? 'ok' : 'warning'}><small>Столбцы</small><b>{mappedCount}/{activeDataset.headers.length}</b></span><span className={mappingReady ? 'ok' : 'warning'}><small>Обязательные</small><b>{readyRequirementCount}/{requirements.length}</b></span><span><small>Изменено</small><b>{editedCells.size}</b></span><span className={rowIssueCount ? 'warning' : 'ok'}><small>Ошибки</small><b>{rowIssueCount}</b></span></div><div className="import-history-actions" aria-label="История изменений"><button type="button" disabled={!canUndo} onClick={undoDraftChange} aria-label="Отменить изменение" title="Назад · Ctrl+Z"><Undo2/></button><button type="button" disabled={!canRedo} onClick={redoDraftChange} aria-label="Вернуть изменение" title="Вперёд · Ctrl+Y"><Redo2/></button></div><label><Search/><input value={search} onChange={changeSearch} placeholder="Найти в таблице"/><kbd aria-live="polite">{visibleRows.length}/{rows.length}</kbd>{search ? <button type="button" onClick={() => setSearch('')} aria-label="Очистить поиск"><X/></button> : null}</label></div></div>
+        {unknownNormRows.length ? <aside className="import-norm-warning" role="note" aria-label="Нет норматива для вида работ"><AlertTriangle/><div><b>Для {countLabel(unknownNormRows.length, 'заявки', 'заявок', 'заявок')} нет норматива работ</b><p>Изначально указано 60 минут на работу. Хотите изменить? Отредактируйте значения в столбце «Норматив, мин» перед загрузкой.</p><small>Виды работ: {unknownWorkTypes.slice(0, 4).join(', ')}{unknownWorkTypes.length > 4 ? ` и ещё ${unknownWorkTypes.length - 4}` : ''}</small></div><button type="button" className={acceptedUnknownNorms ? 'accepted' : ''} onClick={() => setAcceptedUnknownNorms(true)}>{acceptedUnknownNorms ? 'Время проверено' : 'Продолжить с указанным временем'}</button></aside> : null}
         <div className="import-table-scroll" ref={tableRef} onScroll={() => { setMenuOpen(false); setFilterOpen(false); }}>
           <table className="import-grid">
             <thead><tr>{activeDataset.headers.map((header, column) => {
@@ -1326,7 +1408,7 @@ export function ImportWorkspace({ session, region, onCancel, onImport, files = [
       </section>
     </main>
 
-    <footer className="import-footer"><div className={`import-validation-summary ${validationMessages.length ? 'has-errors' : 'is-ready'}`} tabIndex={validationMessages.length ? 0 : undefined} aria-describedby={validationMessages.length ? 'import-validation-details' : undefined}>{!mappingReady ? <><AlertTriangle/><span>Укажите все обязательные поля</span></> : invalidCells.size ? <><AlertTriangle/><span>Исправьте {rowIssueCount} {rowIssueCount === 1 ? 'строку' : 'строки'} с ошибками</span></> : !allReady ? <><AlertTriangle/><span>Проверьте вторую вкладку данных</span></> : <><ShieldCheck/><span>{reviewMode ? 'Все наборы проверены. Изменения можно сохранить.' : 'Все наборы проверены. Можно загружать.'}</span></>}{validationMessages.length ? <aside id="import-validation-details" className="import-validation-details" role="tooltip"><b>Что именно нужно исправить</b><p>Наведите на сообщение или перейдите к нему клавишей Tab — список останется открытым.</p><ul>{validationMessages.slice(0, 12).map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}</ul>{validationMessages.length > 12 ? <small>И ещё {validationMessages.length - 12} ошибок. Исправьте показанные строки — список обновится автоматически.</small> : null}</aside> : null}</div><button type="button" onClick={requestClose}>{reviewMode ? 'Закрыть' : 'Отменить'}</button><button type="button" className="primary" disabled={!allReady} onClick={submit}><Check/>{reviewMode ? 'Сохранить изменения' : `Загрузить ${importButtonText}`}</button></footer>
+    <footer className="import-footer"><div className={`import-validation-summary ${validationMessages.length || (unknownNormRows.length && !acceptedUnknownNorms) ? 'has-errors' : 'is-ready'}`} tabIndex={validationMessages.length ? 0 : undefined} aria-describedby={validationMessages.length ? 'import-validation-details' : undefined}>{!mappingReady ? <><AlertTriangle/><span>Укажите все обязательные поля</span></> : invalidCells.size ? <><AlertTriangle/><span>Исправьте {rowIssueCount} {rowIssueCount === 1 ? 'строку' : 'строки'} с ошибками</span></> : !allReady ? <><AlertTriangle/><span>Проверьте вторую вкладку данных</span></> : unknownNormRows.length && !acceptedUnknownNorms ? <><AlertTriangle/><span>Проверьте время заявок без норматива</span></> : <><ShieldCheck/><span>{reviewMode ? 'Все наборы проверены. Изменения можно сохранить.' : 'Все наборы проверены. Можно загружать.'}</span></>}{validationMessages.length ? <aside id="import-validation-details" className="import-validation-details" role="tooltip"><b>Что именно нужно исправить</b><p>Наведите на сообщение или перейдите к нему клавишей Tab — список останется открытым.</p><ul>{validationMessages.slice(0, 12).map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}</ul>{validationMessages.length > 12 ? <small>И ещё {validationMessages.length - 12} ошибок. Исправьте показанные строки — список обновится автоматически.</small> : null}</aside> : null}</div><button type="button" onClick={requestClose}>{reviewMode ? 'Закрыть' : 'Отменить'}</button><button type="button" className="primary" disabled={!canSubmit} onClick={submit}><Check/>{reviewMode ? 'Сохранить изменения' : `Загрузить ${importButtonText}`}</button></footer>
 
     {mappingPresence.present && menuColumn !== null ? <MappingMenu column={menuColumn} header={activeDataset.headers[menuColumn]} values={rows.map(row => row[menuColumn])} mappings={mappings} entityType={activeType} onSelect={selectMapping} onClose={() => setMenuOpen(false)} position={menuPosition} visible={mappingPresence.visible}/> : null}
     {filterPresence.present && filterColumn !== null ? <FilterMenu key={`${activeType}-${filterColumn}-${filterMenuVersion}`} header={activeDataset.headers[filterColumn]} values={rows.map(row => row[filterColumn])} selected={activeColumnFilters[filterColumn]} onApply={applyColumnFilter} onReset={resetColumnFilter} onClose={() => setFilterOpen(false)} position={filterPosition} visible={filterPresence.visible}/> : null}

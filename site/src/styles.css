@@ -4134,3 +4134,17 @@ html[data-theme="dark"]{
 .development-modal>.primary{min-width:122px;height:40px}
 .app-shell.dark .development-modal{background:linear-gradient(145deg,#40371d,#25282d 65%);border-color:#8d7518;color:#f2f3f5}
 .app-shell.dark .development-modal p{color:#ccd0d5}
+.import-table-area.has-unknown-norms{grid-template-rows:auto auto minmax(0,1fr)}
+.import-norm-warning{display:flex;align-items:center;gap:14px;padding:13px 16px;border:1px solid #e7b835;border-radius:12px;background:#fff8dc;color:#493900;box-shadow:0 3px 12px rgba(80,65,0,.06)}
+.import-norm-warning>svg{width:22px;height:22px;flex:0 0 22px;color:#a57900}
+.import-norm-warning>div{min-width:0;flex:1}
+.import-norm-warning b{display:block;font-size:14px}
+.import-norm-warning p{margin:4px 0;font-size:13px;line-height:1.4}
+.import-norm-warning small{display:block;color:#796731;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.import-norm-warning button{min-height:40px;flex:0 0 auto;padding:0 13px;border:1px solid #d6ab22;border-radius:9px;background:#fff;color:#594300;font-weight:750;cursor:pointer}
+.import-norm-warning button:hover{background:#ffec9a}
+.import-norm-warning button.accepted{border-color:#a8d6b6;background:#edf8f0;color:#24683d}
+.app-shell.dark .import-norm-warning{background:#3b331e;border-color:#9b7a28;color:#ffeca9}
+.app-shell.dark .import-norm-warning small{color:#d1bf86}
+.app-shell.dark .import-norm-warning button{background:#292e34;color:#ffe69a;border-color:#a7862e}
+@media(max-width:900px){.import-norm-warning{align-items:flex-start;flex-wrap:wrap}.import-norm-warning button{margin-left:36px}}
