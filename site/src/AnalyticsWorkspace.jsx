@@ -1334,6 +1334,7 @@ function ReplanningLocationPicker({ latitude, longitude, cluster, onPick }) {
       minZoom: 8,
       maxZoom: 19,
     });
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.on('click', event => onPickRef.current(event.lngLat.lat, event.lngLat.lng));
     mapRef.current = map;

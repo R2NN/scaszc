@@ -72,6 +72,7 @@ export async function runExactPlan(payload, repositoryRoot = process.cwd(), onPr
     '--transit-index', transitIndex,
     '--shared-cache-dir', path.join(repositoryRoot, 'runtime', 'ui-shared-cache'),
     '--stable-plan-cache-dir', path.join(repositoryRoot, 'runtime', 'ui-shared-cache', 'verified-plans'),
+    '--valhalla-base-url', String(process.env.VALHALLA_ROUTE_ENDPOINT || 'http://127.0.0.1:8002/route').replace(/\/route\/?$/, ''),
     '--max-wall-seconds', String(pipelineBudgetSeconds),
     '--execute',
   ], undefined, repositoryRoot, deadlineAt);

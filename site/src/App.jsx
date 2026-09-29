@@ -741,7 +741,7 @@ function MapCanvas({orders,team=[],scheduled,onOrder,onRoute,onOpenPlanning,onOr
     });
     instance.addControl(new maplibregl.AttributionControl({
       compact:true,
-      customAttribution:'<a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geocoding by Geoapify</a>',
+      customAttribution:'<a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Powered by Geoapify</a>',
     }),'bottom-left');
     requestAnimationFrame(()=>{
       const attribution=host.querySelector('.maplibregl-ctrl-attrib');

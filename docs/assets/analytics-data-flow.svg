@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="570" viewBox="0 0 1200 570" role="img" aria-labelledby="title description">
+  <title id="title">Откуда берутся данные аналитики</title>
+  <desc id="description">Рассчитанные сценарии дают 182 дневные сводки для истории и прогноза. Отдельный полный операционный архив 17 августа вместе с введёнными фактами питает экран смены, ревизии и PDF.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#F8FAFF"/><stop offset="1" stop-color="#EDF5FF"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#173362" flood-opacity="0.09"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#61748F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <style>text{font-family:Arial,Helvetica,sans-serif}.title{font-size:36px;font-weight:700;fill:#10213B}.subtitle{font-size:18px;fill:#52647D}.heading{font-size:21px;font-weight:700;fill:#14243D}.note{font-size:16px;fill:#52647D}</style>
+  </defs>
+  <rect width="1200" height="570" rx="28" fill="url(#bg)"/>
+  <path d="M0 128H1200" stroke="#DCE7F5"/>
+  <rect x="48" y="43" width="123" height="34" rx="17" fill="#DBEAFE"/>
+  <text x="109" y="66" text-anchor="middle" font-size="15" font-weight="700" fill="#1D4ED8">BEEGO!</text>
+  <text class="title" x="191" y="72">Два уровня данных аналитики</text>
+  <text class="subtitle" x="49" y="108">Сводки для трендов; полный архив и факты для работы с конкретной сменой.</text>
+
+  <rect x="50" y="209" width="225" height="126" rx="19" fill="#FFF" stroke="#C8DAF5" filter="url(#shadow)"/>
+  <rect x="50" y="209" width="8" height="126" rx="4" fill="#2563EB"/>
+  <text class="heading" x="75" y="251">Сценарные дни</text>
+  <text class="note" x="75" y="283">Синтетические заявки</text>
+  <text class="note" x="75" y="308">и состав бригад</text>
+  <path d="M275 272H328" stroke="#61748F" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="341" y="209" width="225" height="126" rx="19" fill="#FFF" stroke="#C8DAF5" filter="url(#shadow)"/>
+  <rect x="341" y="209" width="8" height="126" rx="4" fill="#2563EB"/>
+  <text class="heading" x="366" y="251">Рассчитанные</text>
+  <text class="heading" x="366" y="279">планы</text>
+  <text class="note" x="366" y="309">Проверенные результаты</text>
+
+  <path d="M566 241H606V182H628" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M566 303H606V394H628" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="641" y="151" width="242" height="123" rx="19" fill="#FFF" stroke="#C8DAF5" filter="url(#shadow)"/>
+  <rect x="641" y="151" width="8" height="123" rx="4" fill="#2563EB"/>
+  <text class="heading" x="666" y="191">182 дневные сводки</text>
+  <text class="note" x="666" y="222">Покрытие, ресурсы,</text>
+  <text class="note" x="666" y="247">плановые показатели</text>
+  <path d="M883 212H935" stroke="#61748F" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="948" y="151" width="203" height="123" rx="19" fill="#EAF1FF" stroke="#BFD4F5" filter="url(#shadow)"/>
+  <text class="heading" x="972" y="195">История</text>
+  <text class="heading" x="972" y="222">и прогноз</text>
+  <text class="note" x="972" y="249">Тренд и диапазон</text>
+
+  <rect x="641" y="337" width="242" height="123" rx="19" fill="#FFF" stroke="#BFE5DD" filter="url(#shadow)"/>
+  <rect x="641" y="337" width="8" height="123" rx="4" fill="#0F766E"/>
+  <text class="heading" x="666" y="377">Полный архив</text>
+  <text class="heading" x="666" y="404">17.08.2026</text>
+  <text class="note" x="666" y="433">Заявки и маршруты</text>
+  <path d="M883 398H935" stroke="#61748F" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="948" y="337" width="203" height="123" rx="19" fill="#E8F9F2" stroke="#A5DEC9" filter="url(#shadow)"/>
+  <text class="heading" x="972" y="380">Смена, ревизии</text>
+  <text class="heading" x="972" y="408">и PDF</text>
+  <text class="note" x="972" y="436">Операционная работа</text>
+  <rect x="641" y="485" width="242" height="54" rx="16" fill="#FFF" stroke="#BFE5DD"/>
+  <text x="762" y="519" text-anchor="middle" font-size="17" font-weight="700" fill="#0F766E">Введённые факты визитов</text>
+  <path d="M883 512H916V443H935" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="50" y="520" class="note">План, факт и прогноз хранятся и подписываются отдельно.</text>
+</svg>

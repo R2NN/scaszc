@@ -26,4 +26,7 @@ credentials/
 valhalla-data/
 .venv/
 site/.dev.vars
+.env
+.env.docker
+docker-data/
 

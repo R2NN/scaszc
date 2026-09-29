@@ -217,18 +217,19 @@ export async function ensureTransitIndex(planningDate, repositoryRoot = path.res
       if (!builtMetadata.rail_schedule_available) {
         throw new Error(`Для ${planningDate} не найдено полное расписание МЦК/МЦД`);
       }
-      await run(python, 'ensure_local_valhalla.py', ['--endpoint', 'http://127.0.0.1:8002'], repositoryRoot, deadlineAt);
-      await run(python, 'build_surface_walk_transfers.py', ['--database', temporaryDatabase], repositoryRoot, deadlineAt);
+      const valhallaBaseUrl = String(process.env.VALHALLA_ROUTE_ENDPOINT || 'http://127.0.0.1:8002/route').replace(/\/route\/?$/, '');
+      await run(python, 'ensure_local_valhalla.py', ['--endpoint', valhallaBaseUrl], repositoryRoot, deadlineAt);
+      await run(python, 'build_surface_walk_transfers.py', ['--database', temporaryDatabase, '--endpoint', `${valhallaBaseUrl}/sources_to_targets`], repositoryRoot, deadlineAt);
       if (await validIndex(canonical, canonicalDate)) {
         try {
           await run(python, 'reuse_rapid_walk_transfers.py', [
             '--source', canonical, '--database', temporaryDatabase,
           ], repositoryRoot, deadlineAt);
         } catch {
-          await run(python, 'build_walk_transfers.py', ['--database', temporaryDatabase], repositoryRoot, deadlineAt);
+          await run(python, 'build_walk_transfers.py', ['--database', temporaryDatabase, '--endpoint', `${valhallaBaseUrl}/sources_to_targets`], repositoryRoot, deadlineAt);
         }
       } else {
-        await run(python, 'build_walk_transfers.py', ['--database', temporaryDatabase], repositoryRoot, deadlineAt);
+        await run(python, 'build_walk_transfers.py', ['--database', temporaryDatabase, '--endpoint', `${valhallaBaseUrl}/sources_to_targets`], repositoryRoot, deadlineAt);
       }
       const surfaceReport = JSON.parse(await readFile(temporaryDatabase.replace(/\.sqlite$/, '.surface_walk_transfers.json'), 'utf8'));
       const walkReport = JSON.parse(await readFile(temporaryDatabase.replace(/\.sqlite$/, '.walk_transfers.json'), 'utf8'));

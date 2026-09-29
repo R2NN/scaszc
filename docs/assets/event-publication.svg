@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="745" viewBox="0 0 1200 745" role="img" aria-labelledby="title description">
+  <title id="title">Как событие превращается в новую версию плана</title>
+  <desc id="description">Опубликованный план и событие запускают точную вставку. При отсутствии слота перестраивается будущая часть смены. Результат независимо проверяется, становится черновиком и публикуется только по решению диспетчера.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#F8FAFF"/><stop offset="1" stop-color="#ECF4FF"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#173362" flood-opacity="0.09"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#61748F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <style>text{font-family:Arial,Helvetica,sans-serif}.title{font-size:36px;font-weight:700;fill:#10213B}.subtitle{font-size:18px;fill:#52647D}.heading{font-size:21px;font-weight:700;fill:#14243D}.note{font-size:16px;fill:#52647D}.badge{font-size:15px;font-weight:700;letter-spacing:1px}</style>
+  </defs>
+  <rect width="1200" height="745" rx="28" fill="url(#bg)"/>
+  <path d="M0 128H1200" stroke="#DCE7F5"/>
+  <rect x="48" y="43" width="123" height="34" rx="17" fill="#DBEAFE"/>
+  <text x="109" y="66" text-anchor="middle" font-size="15" font-weight="700" fill="#1D4ED8">BEEGO!</text>
+  <text class="title" x="190" y="72">Событие → новая версия плана</text>
+  <text class="subtitle" x="49" y="109">Перепланирование затрагивает будущие визиты; опубликованная смена сохраняется до подтверждения.</text>
+
+  <rect x="52" y="162" width="250" height="116" rx="19" fill="#FFF" stroke="#CDDDF3" filter="url(#shadow)"/>
+  <rect x="52" y="162" width="8" height="116" rx="4" fill="#2563EB"/>
+  <text class="heading" x="77" y="202">Опубликованный план</text>
+  <text class="note" x="77" y="231">Ревизия, маршруты, факты</text>
+  <text class="note" x="77" y="254">и текущее время события</text>
+  <path d="M302 220H360" stroke="#61748F" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="373" y="162" width="250" height="116" rx="19" fill="#FFF" stroke="#CDDDF3" filter="url(#shadow)"/>
+  <rect x="373" y="162" width="8" height="116" rx="4" fill="#2563EB"/>
+  <text class="heading" x="398" y="202">Новое событие</text>
+  <text class="note" x="398" y="231">Заявка, отмена, окно</text>
+  <text class="note" x="398" y="254">или состав бригад</text>
+  <path d="M623 220H680" stroke="#61748F" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="694" y="162" width="454" height="116" rx="19" fill="#FFF" stroke="#BFD4F5" filter="url(#shadow)"/>
+  <circle cx="731" cy="198" r="18" fill="#DBEAFE"/>
+  <text x="731" y="204" text-anchor="middle" font-size="16" font-weight="700" fill="#1D4ED8">1</text>
+  <text class="heading" x="763" y="205">Точная вставка заявки</text>
+  <text class="note" x="718" y="240">В действующий маршрут; начатые визиты защищены</text>
+
+  <path d="M921 278V327" stroke="#61748F" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="694" y="340" width="454" height="107" rx="19" fill="#FFF" stroke="#BFE5DD" filter="url(#shadow)"/>
+  <circle cx="731" cy="376" r="18" fill="#CCFBF1"/>
+  <text x="731" y="382" text-anchor="middle" font-size="16" font-weight="700" fill="#0F766E">2</text>
+  <text class="heading" x="763" y="383">Если слот не найден</text>
+  <text class="note" x="718" y="418">Перестройка всей будущей части дня</text>
+  <rect x="718" y="290" width="161" height="29" rx="14" fill="#E8F4EE"/>
+  <text x="798" y="310" text-anchor="middle" font-size="15" font-weight="700" fill="#0F766E">слот не найден</text>
+
+  <path d="M694 223H660V496H693" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="425" y="301" width="157" height="29" rx="14" fill="#E8F0FE"/>
+  <text x="503" y="321" text-anchor="middle" font-size="15" font-weight="700" fill="#1D4ED8">слот найден</text>
+  <path d="M921 447V487H694" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="374" y="469" width="308" height="116" rx="19" fill="#FFF" stroke="#B7C4FA" filter="url(#shadow)"/>
+  <rect x="374" y="469" width="8" height="116" rx="4" fill="#4F46E5"/>
+  <text class="heading" x="398" y="512">Независимая проверка</text>
+  <text class="note" x="398" y="541">Исходные данные, ограничения</text>
+  <text class="note" x="398" y="564">и детальные поездки</text>
+  <path d="M374 527H319" stroke="#61748F" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="52" y="469" width="250" height="116" rx="19" fill="#FFF" stroke="#BFE5DD" filter="url(#shadow)"/>
+  <rect x="52" y="469" width="8" height="116" rx="4" fill="#0F766E"/>
+  <text class="heading" x="77" y="511">Проверенный черновик</text>
+  <text class="note" x="77" y="540">Назначение или очередь</text>
+  <text class="note" x="77" y="563">с конкретной причиной</text>
+  <path d="M177 585V628H394" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="408" y="612" width="366" height="95" rx="19" fill="#E8F9F2" stroke="#9FE4C9" filter="url(#shadow)"/>
+  <text class="heading" x="432" y="651" fill="#09664E">Подтверждение диспетчера</text>
+  <text class="note" x="432" y="680">Новая ревизия и запись в журнале</text>
+
+  <rect x="811" y="490" width="337" height="95" rx="19" fill="#FFF1F0" stroke="#FFC8C2" filter="url(#shadow)"/>
+  <text class="heading" x="836" y="530" fill="#B42318">Ошибка или лимит времени</text>
+  <text class="note" x="836" y="559">Текущий план не заменяется</text>
+  <path d="M682 548H798" stroke="#D92D20" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="739" y="539" text-anchor="middle" font-size="15" font-weight="700" fill="#B42318">отказ</text>
+  <text x="839" y="690" font-size="16" fill="#52647D">Один расчёт · общий предел 15 минут</text>
+</svg>

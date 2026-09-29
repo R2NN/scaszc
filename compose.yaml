@@ -1,0 +1,58 @@
+services:
+  valhalla:
+    profiles: [routing]
+    image: ghcr.io/valhalla/valhalla-scripted@sha256:bc7c22f054c26effa5222a55a9d7a840369f254d314989f9040505342dc7ab84
+    command: ["build_tiles"]
+    environment:
+      build_transit: "False"
+      build_elevation: "False"
+      server_threads: "4"
+      use_tiles_ignore_pbf: "True"
+      build_tar: "True"
+      serve_tiles: "True"
+      force_rebuild: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      use_default_speeds_config: "True"
+    volumes:
+      - type: bind
+        source: ${BEEGO_VALHALLA_DATA_PATH:-./docker-data/valhalla}
+        target: /custom_files
+    restart: unless-stopped
+
+  app:
+    build: .
+    init: true
+    ports:
+      - "127.0.0.1:${BEEGO_HTTP_PORT:-8787}:8787"
+    environment:
+      VALHALLA_ROUTE_ENDPOINT: http://valhalla:8002/route
+      GEOAPIFY_API_KEY: ${GEOAPIFY_API_KEY:-}
+      YANDEX_AI_API_KEY: ${YANDEX_AI_API_KEY:-}
+      YANDEX_AI_FOLDER_ID: ${YANDEX_AI_FOLDER_ID:-}
+      YANDEX_RASP_API_KEY: ${YANDEX_RASP_API_KEY:-}
+    volumes:
+      - beego-db:/app/site/.beego-data
+      - beego-runs:/app/runtime/ui-runs
+      - beego-cache:/app/runtime/ui-shared-cache
+      - beego-replans:/app/runtime/exact-replans
+      - type: bind
+        source: ${BEEGO_GTFS_PATH:-./docker-data/gtfs}
+        target: /app/offline-assets/transit-sources/gtfs
+        read_only: true
+      - type: bind
+        source: ${BEEGO_METRO_PATH:-./docker-data/metro}
+        target: /app/offline-assets/transit-sources/metro
+        read_only: true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  beego-db:
+  beego-runs:
+  beego-cache:
+  beego-replans:

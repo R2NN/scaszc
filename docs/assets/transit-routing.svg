@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title description">
+  <title id="title">Проверка поездки общественным транспортом</title>
+  <desc id="description">От точки выезда рассчитываются два варианта: пеший подход, рейс с пересадками и пеший выход либо прямой пеший путь. Оба ведут к адресу заявки.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1"><stop stop-color="#F8FAFF"/><stop offset="1" stop-color="#EDF5FF"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="6" stdDeviation="9" flood-color="#173362" flood-opacity="0.10"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#59718E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <style>text { font-family: Arial, Helvetica, sans-serif; }.title { font-size: 37px; font-weight: 700; fill: #10213B; }.subtitle { font-size: 19px; fill: #52647D; }.heading { font-size: 21px; font-weight: 700; fill: #14243D; }.note { font-size: 16px; fill: #52647D; }.badge { font-size: 16px; font-weight: 700; letter-spacing: 1px; }</style>
+  </defs>
+  <rect width="1200" height="640" rx="28" fill="url(#background)"/>
+  <path d="M0 126H1200" stroke="#DCE7F5"/>
+  <rect x="48" y="43" width="123" height="34" rx="17" fill="#DBEAFE"/>
+  <text x="109.5" y="66" text-anchor="middle" font-size="15" font-weight="700" fill="#1D4ED8">BEEGO!</text>
+  <text class="title" x="191" y="71">Проверка поездки</text>
+  <text class="subtitle" x="49" y="107">Общественный транспорт и прямой пеший путь</text>
+
+  <rect x="52" y="272" width="245" height="130" rx="19" fill="#FFFFFF" stroke="#C8DAF5" filter="url(#shadow)"/>
+  <rect x="52" y="272" width="8" height="130" rx="4" fill="#2563EB"/>
+  <text class="heading" x="78" y="324">Точка выезда</text>
+  <text class="note" x="78" y="356">Бригада и время</text>
+  <text class="note" x="78" y="380">отправления</text>
+
+  <path d="M301 321H329V286H349" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M301 352H329V487H349" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="360" y="160" width="536" height="232" rx="23" fill="#FFFFFF" stroke="#C8DAF5" filter="url(#shadow)"/>
+  <circle cx="395" cy="197" r="19" fill="#DBEAFE"/>
+  <text x="395" y="204" text-anchor="middle" font-size="17" font-weight="700" fill="#1D4ED8">01</text>
+  <text class="badge" x="429" y="204" fill="#1D4ED8">ОБЩЕСТВЕННЫЙ ТРАНСПОРТ</text>
+
+  <rect x="378" y="238" width="153" height="128" rx="15" fill="#F6FAFF" stroke="#D4E3F8"/>
+  <text class="heading" x="394" y="278" font-size="19">Пеший</text>
+  <text class="heading" x="394" y="303" font-size="19">подход</text>
+  <text class="note" x="394" y="340">Valhalla · OSM</text>
+
+  <path d="M536 302H549" stroke="#59718E" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="555" y="238" width="168" height="128" rx="15" fill="#F6FAFF" stroke="#D4E3F8"/>
+  <text class="heading" x="571" y="278" font-size="19">Рейс и</text>
+  <text class="heading" x="571" y="303" font-size="19">пересадки</text>
+  <text class="note" x="571" y="340">GTFS · МЦК/МЦД</text>
+
+  <path d="M728 302H741" stroke="#59718E" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="747" y="238" width="131" height="128" rx="15" fill="#F6FAFF" stroke="#D4E3F8"/>
+  <text class="heading" x="762" y="278" font-size="18">Пеший</text>
+  <text class="heading" x="762" y="303" font-size="18">выход</text>
+  <text class="note" x="762" y="340">Valhalla</text>
+
+  <rect x="360" y="426" width="536" height="124" rx="23" fill="#FFFFFF" stroke="#BFE5DD" filter="url(#shadow)"/>
+  <circle cx="395" cy="464" r="19" fill="#CCFBF1"/>
+  <text x="395" y="471" text-anchor="middle" font-size="17" font-weight="700" fill="#0F766E">02</text>
+  <text class="badge" x="429" y="471" fill="#0F766E">ПРЯМОЙ ПЕШИЙ ПУТЬ</text>
+  <text class="heading" x="380" y="512">Маршрут по уличной сети Valhalla</text>
+
+  <path d="M902 286H934V321H951" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M902 487H934V354H951" fill="none" stroke="#0F766E" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="964" y="272" width="184" height="130" rx="19" fill="#FFFFFF" stroke="#C8DAF5" filter="url(#shadow)"/>
+  <rect x="1140" y="272" width="8" height="130" rx="4" fill="#2563EB"/>
+  <text class="heading" x="986" y="324">Адрес</text>
+  <text class="heading" x="986" y="353">заявки</text>
+  <text class="note" x="986" y="381">Выбор пути</text>
+
+  <text x="600" y="609" text-anchor="middle" font-size="16" fill="#52647D">Автомобиль и велосипед рассчитываются по дорожной сети Valhalla отдельно.</text>
+</svg>
