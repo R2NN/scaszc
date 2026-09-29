@@ -1,0 +1,26 @@
+[Unit]
+Description=BeeGo planning API
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=beego
+Group=beego
+WorkingDirectory=/opt/beego/current/site
+Environment=NODE_ENV=production
+Environment=PORT=8787
+Environment=BEEGO_HOST=127.0.0.1
+EnvironmentFile=/etc/beego/api.env
+ExecStart=/usr/bin/node server/main.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/srv/beego-data /opt/beego/releases
+UMask=0027
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
