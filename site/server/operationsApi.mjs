@@ -6,6 +6,7 @@ import { reportMode } from './dispatcherPdf.mjs';
 import { askShiftAi } from './aiStudio.mjs';
 import { seedBaseShift } from './seedBaseShift.mjs';
 import { baseHistoryDates, ensureBaseHistoricalShift } from './baseHistoryStore.mjs';
+import { acquirePlanningSlot, planningBusyResponse } from './planningSlot.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const bodyOf = async request => request.json().catch(() => ({}));
@@ -98,14 +99,21 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
         const input = await bodyOf(request);
         const shift = store.get(shiftId);
         if (!shift) return json({ error: 'Смена не найдена.' }, 404);
-        const event = normalizeDataAdditionEvent(shift, input.event);
-        const model = eventModel(shift, event);
-        const id = store.startPreview(shiftId, Number(input.expectedRevision), event);
-        Promise.resolve().then(async () => {
-          const plan = await routing(shift, model, progress => store.updatePreviewProgress(id, progress));
-          store.completePreview(id, { orders: model.orders, team: model.team, plan });
-        }).catch(error => store.failPreview(id, error));
-        return json({ id, status: 'RUNNING' }, 202);
+        const release = acquirePlanningSlot();
+        if (!release) return planningBusyResponse();
+        try {
+          const event = normalizeDataAdditionEvent(shift, input.event);
+          const model = eventModel(shift, event);
+          const id = store.startPreview(shiftId, Number(input.expectedRevision), event);
+          Promise.resolve().then(async () => {
+            const plan = await routing(shift, model, progress => store.updatePreviewProgress(id, progress));
+            store.completePreview(id, { orders: model.orders, team: model.team, plan });
+          }).catch(error => store.failPreview(id, error)).finally(release);
+          return json({ id, status: 'RUNNING' }, 202);
+        } catch (error) {
+          release();
+          throw error;
+        }
       }
       if (action === 'publish' && request.method === 'POST') {
         const input = await bodyOf(request);

@@ -7,6 +7,7 @@ import { projectRoot } from '../scripts/project-root.mjs';
 import exactWorker from '../worker/exact-base.js';
 import { fillExactIdentityGeometry } from './exactPlanGeometry.mjs';
 import { historicalInventory } from './exactShiftReplan.mjs';
+import { acquirePlanningSlot, planningBusyResponse, withPlanningSlot } from './planningSlot.mjs';
 
 const siteRoot = path.resolve(import.meta.dirname, '..');
 const repositoryRoot = projectRoot(siteRoot);
@@ -63,6 +64,8 @@ export async function handleExactPlanning(request) {
       return json({ error: 'Передайте заявки и инженеров для расчёта.' }, 400);
     }
     if (url.pathname === '/api/plan/jobs') {
+      const release = acquirePlanningSlot();
+      if (!release) return planningBusyResponse();
       const job = { id: randomUUID(), status: 'RUNNING', progress: { phase: 'VALIDATING_INPUT' }, startedAt: new Date().toISOString() };
       jobs.set(job.id, job);
       setTimeout(() => jobs.delete(job.id), 30 * 60_000).unref?.();
@@ -74,11 +77,12 @@ export async function handleExactPlanning(request) {
       }).catch(error => {
         job.status = 'FAILED';
         job.error = error?.message || 'Точный расчёт не выполнен';
-      });
+      }).finally(release);
       return json({ id: job.id, status: job.status, progress: job.progress, startedAt: job.startedAt }, 202);
     }
-    return json(await calculateExactPlan(payload));
+    return json(await withPlanningSlot(() => calculateExactPlan(payload)));
   } catch (error) {
+    if (error?.code === 'PLANNING_BUSY') return planningBusyResponse();
     return json({ error: error?.message || 'Точный расчёт не выполнен', code: error?.code || 'EXACT_PLANNING_FAILED', details: error?.details }, error?.code === 'INVALID_INPUT' ? 422 : 503);
   }
 }

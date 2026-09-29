@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { buildExactPlan } from '../worker/index.js';
+import { buildExactPlan } from '../worker/exact-base.js';
 
 const root = new URL('../', import.meta.url);
 const artifact = JSON.parse(await readFile(new URL('public/data/beego-exact-plans.json', root), 'utf8'));
