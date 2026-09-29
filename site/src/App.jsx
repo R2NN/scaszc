@@ -26,6 +26,7 @@ import { displayOrderName, effectiveOrderSkill, isInformationalOrder, workPointT
 import { ZONE_LABELS, normalizeTerritoryKey, zoneBoundaryName, zoneCode } from './territoryAliases.js';
 import { captureMapCamera, restoredCameraOptions } from './locationPrivacy.js';
 import { parseImportedDate, resolveImportedDate } from './importDate.js';
+import { importIdentity, summarizeImport } from './importMerge.js';
 import { DEFAULT_REGION, regionCatalog } from './regions.js';
 import depotMarkerPurple from './assets/depot-marker-purple.png';
 import { MAP_SCALE, MAP_UI, routeModeForCount, shouldShowRouteNumbers, stableRouteColor } from './mapDesign.js';
@@ -1403,16 +1404,23 @@ function BottomRoutes({view,setView,orders,onRoute,onOrder,onRecalculate,schedul
 function RouteWorkspace({orders,team,plan,scheduled,setScheduled,view,setView,openPlan,onOrder,onRoute,onReassign,onEmergency,mapping,onUploadError,selectedDate,setSelectedDate,uiTheme}){const inputRef=useRef(null);const handleFile=async file=>{if(!file)return;try{mapping(await parseImportFiles(file))}catch(error){onUploadError(error?.message||'Не удалось прочитать файл')}};const unassignedOrders=plan?plan.unassigned.map(item=>orders.find(order=>order.id===item.orderId)).filter(Boolean):orders;const assignedOrders=plan?plan.routes.flatMap(route=>route.assignments.map(item=>orders.find(order=>order.id===item.orderId))).filter(Boolean):[];const visibleOrders=scheduled?assignedOrders:unassignedOrders;return <main className="route-workspace"><Topbar scheduled={scheduled} setScheduled={setScheduled} orders={orders} plan={plan} openPlan={openPlan} openUpload={()=>inputRef.current?.click()} addEmergency={onEmergency} selectedDate={selectedDate} setSelectedDate={setSelectedDate}/><input className="workspace-file-input" ref={inputRef} type="file" multiple accept=".csv,.json,.xls,.xlsx,application/json" onChange={event=>{handleFile(event.target.files);event.target.value=''}}/><Metrics orders={orders} plan={plan}/><div className={`workspace-grid ${scheduled&&plan?.metrics?.assigned?'with-bottom':''}`}><section className="orders-panel"><div className="panel-heading"><div><span className="fake-check"/><h3>{scheduled?'Маршруты':'Не назначены'}</h3></div><div className="segmented"><button className="active"><List/> Список</button><button aria-label="Показать на карте" data-tooltip="Показать на карте"><Map/></button></div></div>{!orders.length?(scheduled?<RoutesEmpty/>:<UploadEmpty onFile={handleFile} inputRef={inputRef}/>):scheduled&&plan?<AssignmentBoard orders={orders} plan={plan} team={team} onOrder={onOrder} onRoute={onRoute} onReassign={onReassign}/>:visibleOrders.length?<OrderList orders={visibleOrders} onOrder={onOrder} plan={plan}/>:<div className="resolved-empty"><Check/><h3>Все заявки распределены</h3><p>Конфликтов и заявок для ручной обработки нет.</p></div>}</section><MapCanvas orders={scheduled?assignedOrders:visibleOrders} scheduled={scheduled} onOrder={onOrder} uiTheme={uiTheme}/><BottomRoutes view={view} setView={setView} orders={orders} onRoute={onRoute} scheduled={scheduled} plan={plan}/></div></main>}
 function Modal({children,onClose,wide=false,className='',backdropClassName=''}){return <div className={`modal-backdrop ${backdropClassName}`.trim()} onMouseDown={e=>e.target===e.currentTarget&&onClose()}><section className={`modal ${wide?'wide':''} ${className}`.trim()}>{children}</section></div>}
 function ImportDecisionModal({summary,onCancel,onChoose}){
-  const duplicateFile=summary.conflicts>0&&!summary.newIds&&!summary.differentDate;
+  const duplicateFile=summary.conflicts>0&&!summary.newIds;
+  const displayDate=value=>value?new Date(`${value}T12:00:00`).toLocaleDateString('ru-RU'):'';
+  const targetDay=displayDate(summary.targetDate);
+  const importedLabel=summary.orders&&summary.engineers?'данные':summary.engineers?'инженеров':'заявки';
   return <Modal onClose={onCancel} className="import-decision-modal" backdropClassName="import-decision-backdrop">
-    <div className="modal-head import-decision-head"><span className="import-decision-mark"><FileSpreadsheet/></span><div><small>ПОВТОРНАЯ ЗАГРУЗКА</small><h2>{summary.differentDate?'Создать смену на другую дату?':duplicateFile?'Эти данные уже загружены':'Как применить данные файла?'}</h2><p>Проверьте совпадения и выберите, что изменить в текущей смене.</p></div><button type="button" onClick={onCancel} aria-label="Закрыть"><X/></button></div>
+    <div className="modal-head import-decision-head"><span className="import-decision-mark"><FileSpreadsheet/></span><div><small>ПОВТОРНАЯ ЗАГРУЗКА</small><h2>{duplicateFile?'Эти ID уже есть в выбранном дне':`Присоединить ${importedLabel} из файла?`}</h2><p>Рабочий день файла: {targetDay}. Сейчас открыт {displayDate(summary.selectedDate)}. Выберите, как объединить данные.</p></div><button type="button" onClick={onCancel} aria-label="Закрыть"><X/></button></div>
     <div className="import-decision-body">
-      <div className="import-decision-file"><span><FileSpreadsheet/></span><div><b>{summary.fileName||'Новый файл'}</b><small>{summary.differentDate?'Файл относится к другой рабочей дате':'Файл относится к открытому периоду'}</small></div><Check/></div>
+      <div className="import-decision-file"><span><FileSpreadsheet/></span><div><b>{summary.fileName||'Новый файл'}</b><small>{summary.differentDate?`Заявки будут отнесены к ${targetDay}`:'Файл относится к открытому периоду'}</small></div><Check/></div>
       <div className="import-decision-stats"><span><small>Заявки</small><b>{summary.orders}</b></span><span><small>Инженеры</small><b>{summary.engineers}</b></span><span><small>Новые ID</small><b>{summary.newIds}</b></span><span className={summary.conflicts?'attention':''}><small>Совпадения</small><b>{summary.conflicts}</b></span></div>
-      {summary.conflictIds?.length?<div className="import-conflict-preview"><small>БУДУТ ОБНОВЛЕНЫ ПО ID</small><p>{summary.conflictIds.slice(0,8).join(', ')}{summary.conflictIds.length>8?'…':''}</p></div>:null}
+      {summary.conflictIds?.length?<div className="import-conflict-preview"><small>УЖЕ ЕСТЬ В ЭТОМ ДНЕ · ПРИ ПРИСОЕДИНЕНИИ НЕ ИЗМЕНЯТСЯ</small><p>{summary.conflictIds.slice(0,8).join(', ')}{summary.conflictIds.length>8?'…':''}</p></div>:null}
       {summary.duplicateIds?<div className="import-decision-error"><AlertTriangle/><span>Внутри файла повторяются {summary.duplicateIds} ID. Исправьте файл и загрузите его снова.</span></div>:null}
-      <div className="import-decision-impact"><b>{summary.differentDate?'Текущая смена останется без изменений':'Перед применением ничего не изменяется автоматически'}</b><p>{summary.differentDate?'Будет создан самостоятельный набор на дату файла, а после импорта откроется новая смена.':`При полной замене будет удалено ${summary.replaceRemovals||0} записей выбранного типа. Добавление по ID сохранит остальные данные.`}</p></div>
-      <div className="import-decision-options"><button type="button" disabled={Boolean(summary.duplicateIds)} onClick={()=>onChoose(summary.differentDate?'separate':'merge')}><span className="import-decision-option-icon"><Plus/></span><span><b>{summary.differentDate?'Создать отдельную смену':'Добавить или обновить по ID'}</b><small>{summary.differentDate?'Сохранить текущий период и открыть данные на новой дате.':'Добавить новые записи и обновить только найденные совпадения.'}</small></span><ChevronRight/></button>{!summary.differentDate?<button type="button" disabled={Boolean(summary.duplicateIds)} onClick={()=>onChoose('replace')}><span className="import-decision-option-icon"><RotateCcw/></span><span><b>Полностью заменить данные смены</b><small>Удалить текущий набор этого типа за день и использовать файл вместо него.</small></span><ChevronRight/></button>:null}</div>
+      <div className="import-decision-impact"><b>{summary.newIds?`${summary.newIds} ${countForm(summary.newIds,'новую запись','новые записи','новых записей')} можно присоединить к ${targetDay}`:'Новых ID в этом файле нет'}</b><p>{summary.newIds?'Уже загруженные заявки сохранятся. Совпадающие ID при присоединении не изменятся.':'Все записи из файла уже есть в этом дне. Для изменения их данных выберите обновление по ID.'}</p></div>
+      <div className="import-decision-options">
+        <button type="button" disabled={Boolean(summary.duplicateIds)||!summary.newIds} onClick={()=>onChoose('append')}><span className="import-decision-option-icon"><Plus/></span><span><b>Присоединить {importedLabel}</b><small>Добавить {summary.newIds} {countForm(summary.newIds,'новую запись','новые записи','новых записей')} к {targetDay}; существующие сохранить без изменений.</small></span><ChevronRight/></button>
+        <button type="button" disabled={Boolean(summary.duplicateIds)} onClick={()=>onChoose('merge')}><span className="import-decision-option-icon"><FileSpreadsheet/></span><span><b>Добавить и обновить по ID</b><small>Добавить новые записи и обновить {summary.conflicts} совпадающих ID в этом дне.</small></span><ChevronRight/></button>
+        <button type="button" disabled={Boolean(summary.duplicateIds)} onClick={()=>onChoose('replace')}><span className="import-decision-option-icon"><RotateCcw/></span><span><b>Заменить данные дня</b><small>Удалить {summary.replaceRemovals||0} {countForm(summary.replaceRemovals||0,'запись','записи','записей')} выбранного типа за {targetDay} и загрузить этот файл.</small></span><ChevronRight/></button>
+      </div>
     </div>
     <footer className="modal-footer import-decision-footer"><small>Рабочие данные изменятся только после выбора действия.</small><button type="button" onClick={onCancel}>Отмена</button></footer>
   </Modal>;
@@ -1723,6 +1731,7 @@ export function App(){
   const[engineerFocusRequest,setEngineerFocusRequest]=useState(null);
   const shiftTime=useSyncExternalStore(shiftClock.subscribe,shiftClock.getSnapshot);
   const[pendingImport,setPendingImport]=useState(null);
+  const importedDayAwaitingShiftRef=useRef('');
   const[reviewFiles,setReviewFiles]=useState([]);
   const[reviewClosing,setReviewClosing]=useState(false);
   const reviewCloseTimerRef=useRef(null);
@@ -1747,7 +1756,7 @@ export function App(){
   const regionOrders=useMemo(()=>orders.filter(order=>order.regionId===region.id&&(!order.serviceDate||parseImportedDate(order.serviceDate)?.toLocaleDateString('sv-SE')===selectedDayKey)),[orders,region.id,selectedDayKey]);
   useEffect(()=>{const id=deepLinkOrderRef.current;if(!id)return;const target=regionOrders.find(order=>String(order.id)===id||String(order.sourceId)===id);if(target){deepLinkOrderRef.current=null;setScreen('orders');setWorkspacePanelOpen(true);setSelectedOrder(target)}},[regionOrders]);
   const team=useMemo(()=>{const rosterBySource=new globalThis.Map(staffRoster.filter(member=>member.regionId===region.id).map(member=>[String(member.sourceId||member.id),member]));const scoped=engineers.filter(engineer=>engineer.regionId===region.id&&(!engineer.serviceDate||parseImportedDate(engineer.serviceDate)?.toLocaleDateString('sv-SE')===selectedDayKey)&&(engineer.serviceDate||!rosterBySource.has(String(engineer.sourceId||engineer.id))||staffActiveOn(rosterBySource.get(String(engineer.sourceId||engineer.id)),selectedDayKey)));const bySource=new globalThis.Map();staffRoster.filter(member=>member.regionId===region.id&&staffActiveOn(member,selectedDayKey)).forEach(member=>bySource.set(String(member.sourceId||member.id),member));scoped.forEach(engineer=>{const key=String(engineer.sourceId||engineer.id);const prior=bySource.get(key);if(!prior||engineer.serviceDate)bySource.set(key,engineer)});return[...bySource.values()]},[engineers,staffRoster,region.id,selectedDayKey]);
-  useEffect(()=>{let live=true;fetch(`/api/shifts?regionId=${encodeURIComponent(region.id)}&date=${selectedDayKey}`).then(async response=>response.ok?response.json():null).then(saved=>{if(!live)return;setShift(saved);if(!saved?.plan)return;setPlan(saved.plan);setScheduled(true);const sameDay=item=>item.regionId===region.id&&(!item.serviceDate||parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE')===selectedDayKey);setOrders(current=>[...current.filter(item=>!sameDay(item)),...saved.orders.map(item=>({...item,regionId:region.id,serviceDate:selectedDayKey}))]);setEngineers(current=>[...current.filter(item=>!sameDay(item)),...saved.team.map(item=>({...item,regionId:region.id,serviceDate:selectedDayKey}))])}).catch(()=>{if(live)setShift(null)});return()=>{live=false}},[region.id,selectedDayKey]);
+  useEffect(()=>{let live=true;fetch(`/api/shifts?regionId=${encodeURIComponent(region.id)}&date=${selectedDayKey}`).then(async response=>response.ok?response.json():null).then(saved=>{if(!live)return;setShift(saved);if(importedDayAwaitingShiftRef.current===selectedDayKey){importedDayAwaitingShiftRef.current='';return}if(!saved?.plan)return;setPlan(saved.plan);setScheduled(true);const sameDay=item=>item.regionId===region.id&&(!item.serviceDate||parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE')===selectedDayKey);setOrders(current=>[...current.filter(item=>!sameDay(item)),...saved.orders.map(item=>({...item,regionId:region.id,serviceDate:selectedDayKey}))]);setEngineers(current=>[...current.filter(item=>!sameDay(item)),...saved.team.map(item=>({...item,regionId:region.id,serviceDate:selectedDayKey}))])}).catch(()=>{if(live){if(importedDayAwaitingShiftRef.current===selectedDayKey)importedDayAwaitingShiftRef.current='';setShift(null)}});return()=>{live=false}},[region.id,selectedDayKey]);
   useEffect(()=>{if(screen!=='shift'&&screen!=='engineers')shiftClock.set({playing:false})},[screen]);
   useEffect(()=>{setPlan(null);setScheduled(false);setSelectedOrder(null);setFocusedRoute(null)},[region.id]);
   useEffect(()=>{setPlan(null);setScheduled(false);setSelectedOrder(null);setFocusedRoute(null)},[selectedDayKey]);
@@ -1811,32 +1820,39 @@ export function App(){
     const importedItems=[...nextOrders,...nextEngineers];
     const importedDate=importedItems.map(item=>parseImportedDate(item.serviceDate)).find(Boolean)||resolveImportedDate(importedItems)||selectedDate;
     const dateKey=importedDate.toLocaleDateString('sv-SE');
+    const selectedDay=selectedDate.toLocaleDateString('sv-SE');
     const importedRegionIds=new Set([...nextOrders,...nextEngineers].map(item=>item.regionId).filter(Boolean));
-    const preparedOrders=nextOrders.map(order=>{
+    const existingOrderKeys=new Set(orders.map(order=>importIdentity(order,'orders',selectedDay)));
+    const existingEngineerKeys=new Set(engineers.map(engineer=>importIdentity(engineer,'engineers',selectedDay)));
+    const preparedOrders=nextOrders.filter(order=>mode!=='append'||!existingOrderKeys.has(importIdentity(order,'orders',dateKey))).map(order=>{
       const serviceDate=parseImportedDate(order.serviceDate)?.toLocaleDateString('sv-SE')||dateKey;
-      const collision=orders.some(existing=>String(existing.id)===String(order.id)&&parseImportedDate(existing.serviceDate)?.toLocaleDateString('sv-SE')!==serviceDate);
+      const collision=orders.some(existing=>String(existing.id)===String(order.id)&&(parseImportedDate(existing.serviceDate)?.toLocaleDateString('sv-SE')||selectedDay)!==serviceDate);
       return{...order,serviceDate,id:collision?`${order.id}@${serviceDate}`:order.id};
     });
-    const keyOf=item=>`${item.regionId}:${parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE')||dateKey}:${item.sourceId||item.id}`;
+    const keyOf=item=>importIdentity(item,'orders',dateKey);
     const upsertOrders=next=>setOrders(current=>{
-      const base=mode==='replace'?current.filter(order=>!importedRegionIds.has(order.regionId)||parseImportedDate(order.serviceDate)?.toLocaleDateString('sv-SE')!==dateKey):current;
+      const base=mode==='replace'?current.filter(order=>!importedRegionIds.has(order.regionId)||(parseImportedDate(order.serviceDate)?.toLocaleDateString('sv-SE')||selectedDay)!==dateKey):current;
       const updates=new globalThis.Map(next.map(order=>[keyOf(order),order]));
-      return[...base.filter(order=>!updates.has(keyOf(order))),...updates.values()];
+      return[...base.filter(order=>!updates.has(importIdentity(order,'orders',selectedDay))),...updates.values()];
     });
-    if(preparedOrders.length)upsertOrders(preparedOrders);
-    if(nextEngineers.length){
-      const prepared=nextEngineers.map(engineer=>mode==='separate'?{...engineer,id:`${engineer.id}@${dateKey}`,serviceDate:dateKey}:engineer);
+    if(preparedOrders.length||mode==='replace'&&nextOrders.length)upsertOrders(preparedOrders);
+    const preparedEngineers=nextEngineers.filter(engineer=>mode!=='append'||!existingEngineerKeys.has(importIdentity(engineer,'engineers',dateKey))).map(engineer=>{
+        const serviceDate=parseImportedDate(engineer.serviceDate)?.toLocaleDateString('sv-SE')||dateKey;
+        const collision=engineers.some(existing=>String(existing.id)===String(engineer.id)&&(parseImportedDate(existing.serviceDate)?.toLocaleDateString('sv-SE')||selectedDay)!==serviceDate);
+        return{...engineer,id:collision?`${engineer.id}@${serviceDate}`:engineer.id,serviceDate};
+      });
+    if(preparedEngineers.length||mode==='replace'&&nextEngineers.length){
       setEngineers(current=>{
-        const base=mode==='replace'?current.filter(engineer=>!importedRegionIds.has(engineer.regionId)||engineer.serviceDate&&engineer.serviceDate!==dateKey):current;
-        const updates=new globalThis.Map(prepared.map(engineer=>[`${engineer.regionId}:${engineer.serviceDate||''}:${engineer.sourceId||engineer.id}`,engineer]));
-        return[...base.filter(engineer=>!updates.has(`${engineer.regionId}:${engineer.serviceDate||''}:${engineer.sourceId||engineer.id}`)),...updates.values()];
+        const base=mode==='replace'?current.filter(engineer=>!importedRegionIds.has(engineer.regionId)||(parseImportedDate(engineer.serviceDate)?.toLocaleDateString('sv-SE')||selectedDay)!==dateKey):current;
+        const updates=new globalThis.Map(preparedEngineers.map(engineer=>[importIdentity(engineer,'engineers',dateKey),engineer]));
+        return[...base.filter(engineer=>!updates.has(importIdentity(engineer,'engineers',selectedDay))),...updates.values()];
       });
     }
     const firstImported=nextOrders[0]||nextEngineers[0];
     if(firstImported){const nextRegion=regionCatalog(nextOrders,nextEngineers,region).find(item=>item.id===firstImported.regionId);if(nextRegion)setRegion(nextRegion)}
-    if(importedItems.length){setSelectedDate(importedDate);setAnalyticsDate(importedDate)}
+    if(importedItems.length){if(dateKey!==selectedDay)importedDayAwaitingShiftRef.current=dateKey;setSelectedDate(importedDate);setAnalyticsDate(importedDate)}
     setPlan(null);setImportSession(null);setScheduled(false);setSelectedOrder(null);
-    const parts=[nextOrders.length?`${nextOrders.length} заявок`:'',nextEngineers.length?`${nextEngineers.length} инженеров`:''].filter(Boolean);
+    const parts=[preparedOrders.length?`${preparedOrders.length} ${countForm(preparedOrders.length,'заявка','заявки','заявок')}`:'',preparedEngineers.length?`${preparedEngineers.length} ${countForm(preparedEngineers.length,'инженер','инженера','инженеров')}`:''].filter(Boolean);
     const missing=preparedOrders.filter(order=>!Array.isArray(order.coords)||order.coords.length!==2||!order.coords.every(Number.isFinite));
     if(!missing.length){const cityCount=new Set([...nextOrders,...nextEngineers].map(item=>item.regionId)).size;notify(`${parts.join(' и ')} загружено · ${cityCount} ${cityCount===1?'город':'города'}`);return}
     try{
@@ -1864,22 +1880,13 @@ export function App(){
       importRows(payload,reviewSnapshot,'merge');
       return;
     }
-    const incoming=[...(payload.orders||[]),...(payload.engineers||[])];
-    const importedDate=incoming.map(item=>parseImportedDate(item.serviceDate)).find(Boolean)||resolveImportedDate(incoming)||selectedDate;
-    const dateKey=importedDate.toLocaleDateString('sv-SE');
-    const incomingKeys=incoming.map(item=>`${item.regionId}:${dateKey}:${item.sourceId||item.id}`);
-    const duplicateIds=incomingKeys.length-new Set(incomingKeys).size;
-    const existingItems=[...orders,...engineers];
-    const existingKeys=new Set(existingItems.map(item=>`${item.regionId}:${parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE')||dateKey}:${item.sourceId||item.id}`));
-    const conflictingItems=incoming.filter((item,index)=>existingKeys.has(incomingKeys[index]));
-    const conflicts=conflictingItems.length;
-    const importedRegionIds=new Set(incoming.map(item=>item.regionId).filter(Boolean));
-    const replacesOrders=(payload.orders||[]).length?orders.filter(item=>importedRegionIds.has(item.regionId)&&(parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE')||dateKey)===dateKey).length:0;
-    const replacesEngineers=(payload.engineers||[]).length?engineers.filter(item=>importedRegionIds.has(item.regionId)&&(parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE')||dateKey)===dateKey).length:0;
+    const fileDates=new Set([...(payload.orders||[]),...(payload.engineers||[])]
+      .map(item=>parseImportedDate(item.serviceDate)?.toLocaleDateString('sv-SE')).filter(Boolean));
+    if(fileDates.size>1){notify(`В файлах найдены разные рабочие даты: ${[...fileDates].join(', ')}. Загрузите файлы одного дня вместе.`,{title:'Проверьте даты импорта'});return}
     if(!orders.length&&!engineers.length){importRows(payload,reviewSnapshot,'merge');return}
     setImportSession(null);
     setReviewClosing(false);
-    setPendingImport({payload,reviewSnapshot,summary:{fileName:reviewSnapshot?.fileName,orders:payload.orders?.length||0,engineers:payload.engineers?.length||0,newIds:incoming.length-conflicts,conflicts,conflictIds:conflictingItems.map(item=>String(item.sourceId||item.id)),replaceRemovals:replacesOrders+replacesEngineers,duplicateIds,differentDate:dateKey!==selectedDate.toLocaleDateString('sv-SE')}});
+    setPendingImport({payload,reviewSnapshot,summary:{fileName:reviewSnapshot?.fileName,...summarizeImport(payload,{orders,engineers},selectedDate)}});
   };
   // A sidebar toggle must not re-render the entire editable 205×28-cell table.
   // Stable event wrappers preserve fresh import logic without invalidating memo.
