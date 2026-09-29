@@ -70,9 +70,9 @@ export async function findAlternativeWindow(shift, model, order, routing) {
   return { start, end, plannedStart: visit.plannedStart, engineerId: visit.engineerId, engineerName: visit.engineerName, checkedBy: 'EXACT_REPLAN' };
 }
 
-const historicalInventory = async date => {
+/** Read the actual shared-stock limits for the selected historical dataset. */
+export const historicalInventory = async (date, root = projectRoot()) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return [];
-  const root = projectRoot();
   const historical = path.join(root, 'history', date, 'dataset');
   const base = path.join(root, 'data', 'dataset');
   let csv = '';

@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findAlternativeWindow, preservesStartedVisits } from '../server/exactShiftReplan.mjs';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { findAlternativeWindow, historicalInventory, preservesStartedVisits } from '../server/exactShiftReplan.mjs';
 
 const route = (orderId, plannedStart, engineerId = 'crew-1') => ({
   engineerId,
@@ -68,4 +71,20 @@ test('a queued order is checked through a real client-window event', async () =>
     ['CLIENT_WINDOW_SHIFT', 'queued', '12:01', '18:00'],
     ['CLIENT_WINDOW_SHIFT', 'queued', '13:30', '15:30'],
   ]);
+});
+
+test('full rebuild takes stock limits from the matching base dataset', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'beego-inventory-'));
+  try {
+    const dataset = path.join(root, 'data', 'dataset');
+    await mkdir(path.join(dataset, 'core'), { recursive: true });
+    await writeFile(path.join(dataset, 'manifest.json'), JSON.stringify({ planning_date: '2026-08-17' }));
+    await writeFile(path.join(dataset, 'core', 'shared_inventory.csv'), 'scenario;zone_id;equipment_id;quantity_available\nCORE;EAST;CABLE_PACK;38\n');
+    assert.deepEqual(await historicalInventory('2026-08-17', root), [
+      { zoneId: 'EAST', equipmentId: 'CABLE_PACK', quantity: 38 },
+    ]);
+    assert.deepEqual(await historicalInventory('2026-08-18', root), []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
