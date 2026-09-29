@@ -22,7 +22,7 @@ import './import-engineers.css';
 import { ImportWorkspace, parseImportFiles } from './ImportWorkspace.jsx';
 import { useDropdownPresence } from './useDropdownPresence.js';
 import { useWorkspacePresence } from './useWorkspacePresence.js';
-import { displayOrderName, effectiveOrderSkill, isInformationalOrder, workPointType } from './workTypes.js';
+import { displayOrderName, effectiveOrderSkill, isEmergencyWorkOrder, isInformationalOrder, workPointType } from './workTypes.js';
 import { ZONE_LABELS, normalizeTerritoryKey, zoneBoundaryName, zoneCode } from './territoryAliases.js';
 import { captureMapCamera, restoredCameraOptions } from './locationPrivacy.js';
 import { parseImportedDate, resolveImportedDate } from './importDate.js';
@@ -1910,7 +1910,11 @@ export function App(){
     setPlanOpen(false);
     setAlgorithmActivity({kind:'plan',id:`starting-${startedAt}`,status:'RUNNING',progress:{phase:'VALIDATING_INPUT'},startedAt,orderCount:regionOrders.length});
     try{
-      const planningOrders=regionOrders.map(order=>isInformationalOrder(order)?{...order,skill:effectiveOrderSkill(order),priority:'Обычная'}:order);
+      const planningOrders=regionOrders.map(order=>({
+        ...order,
+        skill:effectiveOrderSkill(order),
+        priority:isEmergencyWorkOrder(order)?'Авария':isInformationalOrder(order)?'Обычная':order.priority,
+      }));
       const next=await requestPlan(planningOrders,team,region.id,{planningDate:selectedDayKey},job=>setAlgorithmActivity(current=>current?.startedAt===startedAt?{
         ...current,id:job.id||current.id,progress:job.status==='READY'?{phase:'SAVING_SHIFT'}:job.progress||current.progress,
       }:current));

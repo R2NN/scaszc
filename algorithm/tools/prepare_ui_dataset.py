@@ -26,7 +26,9 @@ EQUIPMENT_LABELS = {
 }
 SKILLS = {
     'локальные работы': 'LOCAL', 'подключение': 'INSTALL',
-    'аварийные работы': 'EMERGENCY', 'дозаказ': 'UPSELL',
+    'аварийные работы': 'EMERGENCY', 'авария': 'EMERGENCY',
+    'глобальная проблема': 'EMERGENCY', 'global problem': 'EMERGENCY',
+    'global issue': 'EMERGENCY', 'дозаказ': 'UPSELL',
 }
 TRANSPORT = {
     'автомобиль': 'CAR', 'пешком': 'WALKING', 'велосипед': 'BICYCLE',
@@ -68,6 +70,22 @@ def skill(value: Any) -> str:
     if result not in {'LOCAL', 'INSTALL', 'EMERGENCY', 'UPSELL'}:
         raise ValueError(f'Неизвестный навык: {raw}')
     return result
+
+
+def is_emergency_work_type(item: dict[str, Any]) -> bool:
+    """Treat global outages and explicit accidents as emergency work."""
+    values = (item.get('workType'), item.get('serviceType'), item.get('skill'))
+    return any(str(value or '').strip().casefold().replace('ё', 'е') in {
+        'глобальная проблема', 'global problem', 'global issue',
+        'авария', 'аварийные работы', 'emergency',
+    } for value in values)
+
+
+def order_skill(item: dict[str, Any]) -> str:
+    """Resolve the skill required by a request using its BK emergency type first."""
+    if is_emergency_work_type(item):
+        return 'EMERGENCY'
+    return skill(item.get('skill') or item.get('workType') or source_data(item).get('required_skill'))
 
 
 def priority(value: Any) -> str:
@@ -265,7 +283,7 @@ def preflight_ui_rows(orders: list[Any], team: list[Any], planning_date: date,
                 if isinstance(duration, bool) or not re.fullmatch(r'[1-9]\d*', str(duration or '').strip()):
                     issues.append(f'{label}, длительность: укажите целое положительное число минут')
                 try:
-                    skill(item.get('skill') or item.get('workType') or imported.get('required_skill'))
+                    order_skill(item)
                 except ValueError as error:
                     issues.append(f'{label}, навык: {error}')
                 try:
@@ -388,7 +406,7 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         duration = int(item.get('duration') or 0)
         if duration < 1:
             raise ValueError(f'У заявки {job_id} не указана длительность')
-        required_skill = skill(item.get('skill') or item.get('workType') or source_data(item).get('required_skill'))
+        required_skill = order_skill(item)
         bk_type, hd_type = f'UI-{required_skill}', f'UI-WORK-{index}'
         if not any(row['bk_type'] == bk_type for row in skill_mapping):
             skill_mapping.append({'bk_type': bk_type, 'required_skill': required_skill})
@@ -403,7 +421,7 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         if raw_transport not in {'ANY', 'CAR', 'PUBLIC_TRANSIT', 'BICYCLE', 'WALKING'}:
             raise ValueError(f'Неизвестное требование к транспорту заявки {job_id}: {transport_value}')
         priority_value = item['priority'] if 'priority' in item else source_data(item).get('priority')
-        job_priority = priority(priority_value)
+        job_priority = 'URGENT' if is_emergency_work_type(item) else priority(priority_value)
         jobs.append({'scenario': 'CORE', 'job_id': job_id, 'source_job_id': job_id, 'zone_id': zone_id, 'location_id': location_id, 'bk_type': bk_type, 'hd_type': hd_type, 'window_start': f'{planning_date}T{start}:00+03:00', 'window_end': f'{planning_date}T{end}:00+03:00', 'created_at': planning_at, 'service_duration_min': duration, 'priority': job_priority, 'required_skill': required_skill, 'required_transport': raw_transport, 'required_equipment': '|'.join(codes), 'gigabit_required': 'Нет', 'is_event_job': 'false', 'status': 'PENDING'})
     stock_source: dict[tuple[str, str], int] = {}
     overrides = payload.get('sharedInventory', [])

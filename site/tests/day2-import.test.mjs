@@ -5,6 +5,7 @@ import { createServer } from 'vite';
 import worker from '../worker/index.js';
 import { DEFAULT_REGION } from '../src/regions.js';
 import { territoryFromImportFile } from '../src/importTerritory.js';
+import { effectiveOrderSkill, isInformationalOrder, workPointType } from '../src/workTypes.js';
 
 test('district filenames provide an operational sector only when the CSV has none', async () => {
   assert.deepEqual(territoryFromImportFile('восток день 2.csv'), { id: 'EAST', label: 'Восток' });
@@ -29,6 +30,38 @@ test('district filenames provide an operational sector only when the CSV has non
     assert.deepEqual(orders.map(order => [order.sourceId, order.zoneId, order.district, order.serviceDate]), [
       ['E-1', 'EAST', 'Таганский', '2026-09-28'],
       ['C-1', 'SOUTHCENTER', 'Зюзино', '2026-09-28'],
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await vite.close();
+  }
+});
+
+test('global problems and accidents both import as emergency work', async () => {
+  const persisted = {
+    workType: 'Глобальная проблема', serviceType: 'Информация',
+    skill: 'Глобальная проблема', priority: 'Обычная',
+  };
+  assert.equal(isInformationalOrder(persisted), false);
+  assert.equal(effectiveOrderSkill(persisted), 'Аварийные работы');
+  assert.equal(workPointType(persisted), 'emergency');
+
+  const vite = await createServer({ server: { middlewareMode: true, hmr: false } });
+  const originalFetch = globalThis.fetch;
+  try {
+    const { parseImportFiles, buildOrders } = await vite.ssrLoadModule('/src/ImportWorkspace.jsx');
+    const norms = await readFile(new URL('../public/data/work-norms.xlsx', import.meta.url));
+    globalThis.fetch = async () => new Response(norms, { status: 200 });
+    const heading = 'Заявка;Тип заявки BK;Тип заявки HD;Начало;Окончание;Район;Адрес\n';
+    const file = new File([heading
+      + 'G-1;Глобальная проблема;Информация;28.09.2026 10:00;28.09.2026 12:00;Выхино;Москва, Ташкентская улица, 4\n'
+      + 'A-1;Авария;Информация;28.09.2026 12:00;28.09.2026 14:00;Выхино;Москва, Ташкентская улица, 6'], 'восток день 2.csv');
+    const session = await parseImportFiles([file]);
+    const dataset = session.datasets.orders;
+    const orders = buildOrders(dataset.headers, dataset.rows, dataset.savedMappings, DEFAULT_REGION, session.workNorms, session.fileName);
+    assert.deepEqual(orders.map(order => [order.workType, order.skill, order.priority, isInformationalOrder(order)]), [
+      ['Глобальная проблема', 'Аварийные работы', 'Авария', false],
+      ['Авария', 'Аварийные работы', 'Авария', false],
     ]);
   } finally {
     globalThis.fetch = originalFetch;

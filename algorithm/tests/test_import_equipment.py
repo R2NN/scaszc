@@ -1,5 +1,6 @@
 """Regression checks for reviewed UI equipment entering the exact planner."""
 
+import csv
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -50,3 +51,34 @@ class ImportEquipmentTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ValueError, 'нужны проверенные координаты'):
                 prepare(payload, Path(directory) / 'dataset')
+
+    def test_global_problem_and_accident_both_require_emergency_skill(self):
+        payload = {
+            'planningDate': '2026-09-28',
+            'orders': [{
+                'id': 'global-1', 'sourceId': 'global-1', 'zoneId': 'EAST',
+                'workType': 'Глобальная проблема', 'serviceType': 'Информация',
+                'skill': 'Глобальная проблема', 'priority': 'Обычная',
+                'coords': [55.75, 37.61], 'start': '10:00', 'end': '12:00',
+                'duration': 60,
+            }, {
+                'id': 'accident-1', 'sourceId': 'accident-1', 'zoneId': 'EAST',
+                'workType': 'Авария', 'serviceType': 'Информация',
+                'skill': 'Авария', 'priority': 'Обычная',
+                'coords': [55.76, 37.62], 'start': '12:00', 'end': '14:00',
+                'duration': 60,
+            }],
+            'engineers': [{
+                'id': 'crew-1', 'sourceId': 'crew-1', 'zoneId': 'EAST',
+                'startCoords': [55.75, 37.61], 'shiftStart': '08:00',
+                'shiftEnd': '18:00', 'skills': ['EMERGENCY'],
+                'status': 'Доступен', 'transport': 'CAR',
+            }],
+        }
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'dataset'
+            prepare(payload, target)
+            with (target / 'core' / 'jobs.csv').open(encoding='utf-8-sig', newline='') as source:
+                jobs = list(csv.DictReader(source, delimiter=';'))
+            self.assertEqual([job['required_skill'] for job in jobs], ['EMERGENCY', 'EMERGENCY'])
+            self.assertEqual([job['priority'] for job in jobs], ['URGENT', 'URGENT'])

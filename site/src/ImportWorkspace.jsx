@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { isInformationalOrder, translateServiceLabel } from './workTypes.js';
+import { isEmergencyWorkOrder, isInformationalOrder, translateServiceLabel } from './workTypes.js';
 import {
   AlertTriangle, Check, ChevronDown, Filter,
   FilePlus2, Files, Info, Plus, Redo2, Search, ShieldCheck, Undo2, X,
@@ -480,6 +480,7 @@ const translatePriority = value => {
 
 const translateSkill = (skill, workType) => {
   const text = normalize(skill || workType);
+  if (/глобальн.*проблем|global\s+(?:problem|issue)/.test(text)) return 'Аварийные работы';
   if (/emerg|авар/.test(text)) return 'Аварийные работы';
   if (/install|подключ/.test(text)) return 'Подключение';
   if (/local|локал/.test(text)) return 'Локальные работы';
@@ -758,6 +759,7 @@ export function buildOrders(headers, rows, mappings, region, workNorms = null, s
     const windowDate = parseImportedDate(valueFor(row, 'windowStart') || valueFor(row, 'windowRange'));
     const duration = workDurationFor({ workType, serviceType, skill, name }, workNorms, valueFor(row, 'duration'));
     const informational = isInformationalOrder({ serviceType, workType, name: valueFor(row, 'name') });
+    const emergencyWork = isEmergencyWorkOrder({ serviceType, workType });
     const lat = asNumber(valueFor(row, 'latitude'));
     const lon = asNumber(valueFor(row, 'longitude'));
     const customFields = supplementaryFields(row, mappings, 'orders', ORDER_CORE_FIELDS);
@@ -792,9 +794,9 @@ export function buildOrders(headers, rows, mappings, region, workNorms = null, s
       duration,
       durationSource: workNormFor({ workType, serviceType, skill, name }, workNorms)
         ? 'Нормативы.xlsx' : workNorms ? (duration === 60 ? 'Без норматива · 60 мин' : 'Изменено оператором') : 'Файл заявки',
-      priority: informational ? 'Обычная' : translatePriority(valueFor(row, 'priority')),
+      priority: emergencyWork ? 'Авария' : informational ? 'Обычная' : translatePriority(valueFor(row, 'priority')),
       workType,
-      skill: informational && /emerg|авар/i.test(skill) ? '' : translateSkill(skill, workType || serviceType),
+      skill: emergencyWork ? 'Аварийные работы' : informational ? 'Локальные работы' : translateSkill(skill, workType || serviceType),
       equipment: importedEquipmentRequirements(valueFor(row, 'equipment')),
       transport: valueFor(row, 'transport'),
       district: valueFor(row, 'district'),
