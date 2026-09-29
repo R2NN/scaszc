@@ -1,5 +1,5 @@
 # Начните здесь
 
-Текущий комплект сдачи описан в [README.md](README.md). Сверка с постановкой находится в [DELIVERY_AUDIT_RU.md](DELIVERY_AUDIT_RU.md), запуск стенда — в [deploy/README_RU.md](deploy/README_RU.md), слайды и сценарий — в [presentation](presentation/DEMO_SCRIPT_RU.md).
+Текущий комплект сдачи описан в [README.md](README.md). Сверка с постановкой находится в [DELIVERY_AUDIT_RU.md](DELIVERY_AUDIT_RU.md), запуск стенда — в [deploy/README_RU.md](deploy/README_RU.md).
 
 Этот Git-репозиторий содержит код и проверенные демонстрационные артефакты. Тяжёлые данные Valhalla и транспортных расписаний передаются отдельно из полного архива.

@@ -47,4 +47,4 @@ $env:PYTHONPATH='algorithm/src;algorithm'
 python -m unittest discover -s algorithm/tests -p 'test_*.py' -q
 ```
 
-Сверка с ТЗ и известные ограничения — [отчёт о готовности](DELIVERY_AUDIT_RU.md). Для защиты подготовлены [презентация](presentation/BeeGo-defense.pptx) и [порядок показа](presentation/DEMO_SCRIPT_RU.md). Технические детали алгоритма — [маршрутизация](algorithm/routing_README.md) и [новый набор данных](algorithm/NEW_DATA_RUNBOOK.md).
+Сверка с ТЗ и известные ограничения — [отчёт о готовности](DELIVERY_AUDIT_RU.md). Технические детали алгоритма — [маршрутизация](algorithm/routing_README.md) и [новый набор данных](algorithm/NEW_DATA_RUNBOOK.md).
