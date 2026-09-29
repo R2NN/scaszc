@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, CalendarDays, Check, ChevronLeft, ChevronRight, Plus, RotateCcw, Search, X } from 'lucide-react';
 import { TimePicker } from './TimePicker.jsx';
-import { staffAvailableForShift } from './staffRoster.js';
+import { staffActiveOn, staffAvailableForShift } from './staffRoster.js';
 import './staff-roster.css';
 
 const laterTime = (first, second) => first > second ? first : second;
