@@ -22,7 +22,7 @@ COPY data/transit data/transit
 COPY runtime runtime
 COPY site site
 RUN cd site && pnpm run build \
-    && python3 algorithm/tools/install_weekly_rail_snapshots.py \
+    && python3 /app/algorithm/tools/install_weekly_rail_snapshots.py \
       --destination /app/offline-assets/transit-sources/rail \
     && mkdir -p /app/runtime/ui-runs /app/runtime/ui-shared-cache /app/runtime/exact-replans /app/site/.beego-data \
     && chown -R node:node /app/runtime /app/site/.beego-data
