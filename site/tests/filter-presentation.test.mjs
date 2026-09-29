@@ -1,11 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterLabel, matchesAnySelection, matchesSearch, orderSearchValues, orderWorkValues } from '../src/filterPresentation.js';
+import { canonicalWorkValue, filterLabel, matchesAnySelection, matchesSearch, orderSearchValues, orderWorkValues } from '../src/filterPresentation.js';
 
 test('filter values keep source codes while displaying Russian labels', () => {
   assert.equal(filterLabel('EMERGENCY'), 'Аварийные работы');
+  assert.equal(filterLabel('UPSELL'), 'Дозаказ');
   assert.equal(filterLabel('PUBLIC_TRANSIT'), 'Общественный транспорт');
   assert.equal(filterLabel('Глобальная проблема'), 'Глобальная проблема');
+});
+
+test('work filters show one Russian option for each source code and label', () => {
+  const orders = [
+    { workType: 'INSTALL', skill: 'Подключение', sourceData: { bk_type: 'INSTALL', required_skill: 'Подключение' } },
+    { workType: 'UPSELL', skill: 'Дозаказ' },
+    { workType: 'Глобальная проблема', skill: 'EMERGENCY' },
+  ];
+  const values = [...new Set(orders.flatMap(orderWorkValues))];
+  assert.deepEqual(values, ['INSTALL', 'UPSELL', 'Глобальная проблема', 'EMERGENCY']);
+  assert.deepEqual(values.map(filterLabel), ['Подключение', 'Дозаказ', 'Глобальная проблема', 'Аварийные работы']);
+  assert.equal(canonicalWorkValue('локальные работы'), 'LOCAL');
+  assert.equal(matchesAnySelection(['INSTALL'], orderWorkValues(orders[0])), true);
+  assert.equal(matchesAnySelection(['EMERGENCY'], orderWorkValues(orders[0])), false);
 });
 
 test('multiple selections match either value within a group', () => {

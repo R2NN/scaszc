@@ -59,7 +59,13 @@ export function StaffRosterModal({ mode = 'manage', roster = [], shift, date, on
             <div><b>{member.name}</b><small>{member.sourceId} · {member.zone || 'Территория не указана'}</small><small>{member.rosterArchived ? `В архиве с ${member.rosterPeriods?.at(-1)?.to || '—'}` : `В составе с ${member.rosterPeriods?.at(-1)?.from || '—'}`}</small></div>
             {isInclude ? <button type="button" onClick={()=>{setSelectedId(member.id);setStartsLater(false);setError('')}}>Выбрать</button> : member.rosterArchived ? <button type="button" disabled={busy || !employmentDate} onClick={()=>act(()=>onRestore(member,employmentDate))}><RotateCcw size={15}/>Вернуть</button> : confirmId === member.id ? <div className="staff-roster-confirm"><span>Исключить из состава с {employmentDate}? Текущий план не изменится.</span><button type="button" disabled={busy || !employmentDate} onClick={()=>act(()=>onArchive(member,employmentDate))}><Check size={15}/>Подтвердить</button><button type="button" onClick={()=>setConfirmId('')}>Нет</button></div> : <button type="button" onClick={()=>setConfirmId(member.id)}><Archive size={15}/>Исключить из состава</button>}
           </article>)}
-          {!visible.length ? <p className="staff-roster-empty">{isInclude ? 'В составе нет свободных для этой смены бригад.' : 'Инженеры не найдены.'}</p> : null}
+          {!visible.length ? <p className="staff-roster-empty">{query.trim()
+            ? 'По вашему запросу инженеры не найдены.'
+            : isInclude
+              ? candidates.length === 0 && roster.some(member => staffActiveOn(member, date))
+                ? 'Все инженеры действующего состава уже включены в эту смену. Чтобы увеличить команду, добавьте нового инженера в состав. Недоступную бригаду можно вернуть через её карточку.'
+                : 'На выбранную дату в постоянном составе нет доступных инженеров. Добавьте инженера в состав или проверьте дату.'
+              : 'Инженеры не найдены.'}</p> : null}
         </div>
         {isInclude && selected ? <div className="staff-roster-inclusion"><b>{selected.name}</b><p>Рабочее время: {workStart}–{selected.shiftEnd || '18:00'}. После публикации бригада будет видна в списке весь день, а на карте — с {availableFrom}.</p>{lastPlanTime > availableFrom ? <p>Маршрутные изменения начнут действовать с {lastPlanTime}: это время последней опубликованной версии плана, а не начало работы бригады.</p> : null}<label><input type="checkbox" checked={startsLater} onChange={event=>setStartsLater(event.target.checked)}/>Начнёт работу позже</label>{startsLater ? <TimePicker label="Доступна с" value={customTime} onChange={setCustomTime}/> : null}<button type="button" className="staff-roster-primary" disabled={busy} onClick={()=>act(()=>onInclude(selected,effectiveTime,availableFrom))}>Проверить включение в план</button></div> : null}
         {error ? <p className="staff-roster-error" role="alert">{error}</p> : null}

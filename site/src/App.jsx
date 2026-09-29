@@ -555,7 +555,7 @@ function MapHierarchyPanel({onClose,mode,onModeChange,routeCount,activeRoute,ord
         <div><i className="legend-route" style={{'--legend-color':color}}/><span><b>Маршрут</b><small>{activeRoute?`Выделен маршрут: ${activeRoute.engineerName}`:'Серая линия — общий план; выделенная — выбранная бригада'}</small></span></div>
         {playback?<div><i className="legend-crew"/><span><b>Бригада</b><small>Положение в ходе смены</small></span></div>:null}
         <div><i className="legend-point"/><span><b>Назначенная заявка</b><small>Светлая точка с контуром входит в маршрут</small></span></div>
-        {playback?<div><i className="legend-completed"/><span><b>Выполнена</b><small>Зелёная точка — есть фактическая отметка диспетчера</small></span></div>:null}
+        {playback?<><div><i className="legend-planned-completed"/><span><b>По плану завершена</b><small>Светло-зелёная точка — запланированное время работы прошло</small></span></div><div><i className="legend-completed"/><span><b>Выполнена</b><small>Тёмно-зелёная точка — есть фактическая отметка диспетчера</small></span></div></>:null}
         {urgentCount?<div><i className="legend-urgent">⚡</i><span><b>Срочная заявка · {urgentCount}</b><small>Красный ромб — аварийный приоритет</small></span></div>:null}
         {unassignedCount?<div><i className="legend-unassigned">!</i><span><b>В очереди · {unassignedCount}</b><small>Пунктирный круг — не вошла в план</small></span></div>:null}
         {reviewCount?<div><i className="legend-review">?</i><span><b>Проверить адрес · {reviewCount}</b><small>Координаты требуют уточнения</small></span></div>:null}

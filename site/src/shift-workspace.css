@@ -882,7 +882,7 @@
 @media(max-width:760px){.shift-layer:not(.report-layer) .shift-panel nav.shift-tabs button{font-size:12px}.shift-load-filters button{font-size:12px}}
 
 /* The map hierarchy follows the active Shift list: crews first in Brigades,
-   requests first in Orders. A plan-only playback never paints a visit green. */
+   requests first in Orders. Planned completion is light green; fact is solid green. */
 .real-map.shift-map-crews .shift-map-crew-marker{z-index:160!important}
 .real-map.shift-map-orders .shift-map-crew-marker{z-index:10!important;opacity:.82}
 .real-map.shift-map-overview .shift-map-crew-marker{z-index:110!important}
@@ -905,12 +905,16 @@
 .real-map.shift-map-crews .map-order-marker.is-route-active:not(.is-unassigned):not(.is-urgent):not(.is-selected):not([data-fact-completed="true"]) .map-order-pin.is-scheduled{width:21px;height:21px;border-color:#7047ab;color:#3e2861;font-size:10px;text-shadow:none}
 .real-map.shift-map-orders .map-order-marker:not(.is-unassigned):not(.is-urgent):not(.is-selected):not([data-fact-completed="true"]) .map-order-pin.is-scheduled{width:13px;height:13px;border:2px solid #626d79;background:#fff;color:transparent;text-shadow:none;box-shadow:0 1px 4px #26313d55}
 .real-map.shift-map-orders .map-order-marker.is-route-active:not(.is-unassigned):not(.is-urgent):not(.is-selected):not([data-fact-completed="true"]) .map-order-pin.is-scheduled{border-color:#7047ab}
+.real-map.shift-map-crews .map-order-marker[data-visit-status="simulated_completed"]:not([data-fact-completed="true"]) .map-order-pin.is-scheduled,
+.real-map.shift-map-orders .map-order-marker[data-visit-status="simulated_completed"]:not([data-fact-completed="true"]) .map-order-pin.is-scheduled,
+.real-map.shift-map-overview .map-order-marker[data-visit-status="simulated_completed"]:not([data-fact-completed="true"]) .map-order-pin.is-scheduled{width:16px!important;height:16px!important;border:2px solid #fff!important;border-radius:50%!important;background:#b9eacb!important;color:#1c7848!important;clip-path:none!important;filter:none!important;box-shadow:0 0 0 2px #299d60,0 3px 8px #173b2855!important;text-shadow:none}
 .real-map.shift-map-crews .map-order-marker[data-fact-completed="true"] .map-order-pin.is-scheduled,
 .real-map.shift-map-orders .map-order-marker[data-fact-completed="true"] .map-order-pin.is-scheduled,
 .real-map.shift-map-overview .map-order-marker[data-fact-completed="true"] .map-order-pin.is-scheduled{width:16px!important;height:16px!important;border:2px solid #fff!important;border-radius:50%!important;background:#2eaf68!important;color:#fff!important;clip-path:none!important;filter:none!important;box-shadow:0 0 0 2px #187a48,0 3px 8px #173b2855!important;text-shadow:none}
 .real-map.shift-map-orders .map-order-marker[data-fact-completed="true"] .map-order-pin.is-scheduled{width:16px!important;height:16px!important}
 .real-map .map-order-marker[data-fact-completed="true"] .map-order-pin.is-scheduled::before{display:none!important}
 .map-legend-popup-items .legend-completed{width:15px;height:15px;flex-basis:19px;border:2px solid #fff;border-radius:50%;background:#2eaf68;box-shadow:0 0 0 2px #187a48}
+.map-legend-popup-items .legend-planned-completed{width:15px;height:15px;flex-basis:19px;border:2px solid #fff;border-radius:50%;background:#b9eacb;box-shadow:0 0 0 2px #299d60}
 
 /* The journal restores a saved plan revision, never a minute on the scrubber. */
 .shift-journal .shift-section-title>b,.shift-journal>h3{font-size:16px;line-height:1.35;margin:0 0 10px}

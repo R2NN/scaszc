@@ -2,6 +2,7 @@ const LABELS = {
   LOCAL: 'Локальные работы',
   INSTALL: 'Подключение',
   EMERGENCY: 'Аварийные работы',
+  UPSELL: 'Дозаказ',
   CABLE_PACK: 'Кабельный комплект',
   CABLE_SET: 'Набор кабелей',
   DIAG_SET: 'Диагностический набор',
@@ -36,11 +37,24 @@ export const matchesSearch = (query, values) => {
     .some(value => normalize(value).includes(needle) || normalize(filterLabel(value)).includes(needle));
 };
 
+const WORK_CODES = new Map([
+  ['local', 'LOCAL'], ['локальные работы', 'LOCAL'],
+  ['install', 'INSTALL'], ['подключение', 'INSTALL'],
+  ['emergency', 'EMERGENCY'], ['аварийные работы', 'EMERGENCY'],
+  ['upsell', 'UPSELL'], ['дозаказ', 'UPSELL'],
+]);
+
+/** Merge source codes and Russian labels while keeping distinct work categories. */
+export const canonicalWorkValue = value => {
+  const raw = String(value || '').trim();
+  return WORK_CODES.get(normalize(raw)) || raw;
+};
+
 /** Preserve separate work category and required skill when filtering a request. */
-export const orderWorkValues = order => [order?.workType, order?.skill, order?.sourceData?.bk_type, order?.sourceData?.required_skill]
+export const orderWorkValues = order => [...new Set([order?.workType, order?.skill, order?.sourceData?.bk_type, order?.sourceData?.required_skill]
   .flatMap(value => Array.isArray(value) ? value : [value])
-  .map(value => String(value || '').trim())
-  .filter(Boolean);
+  .map(canonicalWorkValue)
+  .filter(Boolean))];
 
 /** Include source IDs and original fields in request search. */
 export const orderSearchValues = order => [
