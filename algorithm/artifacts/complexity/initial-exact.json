@@ -243246,7 +243246,7 @@
       }
     ],
     "run_certificate": {
-      "dataset_sha256": "84d31eca04ee4f98cac6609da9c5ed6aa0f07c6106ab8a696ef700cc67446a9c",
+      "dataset_sha256": "3634accdea540dbabaecc32172aaf83a5e4b2ad81a5b45d5ae4c499b1110c794",
       "validation_status": "VALID",
       "validation_violations": 0,
       "publication_allowed": true,
@@ -243277,11 +243277,11 @@
     "exact_historical_metro_timetable_proof": false
   },
   "result_interpretation": "Validated against frozen surface and rail schedules plus an explicit metro waiting-time model; this is not a proof against a complete historical metro departure timetable.",
-  "dataset_sha256": "84d31eca04ee4f98cac6609da9c5ed6aa0f07c6106ab8a696ef700cc67446a9c",
+  "dataset_sha256": "3634accdea540dbabaecc32172aaf83a5e4b2ad81a5b45d5ae4c499b1110c794",
   "master_solution_content_sha256": "b7caf9f69832414cd6750f42d4f1ed2257998ea79adde347dbc08f9df30d9c81",
   "snapshot_reseal": {
-    "source_dataset_sha256": "73e32ec8b6ee0db5dd3584836cbf894c2203c183f588d2b51fe4b5ef57c5b203",
-    "reason": "Revisioned history evidence and historical timestamps updated. All 205 visit durations identical; full independent validation repeated. Road evidence unchanged."
+    "source_dataset_sha256": "84d31eca04ee4f98cac6609da9c5ed6aa0f07c6106ab8a696ef700cc67446a9c",
+    "reason": "Snapshot evidence metadata updated; all durations agree; independent validation repeated; road proofs retained."
   },
-  "content_sha256": "e3c7b1d5471cba6a9031dec0c7209c4e11126a01155b67c50c3388f5ca588042"
+  "content_sha256": "fadee1eb185a19fd3b56e838648ce90f11404aea71a1b25287ad6504ba5ee2c1"
 }

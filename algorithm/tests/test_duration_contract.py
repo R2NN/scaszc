@@ -43,6 +43,8 @@ class DurationContractTests(unittest.TestCase):
         self.assertEqual(len(plan.unserved_job_ids), 12)
         self.assertTrue(all(job.duration_snapshot_id for job in data.jobs.values()))
         self.assertEqual(report.metrics.total_travel_minutes, raw['validation']['metrics']['total_travel_minutes'])
+        mirror = json.loads((data.root / 'core/dataset.json').read_text(encoding='utf-8'))
+        self.assertEqual({job['job_id']: job['service_duration_min'] for job in mirror['jobs']}, {key: job.service_duration_min for key, job in data.jobs.items()})
 
     def test_signed_identity_is_checked_and_ui_minutes_cannot_shrink(self):
         content = {'orderId': 'A', 'modelVersion': 'duration-1', 'total': 45, 'units': 'minutes', 'travelIncluded': False}
