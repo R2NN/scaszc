@@ -159,9 +159,13 @@ test('unknown stages never become exact technical measurements; performer remain
     store.complexity.recordShiftFact(shift, { orderId: 'A', status: 'completed', time: '10:45', startedAt: '10:00', deviationReason: 'unknown' }, null);
     assert.equal(store.complexity.visits()[0].eligible, false);
     assert.equal(store.complexity.visits()[0].actualTechnical, null);
+    assert.equal(store.complexity.visits()[0].documentMinutes, null);
+    assert.equal(store.complexity.visits()[0].customerMinutes, null);
     shift.plan.routes[0].engineerId = 'engineer-2';
     store.complexity.recordShiftFact(shift, { orderId: 'A', status: 'completed', time: '10:45', startedAt: '10:00', accessMinutes: 0, documentMinutes: 10, customerMinutes: 0, deviationReason: 'unknown', correctionReason: 'Этапы уточнены' }, null);
     assert.equal(store.complexity.visits()[0].actualTechnical, 35);
+    assert.equal(store.complexity.visits()[0].documentMinutes, 10);
+    assert.equal(store.complexity.visits()[0].customerMinutes, 0);
     assert.equal(store.complexity.visits()[0].engineerId, 'engineer-1');
   } finally { store.close(); }
 });
@@ -186,6 +190,7 @@ test('independent holdout quality is reported across multiple reproducible seeds
       const ends = new Map();
       for (const visit of store.complexity.visits().filter(visit => visit.startedAt).sort((a, b) => a.startedAt.localeCompare(b.startedAt))) {
         assert.equal((Date.parse(visit.endedAt) - Date.parse(visit.startedAt)) / 60000, visit.total);
+        assert.equal(visit.actualTechnical + visit.accessMinutes + visit.documentMinutes + visit.customerMinutes, visit.total);
         const key = `${visit.engineerId}/${visit.startedAt.slice(0, 10)}`;
         assert.ok(!ends.has(key) || ends.get(key) <= visit.startedAt);
         ends.set(key, visit.endedAt);
@@ -196,6 +201,23 @@ test('independent holdout quality is reported across multiple reproducible seeds
       const response = await handleComplexity(new Request('http://localhost/api/complexity/objects?kind=local&zone=EAST'), store.complexity);
       const objects = await response.json();
       assert.ok(objects.length); assert.ok(objects.every(object => object.zoneId === 'EAST'));
+      for (const object of objects.slice(0, 3)) {
+        const detail = await (await handleComplexity(new Request(`http://localhost/api/complexity/objects/${object.id}?kind=local`), store.complexity)).json();
+        assert.equal(object.estimate.total, object.total);
+        assert.equal(object.visitCount, detail.visits.filter(visit => visit.kind === 'local').length);
+        assert.deepEqual(object.estimate, detail.estimate);
+      }
+      const standard = await (await handleComplexity(new Request('http://localhost/api/complexity/objects?kind=connection&volume=standard&zone=EAST'), store.complexity)).json();
+      const detail = await (await handleComplexity(new Request(`http://localhost/api/complexity/objects/${standard[0].id}?kind=connection&volume=standard`), store.complexity)).json();
+      assert.deepEqual(standard[0].estimate, detail.estimate);
+      const mixed = await (await handleComplexity(new Request(`http://localhost/api/complexity/objects?kind=all&at=${encodeURIComponent(at)}&zone=EAST`), store.complexity)).json();
+      assert.ok(new Set(mixed.map(object => object.kind)).size > 1);
+      for (const object of mixed) {
+        const passport = await (await handleComplexity(new Request(`http://localhost/api/complexity/objects/${object.id}?kind=${object.kind}&at=${encodeURIComponent(at)}`), store.complexity)).json();
+        assert.deepEqual(object.estimate, passport.estimate);
+        assert.equal(object.kind, passport.estimate.kind);
+        assert.ok(passport.object.examples.some(example => example.id === passport.example.id));
+      }
     } finally { store.close(); }
   }
 });

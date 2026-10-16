@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import { ComplexityMapLayer, ComplexityPassport, DurationSettings, openObjectPassport } from './ComplexityWorkspace.jsx';
+import { clearObjectPassports } from './objectPassport.js';
 import './calendar.css';
 import './import-engineers.css';
 import { ImportWorkspace, parseImportFiles } from './ImportWorkspace.jsx';
@@ -901,7 +902,7 @@ function MapCanvas({complexityMode=false,complexityDate,complexityTerritory='',c
           addRow('Окно клиента',order.start&&order.end?`${order.start}–${order.end}`:'Гибкое');
           if(order.workType||order.skill||isInformationalOrder(order))addRow('Вид работ',isInformationalOrder(order)?'Информационная заявка':order.workType||order.skill);
           addRow('Длительность визита',durationLabel(order.duration));
-          if(order.durationSnapshot)addRow('База / коэффициент',`${order.durationSnapshot.baseTechnical} мин · K ${order.durationSnapshot.coefficient}`);
+          if(order.durationSnapshot){addRow('Работа на объекте',durationLabel(order.durationSnapshot.technical));addRow('Оформление',durationLabel(order.durationSnapshot.documents));}
           if(meta?.assignment?.plannedFinish)addRow('Окончание работ',meta.assignment.plannedFinish);
           for(const [label,section] of [['Расчёт длительности','calculation'],['Паспорт объекта','overview']]){const action=document.createElement('button');action.className='map-popup-route-action';action.type='button';action.textContent=label;action.addEventListener('click',()=>{popup?.remove();openObjectPassport(order,section)});content.append(action)}
           if(!issue)addRow('Оборудование',order.equipment||'Не требуется');
@@ -1284,6 +1285,7 @@ function MapCanvas({complexityMode=false,complexityDate,complexityTerritory='',c
     const clearSelection=event=>{
       const target=event.originalEvent?.target;
       if(target?.closest?.('.map-order-marker,.shift-map-crew-marker,.route-start-marker,.maplibregl-popup,.maplibregl-ctrl,.map-hierarchy-panel,.map-theme-picker'))return;
+      if(map.getLayer('cx-points')&&map.getLayoutProperty('cx-points','visibility')!=='none'&&map.queryRenderedFeatures(event.point,{layers:['cx-points','cx-point-label']}).length)return;
       if(map.getLayer('planned-route-hit')&&map.queryRenderedFeatures(event.point,{layers:['planned-route-hit']}).length)return;
       clearShiftHoverInfo();
       markersRef.current.forEach(item=>item.popup?.remove());
@@ -1605,7 +1607,7 @@ function OperationalMapWorkspace({mode,panelKey,backgroundOnly=false,calendarOve
 
   return <main className={`route-workspace ${engineersMode?'engineer-workspace':''} ${backgroundOnly?'workspace-background-only':''} ${calendarOverOverlay?'calendar-over-overlay':''} ${complexityMode&&!engineersMode?'cx-mode-on':''}`}>
     {engineersMode?<Topbar selectedDate={selectedDate} setSelectedDate={setSelectedDate}/>:<><Topbar selectedDate={selectedDate} setSelectedDate={setSelectedDate}/><input id="beego-orders-file" className="workspace-file-input orders-file-input" ref={ordersInputRef} type="file" multiple accept=".csv,.json,.xls,.xlsx,application/json" onChange={event=>{handleOrdersFile(event.target.files);event.target.value=''}}/></>}
-    {!engineersMode&&!backgroundOnly?<div className="cx-mode-switch" role="group" aria-label="Режим основной карты"><button type="button" className={!complexityMode?'active':''} aria-pressed={!complexityMode} onClick={()=>setComplexityMode(false)}>Маршруты и заявки</button><button type="button" className={complexityMode?'active':''} aria-pressed={complexityMode} onClick={()=>setComplexityMode(true)}>Сложность объектов</button></div>:null}
+    {!engineersMode&&!backgroundOnly?<div className='cx-mode-switch' role='group' aria-label='Режим основной карты'><button type='button' className={!complexityMode?'active':''} aria-pressed={!complexityMode} onClick={()=>setComplexityMode(false)}>Маршруты и заявки</button><button type='button' className={complexityMode?'active':''} aria-pressed={complexityMode} onClick={()=>setComplexityMode(true)}>Время на объектах</button></div>:null}
     <div className={`workspace-grid ${engineersMode?'engineer-workspace-grid':''} ${panelPresence.present?'':'panel-collapsed'}`}>
       {panelPresence.present?(engineersMode?
         <section key={panelKey||'engineers'} className={`orders-panel engineer-panel workspace-panel-enter ${panelMotionClass}`}>
@@ -1732,6 +1734,7 @@ export function App(){
   const[manualEntryType,setManualEntryType]=useState('');
   const[staffRoster,setStaffRoster]=useState([]),[staffDialog,setStaffDialog]=useState('');
   const[shift,setShift]=useState(null),[pendingShiftEvent,setPendingShiftEvent]=useState(null),[replacementFor,setReplacementFor]=useState('');
+  useEffect(() => { clearObjectPassports(); window.dispatchEvent(new Event('beego:complexity-changed')); }, [shift]);
   const[manualAssignmentRequest,setManualAssignmentRequest]=useState(null);
   const[algorithmActivity,setAlgorithmActivity]=useState(null);
   const recordedAlgorithmRef=useRef('');

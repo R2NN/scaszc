@@ -10,6 +10,11 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## Durable product direction
 
+- Keep all main-map modes unclustered, including «Время на объектах». Show individual object markers in one yellow style and label their visit duration in minutes. Do not expose K, decimal coefficients, or a separate color scale for complexity. Opening an object passport must preserve the camera; preload and cache details instead of waiting for a click to start loading. The time panel must collapse and reopen without changing map position or selected filters.
+- Visit history shows a Plan/Actual table with work, access, paperwork and customer waiting, followed by the whole visit total. Preserve missing measurements; older records may show paperwork and waiting together when only their combined duration is known. Do not add generic explanatory paragraphs.
+- Use three passport tabs: «Обзор», «Визиты», «Особенности». Put calculation details under the visit estimate and the audit under service conditions. The map starts with the actual work type from each object’s order; advanced comparison and recurrence filters remain collapsed by default.
+- The object overview leads with visit duration, work and paperwork minutes, past visits and active service conditions. Keep infrastructure under an expandable section, hide internal IDs, and avoid permanent explanations of calculation mechanics. Preload and reuse object details for the selected date, work type and volume; show the available address and estimate immediately on opening.
+
 - Reproduce the clear GeoFlow-style navigation and split map/list hierarchy while keeping the BeeGo! planning workflow. The primary map workspace deliberately has no bottom route timeline: route details live inside expandable brigade rows and the route drawer.
 - All user-facing copy must be in Russian.
 - Analytics is a business decision workspace for a dispatcher, not a wall of charts. Lead with the shift outcome and no more than three actionable signals, use plain-language explanations, and reveal route-level, comparison, and validation details through separate views. Never show a metric without its operational meaning or next action.

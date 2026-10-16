@@ -11,7 +11,8 @@ export async function handleComplexity(request, registry) {
     const at = contextAt(url);
     if (!Number.isFinite(Date.parse(at))) throw new Error('Некорректный момент расчёта.');
     const kind = url.searchParams.get('kind') || 'local';
-    if (!Object.hasOwn(WORK_KINDS, kind)) throw new Error('Неизвестный вид работ.');
+    const allKinds = kind === 'all' && url.pathname === '/api/complexity/objects' && request.method === 'GET';
+    if (!allKinds && !Object.hasOwn(WORK_KINDS, kind)) throw new Error('Неизвестный вид работ.');
     if (url.pathname === '/api/complexity/model' && request.method === 'GET') return json({ model: registry.model(), versions: registry.models(), kinds: WORK_KINDS, reasons: REASONS, workRules: WORK_RULES, defaults: DEFAULT_MODEL });
     if (url.pathname === '/api/complexity/model' && request.method === 'POST') return json(registry.saveModel(await request.json()));
     if (url.pathname === '/api/complexity/estimate' && request.method === 'POST') {
@@ -34,8 +35,8 @@ export async function handleComplexity(request, registry) {
     }
     const objectMatch = /^\/api\/complexity\/objects\/([^/]+)$/.exec(url.pathname);
     const originalExampleFor = object => object.examples?.find(example => {
-      try { return registry.estimate(example, at).kind === kind; } catch { return false; }
-    }) || { id: `PREVIEW-${object.id}-${kind}`, objectId: object.id, serviceEntities: { object: object.id }, workType: WORK_KINDS[kind], skill: kind === 'information' ? 'LOCAL' : undefined, serviceType: kind === 'information' ? 'Информация' : undefined, sourceData: kind === 'information' ? { bk_type: 'Глобальная проблема', hd_type: 'Информация' } : undefined };
+      try { return allKinds || registry.estimate(example, at).kind === kind; } catch { return false; }
+    }) || { id: `PREVIEW-${object.id}-${kind}`, objectId: object.id, serviceEntities: { object: object.id }, workType: WORK_KINDS[allKinds ? 'local' : kind], skill: kind === 'information' ? 'LOCAL' : undefined, serviceType: kind === 'information' ? 'Информация' : undefined, sourceData: kind === 'information' ? { bk_type: 'Глобальная проблема', hd_type: 'Информация' } : undefined };
     const exampleFor = object => {
       const example = originalExampleFor(object);
       if (url.searchParams.get('volume') !== 'standard') return example;
@@ -56,11 +57,12 @@ export async function handleComplexity(request, registry) {
       return json(objects.map(object => {
         const example = exampleFor(object);
         const estimate = registry.estimate(example, at);
-        const visits = allVisits.filter(visit => visit.entities?.object === object.id && visit.endedAt && Date.parse(visit.endedAt) <= Date.parse(at) && visit.eligible && !visit.excluded && visit.kind === kind && visit.operation === estimate.operation);
+        const visitCount = allVisits.filter(visit => visit.entities?.object === object.id && visit.kind === estimate.kind).length;
+        const visits = allVisits.filter(visit => visit.entities?.object === object.id && visit.endedAt && Date.parse(visit.endedAt) <= Date.parse(at) && visit.eligible && !visit.excluded && visit.kind === estimate.kind && visit.operation === estimate.operation);
         const hasRelevantExample = object.examples?.some(item => item.id === example.id);
         const recurring = visits.filter(visit => !['unknown', 'customer', 'other'].includes(visit.reason) && Math.abs(visit.actualTechnical - visit.factorTechnical) >= 8).length >= 3;
         const state = estimate.observationCount ? 'confirmed' : recurring ? 'review' : 'estimated';
-        return { id: object.id, address: object.address, coords: object.coords, zone: object.zone, zoneId: object.zoneId, district: object.district, total: estimate.total, delta: estimate.total - estimate.baseTechnical - estimate.documents, coefficient: estimate.coefficient, observations: visits.length, state, insufficient: !hasRelevantExample || visits.length < 3, kind, orderIds: object.examples?.map(item => item.id) || [], entities: estimate.entities };
+        return { id: object.id, address: object.address, coords: object.coords, zone: object.zone, zoneId: object.zoneId, district: object.district, total: estimate.total, delta: estimate.total - estimate.baseTechnical - estimate.documents, coefficient: estimate.coefficient, observations: visits.length, visitCount, state, insufficient: !hasRelevantExample || visits.length < 3, kind: estimate.kind, estimate, orderIds: object.examples?.map(item => item.id) || [], entities: estimate.entities };
       }));
     }
     return json({ error: 'Неизвестный адрес или метод реестра объектов.' }, 404);
