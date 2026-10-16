@@ -88,4 +88,6 @@ python -m pytest algorithm/tests/test_duration_contract.py algorithm/tests/test_
 
 Для просмотра оставлен сервер **http://127.0.0.1:4191/** из этой копии. БД: `runtime/qa/view-final.sqlite3`, исходное состояние v1, 193/205, все снимки на месте, 195 объектов. Для последующих дорожных расчётов в этом процессе явно задан публичный Valhalla `https://valhalla1.openstreetmap.de/route`; это конфигурация данного запуска, не скрытый fallback приложения. Прежние тестовые БД с опубликованными v2–v4 и фактом сохранены отдельно.
 
+В каталог просмотра отдельно скопированы существующий замороженный транспортный индекс и прогретые маршрутные кеши из проверенного рабочего каталога. Они игнорируются Git и не заменяются вымышленными маршрутами. SHA-256 индекса `data/transit/moscow_2026-08-17.sqlite`: `4f0351e28bf490038a1edcb11f9d87b76bdd79a05b753b5cd5fe6e96681abd00`. Временные серверы 4187–4189 остановлены; для просмотра оставлен только 4191.
+
 Снимки: [светлый паспорт](screenshots/passport-light-1440.jpg), [тёмный паспорт](screenshots/passport-dark-native.jpg), [сравнение](screenshots/replan-comparison-light-1920.jpg). [Чёткая таблица PDF](screenshots/report-duration-page.png), [сам PDF](assets/object-complexity-report.pdf).
