@@ -1,4 +1,10 @@
 export const OBJECT_TIME_THRESHOLD = 10;
+export const OBJECT_TIME_LEGEND = [
+  { key: 'faster', color: '#35a98c', label: 'Быстрее на 10+ мин' },
+  { key: 'normal', color: '#e7c438', label: 'Близко к нормативу' },
+  { key: 'slower', color: '#df6055', label: 'Дольше на 10+ мин' },
+  { key: 'unknown', color: '#92999f', label: 'Мало истории' },
+];
 /** Find repeated differences of at least ten minutes in either direction. */
 export function objectTimeCategory(object) {
   if (object.insufficient || !Number.isFinite(object.delta)) return 'unknown';

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Building2, Check, ChevronLeft, ChevronRight, Clock3, MapPin, Search, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { useDropdownPresence } from './useDropdownPresence.js';
+import { Building2, Check, ChevronRight, Clock3, MapPin, Search, X } from 'lucide-react';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { cachedObjectPassport, clearObjectPassports, loadObjectPassport } from './objectPassport.js';
-import { objectTimeCategory, visitTimeRows } from './objectPresentation.js';
+import { OBJECT_TIME_LEGEND, objectTimeCategory, visitTimeRows } from './objectPresentation.js';
 import './complexity.css';
 
 const KINDS = { connection: 'Подключение', local: 'Ремонт и диагностика', equipment: 'Работы с оборудованием', emergency: 'Аварийные работы', information: 'Информационная заявка' };
@@ -77,8 +79,8 @@ export function DurationFields({ form, onChange, date }) {
   </div>{error ? <p role='alert' className='cx-error'>{error}</p> : preview ? <DurationBreakdown snapshot={preview} compact/> : <p>Считаем длительность…</p>}<details><summary>Изменить время вручную</summary><label>Длительность визита, мин<input type='number' min='1' max='10080' value={form.durationOverride?.minutes ?? ''} onChange={event => onChange('durationOverride', event.target.value ? { minutes: Number(event.target.value), reason: form.durationOverride?.reason || '' } : undefined)}/></label><label>Причина изменения<input value={form.durationOverride?.reason || ''} onChange={event => onChange('durationOverride', { minutes: form.durationOverride?.minutes || Number(form.duration), reason: event.target.value })}/></label></details></section>;
 }
 
-/** Display individual service objects without moving the map when opening a passport. */
-export function ComplexityMapLayer({ map, enabled, date, territory = '', territoryControl, regionId = 'moscow', routeOrderIds = [] }) {
+/** Group objects only in the visit-time mode; opening a passport preserves the camera. */
+export function ComplexityMapLayer({ map, enabled, date, territory = '', territoryControl, regionId = 'moscow', routeOrderIds = [], panelOpen = true, onClosePanel }) {
   const [kind, setKind] = useState('all');
   const [volume, setVolume] = useState('order');
   const [query, setQuery] = useState('');
@@ -88,7 +90,9 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const panelPresence = useDropdownPresence(enabled && panelOpen, 280);
+  const panelMotionClass = panelPresence.visible ? 'is-open' : enabled && panelOpen ? 'is-opening' : 'is-closing';
+  const panelHost = map?.getContainer().closest('.workspace-grid');
   useEffect(() => {
     if (!map) return;
     const focus = event => {
@@ -123,7 +127,7 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
     }, 250);
     return () => { live = false; clearTimeout(timer); };
   }, [enabled, visible.slice(0, 6).map(object => object.id).join(','), kind, volume, day(date), version]);
-  const data = useMemo(() => ({ type: 'FeatureCollection', features: filtered.filter(object => Array.isArray(object.coords)).map(object => ({ type: 'Feature', id: object.id, properties: { id: object.id, label: `${object.total} мин` }, geometry: { type: 'Point', coordinates: [object.coords[1], object.coords[0]] } })) }), [JSON.stringify(filtered)]);
+  const data = useMemo(() => ({ type: 'FeatureCollection', features: filtered.filter(object => Array.isArray(object.coords)).map(object => ({ type: 'Feature', id: object.id, properties: { id: object.id, color: OBJECT_TIME_LEGEND.find(item => item.key === objectTimeCategory(object)).color, label: `${object.total} мин` }, geometry: { type: 'Point', coordinates: [object.coords[1], object.coords[0]] } })) }), [JSON.stringify(filtered)]);
   useEffect(() => {
     if (!map) return;
     const container = map.getContainer();
@@ -131,12 +135,14 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
     const render = () => {
       if (!map.isStyleLoaded()) return;
       if (!map.getSource('cx-objects')) {
-        map.addSource('cx-objects', { type: 'geojson', data });
-        map.addLayer({ id: 'cx-points', type: 'circle', source: 'cx-objects', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 5, 16, 9], 'circle-color': '#FFD21F', 'circle-stroke-color': '#343a40', 'circle-stroke-width': 1.5 } });
-        map.addLayer({ id: 'cx-point-label', type: 'symbol', source: 'cx-objects', minzoom: 10, layout: { 'text-field': ['get', 'label'], 'text-size': 12, 'text-offset': [0, 1.6], 'text-font': ['Noto Sans Regular'], 'text-allow-overlap': false }, paint: { 'text-color': '#18242b', 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
+        map.addSource('cx-objects', { type: 'geojson', data, cluster: true, clusterMaxZoom: 13, clusterRadius: 40 });
+        map.addLayer({ id: 'cx-clusters', type: 'circle', source: 'cx-objects', filter: ['has', 'point_count'], paint: { 'circle-color': '#424b50', 'circle-radius': 25, 'circle-stroke-color': '#FFD21F', 'circle-stroke-width': 2 } });
+        map.addLayer({ id: 'cx-cluster-label', type: 'symbol', source: 'cx-objects', filter: ['has', 'point_count'], layout: { 'text-field': ['concat', 'Объектов\n', ['to-string', ['get', 'point_count']]], 'text-size': 11, 'text-font': ['Noto Sans Regular'], 'text-allow-overlap': true }, paint: { 'text-color': '#ffffff' } });
+        map.addLayer({ id: 'cx-points', type: 'circle', source: 'cx-objects', filter: ['!', ['has', 'point_count']], paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 5, 16, 9], 'circle-color': ['get', 'color'], 'circle-stroke-color': '#343a40', 'circle-stroke-width': 1.5 } });
+        map.addLayer({ id: 'cx-point-label', type: 'symbol', source: 'cx-objects', filter: ['!', ['has', 'point_count']], minzoom: 10, layout: { 'text-field': ['get', 'label'], 'text-size': 12, 'text-offset': [0, 1.6], 'text-font': ['Noto Sans Regular'], 'text-allow-overlap': false }, paint: { 'text-color': '#18242b', 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
       }
       map.getSource('cx-objects')?.setData(data);
-      for (const id of ['cx-points', 'cx-point-label']) map.setLayoutProperty(id, 'visibility', enabled ? 'visible' : 'none');
+      for (const id of ['cx-clusters', 'cx-cluster-label', 'cx-points', 'cx-point-label']) map.setLayoutProperty(id, 'visibility', enabled ? 'visible' : 'none');
     };
     render(); map.on('style.load', render);
     return () => { map.off('style.load', render); container.classList.remove('cx-map-active'); };
@@ -150,31 +156,41 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
       if (object) loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {});
     };
     const leave = () => { map.getCanvas().style.cursor = ''; };
-    const click = event => {
+    const click = async event => {
       if (!map.getLayer('cx-points')) return;
-      const features = map.queryRenderedFeatures(event.point, { layers: ['cx-points', 'cx-point-label'] });
+      const features = map.queryRenderedFeatures(event.point, { layers: ['cx-points', 'cx-point-label', 'cx-clusters', 'cx-cluster-label'] });
       const feature = features[0];
       if (!feature) return;
+      if (feature.properties.cluster_id != null) {
+        try {
+          const zoom = await map.getSource('cx-objects').getClusterExpansionZoom(Number(feature.properties.cluster_id));
+          map.easeTo({ center: feature.geometry.coordinates, zoom });
+        } catch { setError('Не удалось раскрыть группу объектов. Попробуйте ещё раз.'); }
+        return;
+      }
       const object = objects.find(item => item.id === feature.properties.id);
       if (object) openObjectPassport(passportTarget(object, kind, volume));
     };
-    bounds(); map.on('moveend', bounds); map.on('click', click); map.on('mousemove', 'cx-points', hover); map.on('mouseleave', 'cx-points', leave);
-    return () => { map.off('moveend', bounds); map.off('click', click); map.off('mousemove', 'cx-points', hover); map.off('mouseleave', 'cx-points', leave); leave(); };
+    bounds(); map.on('moveend', bounds); map.on('click', click);
+    for (const layer of ['cx-points', 'cx-clusters']) { map.on('mousemove', layer, hover); map.on('mouseleave', layer, leave); }
+    return () => { map.off('moveend', bounds); map.off('click', click); for (const layer of ['cx-points', 'cx-clusters']) { map.off('mousemove', layer, hover); map.off('mouseleave', layer, leave); } leave(); };
   }, [map, enabled, objects, kind, volume]);
-  if (!enabled) return null;
-  if (collapsed) return <aside className='cx-map-panel cx-map-panel-collapsed' aria-label='Время на объектах'><button type='button' aria-label='Развернуть панель времени на объектах' aria-expanded='false' onClick={() => setCollapsed(false)}><Clock3 size={19}/><span>Время на объектах</span><b>{visible.length}</b><ChevronRight size={18}/></button></aside>;
-  return <aside className='cx-map-panel' aria-label='Время на объектах'>
-    <header><Clock3 size={19}/><div><h3>Время на объектах</h3><small>Планируемая длительность визита</small></div><b aria-label='Объектов на карте'>{visible.length}</b><button type='button' className='cx-panel-collapse' aria-label='Свернуть панель времени на объектах' aria-expanded='true' title='Свернуть панель' onClick={() => setCollapsed(true)}><ChevronLeft size={18}/></button></header>
+  if (!panelPresence.present || !panelHost) return null;
+  return createPortal(<section className={`orders-panel route-list-panel cx-time-panel workspace-panel-enter ${panelMotionClass}`} aria-label='Время на объектах'>
+    <div className='panel-heading'><div><h3>Время на объектах</h3><b className='engineer-count' aria-label='Объектов на карте'>{visible.length}</b></div><div className='panel-heading-actions'><button type='button' className='panel-close' aria-label='Скрыть панель времени на объектах' data-tooltip='Скрыть панель' onClick={onClosePanel}><X/></button></div></div>
     {territoryControl}
+    <div className='cx-panel-controls'>
     <label className='cx-filter-label'>Вид работ<BusinessSelect ariaLabel='Вид работ на карте' value={kind} onChange={setKind} options={[{ value: 'all', label: 'Все виды работ' }, ...options(KINDS)]}/></label>
-    <label className='cx-search'><Search size={16}/><input type='search' aria-label='Поиск обслуживаемого объекта' placeholder='Найти адрес' value={query} onChange={event => setQuery(event.target.value)}/></label>
+    <div className='panel-search-row'><label className='panel-search'><Search aria-hidden='true'/><input type='search' aria-label='Поиск обслуживаемого объекта' placeholder='Адрес объекта…' value={query} onChange={event => setQuery(event.target.value)}/>{query ? <button type='button' aria-label='Очистить поиск объектов' onClick={() => setQuery('')}><X/></button> : null}</label></div>
     <details className='cx-map-options'><summary>Дополнительные фильтры{filter !== 'all' || volume !== 'order' ? ' · включены' : ''}</summary>
     <label className='cx-filter-label'>Объём работ<BusinessSelect ariaLabel='Объём сравнения на карте' value={volume} onChange={setVolume} options={[{value:'order',label:'Как в заявках'},{value:'standard',label:'Стандартный: 1 устройство, 1 точка'}]}/></label>
     <label className='cx-filter-label'>Показать<BusinessSelect ariaLabel='Показать объекты' value={filter} onChange={setFilter} options={[{ value: 'all', label: 'Все объекты на карте' }, { value: 'repeat', label: 'Отклонение от норматива от 10 мин' }, { value: 'review', label: 'Нужно проверить время' }, { value: 'route', label: 'Объекты выбранного маршрута' }]}/></label>
     </details>
+    </div>
+    <div className='cx-legend' aria-label='Цвета времени визита'>{OBJECT_TIME_LEGEND.map(item => <span key={item.key}><i style={{ background: item.color }}/>{item.label}</span>)}</div>
     {error ? <p role='alert' className='cx-error'>{error}</p> : null}
     <div className='cx-object-list' aria-busy={loading}>{loading ? <p role='status'>Загружаем объекты…</p> : visible.length ? visible.map(object => <button type='button' key={object.id} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => openObjectPassport(passportTarget(object, kind, volume))}><Building2 size={17}/><span><strong>{object.address}</strong><small>{KINDS[object.kind]}</small>{object.insufficient || object.delta !== 0 ? <small>{object.insufficient ? 'Предварительное время' : deltaLabel(object.delta)}</small> : null}</span><b>{object.total} мин</b></button>) : <p className='cx-empty'>Объектов не найдено. Измените фильтры или найдите адрес.</p>}</div>
-  </aside>;
+  </section>, panelHost);
 }
 
 function VisitTiming({ visit }) {
