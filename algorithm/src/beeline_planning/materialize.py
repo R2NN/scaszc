@@ -31,6 +31,11 @@ class MaterializationFailure:
     destination_location_id: str
     departure_at: str
     reason: str
+    constraint: str | None = None
+    service_start_at: str | None = None
+    service_end_at: str | None = None
+    limit_at: str | None = None
+    violation_minutes: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +181,11 @@ def _materialize_route(
                     job.location_id,
                     departure_at.isoformat(),
                     reason,
+                    constraint=('client_window' if service_start > job.window_end else 'shift' if service_end > engineer.shift_end else 'route_limit'),
+                    service_start_at=service_start.isoformat(),
+                    service_end_at=service_end.isoformat(),
+                    limit_at=(job.window_end if service_start > job.window_end else engineer.shift_end if service_end > engineer.shift_end else route_start + timedelta(minutes=engineer.max_route_minutes)).isoformat(),
+                    violation_minutes=max(0, int(((service_start - job.window_end) if service_start > job.window_end else (service_end - engineer.shift_end) if service_end > engineer.shift_end else (service_end - route_start - timedelta(minutes=engineer.max_route_minutes))).total_seconds() // 60)),
                 ),
                 MaterializationStatus.ORDER_INFEASIBLE,
                 exact_queries,

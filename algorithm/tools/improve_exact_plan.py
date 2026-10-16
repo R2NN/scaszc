@@ -66,24 +66,39 @@ def _master(dataset, routes: dict[str, list[str]], unserved: set[str]) -> Master
     )
 
 
-def _zero_travel_window_feasible(dataset, engineer_id: str, job_ids: list[str]) -> bool:
-    """Reject an order that fails even with zero travel; exact routing handles the rest."""
+def _insertion_master(dataset, routes, engineer_id, trial, active_job_ids):
+    """Retain other teams so shared inventory and commitments are checked globally."""
+    trial_routes = {**routes, engineer_id: trial}
+    trial_jobs = {item for jobs in trial_routes.values() for item in jobs}
+    return _master(dataset, trial_routes, set(active_job_ids) - trial_jobs)
+
+
+def _zero_travel_window_conflict(dataset, engineer_id: str, job_ids: list[str]) -> dict | None:
+    """Save the first lower-bound violation for this particular route ordering."""
     engineer = dataset.engineers[engineer_id]
     moment = max(dataset.initial_planning_at, engineer.shift_start)
     route_start = None
     for job_id in job_ids:
         job = dataset.jobs[job_id]
         moment = max(moment, job.created_at, job.window_start)
-        if moment > job.window_end:
-            return False
+        start = moment
+        end = start + timedelta(minutes=job.service_duration_min)
         if route_start is None:
-            route_start = moment
-        moment += timedelta(minutes=job.service_duration_min)
-        if moment > engineer.shift_end:
-            return False
-    return route_start is None or moment - route_start <= timedelta(
-        minutes=engineer.max_route_minutes
-    )
+            route_start = start
+        limit = job.window_end if start > job.window_end else engineer.shift_end
+        actual = start if start > job.window_end else end
+        constraint = 'client_window' if start > job.window_end else 'shift'
+        if actual <= limit and end - route_start > timedelta(minutes=engineer.max_route_minutes):
+            actual, limit = end, route_start + timedelta(minutes=engineer.max_route_minutes)
+            constraint = 'route_limit'
+        if actual > limit:
+            return {'conflicting_job_id': job_id, 'constraint': constraint, 'service_start_at': start.isoformat(), 'service_end_at': end.isoformat(), 'limit_at': limit.isoformat(), 'violation_minutes': int((actual - limit).total_seconds() // 60), 'proof_level': 'ZERO_TRAVEL_LOWER_BOUND_FOR_THIS_ORDER'}
+        moment = end
+    return None
+
+
+def _zero_travel_window_feasible(dataset, engineer_id: str, job_ids: list[str]) -> bool:
+    return _zero_travel_window_conflict(dataset, engineer_id, job_ids) is None
 
 
 def main() -> int:
@@ -131,7 +146,7 @@ def main() -> int:
     )
 
     inserted: list[dict[str, object]] = []
-    insertion_diagnostics: dict[str, dict[str, int]] = {}
+    insertion_diagnostics: dict[str, dict] = {}
     exact_provider_queries = 0
     exact_route_checks = 0
     changed = True
@@ -148,29 +163,34 @@ def main() -> int:
                 'zero_travel_window_rejections': 0,
                 'exact_route_evaluations': 0,
                 'exact_schedule_rejections': 0,
+                'routing_unverified': 0,
+                'checked_positions': [],
+                'proof_level': 'CURRENT_ROUTES_ONLY_NOT_GLOBAL_INFEASIBILITY',
             }
             for engineer_id in candidates.eligible_engineers_by_job[job_id]:
                 current = routes[engineer_id]
                 if len(current) >= dataset.engineers[engineer_id].max_jobs:
                     counters['engineers_at_max_jobs'] += 1
+                    counters['checked_positions'].append({'engineer_id': engineer_id, 'constraint': 'max_jobs', 'actual': len(current) + 1, 'limit': dataset.engineers[engineer_id].max_jobs, 'proof_level': 'STATIC_CURRENT_ROUTE'})
                     continue
                 for position in range(len(current) + 1):
                     counters['candidate_positions'] += 1
                     trial = current[:position] + [job_id] + current[position:]
-                    if not _zero_travel_window_feasible(dataset, engineer_id, trial):
+                    conflict = _zero_travel_window_conflict(dataset, engineer_id, trial)
+                    if conflict:
+                        counters['checked_positions'].append({'engineer_id': engineer_id, 'position': position + 1, **conflict})
                         counters['zero_travel_window_rejections'] += 1
                         continue
                     counters['exact_route_evaluations'] += 1
                     exact_route_checks += 1
-                    trial_master = _master(
-                        dataset,
-                        {engineer_id: trial},
-                        set(candidates.active_job_ids) - set(trial),
-                    )
+                    trial_master = _insertion_master(dataset, routes, engineer_id, trial, candidates.active_job_ids)
                     result = materialize_exact_initial_plan(dataset, trial_master, oracle)
                     exact_provider_queries += result.exact_provider_queries
                     if result.status.value != 'EXACT_VALID' or result.validation is None:
                         counters['exact_schedule_rejections'] += 1
+                        counters['routing_unverified'] += int(result.status.value == 'ROUTING_INCOMPLETE')
+                        failure = materialization_result_dict(result)['failure']
+                        counters['checked_positions'].append({'engineer_id': engineer_id, 'position': position + 1, 'proof_level': 'ROUTING_UNVERIFIED' if result.status.value == 'ROUTING_INCOMPLETE' else 'EXACT_CURRENT_ORDER', **(failure or {'constraint': 'validation', 'violations': [str(item) for item in result.validation.violations] if result.validation else []})})
                         continue
                     selected = (engineer_id, position)
                     break
@@ -178,6 +198,7 @@ def main() -> int:
                     break
             if selected is None:
                 insertion_diagnostics[job_id] = counters
+                write_json_atomic(args.output.with_suffix('.diagnostics.json'), {'dataset_sha256': dataset.dataset_sha256, 'status': 'CURRENT_ROUTE_INSERTIONS_CHECKED', 'global_infeasibility_proven': False, 'jobs': insertion_diagnostics})
                 continue
             engineer_id, position = selected
             routes[engineer_id].insert(position, job_id)

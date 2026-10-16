@@ -48,8 +48,7 @@ const run = (python, args, input, repositoryRoot, deadlineAt) => new Promise((re
 });
 
 /** Build and independently validate a new plan with the complete exact pipeline. */
-export async function runExactPlan(payload, repositoryRoot = process.cwd(), onProgress = () => {}) {
-  const deadlineAt = Date.now() + PLANNING_DEADLINE_MS;
+export async function runExactPlan(payload, repositoryRoot = process.cwd(), onProgress = () => {}, { deadlineAt = Date.now() + PLANNING_DEADLINE_MS } = {}) {
   repositoryRoot = projectRoot(repositoryRoot);
   const runRoot = path.join(repositoryRoot, 'runtime', 'ui-runs', randomUUID());
   const dataset = path.join(runRoot, 'dataset');
@@ -74,6 +73,9 @@ export async function runExactPlan(payload, repositoryRoot = process.cwd(), onPr
     '--stable-plan-cache-dir', path.join(repositoryRoot, 'runtime', 'ui-shared-cache', 'verified-plans'),
     '--valhalla-base-url', String(process.env.VALHALLA_ROUTE_ENDPOINT || 'http://127.0.0.1:8002/route').replace(/\/route\/?$/, ''),
     '--max-wall-seconds', String(pipelineBudgetSeconds),
+    '--include-exact-improvement',
+    ...(payload.recompute ? ['--recompute-stable-plan'] : []),
+    ...(process.env.BEEGO_MATRIX_BATCH_SIZE ? ['--matrix-batch-size', process.env.BEEGO_MATRIX_BATCH_SIZE] : []),
     '--execute',
   ], undefined, repositoryRoot, deadlineAt);
   if (pipeline.status !== 'COMPLETE' || !pipeline.final_plan) throw new Error('Новый точный план не прошёл проверку');

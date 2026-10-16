@@ -1,3 +1,4 @@
+import { changeServiceLocation } from './serviceLocation.js';
 import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { Check, FileUp, MapPin, Plus, X } from 'lucide-react';
@@ -65,7 +66,7 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.on('click', event => {
       const coords = [Number(event.lngLat.lat.toFixed(7)), Number(event.lngLat.lng.toFixed(7))];
-      setForm(current => ({ ...current, coords, locationSource: 'map', address: '' }));
+      setForm(current => changeServiceLocation(current, { coords, locationSource: 'map', address: '' }));
       setSuggestions([]);
       setError('');
     });
@@ -127,7 +128,7 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
       {isOrder ? <>
         <label>Вид работ<BusinessSelect ariaLabel="Вид работ" value={form.skill} onChange={value => {update('skill', value);update('durationFactors', {});}} options={SKILLS}/></label>
         <label>Приоритет<BusinessSelect ariaLabel="Приоритет" value={form.priority} onChange={value => update('priority', value)} options={[{ value: 'Обычная', label: 'Обычная' }, { value: 'Срочная', label: 'Срочная' }, { value: 'Авария', label: 'Авария' }]}/></label>
-        <div className="wide manual-address-field"><label>Адрес в Москве<input value={form.address} onChange={event => { setForm(current => ({ ...current, address: event.target.value, coords: null, locationSource: '' })); setError(''); }} placeholder="Улица, дом" autoComplete="off"/></label>{suggestions.length ? <div className="manual-address-suggestions" role="listbox" aria-label="Подсказки адресов">{suggestions.map((item, index) => <button type="button" role="option" aria-selected={false} key={`${item.address}-${index}`} onClick={() => { setForm(current => ({ ...current, address: item.address, coords: item.coords, locationSource: 'suggestion' })); setSuggestions([]); }}><MapPin size={15}/>{item.address}</button>)}</div> : null}<button type="button" className="manual-map-toggle" onClick={() => setMapOpen(value => !value)}><MapPin size={16}/>{mapOpen ? 'Скрыть карту' : 'Выбрать точку на карте'}</button>{form.coords ? <small>Точка: {form.coords[0].toFixed(6)}, {form.coords[1].toFixed(6)} · {form.locationSource === 'map' ? 'выбрана на карте' : 'из адреса или файла'}</small> : null}{mapOpen ? <div ref={mapContainerRef} className="manual-entry-map" aria-label="Карта для выбора точки заявки"/> : null}</div>
+        <div className="wide manual-address-field"><label>Адрес в Москве<input value={form.address} onChange={event => { setForm(current => changeServiceLocation(current, { address: event.target.value, coords: null, locationSource: '' })); setError(''); }} placeholder="Улица, дом" autoComplete="off"/></label>{suggestions.length ? <div className="manual-address-suggestions" role="listbox" aria-label="Подсказки адресов">{suggestions.map((item, index) => <button type="button" role="option" aria-selected={false} key={`${item.address}-${index}`} onClick={() => { setForm(current => changeServiceLocation(current, { address: item.address, coords: item.coords, locationSource: 'suggestion' })); setSuggestions([]); }}><MapPin size={15}/>{item.address}</button>)}</div> : null}<button type="button" className="manual-map-toggle" onClick={() => setMapOpen(value => !value)}><MapPin size={16}/>{mapOpen ? 'Скрыть карту' : 'Выбрать точку на карте'}</button>{form.coords ? <small>Точка: {form.coords[0].toFixed(6)}, {form.coords[1].toFixed(6)} · {form.locationSource === 'map' ? 'выбрана на карте' : 'из адреса или файла'}</small> : null}{mapOpen ? <div ref={mapContainerRef} className="manual-entry-map" aria-label="Карта для выбора точки заявки"/> : null}</div>
         <TimePicker label="Начало окна" value={form.start} onChange={value => update('start', value)}/><TimePicker label="Конец окна" value={form.end} onChange={value => update('end', value)}/>
         <DurationFields form={form} onChange={update} date={date}/>
         <label>Оборудование<input value={form.equipment} onChange={event => update('equipment', event.target.value)} placeholder="Роутер, ТВ-приставка"/></label>

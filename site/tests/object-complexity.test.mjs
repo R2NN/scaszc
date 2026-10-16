@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { ShiftStore } from '../server/shiftStore.mjs';
 import { calculateDuration, DEFAULT_MODEL, WORK_RULES } from '../server/durationModel.mjs';
@@ -9,6 +10,7 @@ import { handleComplexity } from '../server/complexityApi.mjs';
 import { parseDurationImport } from '../src/durationImport.js';
 import { readFile } from 'node:fs/promises';
 import { createOperationsApi } from '../server/operationsApi.mjs';
+import { matchesComplexityArtifact } from '../server/complexityArtifact.mjs';
 import { handleExactPlanning } from '../server/exactPlanningApi.mjs';
 
 const at = '2026-08-17T07:00:00+03:00';
@@ -131,7 +133,7 @@ test('immutable snapshots, manual override reasons, and server plan receipts rej
 });
 
 test('SQLite migration, immutable history revisions, restart and model versioning preserve old forecasts', () => {
-  const directory = mkdtempSync(join(process.cwd(), '../runtime/qa/migration-'));
+  const directory = mkdtempSync(fileURLToPath(new URL('../../runtime/qa/migration-', import.meta.url)));
   const file = join(directory, 'shifts.sqlite3');
   let store = new ShiftStore(file);
   const original = store.complexity.prepareOrders([order], at)[0];
@@ -222,24 +224,31 @@ test('independent holdout quality is reported across multiple reproducible seeds
   }
 });
 
-test('fresh production store uses the variable-duration plan and rejects forged publication', async () => {
+test('published snapshots stay frozen; a changed formula cannot reuse or forge their receipt', async () => {
   const store = new ShiftStore(':memory:');
   const api = createOperationsApi({ store, seedFromBase: true });
   try {
     const shift = await (await api.handle(new Request('http://localhost/api/shifts?regionId=moscow&date=2026-08-17'))).json();
-    assert.equal(shift.plan.metrics.assigned, 193);
+    const candidate = JSON.parse(await readFile(new URL('../public/data/beego-complexity-plan.json', import.meta.url), 'utf8'));
+    assert.equal(shift.plan.metrics.assigned, candidate.plan.metrics.assigned);
     for (const visit of shift.plan.routes.flatMap(route => route.assignments)) {
       const order = shift.orders.find(order => order.id === visit.orderId);
       const minute = clock => Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3));
       assert.equal(minute(visit.plannedFinish) - minute(visit.plannedStart), order.durationSnapshot.total);
     }
-    const candidate = JSON.parse(await readFile(new URL('../public/data/beego-complexity-plan.json', import.meta.url), 'utf8'));
-    const response = await handleExactPlanning(new Request('http://localhost/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(candidate) }), { complexity: store.complexity });
-    assert.equal(response.status, 200);
-    const plan = await response.json();
-    assert.equal(plan.metrics.assigned, 193);
-    store.complexity.requirePlanReceipt(plan.durationOrders, candidate.engineers, plan);
-    const forged = await api.handle(new Request('http://localhost/api/shifts', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ regionId: 'moscow', date: '2026-08-17', orders: plan.durationOrders.map(order => ({ ...order, duration: 1, durationSnapshot: undefined })), team: candidate.engineers, plan }) }));
+    const refreshed = store.complexity.prepareOrders(candidate.orders, at);
+    const matches = matchesComplexityArtifact({ ...candidate, orders: refreshed }, candidate);
+    let plan = shift.plan;
+    if (matches) {
+      const response = await handleExactPlanning(new Request('http://localhost/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(candidate) }), { complexity: store.complexity });
+      assert.equal(response.status, 200);
+      plan = await response.json();
+      store.complexity.requirePlanReceipt(plan.durationOrders, candidate.engineers, plan);
+    } else {
+      assert.ok(candidate.orders.some((order, index) => order.durationSnapshot.id !== refreshed[index].durationSnapshot.id));
+      assert.throws(() => store.complexity.requirePlanReceipt(refreshed, candidate.engineers, plan), /Публикация/);
+    }
+    const forged = await api.handle(new Request('http://localhost/api/shifts', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ regionId: 'moscow', date: '2026-08-17', orders: (plan.durationOrders || candidate.orders).map(order => ({ ...order, duration: 1, durationSnapshot: undefined })), team: candidate.engineers, plan }) }));
     assert.equal(forged.status, 422);
     assert.equal(store.byDate('moscow', '2026-08-17').revision, 1);
   } finally { store.close(); }

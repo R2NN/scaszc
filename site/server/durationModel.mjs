@@ -9,7 +9,7 @@ export const WORK_RULES = ruleRows.map(row => {
 export const WORK_KINDS = { connection: 'Подключение', local: 'Локальная заявка', equipment: 'Дозаказ', emergency: 'Аварийные работы', information: 'Информация' };
 export const REASONS = { access: 'Доступ', extra: 'Дополнительные работы', diagnosis: 'Диагностика', customer: 'Ожидание клиента', simpler: 'Более простой объём', unknown: 'Причина неизвестна', other: 'Другое' };
 export const DEFAULT_MODEL = {
-  version: 'duration-1', effectiveAt: '2026-01-01T00:00:00+03:00',
+  version: 'duration-2', effectiveAt: '2026-01-01T00:00:00+03:00',
   norms: { connection: [60, 10], local: [30, 0], equipment: [10, 10], emergency: [80, 0], information: [80, 0] },
   weights: { existingLine: -25, shortCable: -10, longCable: 25, device: 8, point: 12, site: 18, knownFault: -10, intermittent: 12, segment: 7, replacement: 12, firmware: 15, searchNode: 25, damage: 20, readyConfig: -15, stairs: 4 },
   history: { minimum: 3, shrinkage: 5, maxAgeDays: 120, outlierMinutes: 90 },
@@ -74,6 +74,29 @@ export function validateModel(model) {
   return model;
 }
 
+/** Match a condition by the component it changes, then by its actual service entity. */
+export function matchesConditionWork(condition, work) {
+  if ((condition.component !== 'access' || condition.scope === 'operation') && (condition.kind !== work.kind || condition.operation !== work.operation)) return false;
+  if (condition.scope !== 'operation' && work.entities?.[condition.scope] !== condition.entityId) return false;
+  return condition.scope !== 'node' || Boolean(work.factors?.requiresNode || work.forecast?.factors?.requiresNode);
+}
+
+/** Select measured, current evidence without spreading visit-only decisions or counting duplicates. */
+export function conditionEvidence(condition, visits, at, model) {
+  const seen = new Set();
+  const measured = [];
+  for (const visit of visits) {
+    const ended = Date.parse(visit.endedAt), known = Date.parse(visit.knownAt), moment = Date.parse(at);
+    if (seen.has(visit.id) || visit.excluded || !visit.eligible || ['pending', 'visit', 'rejected'].includes(visit.learningDecision) || visit.reason !== condition.reason || (condition.findingKey && visit.findingKey !== condition.findingKey) || !Number.isFinite(ended) || !Number.isFinite(known) || ended > moment || known > moment || moment - ended > model.history.maxAgeDays * 86400000 || !matchesConditionWork(condition, visit)) continue;
+    seen.add(visit.id);
+    const residual = condition.component === 'access' ? visit.accessMinutes : Number.isFinite(visit.actualTechnical) && Number.isFinite(visit.factorTechnical) ? visit.actualTechnical - visit.factorTechnical : null;
+    if (Number.isFinite(residual) && Math.abs(residual) <= model.history.outlierMinutes) measured.push({ visit, residual });
+  }
+  const center = median(measured.map(item => item.residual));
+  const mad = median(measured.map(item => Math.abs(item.residual - center)));
+  return measured.filter(item => Math.abs(item.residual - center) <= Math.max(8, 3 * mad));
+}
+
 /** Calculate the sole authoritative duration in whole minutes; travel is never included. */
 export function calculateDuration(order, { model = DEFAULT_MODEL, asOf, visits = [], conditions = [], entities = {} } = {}) {
   const kind = workKind(order);
@@ -85,7 +108,15 @@ export function calculateDuration(order, { model = DEFAULT_MODEL, asOf, visits =
   const w = model.weights;
   if (kind !== 'information') {
     if (kind === 'connection' && factors.line === 'existing') add('line', w.existingLine);
-    if (['connection', 'local', 'equipment', 'emergency'].includes(kind) && factors.cable && factors.cable !== 'none' && !(kind === 'connection' && factors.line === 'existing')) add('cable', factors.cable === 'large' ? w.longCable : factors.cable === 'short' ? (kind === 'connection' ? w.shortCable : Math.max(3, Math.round(Math.abs(w.shortCable) / 2))) : 0);
+    if (factors.cable && factors.cable !== 'none' && !(kind === 'connection' && factors.line === 'existing')) {
+      // A new connection includes a standard line; repairing cable damage includes standard restoration.
+      const cableSteps = kind === 'connection' ? { short: 0, standard: 0, large: 1 }
+        : kind === 'emergency' && ['cable', 'multiple'].includes(factors.damage) ? { short: 0, standard: 0, large: 0.6 }
+          : kind === 'local' ? { short: 0.12, standard: 0.28, large: 0.6 }
+            : kind === 'equipment' ? { short: 0.2, standard: 0.48, large: 1 }
+              : { short: 0.28, standard: 0.68, large: 1.4 };
+      add('cable', Math.round(w.longCable * (cableSteps[factors.cable] || 0)));
+    }
     if (['connection', 'equipment'].includes(kind)) {
       add('devices', ((factors.devices ?? 1) - 1) * w.device);
       add('points', ((factors.points ?? 1) - 1) * w.point);
@@ -109,22 +140,12 @@ export function calculateDuration(order, { model = DEFAULT_MODEL, asOf, visits =
   const operation = `${kind}:${digest(applied).slice(0, 16)}`;
   const at = asOf || `${order.serviceDate || '2026-08-17'}T07:00:00+03:00`;
   if (!Number.isFinite(Date.parse(at))) throw new Error('Укажите момент расчёта.');
-  const applicable = conditions.filter(condition => condition.status === 'confirmed' && condition.kind === kind && condition.operation === operation && Date.parse(condition.knownAt) <= Date.parse(at) && Date.parse(condition.validFrom) <= Date.parse(at) && (!condition.validUntil || Date.parse(condition.validUntil) > Date.parse(at)) && (!condition.closedAt || Date.parse(condition.closedAt) > Date.parse(at)) && (condition.scope === 'operation' || entities[condition.scope] === condition.entityId) && (condition.scope !== 'node' || factors.requiresNode));
-  const seen = new Set();
-  const valid = visits.filter(visit => {
-    if (seen.has(visit.id) || visit.excluded || !visit.eligible || visit.kind !== kind || visit.operation !== operation || Date.parse(visit.endedAt) > Date.parse(at) || Date.parse(visit.knownAt) > Date.parse(at) || Date.parse(at) - Date.parse(visit.endedAt) > model.history.maxAgeDays * 86400000 || !Number.isFinite(visit.actualTechnical) || !Number.isFinite(visit.factorTechnical)) return false;
-    seen.add(visit.id); return true;
-  });
+  const applicable = conditions.filter(condition => condition.status === 'confirmed' && Date.parse(condition.knownAt) <= Date.parse(at) && Date.parse(condition.validFrom) <= Date.parse(at) && (!condition.validUntil || Date.parse(condition.validUntil) > Date.parse(at)) && (!condition.closedAt || Date.parse(condition.closedAt) > Date.parse(at)) && matchesConditionWork(condition, { kind, operation, factors, entities }));
   const histories = [];
   for (const component of ['technical', 'access']) {
     const candidates = applicable.filter(condition => condition.component === component).sort((a, b) => ['line', 'node', 'entrance', 'object', 'operation'].indexOf(a.scope) - ['line', 'node', 'entrance', 'object', 'operation'].indexOf(b.scope));
     for (const condition of candidates) {
-      const group = valid.filter(visit => visit.reason === condition.reason && (condition.scope === 'operation' || visit.entities?.[condition.scope] === condition.entityId));
-      const measured = group.map(visit => ({ visit, residual: component === 'access' ? visit.accessMinutes : visit.actualTechnical - factorTechnical })).filter(item => Number.isFinite(item.residual) && Math.abs(item.residual) <= model.history.outlierMinutes);
-      const residuals = measured.map(item => item.residual);
-      if (residuals.length < model.history.minimum) continue;
-      const center = median(residuals), mad = median(residuals.map(value => Math.abs(value - center)));
-      const inliers = measured.filter(item => Math.abs(item.residual - center) <= Math.max(8, 3 * mad));
+      const inliers = conditionEvidence(condition, visits, at, model);
       if (inliers.length < model.history.minimum) continue;
       const minutes = Math.round(median(inliers.map(item => item.residual)) * inliers.length / (inliers.length + model.history.shrinkage));
       histories.push({ component, minutes, count: inliers.length, evidence: inliers.map(item => ({ id: item.visit.id, revision: item.visit.revision || 1 })), conditionId: condition.id, scope: condition.scope, entityId: condition.entityId, reason: condition.reason, latestAt: inliers.map(item => item.visit.endedAt).sort().at(-1) });

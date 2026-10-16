@@ -649,6 +649,20 @@ class ExactMaterializationTests(unittest.TestCase):
         self.assertEqual(result.validation.metrics.total_distance_m, 123)
         self.assertNotEqual(result.validation.metrics.total_distance_m, 999_999)
 
+        class LateClient(ExactClient):
+            def route(self, **kwargs):
+                from dataclasses import replace
+                route = super().route(**kwargs)
+                duration = int((job.window_end - engineer.shift_start).total_seconds() // 60) + 1
+                return replace(route, duration_seconds=duration * 60, duration_minutes=duration)
+
+        late = materialize_exact_initial_plan(dataset, solution, ExactRoutingOracle(LateClient()))
+        self.assertEqual(late.status, MaterializationStatus.ORDER_INFEASIBLE)
+        self.assertEqual(late.failure.constraint, 'client_window')
+        self.assertEqual(late.failure.violation_minutes, 1)
+        self.assertEqual(late.failure.limit_at, job.window_end.isoformat())
+        self.assertEqual(late.failure.job_id, job.job_id)
+
     def test_probe_continues_with_other_engineers_after_one_route_fails(self) -> None:
         timezone = ZoneInfo('Europe/Moscow')
         day = datetime(2026, 8, 17, tzinfo=timezone)

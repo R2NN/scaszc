@@ -294,7 +294,8 @@ test('generic planner reason is presented as a candidate check request, not a pr
   };
   const explanation = analyzeResourceGaps(record).explanations[0];
   assert.equal(explanation.reasonCode, 'STATIC_ELIGIBLE_BUT_UNSERVED');
-  assert.match(explanation.label, /подходящие бригады есть/i);
+  assert.match(explanation.label, /варианты маршрута не подтверждены/i);
+  assert.doesNotMatch(explanation.label, /не помещается/i);
   assert.match(explanation.detail, /не содержит допустимого назначения/i);
   assert.doesNotMatch(explanation.detail, /Что известно:/i);
   assert.match(explanation.detail, /не указывает, какое именно условие/i);

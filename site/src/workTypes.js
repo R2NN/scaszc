@@ -19,7 +19,10 @@ export const displayOrderName = order => translateServiceLabel(order?.name || '�
 export const isGlobalProblemOrder = order => [order?.workType, order?.serviceType, order?.skill]
   .some(value => /^(?:глобальная проблема|global problem|global issue)(?=\s|$)/.test(normalize(value)));
 
-export const isEmergencyWorkOrder = order => isGlobalProblemOrder(order)
+/** Match the solver priority, independently of the qualification needed for the job. */
+export const isUrgentOrder = order => ['urgent', 'авария', 'critical'].includes(normalize(order?.priority));
+
+export const isEmergencyWorkOrder = order => isUrgentOrder(order)
   || [order?.workType, order?.serviceType].some(value => /^(?:авария|аварийные работы|emergency)(?=\s|$)/.test(normalize(value)));
 
 export const isInformationalOrder = order => [order?.serviceType, order?.workType, order?.name]
@@ -28,7 +31,7 @@ export const isInformationalOrder = order => [order?.serviceType, order?.workTyp
 
 export const effectiveOrderSkill = order => {
   if (isEmergencyWorkOrder(order)) return 'Аварийные работы';
-  if (isInformationalOrder(order)) return 'Локальные работы';
+  if (isInformationalOrder(order)) return 'Аварийные работы';
   const skill = String(order?.skill || order?.workType || '').trim();
   return skill;
 };

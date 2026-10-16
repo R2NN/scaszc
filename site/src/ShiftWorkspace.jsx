@@ -1,3 +1,5 @@
+import { workPointType } from './workTypes.js';
+import { savedFactDraft, updateFactDraft, visitFactDraft } from './visitFactDraft.js';
 import { DurationFactFields, DurationDraftComparison } from './ComplexityWorkspace.jsx';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -36,7 +38,7 @@ import "./shift-workspace.css";
 
 const filterTokens = value => (Array.isArray(value) ? value : String(value || '').split(/\s*[|,;]\s*/)).map(item => String(item).trim()).filter(Boolean);
 const ShiftTransportIcon=({type})=>{const normalized=String(type||'').toLocaleLowerCase('ru-RU');if(/велосип|bike|bicycle/.test(normalized))return <Bike aria-hidden="true"/>;if(/обществен|автобус|public|bus|transit/.test(normalized))return <Bus aria-hidden="true"/>;if(/пеш|walk|foot/.test(normalized))return <Footprints aria-hidden="true"/>;return <Car aria-hidden="true"/>};
-const shiftPointType = order => { const name = `${order?.workType || ''} ${order?.skill || ''}`.toLocaleLowerCase('ru'); if (['Авария', 'URGENT'].includes(order?.priority) || /авар|emergency/.test(name)) return 'emergency'; if (/подключ|конверген|монтаж|install/.test(name)) return 'connection'; if (/оборудован|роутер|пристав/.test(name)) return 'equipment'; return 'service'; };
+const shiftPointType = order => { const type = workPointType(order); return type === 'upgrade' ? 'equipment' : type; };
 const reportKind = mode => mode === 'full' ? 'Итоги смены' : mode === 'partial' ? 'Частичный факт' : 'Плановый брифинг';
 const reportFileName = item => {
   const date = String(item.date || '');
@@ -277,11 +279,9 @@ export function ShiftWorkspace({
   const [eventType, setEventType] = useState(standaloneReplanning ? EVENT_TYPES.RECALCULATE : EVENT_TYPES.ENGINEER_UNAVAILABLE);
   const [targetId, setTargetId] = useState("");
   const [factOrderId, setFactOrderId] = useState("");
-  const [factTime, setFactTime] = useState("12:00");
-  const [durationFact, setDurationFact] = useState({});
+  const [factDrafts, setFactDrafts] = useState({});
   const [durationMinutes, setDurationMinutes] = useState('');
   const [automaticDuration, setAutomaticDuration] = useState(false);
-  const [correctionReason, setCorrectionReason] = useState("");
   const [time, setTime] = useState(standaloneReplanning ? '07:00' : '12:00');
   const [recalculateScope, setRecalculateScope] = useState('before');
   const [reason, setReason] = useState(standaloneReplanning ? 'Повторный расчёт плана до начала смены' : '');
@@ -290,7 +290,6 @@ export function ShiftWorkspace({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [restoreTargetId, setRestoreTargetId] = useState("");
-  const [factReason, setFactReason] = useState("");
   const [reportUrl, setReportUrl] = useState("");
   const [reportArtifact, setReportArtifact] = useState(null);
   const [reportArchive, setReportArchive] = useState([]);
@@ -621,6 +620,19 @@ export function ShiftWorkspace({
     return matchesSearch(crewQuery, [engineer.name, engineer.sourceId, engineer.startAddress, engineer.status, engineer.transport, skills, equipment, territories]) && (crewLoadFilter === 'all' || (crewLoadFilter === 'idle' ? !route?.assignments?.length : route?.assignments?.length > 0 && route.assignments.length <= 3)) && matchesAnySelection(crewSkillFilter, skills) && matchesAnySelection(crewEquipmentFilter, equipment) && (crewTerritoryFilter === 'all' || territories.includes(crewTerritoryFilter)) && (crewTransportFilter === 'all' || engineer.transport === crewTransportFilter) && (crewStatusFilter === 'all' || engineer.status === crewStatusFilter);
   });
   const selectedFact = (shift?.facts || []).find(item => String(item.orderId) === String(factOrderId));
+  const factKey = `${shift?.id}/${shift?.date}/${factOrderId}`;
+  const durationFact = visitFactDraft(factDrafts, factKey, selectedFact);
+  const setDurationFact = value => setFactDrafts(current => updateFactDraft(current, factKey, selectedFact, typeof value === 'function' ? value(visitFactDraft(current, factKey, selectedFact)) : value));
+  const factTime = durationFact.time;
+  const setFactTime = time => setDurationFact(current => ({ ...current, time }));
+  const factReason = durationFact.reason;
+  const setFactReason = reason => setDurationFact(current => ({ ...current, reason }));
+  const correctionReason = durationFact.correctionReason;
+  const setCorrectionReason = correctionReason => setDurationFact(current => ({ ...current, correctionReason }));
+  const factChangedOnServer = factDrafts[factKey] && factDrafts[factKey].saved !== JSON.stringify(savedFactDraft(selectedFact));
+  const resetFactDraft = () => setFactDrafts(current => { const next = { ...current }; delete next[factKey]; return next; });
+  useEffect(() => { setFactOrderId(''); }, [shift?.id, shift?.date]);
+
   const eventOptions = (pendingEvent || eventType) && !DIRECT_EVENTS.includes(pendingEvent?.type || eventType) ? [...DIRECT_EVENTS, pendingEvent?.type || eventType] : DIRECT_EVENTS;
   const restoredManualAddition = !pendingEvent && [EVENT_TYPES.NEW_ORDER, EVENT_TYPES.CAPACITY_ADDED, EVENT_TYPES.ENGINEER_REPLACED].includes(preview?.event?.type) ? preview.event : null;
   const buildEvent = () => {
@@ -831,8 +843,8 @@ export function ShiftWorkspace({
           actor,
         }),
       );
-      setFactReason("");
-      setCorrectionReason("");
+      resetFactDraft();
+      setFactOrderId('');
     } catch (issue) {
       setError(issue.message);
     } finally {
@@ -1065,7 +1077,7 @@ export function ShiftWorkspace({
                   <span className="order-main"><b>{order.name || order.sourceId || order.id}</b><small>{order.address || 'Адрес не указан'}</small><em className={`shift-status status-${status}`}>{visitStatusLabel(status, clock.mode)}</em></span>
                   <span className="order-window">{order.start ? `${order.start}–${order.end}` : 'Гибкое'}</span><ChevronRight size={17} aria-hidden="true"/>
                 </button>
-                {active ? <div className="shift-order-actions"><div className="shift-order-meta"><span>{order.workType || order.skill || 'Вид работ не указан'}</span><span>{route ? `${route.engineerName || 'Бригада'} · ${assignment?.plannedStart || 'в плане'}` : 'Не назначена · требуется решение диспетчера'}</span></div><div className="shift-order-action-buttons"><button type='button' onClick={() => { setDurationMinutes(String(order.duration)); editOrder(order.id, EVENT_TYPES.ORDER_DURATION_CHANGED); }}>Длительность</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.CLIENT_WINDOW_SHIFT)}>Перенести время</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.MANUAL_ASSIGN)}>{route ? 'Сменить бригаду' : 'Назначить бригаду'}</button>{route ? <button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.VISIT_CANCELLED)}>Отменить визит</button> : null}<button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.ORDER_CANCELLED)}>Отменить заявку</button>{route ? <button type="button" onClick={() => { setFactOrderId(String(order.id)); setFactTime(timeOf(Math.floor(clock.minute))); setTab('fact'); }}>Факт визита</button> : null}</div></div> : null}
+                {active ? <div className="shift-order-actions"><div className="shift-order-meta"><span>{order.workType || order.skill || 'Вид работ не указан'}</span><span>{route ? `${route.engineerName || 'Бригада'} · ${assignment?.plannedStart || 'в плане'}` : 'Не назначена · требуется решение диспетчера'}</span></div><div className="shift-order-action-buttons"><button type='button' onClick={() => { setDurationMinutes(String(order.duration)); editOrder(order.id, EVENT_TYPES.ORDER_DURATION_CHANGED); }}>Длительность</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.CLIENT_WINDOW_SHIFT)}>Перенести время</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.MANUAL_ASSIGN)}>{route ? 'Сменить бригаду' : 'Назначить бригаду'}</button>{route ? <button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.VISIT_CANCELLED)}>Отменить визит</button> : null}<button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.ORDER_CANCELLED)}>Отменить заявку</button>{route ? <button type="button" onClick={() => { setFactOrderId(String(order.id)); setTab('fact'); }}>Факт визита</button> : null}</div></div> : null}
               </article>;
             }) : <p className="shift-muted">Заявок в этой группе нет.</p>}
             </div>
@@ -1313,6 +1325,7 @@ export function ShiftWorkspace({
               </label>
               {selectedFact ? <p className="shift-muted">Последняя отметка: {selectedFact.status === 'completed' ? 'завершено' : selectedFact.status === 'started' ? 'начато' : 'не выполнено'} в {selectedFact.time}.</p> : null}
               <TimePicker label="Время факта" value={factTime} onChange={setFactTime}/>
+              {factDrafts[factKey] ? <div className='cx-fact-draft-status'><span>{factChangedOnServer ? 'Сохранённый факт изменился. В форме ваш несохранённый ввод.' : 'Несохранённый ввод этой заявки'}</span><button type='button' onClick={resetFactDraft}>Сбросить ввод</button></div> : null}
               <DurationFactFields value={durationFact} onChange={setDurationFact} snapshot={shift.orders.find(order=>String(order.id)===String(factOrderId))?.durationSnapshot} fact={selectedFact}/>
               <label>
                 Причина невыполнения

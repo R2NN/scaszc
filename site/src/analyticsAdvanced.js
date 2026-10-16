@@ -252,7 +252,7 @@ export function analyzeResourceGaps(record) {
     let reason;
     const genericPlannerReason = item.reasonCode === 'STATIC_ELIGIBLE_BUT_UNSERVED';
     if (genericPlannerReason) {
-      label = 'Подходящие бригады есть, но заявка не помещается в их маршруты';
+      label = 'Не назначена; варианты маршрута не подтверждены';
       reason = `В зоне «${zone}» есть бригады с навыком «${readableSkill}», однако готовый план не содержит допустимого назначения. Эта запись не указывает, какое именно условие оказалось решающим.`;
       action = 'Откройте проверку бригад: отдельно сравните навык, зону, окно, дорогу и текущую занятость.';
     } else if (!localWithSkill.length) {

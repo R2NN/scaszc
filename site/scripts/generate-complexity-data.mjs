@@ -7,7 +7,7 @@ import { canonicalDemoInput } from '../src/canonicalDemo.js';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const destination = path.resolve(process.argv[2] || path.join(root, 'runtime/candidate'));
-const seed = Number(process.argv[3] || 17082026);
+const seed = Number(process.argv[3] || 27082026);
 const anchor = process.argv[4] || '2026-08-17';
 await mkdir(destination, { recursive: true });
 const store = new ShiftStore(path.join(destination, 'generator.sqlite3'));
@@ -89,6 +89,6 @@ for (const file of files.sort()) checksums.push(`${createHash('sha256').update(a
 await writeFile(path.join(dataset, 'CHECKSUMS.sha256'), `${checksums.join('\n')}\n`);
 const quality = store.complexity.accuracy(`${anchor}T07:00:00+03:00`);
 await writeFile(path.join(destination, 'quality.json'), JSON.stringify({ seed, anchor, ...quality }, null, 2));
-await writeFile(path.join(destination, 'manifest.json'), JSON.stringify({ generator: 'complexity-v1', seed, anchor, sourceMain: '02d4811a93a1e17d6a45364a8a705e0f93fc6053', originalIdsPreserved: true, originalCoordinatesPreserved: true, objects: store.complexity.objects().length, visits: store.complexity.visits().length, stages: 'Independent simulation, hidden operation speeds and persistent conditions; not forecast plus noise', limits: 'Synthetic inventory, entrance/node positions not geocoded. Sample visits do not constitute full measured shifts.' }, null, 2));
+await writeFile(path.join(destination, 'manifest.json'), JSON.stringify({ generator: 'complexity-v2', seed, anchor, sourceMain: '02d4811a93a1e17d6a45364a8a705e0f93fc6053', originalIdsPreserved: true, originalCoordinatesPreserved: true, objects: store.complexity.objects().length, visits: store.complexity.visits().length, stages: 'Independent simulation, hidden operation speeds and persistent conditions; not forecast plus noise', limits: 'Synthetic inventory, entrance/node positions not geocoded. Sample visits do not constitute full measured shifts.' }, null, 2));
 store.close();
 process.stdout.write(`${JSON.stringify({ destination, dataset, mae: quality.mae, fixedMae: quality.fixedMae })}\n`);

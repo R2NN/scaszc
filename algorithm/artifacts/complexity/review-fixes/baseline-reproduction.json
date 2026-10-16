@@ -1,0 +1,232 @@
+{
+  "operationTransfer": {
+    "confirmed": "operation",
+    "globalEvidence": 3,
+    "results": [
+      {
+        "objectId": "A",
+        "historyMinutes": 0,
+        "technical": 30
+      },
+      {
+        "objectId": "B",
+        "historyMinutes": 0,
+        "technical": 30
+      },
+      {
+        "objectId": "C",
+        "historyMinutes": 0,
+        "technical": 30
+      },
+      {
+        "objectId": "D",
+        "historyMinutes": 0,
+        "technical": 30
+      }
+    ]
+  },
+  "cableTotals": [
+    {
+      "cable": "none",
+      "total": 20
+    },
+    {
+      "cable": "short",
+      "total": 25
+    },
+    {
+      "cable": "standard",
+      "total": 20
+    },
+    {
+      "cable": "large",
+      "total": 45
+    }
+  ],
+  "rejection": {
+    "before": 8,
+    "after": 8,
+    "stillEligible": true,
+    "excluded": false
+  },
+  "coverage": {
+    "queue": [
+      {
+        "id": "EAST-74949",
+        "work": "Подключение",
+        "priority": "NORMAL",
+        "base": 70,
+        "duration": 115,
+        "window": "10:00-12:00"
+      },
+      {
+        "id": "EAST-76082",
+        "work": "Подключение",
+        "priority": "NORMAL",
+        "base": 70,
+        "duration": 70,
+        "window": "12:00-14:00"
+      },
+      {
+        "id": "EAST-76678",
+        "work": "Локальная заявка",
+        "priority": "NORMAL",
+        "base": 30,
+        "duration": 56,
+        "window": "10:00-12:00"
+      },
+      {
+        "id": "SOUTHCENTER-23637",
+        "work": "Подключение",
+        "priority": "NORMAL",
+        "base": 70,
+        "duration": 80,
+        "window": "20:00-22:00"
+      },
+      {
+        "id": "SOUTHCENTER-32840",
+        "work": "Подключение",
+        "priority": "NORMAL",
+        "base": 70,
+        "duration": 70,
+        "window": "18:00-20:00"
+      },
+      {
+        "id": "SOUTHCENTER-79707",
+        "work": "Подключение",
+        "priority": "NORMAL",
+        "base": 70,
+        "duration": 115,
+        "window": "10:00-12:00"
+      },
+      {
+        "id": "SOUTHEAST-40111",
+        "work": "Локальная заявка",
+        "priority": "NORMAL",
+        "base": 30,
+        "duration": 30,
+        "window": "10:00-12:00"
+      },
+      {
+        "id": "SOUTHEAST-64168",
+        "work": "Локальная заявка",
+        "priority": "NORMAL",
+        "base": 30,
+        "duration": 13,
+        "window": "16:00-18:00"
+      },
+      {
+        "id": "SOUTHEAST-68946",
+        "work": "Подключение",
+        "priority": "NORMAL",
+        "base": 70,
+        "duration": 115,
+        "window": "16:00-18:00"
+      },
+      {
+        "id": "SOUTHEAST-78673",
+        "work": "Глобальная проблема",
+        "priority": "URGENT",
+        "base": 80,
+        "duration": 80,
+        "window": "00:01-23:59"
+      },
+      {
+        "id": "SOUTHEAST-79450",
+        "work": "Подключение",
+        "priority": "NORMAL",
+        "base": 70,
+        "duration": 115,
+        "window": "12:00-14:00"
+      },
+      {
+        "id": "SOUTHEAST-89067",
+        "work": "Локальная заявка",
+        "priority": "NORMAL",
+        "base": 30,
+        "duration": 56,
+        "window": "18:00-20:00"
+      }
+    ],
+    "totalBase": 10880,
+    "totalNew": 11166
+  },
+  "synthetic": {
+    "objectsWithHistory": 167,
+    "objectsWithMultipleOperations": 0,
+    "historicalVisits": 1780,
+    "badSkills": 521,
+    "badExamples": [
+      {
+        "visitId": "HIST-17082026-OBJ-a33ac9e84e8b2609b9-2",
+        "kind": "connection",
+        "engineer": "EAST-ENG-04",
+        "skills": [
+          "EMERGENCY"
+        ],
+        "needed": "INSTALL"
+      },
+      {
+        "visitId": "HIST-17082026-OBJ-a33ac9e84e8b2609b9-4",
+        "kind": "connection",
+        "engineer": "EAST-ENG-06",
+        "skills": [
+          "LOCAL",
+          "EMERGENCY"
+        ],
+        "needed": "INSTALL"
+      },
+      {
+        "visitId": "HIST-17082026-OBJ-a33ac9e84e8b2609b9-7",
+        "kind": "connection",
+        "engineer": "EAST-ENG-09",
+        "skills": [
+          "LOCAL",
+          "EMERGENCY"
+        ],
+        "needed": "INSTALL"
+      }
+    ],
+    "engineerExample": {
+      "id": "EAST-ENG-01",
+      "sourceId": "EAST-ENG-01",
+      "name": "Бригада Комарь",
+      "skills": [
+        "LOCAL",
+        "INSTALL",
+        "EMERGENCY"
+      ],
+      "shiftStart": "10:00",
+      "shiftEnd": "22:00",
+      "transport": "PUBLIC_TRANSIT",
+      "equipment": [
+        "DIAG_SET",
+        "INSTALL_SET",
+        "CABLE_SET"
+      ],
+      "startAddress": "Москва, Юных Ленинцев улица, 83к4",
+      "startCoords": [
+        55.7022013,
+        37.7739593
+      ],
+      "zone": "Восток",
+      "zoneId": "EAST",
+      "regionId": "moscow",
+      "status": "Доступен сегодня",
+      "sourceData": {
+        "engineer_id": "EAST-ENG-01",
+        "engineer_name": "Бригада Комарь",
+        "skills": "LOCAL | INSTALL | EMERGENCY",
+        "shift_start": "10:00",
+        "shift_end": "22:00",
+        "transport": "PUBLIC_TRANSIT",
+        "equipment": "DIAG_SET | INSTALL_SET | CABLE_SET",
+        "start_address": "Москва, Юных Ленинцев улица, 83к4",
+        "start_latitude": "55.7022013",
+        "start_longitude": "37.7739593",
+        "zone": "Восток",
+        "status": "Доступен сегодня"
+      }
+    }
+  }
+}

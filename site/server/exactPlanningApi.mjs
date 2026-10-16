@@ -21,17 +21,17 @@ const json = (value, status = 200) => new Response(JSON.stringify(value), {
   headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
 });
 
-async function calculateExactPlan(payload, onProgress = () => {}, complexity) {
+async function calculateExactPlan(payload, onProgress = () => {}, complexity, planRunner = runExactPlan) {
   artifactPromise ||= readFile(artifactFile, 'utf8').then(JSON.parse);
   const artifact = await artifactPromise;
   const planningDate = payload.planningDate || payload.date || payload.orders[0]?.serviceDate || payload.orders[0]?.sourceData?.window_start?.slice(0, 10);
   const input = { ...payload, planningDate, orders: complexity ? complexity.prepareOrders(payload.orders, `${planningDate}T07:00:00+03:00`) : payload.orders };
   const retained = complexity ? await loadComplexityArtifact() : null;
   let plan;
-  if (matchesComplexityArtifact(input, retained)) {
+  if (!payload.recompute && matchesComplexityArtifact(input, retained)) {
     onProgress({ phase: 'LOOKUP_VALIDATED_PLAN' });
     plan = structuredClone(retained.plan);
-  } else if (isCanonicalPlanningInput(input, artifact, siteRoot)) {
+  } else if (!payload.recompute && isCanonicalPlanningInput(input, artifact, siteRoot)) {
     onProgress({ phase: 'LOOKUP_VALIDATED_PLAN' });
     const response = await exactWorker.fetch(new Request('http://localhost/api/plan', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
@@ -45,7 +45,7 @@ async function calculateExactPlan(payload, onProgress = () => {}, complexity) {
     const sharedInventory = Array.isArray(input.sharedInventory)
       ? input.sharedInventory
       : await historicalInventory(planningDate, repositoryRoot);
-    plan = await runExactPlan({ ...input, sharedInventory }, repositoryRoot, onProgress);
+    plan = await planRunner({ ...input, sharedInventory }, repositoryRoot, onProgress);
   }
   onProgress({ phase: 'VALIDATING_PLAN' });
   if (plan.status !== 'EXACT_VALID' || plan.publicationAllowed !== true || plan.validation?.status !== 'VALID' || plan.approximateTravel === true) {
@@ -58,7 +58,7 @@ async function calculateExactPlan(payload, onProgress = () => {}, complexity) {
 }
 
 /** Serve exact plans and expose real server phases for background calculations. */
-export async function handleExactPlanning(request, { complexity } = {}) {
+export async function handleExactPlanning(request, { complexity, planRunner = runExactPlan } = {}) {
   const url = new URL(request.url);
   const jobId = /^\/api\/plan\/jobs\/([\w-]+)$/.exec(url.pathname)?.[1];
   if (jobId && request.method === 'GET') {
@@ -78,7 +78,7 @@ export async function handleExactPlanning(request, { complexity } = {}) {
       jobs.set(job.id, job);
       setTimeout(() => jobs.delete(job.id), 30 * 60_000).unref?.();
       Promise.resolve().then(async () => {
-        const result = await calculateExactPlan(payload, progress => { job.progress = progress; }, complexity);
+        const result = await calculateExactPlan(payload, progress => { job.progress = progress; }, complexity, planRunner);
         job.status = 'READY';
         job.progress = { phase: 'READY' };
         job.result = result;
@@ -88,7 +88,7 @@ export async function handleExactPlanning(request, { complexity } = {}) {
       }).finally(release);
       return json({ id: job.id, status: job.status, progress: job.progress, startedAt: job.startedAt }, 202);
     }
-    return json(await withPlanningSlot(() => calculateExactPlan(payload, undefined, complexity)));
+    return json(await withPlanningSlot(() => calculateExactPlan(payload, undefined, complexity, planRunner)));
   } catch (error) {
     if (error?.code === 'PLANNING_BUSY') return planningBusyResponse();
     return json({ error: error?.message || 'Точный расчёт не выполнен', code: error?.code || 'EXACT_PLANNING_FAILED', details: error?.details }, error?.code === 'INVALID_INPUT' ? 422 : 503);

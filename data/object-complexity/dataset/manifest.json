@@ -28,5 +28,5 @@
   "validation_command": "python validate_dataset.py .",
   "stress_expected_result": "Дефицит 1 ONT_GIGABIT в SOUTHEAST после SOUTHEAST-EVENT-002.",
   "duration_contract": "server-snapshot-v1",
-  "duration_model": "duration-1"
+  "duration_model": "duration-2"
 }

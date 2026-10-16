@@ -1,4 +1,5 @@
-import { DurationAccuracy } from './ComplexityWorkspace.jsx';
+import { isUrgentOrder } from './workTypes.js';
+import { DurationAccuracy, openObjectPassport, useDurationAttention } from './ComplexityWorkspace.jsx';
 import { Fragment, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as maplibregl from 'maplibre-gl';
@@ -56,7 +57,7 @@ const CLUSTER_ORDER = ['Юго-восток', 'Восток', 'Югоцентр'
 const HACKATHON_PLANNING_DATE = '2026-08-17';
 const TRANSPORT_LABELS = new Proxy({}, { get: (_, value) => transportLabel(value) });
 const CLUSTER_MAP_CENTERS = { 'Юго-восток': [37.78, 55.67], 'Восток': [37.80, 55.77], 'Югоцентр': [37.62, 55.68] };
-const isUrgentOrder = order => /urgent|emergency|авар|срочн/i.test(`${order?.priority || ''} ${order?.skill || ''}`);
+
 const orderedClusters = values => [...new Set(values.filter(Boolean))].sort((left, right) => {
   const leftIndex = CLUSTER_ORDER.indexOf(left);
   const rightIndex = CLUSTER_ORDER.indexOf(right);
@@ -373,7 +374,7 @@ function UnassignedExplanationList({ explanations = [], onOpenOrder, onOpenResou
   if (!explanations.length) return null;
   return <section className="analytics-panel unassigned-explanations">
     <SectionHeading title="Почему заявки не вошли в план" description="Здесь — результат планирования. Проверка условий каждой бригады открывается отдельно."/>
-    <div>{explanations.map(item => <article key={item.orderId}><span><CircleAlert/></span><div className="unassigned-explanation-copy"><header><div><small>ЗАЯВКА №{item.orderNumber || String(item.orderId).replace(/^.*:/, '')}</small><b>{item.label}</b></div><em>{item.zone} · {item.window}</em></header><p>{item.reasonCode === 'STATIC_ELIGIBLE_BUT_UNSERVED' ? 'Базово подходящие бригады есть, но в готовом плане заявка осталась без назначения. Точное ограничение видно только после проверки каждой бригады.' : item.detail}</p><footer><button type="button" className="primary-action" onClick={() => onOpenOrder?.(item.orderId)}>Разобрать заявку<ChevronRight/></button><button type="button" className="secondary-action" onClick={() => onOpenResource?.(item)}><Users/>Проверить бригады</button></footer></div></article>)}</div>
+    <div>{explanations.map(item => <article key={item.orderId}><span><CircleAlert/></span><div className="unassigned-explanation-copy"><header><div><small>ЗАЯВКА №{item.orderNumber || String(item.orderId).replace(/^.*:/, '')}</small><b>{item.label}</b></div><em>{item.zone} · {item.window}</em></header>{item.reasonCode !== 'STATIC_ELIGIBLE_BUT_UNSERVED' && item.detail ? <p>{item.detail}</p> : null}<footer><button type="button" className="primary-action" onClick={() => onOpenOrder?.(item.orderId)}>Разобрать заявку<ChevronRight/></button><button type="button" className="secondary-action" onClick={() => onOpenResource?.(item)}><Users/>Проверить бригады</button></footer></div></article>)}</div>
   </section>;
 }
 
@@ -643,7 +644,7 @@ function BaselineComparison({ data }) {
   </section>;
 }
 
-function ShiftView({ data, onOpenUnassigned, onOpenResource, onOpenRoutes, onOpenWindows, onInspect, isArchived = false }) {
+function ShiftView({ data, durationAttention = [], onOpenUnassigned, onOpenResource, onOpenRoutes, onOpenWindows, onInspect, isArchived = false }) {
   const mainNeed = data.needs[0];
   const urgentOpen = Math.max(0, data.urgentTotal - data.urgentAssigned);
   const actions = [
@@ -660,6 +661,11 @@ function ShiftView({ data, onOpenUnassigned, onOpenResource, onOpenRoutes, onOpe
       tone: 'warning', icon: Clock3, title: `${data.lateStarts.length} ${plural(data.lateStarts.length, ['поздний старт в плане', 'поздних старта в плане', 'поздних стартов в плане'])}`,
       text: 'Плановое начало выходит за клиентское окно.', action: 'Открыть маршруты', onClick: onOpenRoutes,
     } : null,
+    durationAttention[0] ? {
+      tone: 'warning', icon: Clock3, title: durationAttention[0].attention.action,
+      text: `${durationAttention[0].address}: ${durationAttention[0].attention.why}`,
+      action: 'Разобрать визит', onClick: () => openObjectPassport({ objectId: durationAttention[0].id, passportKind: durationAttention[0].attention.kind, visitId: durationAttention[0].attention.visitId }, 'conditions'),
+    } : null,
     data.operationalGaps.length ? {
       tone: 'neutral', icon: Gauge, title: `${data.operationalGaps.length} ${plural(data.operationalGaps.length, ['свободный промежуток', 'свободных промежутка', 'свободных промежутков'])} в сменах`,
       text: 'Проверьте, можно ли безопасно закрыть очередь или сдвинуть границы смены.',
@@ -674,7 +680,7 @@ function ShiftView({ data, onOpenUnassigned, onOpenResource, onOpenRoutes, onOpe
   return <div className="shift-workspace">
     <div className="analytics-kpis">
       <MetricCard icon={Target} label="Заявки в плане" value={`${data.assigned} из ${data.total}`} note={`${number(data.coverage)}% спроса закрыто`} tone={data.coverage >= 99 ? 'good' : 'attention'} delta={`${orderDelta > 0 ? '+' : orderDelta < 0 ? '−' : ''}${Math.abs(orderDelta)} ${plural(Math.abs(orderDelta), ['заявка', 'заявки', 'заявок'])} vs Бейзлайн`} deltaTone={orderDelta > 0 ? 'positive' : orderDelta < 0 ? 'negative' : 'neutral'}/>
-      <MetricCard icon={AlertTriangle} label="Аварии" value={`${data.urgentAssigned} из ${data.urgentTotal}`} note={data.urgentAssigned === data.urgentTotal ? 'Все срочные заявки назначены' : `${data.urgentTotal - data.urgentAssigned} требуют решения`} tone={data.urgentAssigned === data.urgentTotal ? 'good' : 'attention'}/>
+      <MetricCard icon={AlertTriangle} label="Срочные заявки" value={`${data.urgentAssigned} из ${data.urgentTotal}`} note={data.urgentAssigned === data.urgentTotal ? 'Все срочные заявки назначены' : `${data.urgentTotal - data.urgentAssigned} требуют решения`} tone={data.urgentAssigned === data.urgentTotal ? 'good' : 'attention'}/>
       <MetricCard icon={Users} label="Задействованные бригады" value={`${data.activeEngineers}/${data.availableEngineers}`} note={data.idleCount ? `${data.idleCount} ${plural(data.idleCount, ['бригада без маршрута', 'бригады без маршрута', 'бригад без маршрута'])}` : 'Вся команда задействована'} delta={`${engineerSaving > 0 ? '−' : engineerSaving < 0 ? '+' : ''}${Math.abs(engineerSaving)} ${plural(Math.abs(engineerSaving), ['бригада', 'бригады', 'бригад'])} vs Бейзлайн`} deltaTone={engineerSaving > 0 ? 'positive' : engineerSaving < 0 ? 'negative' : 'neutral'}/>
       <MetricCard icon={MapPin} label="Общий пробег" value={`${number(data.distance)} км`} note={`${number(optimizedAverageDistance)} км на назначенную заявку`} delta={`${averageDistanceSaving > 0 ? '−' : averageDistanceSaving < 0 ? '+' : ''}${number(Math.abs(averageDistanceSaving))} км на заявку (${averageDistanceSaving > 0 ? '−' : averageDistanceSaving < 0 ? '+' : ''}${number(Math.round(Math.abs(averageDistanceSavingPercent)))}%) vs Бейзлайн`} deltaTone={averageDistanceSaving > 0 ? 'positive' : averageDistanceSaving < 0 ? 'negative' : 'neutral'}/>
     </div>
@@ -1675,6 +1681,7 @@ function ReplanningView({ record, data, cluster = 'all', isLive = false, plannin
 const analyticsReturnPosition = { view: 'shift', scrollTop: 0 };
 
 export function AnalyticsWorkspace({ orders = [], team = [], plan, date, onDateChange, history = EMPTY_ANALYTICS_HISTORY, dateControl, onUploadData, onOpenUnassigned, onOpenRoutes, onOpenOrder, onPreviewReplan, onApplyReplan, onRollbackReplan, onStartLiveReplan }) {
+  const durationAttention = useDurationAttention(date, orders);
   const [view, setView] = useState(() => analyticsReturnPosition.view);
   const pendingReturnScrollRef = useRef(analyticsReturnPosition.scrollTop);
   const [toolbarStuck, setToolbarStuck] = useState(false);
@@ -1861,7 +1868,7 @@ export function AnalyticsWorkspace({ orders = [], team = [], plan, date, onDateC
   return <div className="analytics-workspace">
     {analyticsToolbar}
     <div className="analytics-view-stage" key={view}>
-      {view === 'shift' ? <><StatusHero data={data} onResolve={openUnassigned}/><ShiftView data={data} onOpenUnassigned={openUnassigned} onOpenResource={openResourceForNeed} onOpenRoutes={openRoutes} onOpenWindows={openWindows} onInspect={openInspector} isArchived={Boolean(selectedRecord && liveDateKey && selectedRecord.date < liveDateKey)}/></> : null}
+      {view === 'shift' ? <><StatusHero data={data} onResolve={openUnassigned}/><ShiftView data={data} durationAttention={durationAttention} onOpenUnassigned={openUnassigned} onOpenResource={openResourceForNeed} onOpenRoutes={openRoutes} onOpenWindows={openWindows} onInspect={openInspector} isArchived={Boolean(selectedRecord && liveDateKey && selectedRecord.date < liveDateKey)}/></> : null}
       {view === 'history' ? <HistoryView records={historyRecords} comparisonRecords={comparisonHistoryRecords} mlForecast={mlForecast} forecastStatus={forecastStatus} selectedDate={selectedKey} planningDate={liveDateKey} onSelectDate={onDateChange} onOpenDecision={onStartLiveReplan} region={cluster} section={historySection} onSectionChange={setHistorySection}/> : null}
       {view === 'resources' ? <ResourcesView data={data} record={activeRecord} decisionScope={selectedKey} viewMode={resourceViewMode} focusNeed={resourceFocus} isLive={isPlanningDay && Boolean(plan)} onViewModeChange={setResourceViewMode} onOpenUnassigned={openUnassigned} onOpenRoute={openRoutes} onOpenOrder={onOpenOrder} onPreviewReplan={onPreviewReplan} onApplyReplan={onApplyReplan}/> : null}
       {view === 'comparison' ? <div className="efficiency-workspace"><DurationAccuracy date={date} regionId={orders[0]?.regionId || team[0]?.regionId || 'moscow'} zone={cluster==='all'?'':cluster}/><FinancePanel record={activeRecord} baseline={data.baseline} rates={preferences.rates} onRateChange={(key, value) => updatePreference('rates', key, value)} onInspect={openInspector}/><EfficiencyView record={activeRecord} rates={preferences.rates} onOpenRoutes={openRoutes}/></div> : null}

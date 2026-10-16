@@ -1,12 +1,15 @@
 {
-  "generator": "complexity-v1",
-  "seed": 17082026,
+  "generator": "complexity-v2",
+  "seed": 27082026,
   "anchor": "2026-08-17",
   "sourceMain": "02d4811a93a1e17d6a45364a8a705e0f93fc6053",
   "originalIdsPreserved": true,
   "originalCoordinatesPreserved": true,
   "objects": 197,
-  "visits": 1780,
+  "visits": 2074,
   "stages": "Independent simulation, hidden operation speeds and persistent conditions; not forecast plus noise",
-  "limits": "Synthetic inventory, entrance/node positions not geocoded. Sample visits do not constitute full measured shifts."
+  "limits": "Synthetic inventory, entrance/node positions not geocoded. Sample visits do not constitute full measured shifts.",
+  "planStatus": "PENDING_REAL_ROUTING",
+  "publishedPlan": "Preserved v1 artifact, not a v2 search result",
+  "baseFeature": "3035d1e36ff239b51699d8dfeae5eb3adca3be34"
 }

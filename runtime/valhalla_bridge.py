@@ -16,7 +16,7 @@ RUNTIME_REVISION = 'valhalla-3.8.3-runtime-schema-v1'
 ROUTE_TIMEOUT_SECONDS = 25
 
 
-class ValhallaBridge:
+class ValhallaWorker:
     def __init__(self) -> None:
         self._process: asyncio.subprocess.Process | None = None
         self._lock = asyncio.Lock()
@@ -58,9 +58,7 @@ class ValhallaBridge:
                     return False
             return self._process is not None and self._process.returncode is None
 
-    async def route(self, request: web.Request) -> web.Response:
-        payload = await request.json()
-        line = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode() + b'\n'
+    async def query(self, line: bytes, *, timeout_seconds: float) -> bytes:
         async with self._lock:
             response_line = b''
             for attempt in range(2):
@@ -73,7 +71,7 @@ class ValhallaBridge:
                 try:
                     process.stdin.write(line)
                     await process.stdin.drain()
-                    deadline = asyncio.get_running_loop().time() + ROUTE_TIMEOUT_SECONDS
+                    deadline = asyncio.get_running_loop().time() + timeout_seconds
                     candidate = b''
                     # The local Valhalla CLI emits startup diagnostics on stdout
                     # before its first JSON response. Consume only those lines;
@@ -111,7 +109,46 @@ class ValhallaBridge:
                 break
         if not response_line:
             raise web.HTTPBadGateway(text='Valhalla worker returned no JSON response')
-        return web.Response(body=response_line, content_type='application/json')
+        return response_line
+
+
+class ValhallaBridge:
+    """Lease independent real CLI workers; release each lease even after cancellation."""
+
+    def __init__(self, worker_count: int = 3) -> None:
+        if worker_count < 1:
+            raise ValueError('At least one Valhalla worker is required')
+        self.workers = [ValhallaWorker() for _ in range(worker_count)]
+        self.available: asyncio.Queue[ValhallaWorker] = asyncio.Queue()
+
+    async def start(self) -> None:
+        await asyncio.gather(*(worker.start() for worker in self.workers))
+        if self.available.empty():
+            for worker in self.workers:
+                self.available.put_nowait(worker)
+
+    async def close(self) -> None:
+        await asyncio.gather(*(worker.close() for worker in self.workers))
+
+    async def healthy(self) -> bool:
+        return all(await asyncio.gather(*(worker.healthy() for worker in self.workers)))
+
+    async def route(self, request: web.Request) -> web.Response:
+        payload = await request.json()
+        line = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode() + b'\n'
+        try:
+            async with asyncio.timeout(ROUTE_TIMEOUT_SECONDS):
+                worker = await self.available.get()
+                try:
+                    response = await worker.query(line, timeout_seconds=ROUTE_TIMEOUT_SECONDS)
+                except asyncio.CancelledError:
+                    await worker.close()
+                    raise
+                finally:
+                    self.available.put_nowait(worker)
+        except TimeoutError as error:
+            raise web.HTTPServiceUnavailable(text='Valhalla routing deadline exceeded') from error
+        return web.Response(body=response, content_type='application/json')
 
 
 async def status(request: web.Request) -> web.Response:

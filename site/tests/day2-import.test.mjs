@@ -37,14 +37,14 @@ test('district filenames provide an operational sector only when the CSV has non
   }
 });
 
-test('global problems and accidents both import as emergency work', async () => {
+test('information keeps emergency qualification without acquiring urgent priority', async () => {
   const persisted = {
     workType: 'Глобальная проблема', serviceType: 'Информация',
     skill: 'Глобальная проблема', priority: 'Обычная',
   };
-  assert.equal(isInformationalOrder(persisted), false);
+  assert.equal(isInformationalOrder(persisted), true);
   assert.equal(effectiveOrderSkill(persisted), 'Аварийные работы');
-  assert.equal(workPointType(persisted), 'emergency');
+  assert.equal(workPointType(persisted), 'other');
 
   const vite = await createServer({ server: { middlewareMode: true, hmr: false } });
   const originalFetch = globalThis.fetch;
@@ -60,7 +60,7 @@ test('global problems and accidents both import as emergency work', async () => 
     const dataset = session.datasets.orders;
     const orders = buildOrders(dataset.headers, dataset.rows, dataset.savedMappings, DEFAULT_REGION, session.workNorms, session.fileName);
     assert.deepEqual(orders.map(order => [order.workType, order.skill, order.priority, isInformationalOrder(order)]), [
-      ['Глобальная проблема', 'Аварийные работы', 'Авария', false],
+      ['Глобальная проблема', 'Аварийные работы', 'Обычная', true],
       ['Авария', 'Аварийные работы', 'Авария', false],
     ]);
   } finally {

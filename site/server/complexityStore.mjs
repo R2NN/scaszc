@@ -1,16 +1,19 @@
+import { assertServiceLocation } from '../src/serviceLocation.js';
 import { randomUUID } from 'node:crypto';
-import { calculateDuration, DEFAULT_MODEL, digest, normalizeFactors, REASONS, validateModel } from './durationModel.mjs';
+import { calculateDuration, conditionEvidence, matchesConditionWork, DEFAULT_MODEL, digest, normalizeFactors, REASONS, validateModel } from './durationModel.mjs';
 
 const encode = value => JSON.stringify(value);
 const decode = row => row ? JSON.parse(row.payload_json) : null;
 const stamp = () => new Date().toISOString();
 const minute = value => { const [h, m] = String(value || '').split(':').map(Number); return h * 60 + m; };
 const scopeKeys = ['object', 'entrance', 'node', 'line', 'operation'];
+const immutable = value => { if (value && typeof value === 'object' && !Object.isFrozen(value)) { for (const item of Object.values(value)) immutable(item); Object.freeze(value); } return value; };
 
 /** Transactional registry, immutable forecasts, versioned facts and scoped decisions. */
 export class ComplexityStore {
   constructor(db) {
     this.db = db;
+    this.visitRows = new Map();
     db.transaction(() => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS duration_models(id TEXT PRIMARY KEY, effective_at TEXT NOT NULL, payload_json TEXT NOT NULL);
@@ -56,12 +59,16 @@ export class ComplexityStore {
     for (const entity of entities) this.db.prepare('INSERT OR IGNORE INTO infrastructure_entities VALUES (?,?,?,?)').run(entity.id, object.id, entity.kind, encode(entity));
   }
   visits(at = '9999-12-31T23:59:59Z', objectId) {
-    const rows = this.db.prepare(`SELECT v.payload_json FROM duration_visits v WHERE julianday(v.known_at)<=julianday(?) ${objectId ? 'AND v.object_id=?' : ''} AND v.revision=(SELECT max(n.revision) FROM duration_visits n WHERE n.id=v.id AND julianday(n.known_at)<=julianday(?))`).all(...(objectId ? [at, objectId, at] : [at, at]));
-    return rows.map(decode);
+    const rows = this.db.prepare(`SELECT v.rowid FROM duration_visits v WHERE julianday(v.known_at)<=julianday(?) ${objectId ? 'AND v.object_id=?' : ''} AND v.revision=(SELECT max(n.revision) FROM duration_visits n WHERE n.id=v.id AND julianday(n.known_at)<=julianday(?))`).all(...(objectId ? [at, objectId, at] : [at, at]));
+    return rows.map(row => {
+      if (!this.visitRows.has(row.rowid)) this.visitRows.set(row.rowid, immutable(decode(this.db.prepare('SELECT payload_json FROM duration_visits WHERE rowid=?').get(row.rowid))));
+      return this.visitRows.get(row.rowid);
+    });
   }
   conditions(objectId) { return this.db.prepare(`SELECT payload_json FROM object_conditions ${objectId ? 'WHERE object_id=? OR object_id IS NULL' : ''}`).all(...(objectId ? [objectId] : [])).map(decode); }
   links(order, registerUnknown = false) {
     const entities = { ...(order.serviceEntities || {}) };
+    if (entities.object && order.objectId && entities.object !== order.objectId) throw new Error('Объект заявки противоречит связанным сущностям.');
     const explicitObject = entities.object || order.objectId;
     const source = order.sourceData || {};
     const sourceObject = source.geocode_object_id || source.location_id;
@@ -71,6 +78,7 @@ export class ComplexityStore {
         if (explicitObject) throw new Error('Объект не найден в реестре.');
         this.registerObject({ id: objectId, address: order.address, coords: order.coords, zone: order.zone, zoneId: order.zoneId, district: order.district, regionId: order.regionId || 'moscow', source: 'Исходное геокодирование; инфраструктура не установлена' });
       }
+      assertServiceLocation(order, this.object(objectId));
       entities.object = objectId;
       const defaults = this.object(objectId)?.orderDefaults?.[String(order.sourceId || order.id)];
       if (defaults?.serviceEntities) Object.assign(entities, { ...defaults.serviceEntities, ...entities });
@@ -93,7 +101,9 @@ export class ComplexityStore {
     const object = this.object(entities.object);
     const defaults = object?.orderDefaults?.[String(order.sourceId || order.id)] || {};
     const enriched = { ...order, durationFactors: { ...defaults.durationFactors, ...order.durationFactors }, factorSources: { ...defaults.factorSources, ...order.factorSources } };
-    const forecast = calculateDuration(enriched, { asOf: at, entities, model: this.model(at), visits: this.visits(at, entities.object), conditions: this.conditions(entities.object) });
+    const conditions = this.conditions(entities.object);
+    const evidence = conditions.some(condition => condition.scope === 'operation') ? this.visits(at) : this.visits(at, entities.object);
+    const forecast = calculateDuration(enriched, { asOf: at, entities, model: this.model(at), visits: evidence, conditions });
     const id = digest({ orderId: String(order.id), ...forecast });
     const snapshot = { id, orderId: String(order.id), ...forecast };
     if (persist) {
@@ -136,10 +146,11 @@ export class ComplexityStore {
     }
   }
   recordVisit(visit, reason = 'Запись факта визита', actor = 'Диспетчер') {
+    const before = decode(this.db.prepare('SELECT payload_json FROM duration_visits WHERE id=? ORDER BY revision DESC LIMIT 1').get(visit.id));
     const revision = (this.db.prepare('SELECT max(revision) AS revision FROM duration_visits WHERE id=?').get(visit.id).revision || 0) + 1;
-    this.db.prepare('INSERT INTO duration_visits VALUES (?,?,?,?,?,?)').run(visit.id, revision, visit.entities?.object || null, visit.endedAt || null, visit.knownAt, encode({ ...visit, revision }));
-    this.audit(visit.entities?.object, 'VISIT_RECORDED', reason, null, { ...visit, revision }, actor, visit.knownAt);
-    return { ...visit, revision };
+    this.db.prepare('INSERT INTO duration_visits VALUES (?,?,?,?,?,?)').run(visit.id, revision, visit.entities?.object || null, visit.endedAt || null, visit.knownAt, encode({ ...visit, revision, actor }));
+    this.audit(visit.entities?.object, 'VISIT_RECORDED', reason, before, { ...visit, revision, actor }, actor, visit.knownAt);
+    return { ...visit, revision, actor };
   }
   recordShiftFact(shift, fact, prior, actor) {
     const order = shift.orders.find(item => String(item.id) === String(fact.orderId));
@@ -158,40 +169,70 @@ export class ComplexityStore {
     if (total != null && stageSum >= total) throw new Error('Сумма этапов не оставляет времени технической работе.');
     const route = shift.plan.routes.find(item => item.assignments.some(visit => String(visit.orderId) === String(fact.orderId)));
     const previous = this.visits().find(visit => visit.id === `FACT-${shift.id}-${fact.orderId}`);
-    this.recordVisit({ id: `FACT-${shift.id}-${fact.orderId}`, orderId: fact.orderId, shiftId: shift.id, entities: forecast.entities, kind: forecast.kind, operation: forecast.operation, forecast, factorTechnical: forecast.factorTechnical, startedAt: start ? `${shift.date}T${start}:00+03:00` : null, endedAt: end ? `${shift.date}T${end}:00+03:00` : null, knownAt: `${shift.date}T${fact.time}:00+03:00`, total, actualTechnical: knownStages && total != null ? total - stageSum : null, accessMinutes: knownStages ? Number(fact.accessMinutes) : null, documentMinutes: knownStages ? Number(fact.documentMinutes) : null, customerMinutes: knownStages ? Number(fact.customerMinutes) : null, eligible: fact.status === 'completed' && knownStages && !fact.excluded, excluded: Boolean(fact.excluded), reason, comment: String(fact.comment || '').slice(0, 2000), engineerId: previous?.engineerId || prior?.engineerId || route?.engineerId, source: 'dispatcher', status: fact.status }, fact.correctionReason || 'Отметка факта визита', actor);
+    const engineerId = previous?.engineerId || prior?.engineerId || route?.engineerId;
+    const engineerName = previous?.engineerName || shift.team?.find(member => String(member.id) === String(engineerId))?.name;
+    this.recordVisit({ id: `FACT-${shift.id}-${fact.orderId}`, orderId: fact.orderId, shiftId: shift.id, entities: forecast.entities, kind: forecast.kind, operation: forecast.operation, forecast, factorTechnical: forecast.factorTechnical, startedAt: start ? `${shift.date}T${start}:00+03:00` : null, endedAt: end ? `${shift.date}T${end}:00+03:00` : null, knownAt: stamp(), total, actualTechnical: knownStages && total != null ? total - stageSum : null, accessMinutes: fact.accessMinutes != null && fact.accessMinutes !== '' ? Number(fact.accessMinutes) : null, documentMinutes: fact.documentMinutes != null && fact.documentMinutes !== '' ? Number(fact.documentMinutes) : null, customerMinutes: fact.customerMinutes != null && fact.customerMinutes !== '' ? Number(fact.customerMinutes) : null, eligible: fact.status === 'completed' && knownStages, excluded: Boolean(fact.excluded), reason, comment: String(fact.comment || '').slice(0, 2000), engineerId, engineerName, source: 'dispatcher', status: fact.status }, fact.correctionReason || 'Отметка факта визита', actor);
   }
   decide(input) {
     return this.db.transaction(() => {
       const at = input.at;
+      if (!String(input.reason || '').trim()) throw new Error('Укажите основание решения.');
       if (!Number.isFinite(Date.parse(at))) throw new Error('Укажите время решения.');
       const visit = this.visits(at).find(item => item.id === input.visitId);
-      if (!visit) throw new Error('Визит не найден или ещё не известен.');
+      if (!visit || Date.parse(at) < Date.parse(this.visits().find(item => item.id === visit.id).knownAt)) throw new Error('Визит не найден или решение предшествует известному исправлению.');
       if (!['confirm', 'visit', 'reject'].includes(input.action)) throw new Error('Неизвестное решение.');
       let condition = null;
       if (input.action === 'confirm') {
+        if (!visit.eligible || visit.excluded) throw new Error('Подтверждение требует пригодного измерения; сначала восстановите исключённый визит.');
         if (['unknown', 'customer', 'other'].includes(visit.reason)) throw new Error('Неустановленная причина и ожидание клиента относятся только к этому визиту.');
         if (!scopeKeys.includes(input.scope) || (input.scope !== 'operation' && !visit.entities?.[input.scope])) throw new Error('Выберите существующую область применения.');
         const component = visit.reason === 'access' ? 'access' : 'technical';
-        const comparable = this.visits(at).filter(item => item.eligible && !item.excluded && item.kind === visit.kind && item.operation === visit.operation && item.reason === visit.reason && (input.scope === 'operation' || item.entities?.[input.scope] === visit.entities[input.scope]) && Number.isFinite(component === 'access' ? item.accessMinutes : item.actualTechnical));
+        const probe = { scope: input.scope, component, findingKey: visit.findingKey, kind: visit.kind, operation: visit.operation, entityId: input.scope === 'operation' ? visit.operation : visit.entities?.[input.scope], reason: visit.reason };
+        const comparable = conditionEvidence(probe, this.visits(at).map(item => item.id === visit.id || item.learningDecision === 'pending' ? { ...item, learningDecision: 'confirmed' } : item), at, this.model(at)).map(item => item.visit);
         if (comparable.length < this.model(at).history.minimum) throw new Error('Недостаточно сопоставимых пригодных наблюдений для переноса на следующие заявки.');
         if (input.scope === 'node' && !visit.forecast?.factors?.requiresNode) throw new Error('Этот визит не требовал посещения узла.');
         if (input.validUntil && (!Number.isFinite(Date.parse(input.validUntil)) || Date.parse(input.validUntil) <= Date.parse(at))) throw new Error('Срок временного условия должен быть позже решения.');
         if (input.replacesConditionId) {
           const previous = this.conditions(visit.entities.object).find(item => item.id === input.replacesConditionId);
-          if (!previous || previous.kind !== visit.kind || previous.operation !== visit.operation || previous.reason !== visit.reason) throw new Error('Условие не связано с выбранным сопоставимым визитом.');
+          if (!previous || previous.reason !== visit.reason || !matchesConditionWork(previous, visit)) throw new Error('Условие не связано с выбранным сопоставимым визитом.');
           this.closeCondition(previous.id, { at, reason: input.reason, actor: input.actor });
         }
-        condition = { id: randomUUID(), objectId: visit.entities.object, entityId: input.scope === 'operation' ? visit.operation : visit.entities[input.scope], scope: input.scope, kind: visit.kind, operation: visit.operation, reason: visit.reason, component, knownAt: at, validFrom: at, validUntil: input.validUntil || null, status: 'confirmed', evidenceIds: comparable.map(item => item.id), source: input.reason, actor: input.actor || 'Диспетчер' };
+        condition = { id: randomUUID(), objectId: visit.entities.object, entityId: input.scope === 'operation' ? visit.operation : visit.entities[input.scope], scope: input.scope, kind: visit.kind, operation: visit.operation, reason: visit.reason, findingKey: visit.findingKey, component, knownAt: at, validFrom: at, validUntil: input.validUntil || null, status: 'confirmed', evidenceIds: comparable.map(item => item.id), source: input.reason, finding: input.finding || visit.finding || visit.comment || '', preparation: input.preparation || visit.preparation || '', actor: input.actor || 'Диспетчер' };
         this.db.prepare('INSERT INTO object_conditions VALUES (?,?,?)').run(condition.id, input.scope === 'operation' ? null : visit.entities.object, encode(condition));
+        for (const evidence of comparable) if (evidence.id !== visit.id && evidence.learningDecision === 'confirmed') {
+          const original = this.visits(at).find(item => item.id === evidence.id);
+          if (original?.learningDecision === 'pending') this.recordVisit({ ...original, knownAt: at, learningDecision: 'confirmed', decisionReason: input.reason }, input.reason, input.actor);
+        }
       }
-      this.audit(visit.entities.object, `DECISION_${input.action.toUpperCase()}`, input.reason, { visitId: visit.id }, condition, input.actor, at);
-      return condition || { action: input.action, visitId: visit.id };
+      const afterVisit = this.recordVisit({ ...visit, knownAt: at, learningDecision: input.action === 'confirm' ? 'confirmed' : input.action === 'reject' ? 'rejected' : 'visit', decisionReason: input.reason }, input.reason, input.actor);
+      this.audit(visit.entities.object, `DECISION_${input.action.toUpperCase()}`, input.reason, { visit }, { visit: afterVisit, condition }, input.actor, at);
+      return condition || { action: input.action, visitId: visit.id, visit: afterVisit };
+    })();
+  }
+  reviseVisit(id, input) {
+    return this.db.transaction(() => {
+      const visit = this.visits().find(item => item.id === id);
+      if (!visit || !Number.isFinite(Date.parse(input.at)) || Date.parse(input.at) < Date.parse(visit.knownAt)) throw new Error('Визит не найден или время исправления неверно.');
+      if (!String(input.reason || '').trim()) throw new Error('Укажите основание исправления.');
+      const change = {};
+      if (input.excluded !== undefined) {
+        if (typeof input.excluded !== 'boolean') throw new Error('Некорректный признак исключения.');
+        change.excluded = input.excluded;
+      }
+      if (input.deviationReason !== undefined) {
+        if (!Object.hasOwn(REASONS, input.deviationReason) || !String(input.finding || '').trim()) throw new Error('Укажите установленную причину и конкретную особенность.');
+        const matchingFinding = this.visits(input.at).find(item => item.reason === input.deviationReason && item.finding?.trim().toLocaleLowerCase('ru-RU') === input.finding.trim().toLocaleLowerCase('ru-RU'));
+        Object.assign(change, { reason: input.deviationReason, findingKey: input.findingKey || matchingFinding?.findingKey || `finding:${digest([input.deviationReason, input.finding.trim()]).slice(0, 16)}`, finding: String(input.finding).trim().slice(0, 2000), preparation: String(input.preparation || '').trim().slice(0, 2000), learningDecision: 'pending' });
+      }
+      if (!Object.keys(change).length) throw new Error('Укажите изменение визита.');
+      return this.recordVisit({ ...visit, ...change, knownAt: input.at }, input.reason, input.actor);
     })();
   }
   closeCondition(id, input) {
     return this.db.transaction(() => {
       const before = decode(this.db.prepare('SELECT payload_json FROM object_conditions WHERE id=?').get(id));
       if (!before) throw new Error('Особенность не найдена.');
+      if (!String(input.reason || '').trim()) throw new Error('Укажите основание устранения особенности.');
       if (!Number.isFinite(Date.parse(input.at)) || Date.parse(input.at) < Date.parse(before.knownAt)) throw new Error('Закрытие не может быть раньше подтверждения.');
       if (before.closedAt) throw new Error('Особенность уже закрыта.');
       const after = { ...before, closedAt: input.at };
@@ -201,9 +242,9 @@ export class ComplexityStore {
     })();
   }
   history(objectId) { return this.db.prepare('SELECT * FROM complexity_audit WHERE object_id=? OR object_id IS NULL ORDER BY rowid DESC LIMIT 100').all(objectId).map(row => ({ ...row, ...JSON.parse(row.payload_json), payload_json: undefined })); }
-  accuracy(at, zone, regionId = 'moscow') {
+  accuracy(at, zone, regionId = 'moscow', knowledgeAt = at) {
     const objects = new Set(this.objects().filter(item => item.regionId === regionId && (!zone || item.zone === zone || item.zoneId === zone)).map(item => item.id));
-    const all = this.visits(at).filter(visit => objects.has(visit.entities?.object) && visit.endedAt && Date.parse(visit.endedAt) <= Date.parse(at));
+    const all = this.visits(knowledgeAt).filter(visit => objects.has(visit.entities?.object) && visit.endedAt && Date.parse(visit.endedAt) <= Date.parse(at));
     const eligible = all.filter(visit => visit.eligible && !visit.excluded && Number.isFinite(visit.actualTechnical) && visit.forecast && !visit.forecast.override);
     const holdout = eligible.filter(visit => visit.partition === 'holdout' || visit.source === 'dispatcher');
     const stats = rows => rows.length ? { count: rows.length, mae: rows.reduce((sum, v) => sum + Math.abs(v.actualTechnical - v.forecast.technical), 0) / rows.length, fixedMae: rows.reduce((sum, v) => sum + Math.abs(v.actualTechnical - v.forecast.baseTechnical), 0) / rows.length, underestimated: rows.filter(v => v.actualTechnical > v.forecast.technical).length, overestimated: rows.filter(v => v.actualTechnical < v.forecast.technical).length, underMinutes: rows.reduce((sum, v) => sum + Math.max(0, v.actualTechnical - v.forecast.technical), 0) / rows.length, overMinutes: rows.reduce((sum, v) => sum + Math.max(0, v.forecast.technical - v.actualTechnical), 0) / rows.length } : { count: 0, mae: null, fixedMae: null, underestimated: 0, overestimated: 0, underMinutes: null, overMinutes: null };

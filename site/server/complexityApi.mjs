@@ -1,3 +1,5 @@
+import { objectAttention } from './complexityAttention.mjs';
+import { conditionEvidence, matchesConditionWork } from './durationModel.mjs';
 import { DEFAULT_MODEL, REASONS, WORK_KINDS, WORK_RULES } from './durationModel.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -21,22 +23,19 @@ export async function handleComplexity(request, registry) {
       const order = input.persist === false ? { ...input.order, durationSnapshot: registry.estimate(input.order, input.asOf || at) } : registry.prepareOrders([input.order], input.asOf || at)[0];
       return json({ snapshot: order.durationSnapshot, order });
     }
-    if (url.pathname === '/api/complexity/accuracy' && request.method === 'GET') return json(registry.accuracy(at, url.searchParams.get('zone'), url.searchParams.get('regionId') || 'moscow'));
+    if (url.pathname === '/api/complexity/accuracy' && request.method === 'GET') return json(registry.accuracy(at, url.searchParams.get('zone'), url.searchParams.get('regionId') || 'moscow', url.searchParams.get('review') === 'current' ? new Date().toISOString() : at));
     if (url.pathname === '/api/complexity/decisions' && request.method === 'POST') return json(registry.decide(await request.json()));
     const close = /^\/api\/complexity\/conditions\/([^/]+)$/.exec(url.pathname);
     if (close && request.method === 'PATCH') return json(registry.closeCondition(decodeURIComponent(close[1]), await request.json()));
     const visitMatch = /^\/api\/complexity\/visits\/([^/]+)$/.exec(url.pathname);
     if (visitMatch && request.method === 'PATCH') {
       const input = await request.json();
-      if (typeof input.excluded !== 'boolean' || !input.reason?.trim()) throw new Error('Укажите исключение факта и причину.');
-      const visit = registry.visits(input.at).find(item => item.id === decodeURIComponent(visitMatch[1]));
-      if (!visit || !Number.isFinite(Date.parse(input.at)) || Date.parse(input.at) < Date.parse(visit.knownAt)) throw new Error('Визит не найден или время исправления неверно.');
-      return json(registry.db.transaction(() => registry.recordVisit({ ...visit, excluded: input.excluded, knownAt: input.at }, input.reason, input.actor))());
+      return json(registry.reviseVisit(decodeURIComponent(visitMatch[1]), input));
     }
     const objectMatch = /^\/api\/complexity\/objects\/([^/]+)$/.exec(url.pathname);
     const originalExampleFor = object => object.examples?.find(example => {
       try { return allKinds || registry.estimate(example, at).kind === kind; } catch { return false; }
-    }) || { id: `PREVIEW-${object.id}-${kind}`, objectId: object.id, serviceEntities: { object: object.id }, workType: WORK_KINDS[allKinds ? 'local' : kind], skill: kind === 'information' ? 'LOCAL' : undefined, serviceType: kind === 'information' ? 'Информация' : undefined, sourceData: kind === 'information' ? { bk_type: 'Глобальная проблема', hd_type: 'Информация' } : undefined };
+    }) || { id: `PREVIEW-${object.id}-${kind}`, objectId: object.id, serviceEntities: { object: object.id }, workType: WORK_KINDS[allKinds ? 'local' : kind], skill: kind === 'information' ? 'EMERGENCY' : undefined, serviceType: kind === 'information' ? 'Информация' : undefined, sourceData: kind === 'information' ? { bk_type: 'Глобальная проблема', hd_type: 'Информация' } : undefined };
     const exampleFor = object => {
       const example = originalExampleFor(object);
       if (url.searchParams.get('volume') !== 'standard') return example;
@@ -46,13 +45,17 @@ export async function handleComplexity(request, registry) {
       const object = registry.object(decodeURIComponent(objectMatch[1]));
       if (!object) return json({ error: 'Объект не найден.' }, 404);
       const example = exampleFor(object);
-      return json({ object, entities: registry.entities(object.id), estimate: registry.estimate(example, at), example, visits: registry.visits(at, object.id).sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt))), conditions: registry.conditions(object.id).filter(condition => Date.parse(condition.knownAt) <= Date.parse(at)).map(condition => condition.closedAt && Date.parse(condition.closedAt) > Date.parse(at) ? { ...condition, closedAt: null } : condition), audit: registry.history(object.id).filter(item => Date.parse(item.at) <= Date.parse(at)), kinds: WORK_KINDS, reasons: REASONS });
+      const estimate = registry.estimate(example, at);
+      const reviewAt = url.searchParams.get('review') === 'current' ? new Date().toISOString() : at;
+      const visits = registry.visits(reviewAt);
+      return json({ reviewAt, object, entities: registry.entities(object.id), estimate, example, visits: visits.filter(visit => visit.entities?.object === object.id && Date.parse(visit.endedAt || visit.startedAt) <= Date.parse(at)).sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt))), conditions: registry.conditions(object.id).filter(condition => Date.parse(condition.knownAt) <= Date.parse(reviewAt)).map(condition => ({ ...condition, closedAt: condition.closedAt && Date.parse(condition.closedAt) > Date.parse(reviewAt) ? null : condition.closedAt, relevant: matchesConditionWork(condition, estimate), evidenceCount: conditionEvidence(condition, visits, reviewAt, registry.model(reviewAt)).length, evidence: (condition.evidenceIds || []).map(id => visits.find(visit => visit.id === id)).filter(Boolean).map(visit => ({ id: visit.id, objectId: visit.entities.object, address: registry.object(visit.entities.object)?.address, kind: visit.kind, endedAt: visit.endedAt, orderId: visit.orderId, engineerName: visit.engineerName || visit.engineerId, finding: visit.finding })) })), audit: registry.history(object.id).filter(item => Date.parse(item.at) <= Date.parse(reviewAt)), kinds: WORK_KINDS, reasons: REASONS });
     }
     if (url.pathname === '/api/complexity/objects' && request.method === 'GET') {
       const q = (url.searchParams.get('q') || '').toLocaleLowerCase('ru-RU');
       const zone = url.searchParams.get('zone');
       const region = url.searchParams.get('regionId') || 'moscow';
       const allVisits = registry.visits(at);
+      const attentionVisits = url.searchParams.get('review') === 'current' ? registry.visits(new Date().toISOString()) : allVisits;
       const objects = registry.objects().filter(object => object.regionId === region && (!zone || object.zone === zone || object.zoneId === zone || object.district === zone) && `${object.address} ${object.id}`.toLocaleLowerCase('ru-RU').includes(q));
       return json(objects.map(object => {
         const example = exampleFor(object);
@@ -62,7 +65,7 @@ export async function handleComplexity(request, registry) {
         const hasRelevantExample = object.examples?.some(item => item.id === example.id);
         const recurring = visits.filter(visit => !['unknown', 'customer', 'other'].includes(visit.reason) && Math.abs(visit.actualTechnical - visit.factorTechnical) >= 8).length >= 3;
         const state = estimate.observationCount ? 'confirmed' : recurring ? 'review' : 'estimated';
-        return { id: object.id, address: object.address, coords: object.coords, zone: object.zone, zoneId: object.zoneId, district: object.district, total: estimate.total, delta: estimate.total - estimate.baseTechnical - estimate.documents, coefficient: estimate.coefficient, observations: visits.length, visitCount, state, insufficient: !hasRelevantExample || visits.length < 3, kind: estimate.kind, estimate, orderIds: object.examples?.map(item => item.id) || [], entities: estimate.entities };
+        return { attention: objectAttention(object, attentionVisits, at, order => registry.estimate(order, at)), id: object.id, address: object.address, coords: object.coords, zone: object.zone, zoneId: object.zoneId, district: object.district, total: estimate.total, delta: estimate.total - estimate.baseTechnical - estimate.documents, coefficient: estimate.coefficient, observations: visits.length, visitCount, state, insufficient: !estimate.observationCount && (!hasRelevantExample || visits.length < 3), kind: estimate.kind, estimate, orderIds: object.examples?.map(item => item.id) || [], entities: estimate.entities };
       }));
     }
     return json({ error: 'Неизвестный адрес или метод реестра объектов.' }, 404);

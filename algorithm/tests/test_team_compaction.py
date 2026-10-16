@@ -25,7 +25,7 @@ PLAN = (
     / 'algorithm'
     / 'artifacts'
     / 'current'
-    / 'exact-205-of-205-28-teams-clean-automatic.json'
+    / 'initial-exact-205-of-205-retimed.json'
 )
 
 

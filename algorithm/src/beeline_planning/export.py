@@ -151,6 +151,11 @@ def materialization_result_dict(result: MaterializationResult) -> dict[str, Any]
                 'destination_location_id': result.failure.destination_location_id,
                 'departure_at': result.failure.departure_at,
                 'reason': result.failure.reason,
+                'constraint': result.failure.constraint,
+                'service_start_at': result.failure.service_start_at,
+                'service_end_at': result.failure.service_end_at,
+                'limit_at': result.failure.limit_at,
+                'violation_minutes': result.failure.violation_minutes,
             }
             if result.failure
             else None

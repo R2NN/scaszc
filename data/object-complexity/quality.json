@@ -1,224 +1,70 @@
 {
-  "method": "Independent stage simulator; chronological holdout. Same eligible technical facts for both models.",
-  "results": [
+  "seed": 27082026,
+  "anchor": "2026-08-17",
+  "count": 271,
+  "mae": 9.656826568265682,
+  "fixedMae": 21.10332103321033,
+  "underestimated": 57,
+  "overestimated": 195,
+  "underMinutes": 5.025830258302583,
+  "overMinutes": 4.630996309963099,
+  "eligible": 1934,
+  "total": 2074,
+  "coverage": 0.9324975891996142,
+  "trainingCount": 1663,
+  "byKind": [
     {
-      "seed": 17082026,
-      "version": "complexity-v1",
-      "anchor": "2026-08-17",
-      "objects": 195,
-      "visits": 1780,
-      "count": 260,
-      "mae": 6.85,
-      "fixedMae": 18.53846153846154,
-      "underestimated": 79,
-      "overestimated": 169,
-      "underMinutes": 2.753846153846154,
-      "overMinutes": 4.096153846153846,
-      "eligible": 1640,
-      "total": 1780,
-      "coverage": 0.9213483146067416,
-      "trainingCount": 1380,
-      "byKind": [
-        {
-          "kind": "connection",
-          "count": 111,
-          "mae": 7.297297297297297,
-          "fixedMae": 19,
-          "underestimated": 25,
-          "overestimated": 85,
-          "underMinutes": 1.4054054054054055,
-          "overMinutes": 5.891891891891892
-        },
-        {
-          "kind": "local",
-          "count": 111,
-          "mae": 5.54054054054054,
-          "fixedMae": 19.63063063063063,
-          "underestimated": 42,
-          "overestimated": 60,
-          "underMinutes": 3.4684684684684686,
-          "overMinutes": 2.0720720720720722
-        },
-        {
-          "kind": "equipment",
-          "count": 14,
-          "mae": 2.7142857142857144,
-          "fixedMae": 7.785714285714286,
-          "underestimated": 4,
-          "overestimated": 8,
-          "underMinutes": 1.5,
-          "overMinutes": 1.2142857142857142
-        },
-        {
-          "kind": "emergency",
-          "count": 17,
-          "mae": 14.647058823529411,
-          "fixedMae": 20.823529411764707,
-          "underestimated": 6,
-          "overestimated": 11,
-          "underMinutes": 8.117647058823529,
-          "overMinutes": 6.529411764705882
-        },
-        {
-          "kind": "information",
-          "count": 7,
-          "mae": 9.857142857142858,
-          "fixedMae": 9.857142857142858,
-          "underestimated": 2,
-          "overestimated": 5,
-          "underMinutes": 2.2857142857142856,
-          "overMinutes": 7.571428571428571
-        }
-      ],
-      "temporalSplit": "2026-08-01",
-      "measure": "Технические минуты; одинаковые пригодные факты, прогноз до визита",
-      "limitations": "Синтетическая независимая симуляция, а не доказательство качества на производственных данных."
+      "kind": "connection",
+      "count": 127,
+      "mae": 10.125984251968504,
+      "fixedMae": 24.905511811023622,
+      "underestimated": 14,
+      "overestimated": 108,
+      "underMinutes": 3.338582677165354,
+      "overMinutes": 6.78740157480315
     },
     {
-      "seed": 17082027,
-      "version": "complexity-v1",
-      "anchor": "2026-08-17",
-      "objects": 195,
-      "visits": 1786,
-      "count": 267,
-      "mae": 9.05243445692884,
-      "fixedMae": 20.280898876404493,
-      "underestimated": 81,
-      "overestimated": 170,
-      "underMinutes": 4.921348314606742,
-      "overMinutes": 4.131086142322097,
-      "eligible": 1646,
-      "total": 1786,
-      "coverage": 0.921612541993281,
-      "trainingCount": 1379,
-      "byKind": [
-        {
-          "kind": "connection",
-          "count": 125,
-          "mae": 9.424,
-          "fixedMae": 20.192,
-          "underestimated": 25,
-          "overestimated": 96,
-          "underMinutes": 3.48,
-          "overMinutes": 5.944
-        },
-        {
-          "kind": "local",
-          "count": 97,
-          "mae": 6.072164948453608,
-          "fixedMae": 12.824742268041238,
-          "underestimated": 44,
-          "overestimated": 45,
-          "underMinutes": 4.618556701030927,
-          "overMinutes": 1.4536082474226804
-        },
-        {
-          "kind": "equipment",
-          "count": 14,
-          "mae": 12.642857142857142,
-          "fixedMae": 21.5,
-          "underestimated": 5,
-          "overestimated": 8,
-          "underMinutes": 11.214285714285714,
-          "overMinutes": 1.4285714285714286
-        },
-        {
-          "kind": "emergency",
-          "count": 23,
-          "mae": 17.608695652173914,
-          "fixedMae": 55.56521739130435,
-          "underestimated": 6,
-          "overestimated": 15,
-          "underMinutes": 11.73913043478261,
-          "overMinutes": 5.869565217391305
-        },
-        {
-          "kind": "information",
-          "count": 8,
-          "mae": 8.5,
-          "fixedMae": 8.5,
-          "underestimated": 1,
-          "overestimated": 6,
-          "underMinutes": 0.5,
-          "overMinutes": 8
-        }
-      ],
-      "temporalSplit": "2026-08-01",
-      "measure": "Технические минуты; одинаковые пригодные факты, прогноз до визита",
-      "limitations": "Синтетическая независимая симуляция, а не доказательство качества на производственных данных."
+      "kind": "local",
+      "count": 116,
+      "mae": 9.64655172413793,
+      "fixedMae": 18.57758620689655,
+      "underestimated": 37,
+      "overestimated": 65,
+      "underMinutes": 7.7155172413793105,
+      "overMinutes": 1.9310344827586208
     },
     {
-      "seed": 17082028,
-      "version": "complexity-v1",
-      "anchor": "2026-08-17",
-      "objects": 195,
-      "visits": 1786,
-      "count": 265,
-      "mae": 7.162264150943396,
-      "fixedMae": 16.173584905660377,
-      "underestimated": 80,
-      "overestimated": 168,
-      "underMinutes": 3.5320754716981133,
-      "overMinutes": 3.630188679245283,
-      "eligible": 1646,
-      "total": 1786,
-      "coverage": 0.921612541993281,
-      "trainingCount": 1381,
-      "byKind": [
-        {
-          "kind": "connection",
-          "count": 128,
-          "mae": 8.1171875,
-          "fixedMae": 20.25,
-          "underestimated": 30,
-          "overestimated": 92,
-          "underMinutes": 2.984375,
-          "overMinutes": 5.1328125
-        },
-        {
-          "kind": "local",
-          "count": 89,
-          "mae": 4.955056179775281,
-          "fixedMae": 11.50561797752809,
-          "underestimated": 31,
-          "overestimated": 49,
-          "underMinutes": 3.0224719101123596,
-          "overMinutes": 1.9325842696629214
-        },
-        {
-          "kind": "equipment",
-          "count": 16,
-          "mae": 3.375,
-          "fixedMae": 15.875,
-          "underestimated": 5,
-          "overestimated": 9,
-          "underMinutes": 2.625,
-          "overMinutes": 0.75
-        },
-        {
-          "kind": "emergency",
-          "count": 25,
-          "mae": 7.32,
-          "fixedMae": 9.4,
-          "underestimated": 11,
-          "overestimated": 14,
-          "underMinutes": 2.96,
-          "overMinutes": 4.36
-        },
-        {
-          "kind": "information",
-          "count": 7,
-          "mae": 25.857142857142858,
-          "fixedMae": 25.857142857142858,
-          "underestimated": 3,
-          "overestimated": 4,
-          "underMinutes": 24.142857142857142,
-          "overMinutes": 1.7142857142857142
-        }
-      ],
-      "temporalSplit": "2026-08-01",
-      "measure": "Технические минуты; одинаковые пригодные факты, прогноз до визита",
-      "limitations": "Синтетическая независимая симуляция, а не доказательство качества на производственных данных."
+      "kind": "equipment",
+      "count": 10,
+      "mae": 3.6,
+      "fixedMae": 4.7,
+      "underestimated": 2,
+      "overestimated": 8,
+      "underMinutes": 0.2,
+      "overMinutes": 3.4
+    },
+    {
+      "kind": "emergency",
+      "count": 15,
+      "mae": 10.266666666666667,
+      "fixedMae": 22.133333333333333,
+      "underestimated": 3,
+      "overestimated": 12,
+      "underMinutes": 2.6,
+      "overMinutes": 7.666666666666667
+    },
+    {
+      "kind": "information",
+      "count": 3,
+      "mae": 7.333333333333333,
+      "fixedMae": 7.333333333333333,
+      "underestimated": 1,
+      "overestimated": 2,
+      "underMinutes": 0.6666666666666666,
+      "overMinutes": 6.666666666666667
     }
-  ]
+  ],
+  "temporalSplit": "2026-08-03",
+  "measure": "Технические минуты; одинаковые пригодные факты, прогноз до визита",
+  "limitations": "Синтетическая независимая симуляция, а не доказательство качества на производственных данных."
 }

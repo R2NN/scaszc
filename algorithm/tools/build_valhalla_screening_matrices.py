@@ -187,7 +187,11 @@ def build(args: argparse.Namespace) -> int:
                         pending.append(((source_indices, target_indices), depth, busy_retries + 1))
                         continue
                     except urllib.error.URLError as error:
-                        raise RuntimeError('Valhalla matrix service is unreachable') from error
+                        if busy_retries >= 3:
+                            raise RuntimeError('Valhalla matrix service is unreachable after bounded retries') from error
+                        time.sleep(min(2 ** busy_retries, 4))
+                        pending.append(((source_indices, target_indices), depth, busy_retries + 1))
+                        continue
                     except (OSError, KeyError, ValueError) as error:
                         if len(source_indices) * len(target_indices) <= 1:
                             print(json.dumps({

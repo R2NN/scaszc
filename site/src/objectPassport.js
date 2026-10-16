@@ -1,5 +1,5 @@
 const requests = new Map();
-const passportUrl = (id, at, kind, volume) => `/api/complexity/objects/${encodeURIComponent(id)}?${new URLSearchParams({ at, kind, volume })}`;
+const passportUrl = (id, at, kind, volume) => `/api/complexity/objects/${encodeURIComponent(id)}?${new URLSearchParams({ at, kind, volume, review: 'current' })}`;
 
 /** Return already loaded details without flashing a loading state on reopening. */
 export function cachedObjectPassport(id, at, kind = 'local', volume = 'order') {

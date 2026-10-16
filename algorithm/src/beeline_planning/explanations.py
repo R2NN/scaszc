@@ -255,7 +255,7 @@ def build_explanation_bundle(
     previous_plan: ProposedPlan | None = None,
     event: Event | None = None,
     unserved_reasons: Mapping[str, str] | None = None,
-    insertion_diagnostics: Mapping[str, Mapping[str, int]] | None = None,
+    insertion_diagnostics: Mapping[str, Mapping[str, Any]] | None = None,
     candidate_evaluations: Mapping[str, Sequence[CandidateEvaluation]] | None = None,
     search_budget_exhausted: bool = False,
     exact_route_checks: int | None = None,
@@ -368,6 +368,8 @@ def build_explanation_bundle(
                     else 'STATIC_ELIGIBLE_BUT_UNSERVED'
                 )
             detail = dict(diagnostics.get(job_id, {}))
+            if detail.get('routing_unverified'):
+                reason = 'ROUTING_UNVERIFIED'
             if detail and reason == 'STATIC_ELIGIBLE_BUT_UNSERVED':
                 reason = 'NO_EXACT_FEASIBLE_INSERTION_IN_CURRENT_ROUTES'
             base.update({

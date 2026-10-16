@@ -28,13 +28,15 @@ const loadLocalVariables = () => {
 };
 
 const localVariables = loadLocalVariables();
-const operations = createOperationsApi({ seedFromBase: true, routingOptions: { geoapifyKey: localVariables.GEOAPIFY_API_KEY }, aiOptions: { apiKey: localVariables.YANDEX_AI_API_KEY, folderId: localVariables.YANDEX_AI_FOLDER_ID } });
 
 const localPlanningApi = () => ({
   name: "beego-local-planning-api",
   configureServer(server) {
+    let operations;
+    server.httpServer?.once('close', () => operations?.store.close());
     server.middlewares.use(async (request, response, next) => {
       if (!request.url?.startsWith("/api/")) return next();
+      operations ||= createOperationsApi({ seedFromBase: true, routingOptions: { geoapifyKey: localVariables.GEOAPIFY_API_KEY }, aiOptions: { apiKey: localVariables.YANDEX_AI_API_KEY, folderId: localVariables.YANDEX_AI_FOLDER_ID } });
 
       try {
         const chunks = [];
