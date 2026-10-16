@@ -1285,8 +1285,8 @@ function MapCanvas({complexityMode=false,complexityPanelOpen=true,onCloseComplex
     if(!map)return undefined;
     const clearSelection=event=>{
       const target=event.originalEvent?.target;
-      if(target?.closest?.('.map-order-marker,.shift-map-crew-marker,.route-start-marker,.maplibregl-popup,.maplibregl-ctrl,.map-hierarchy-panel,.map-theme-picker'))return;
-      if(map.getLayer('cx-points')&&map.getLayoutProperty('cx-points','visibility')!=='none'&&map.queryRenderedFeatures(event.point,{layers:['cx-points','cx-point-label','cx-clusters','cx-cluster-label']}).length)return;
+      if(target?.closest?.('.map-order-marker,.shift-map-crew-marker,.route-start-marker,.cx-cluster-marker,.maplibregl-popup,.maplibregl-ctrl,.map-hierarchy-panel,.map-theme-picker'))return;
+      if(map.getLayer('cx-points')&&map.getLayoutProperty('cx-points','visibility')!=='none'&&map.queryRenderedFeatures(event.point,{layers:['cx-points','cx-point-label']}).length)return;
       if(map.getLayer('planned-route-hit')&&map.queryRenderedFeatures(event.point,{layers:['planned-route-hit']}).length)return;
       clearShiftHoverInfo();
       markersRef.current.forEach(item=>item.popup?.remove());

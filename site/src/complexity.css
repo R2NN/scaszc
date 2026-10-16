@@ -64,5 +64,29 @@
 .cx-fact-draft-status{display:flex;gap:10px;align-items:center;justify-content:space-between;font-size:11px;line-height:1.5}.cx-fact-draft-status button{border:0;background:transparent;color:inherit;text-decoration:underline;cursor:pointer;white-space:nowrap}
 
 .cx-group-summary{padding:14px 16px;border-bottom:1px solid var(--cx-line);max-height:220px;overflow:auto;background:var(--cx-soft);font-size:12px}
+
+/* Visit-time groups share BeeGo surfaces; their size follows the text, never the count. */
+.cx-map-active .maplibregl-marker.cx-cluster-marker{visibility:visible}
+.cx-cluster-marker{width:max-content;height:34px;z-index:2}
+.cx-cluster-marker:has(:is(:hover,:focus-visible)){z-index:3}
+.cx-cluster-chip{box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:7px;min-width:34px;max-width:124px;height:34px;padding:0 10px;border:1px solid var(--bee-border,#d9dee7);border-radius:10px;background:var(--bee-surface,#fff);color:var(--bee-text,#282828);box-shadow:0 2px 7px #18242b24,0 1px 2px #18242b12;font-family:inherit;line-height:1;white-space:nowrap;cursor:pointer;transition:background .16s,border-color .16s,box-shadow .16s}
+.cx-cluster-count{font-size:15px;font-weight:750;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.cx-cluster-increased{display:inline-flex;align-items:center;padding:4px 5px;border-radius:5px;background:#fff2da;color:#865512;font-size:11px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:0}
+.cx-cluster-chip:hover{border-color:#d9b53b;background:#fffbee;box-shadow:0 3px 10px #18242b2b}
+.cx-cluster-chip:focus-visible{outline:2px solid #e1b719;outline-offset:3px;border-color:#c4a536}
+.cx-cluster-chip:active{background:#fff4bd}
+.cx-cluster-tooltip{position:absolute;z-index:6;box-sizing:border-box;width:238px;max-width:calc(100% - 16px);padding:10px 12px;border:1px solid var(--bee-border,#d9dee7);border-radius:10px;background:var(--bee-surface,#fff);color:var(--bee-text,#282828);box-shadow:0 5px 18px #18242b26;font-family:inherit;font-size:12px;line-height:1.5;pointer-events:none}
+.cx-cluster-tooltip[hidden]{display:none}
+.cx-cluster-tooltip>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.cx-cluster-tooltip span{color:var(--bee-muted-text,#6e788a)}
+.cx-cluster-tooltip b{font-variant-numeric:tabular-nums;font-weight:650}
+.cx-time-panel .cx-cluster-key{grid-column:1/-1;color:var(--cx-muted)}
+.cx-cluster-key>b{display:inline-grid;place-items:center;width:15px;height:17px;border-radius:4px;background:#fff2da;color:#865512;font-size:12px}
+[data-theme='dark'] .cx-cluster-chip{background:#2c3138;border-color:#505966;box-shadow:0 2px 8px #070c1440;color:#f5f1e8}
+[data-theme='dark'] .cx-cluster-increased,[data-theme='dark'] .cx-cluster-key>b{background:#433720;color:#e5bc76}
+[data-theme='dark'] .cx-cluster-chip:hover{background:#37382f;border-color:#a48d45}
+[data-theme='dark'] .cx-cluster-chip:active{background:#44402e}
+[data-theme='dark'] .cx-cluster-tooltip{background:#2c3138;border-color:#505966}
+@media(prefers-reduced-motion:reduce){.cx-cluster-chip{transition:none}}
 .cx-group-summary header{display:flex;justify-content:space-between;align-items:center}.cx-group-summary header button{border:0;background:none;color:inherit;cursor:pointer}.cx-group-summary p{display:grid;gap:5px;border-bottom:1px solid var(--cx-line);padding-bottom:10px}.cx-group-summary span,.cx-group-summary small{font-size:11px;color:var(--cx-muted);line-height:1.5}
 .cx-map-context{font-size:11px;color:var(--cx-muted);padding:0 16px;margin:10px 0}.cx-preparation{display:block;border-left:3px solid #ffd21f;padding-left:10px;font-size:12px;line-height:1.5}.cx-condition-summary small{color:var(--cx-muted);font-size:11px}.cx-visit-person{font-size:12px}.cx-decision-state,.cx-saved{border-radius:7px;padding:8px 10px;background:var(--cx-soft);font-size:11px;color:var(--cx-muted)}.cx-saved{color:#24775c}.cx-condition details p{font-size:11px}.cx-audit details p{font-size:12px}.cx-action>span>small{display:block;margin-top:5px;color:var(--cx-muted);font-weight:400;line-height:1.5}
