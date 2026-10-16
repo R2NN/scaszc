@@ -3,12 +3,47 @@ from types import SimpleNamespace
 from pathlib import Path
 import sys
 import unittest
+import json
+import tempfile
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1] / 'tools'))
-from improve_exact_plan import _insertion_master, _zero_travel_window_conflict
+from improve_exact_plan import _insertion_job_order, _insertion_master, _save_insertion_checkpoint, _zero_travel_window_conflict
+from beeline_planning.domain import Priority
+from beeline_routing.export import payload_sha256
 
 
 class InsertionDiagnosticsTests(unittest.TestCase):
+    def test_validated_insertion_survives_interruption_before_next_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'checkpoint.json'
+            payload = {'publication_allowed': True, 'status': 'EXACT_VALID',
+                       'plan': {'unserved_job_ids': ['B']},
+                       'validation': {'status': 'VALID'}}
+            with patch('improve_exact_plan.materialization_result_dict', return_value=payload):
+                _save_insertion_checkpoint(output, object(), dataset_sha256='new-data',
+                                           source_plan='initial.json', inserted_jobs=['A'], diagnostics={})
+            saved = json.loads(output.read_text())
+            checksum = saved.pop('content_sha256')
+            self.assertEqual(checksum, payload_sha256(saved))
+            self.assertEqual(saved['dataset_sha256'], 'new-data')
+            self.assertEqual(saved['inserted_jobs'], ['A'])
+            with patch('improve_exact_plan.materialization_result_dict', return_value={'publication_allowed': False}):
+                with self.assertRaises(ValueError):
+                    _save_insertion_checkpoint(output, object(), dataset_sha256='new-data',
+                                               source_plan='initial.json', inserted_jobs=['B'], diagnostics={})
+            self.assertEqual(json.loads(output.read_text())['inserted_jobs'], ['A'])
+
+    def test_emergency_insertion_precedes_ordinary_jobs_regardless_of_id(self):
+        dataset = SimpleNamespace(jobs={
+            'A-normal': SimpleNamespace(priority=Priority.NORMAL),
+            'Z-urgent': SimpleNamespace(priority=Priority.URGENT),
+            'B-urgent': SimpleNamespace(priority=Priority.URGENT),
+        })
+        self.assertEqual(_insertion_job_order(dataset, dataset.jobs), [
+            'B-urgent', 'Z-urgent', 'A-normal',
+        ])
+
     def test_window_conflict_reports_the_displaced_job_and_exact_minutes(self):
         day = datetime.fromisoformat('2026-08-17T08:00:00+03:00')
         engineer = SimpleNamespace(shift_start=day, shift_end=day + timedelta(hours=10), max_route_minutes=600)

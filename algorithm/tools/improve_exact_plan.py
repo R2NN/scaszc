@@ -20,6 +20,7 @@ from beeline_routing.cache import RoutingCache
 from beeline_routing.cli import create_route_client
 from beeline_routing.export import payload_sha256, write_json_atomic
 from beeline_routing.oracle import ExactRoutingOracle
+from beeline_planning.domain import Priority
 
 
 def _master(dataset, routes: dict[str, list[str]], unserved: set[str]) -> MasterSolution:
@@ -101,6 +102,31 @@ def _zero_travel_window_feasible(dataset, engineer_id: str, job_ids: list[str]) 
     return _zero_travel_window_conflict(dataset, engineer_id, job_ids) is None
 
 
+def _insertion_job_order(dataset, job_ids):
+    """Try every unserved emergency before ordinary work can consume capacity."""
+    return sorted(job_ids, key=lambda job_id: (
+        dataset.jobs[job_id].priority != Priority.URGENT, job_id,
+    ))
+
+
+def _save_insertion_checkpoint(output, result, *, dataset_sha256, source_plan,
+                               inserted_jobs, diagnostics):
+    """Keep each validated improvement if a later insertion exhausts its budget."""
+    payload = materialization_result_dict(result)
+    if not payload['publication_allowed']:
+        raise ValueError('An insertion checkpoint must pass independent validation')
+    payload.update({
+        'artifact_type': 'EXACT_PLAN_INSERTION_IMPROVEMENT',
+        'dataset_sha256': dataset_sha256,
+        'source_plan': str(source_plan),
+        'inserted_jobs': list(inserted_jobs),
+        'unserved_insertion_diagnostics': diagnostics,
+        'checkpoint': True,
+    })
+    payload['content_sha256'] = payload_sha256(payload)
+    write_json_atomic(output, payload)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Insert unserved jobs only when the resulting exact route stays valid.'
@@ -152,7 +178,7 @@ def main() -> int:
     changed = True
     while changed:
         changed = False
-        for job_id in sorted(tuple(unserved)):
+        for job_id in _insertion_job_order(dataset, unserved):
             selected = None
             counters = {
                 'static_eligible_engineers': len(
@@ -207,6 +233,11 @@ def main() -> int:
                 {'job_id': job_id, 'engineer_id': engineer_id, 'position': position + 1}
             )
             insertion_diagnostics.pop(job_id, None)
+            _save_insertion_checkpoint(
+                args.output, result, dataset_sha256=dataset.dataset_sha256,
+                source_plan=args.input_plan, inserted_jobs=inserted,
+                diagnostics=insertion_diagnostics,
+            )
             changed = True
 
     final_master = _master(dataset, routes, unserved)
