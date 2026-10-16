@@ -482,10 +482,19 @@
 
 /* A daily report is a compact operational dashboard, not an empty PDF canvas. */
 .report-layer:not(.assistant-layer) .shift-panel-body{overflow:auto;padding:0;scrollbar-gutter:stable}
-.daily-report-toolbar{position:relative;z-index:4;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 28px;border-bottom:1px solid #e7eaf0;background:#fff}
-.daily-report-toolbar>div{display:flex;align-items:center;gap:16px;min-width:0}
+.daily-report-toolbar{position:relative;z-index:4;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px;padding:18px 28px;border-bottom:1px solid #e7eaf0;background:#fff}
+.daily-report-toolbar>div{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;min-width:0}
 .daily-report-toolbar small,.daily-report-history>div:first-child small,.daily-report-headline small,.daily-report-comparison small{font-size:10px;font-weight:850;letter-spacing:.1em;color:#947000}
 .daily-report-toolbar>span{color:#76818d;font-size:12px;line-height:1.4;text-align:right}
+.daily-report-export{display:inline-flex;align-items:center;justify-content:center;gap:9px;flex-shrink:0;box-sizing:border-box;min-height:40px;padding:9px 12px;border:1px solid var(--bee-border,#d9dee7);border-radius:10px;background:var(--bee-surface,#fff);color:var(--bee-text,#282828);font-size:12px;font-weight:650;line-height:1.4;text-decoration:none;box-shadow:0 1px 3px #18242b0a;transition:background .16s,border-color .16s}
+.daily-report-export:visited{color:var(--bee-text,#282828)}
+.daily-report-export svg{flex-shrink:0;color:var(--bee-muted-text,#6e788a)}
+.daily-report-toolbar .daily-report-export small{padding:3px 5px;border-radius:5px;background:var(--bee-background,#f0f3f5);color:var(--bee-muted-text,#6e788a);font-size:9px;font-weight:700;letter-spacing:.04em}
+.daily-report-export:hover{border-color:#d8bb50;background:#fffbee}
+.daily-report-export:focus-visible{outline:2px solid #e1b719;outline-offset:3px}
+.app-shell.dark .daily-report-export:hover{background:#37382f;border-color:#a48d45}
+@media(max-width:620px){.daily-report-export{max-width:100%;flex-wrap:wrap;justify-content:flex-start}}
+@media(prefers-reduced-motion:reduce){.daily-report-export{transition:none}}
 .report-date-control{position:relative;top:auto;left:auto;transform:none;z-index:8}
 .report-date-control .date-switch{gap:5px}
 .report-date-control .date-switch button{height:39px;min-width:0}

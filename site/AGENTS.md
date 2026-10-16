@@ -10,6 +10,8 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## Durable product direction
 
+- The visit-time panel shares the Orders workspace open/close state: after closing it, one click on «Заявки» or «Время на объектах» reopens it, preserving filters and camera. Download actions such as duration export use styled secondary buttons with a download icon and a quiet format badge, never default blue underlined links. Keep their toolbar responsive and omit empty-state instructions when a saved plan is already selected.
+
 - In «Время на объектах», clusters are compact rounded surface chips with a thin border and light shadow, never black discs or count-scaled circles. Show only the object count and an optional small amber «↑ N» indicator for increased time; omit the indicator at zero and omit words inside the chip. Explain available aggregate counts in a hover/keyboard-focus tooltip and the arrow in the legend. Use matching charcoal surfaces in dark mode, restrained yellow only on interaction, and keep the existing single map, filters, route selection and passport behaviour.
 
 - A fresh planning acceptance run must use the active duration snapshots and dataset checksum. Never present a retained plan from another model or dataset as its result. Keep actual search timestamps separate from the simulated planning date, verify the candidate in a separate database and origin, and preserve the running stand.

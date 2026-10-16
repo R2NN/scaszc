@@ -1361,7 +1361,7 @@ export function ShiftWorkspace({
               </div>
             </div>
           ) : null}
-          {tab === "report" && reportSection === 'pdf' ? <div className="daily-report-toolbar"><div><small>ДАТА ОТЧЁТА</small>{reportDateControl || <strong>{displayDate(selectedDate)}</strong>}</div><span>Выберите день с сохранённым планом</span>{shift?.plan?<a href={`/api/shifts/${shift.id}/report-data?download=durations&revision=${shift.revision}`} download>Экспорт длительностей (JSON)</a>:null}</div> : null}
+          {tab === 'report' && reportSection === 'pdf' ? <div className='daily-report-toolbar'><div><small>ДАТА ОТЧЁТА</small>{reportDateControl || <strong>{displayDate(selectedDate)}</strong>}</div>{!shift?.plan ? <span>Выберите день с сохранённым планом</span> : null}{shift?.plan ? <a className='daily-report-export' href={`/api/shifts/${shift.id}/report-data?download=durations&revision=${shift.revision}`} download aria-label='Скачать длительности в формате JSON'><Download size={16} aria-hidden='true'/><span>Скачать длительности</span><small>JSON</small></a> : null}</div> : null}
           {tab === "report" && reportSection === 'pdf' && !shift?.plan ? (
             <section className="shift-report-onboarding report-empty-state" aria-label="Как подготовить отчёт">
               <div className="shift-report-onboarding-intro">
