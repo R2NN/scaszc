@@ -251,7 +251,13 @@ export function analyzeResourceGaps(record) {
     let action;
     let reason;
     const genericPlannerReason = item.reasonCode === 'STATIC_ELIGIBLE_BUT_UNSERVED';
-    if (genericPlannerReason) {
+    const audited = record?.plan?.candidateDiagnostics?.[String(order.sourceId || order.id)];
+    if (item.diagnosticSummary) {
+      const shiftConflict = audited?.engineers?.some(engineer => engineer.rejections?.length === 1 && engineer.rejections[0] === 'SHIFT_WINDOW_NO_OVERLAP' && engineer.minimum_shift_overrun_minutes > 0);
+      label = shiftConflict ? 'Время работы выходит за смену' : audited?.proof_level === 'STATIC_NO_ELIGIBLE_ENGINEER' ? 'Нет подходящей бригады' : 'Проверенные вставки нарушают время';
+      reason = item.diagnosticSummary;
+      action = 'Откройте сохранённые проверки бригад и варианты маршрутов.';
+    } else if (genericPlannerReason) {
       label = 'Не назначена; варианты маршрута не подтверждены';
       reason = `В зоне «${zone}» есть бригады с навыком «${readableSkill}», однако готовый план не содержит допустимого назначения. Эта запись не указывает, какое именно условие оказалось решающим.`;
       action = 'Откройте проверку бригад: отдельно сравните навык, зону, окно, дорогу и текущую занятость.';
@@ -281,9 +287,9 @@ export function analyzeResourceGaps(record) {
     }
     const duration = numeric(order.duration);
     if (duration) action += ` На работу требуется ${duration} мин.`;
-    const orderNumber = String(order.sourceId || order.id || item.orderId).replace(/^.*:/, '');
+    const orderNumber = String(order.sourceData?.source_job_id || order.sourceId || order.id || item.orderId).replace(/^.*:/, '');
     const work = String(order.workType || order.serviceType || readableSkill);
-    const detail = genericPlannerReason
+    const detail = item.diagnosticSummary ? reason : genericPlannerReason
       ? `Заявка №${orderNumber} пока без назначения. ${reason}`
       : `Заявка №${orderNumber} не распределена (${zone}, окно ${window}, ${work}). Причина: ${reason}`;
     const key = `${zone}|${skill}|${label}`;

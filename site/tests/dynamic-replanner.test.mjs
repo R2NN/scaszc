@@ -103,6 +103,22 @@ test('candidate diagnostics report every constraint instead of one generic diagn
   assert.match(candidates[1].label, /навык|оснащение/i);
 });
 
+test('exact-plan diagnostics use stored route checks and never infer travel from distance', () => {
+  const order = { id: 'job', sourceId: 'J', start: '20:00', end: '22:00', duration: 128, equipment: 'CABLE_PACK', coords: [55.7, 37.6] };
+  const engineer = { id: 'crew', sourceId: 'E', name: 'Бригада', zone: 'Восток', equipment: [], startCoords: [55.8, 37.7] };
+  const plan = { status: 'EXACT_VALID', candidateDiagnostics: { J: { required_skill: 'INSTALL', positions: [], engineers: [{ engineer_id: 'E', rejections: ['SHIFT_WINDOW_NO_OVERLAP'], earliest_finish_without_travel: '2026-08-17T22:08:00+03:00', shift_end: '2026-08-17T22:00:00+03:00', minimum_shift_overrun_minutes: 8 }] } } };
+  const [result] = diagnoseOrderCandidates(order, [engineer], [], plan);
+  assert.equal(result.state, 'window');
+  assert.match(result.label, /8 мин/);
+  assert.equal(result.checks.find(item => item.key === 'equipment').ok, true);
+  assert.equal(result.checks.find(item => item.key === 'travel').ok, false);
+  assert.equal(result.candidate, null);
+  const [unknown] = diagnoseOrderCandidates(order, [engineer], [], { status: 'EXACT_VALID' });
+  assert.equal(unknown.state, 'coordinates');
+  assert.equal(unknown.candidate, null);
+  assert.doesNotMatch(unknown.checks[0].detail, /км|мин/);
+});
+
 test('a client-approved window shift is recalculated before it can be published', () => {
   const shiftedOrders = baseOrders.map(order => order.id === 'b' ? { ...order, start: '10:30', end: '13:00' } : order);
   const plan = buildDynamicReplan(shiftedOrders, [engineers[0]], basePlan, { type: 'CLIENT_WINDOW_SHIFT', orderId: 'b', time: '10:00' });

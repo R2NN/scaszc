@@ -1,0 +1,14 @@
+{
+  "orders": 205,
+  "engineers": 35,
+  "model_versions": {
+    "duration-2": 205
+  },
+  "total_service_minutes": 11452,
+  "original_constraints_unchanged": true,
+  "only_changed_job_column": "service_duration_min",
+  "changed_job_count": 101,
+  "liveRegistrySnapshotsMatch": true,
+  "liveRegistryMatchingOrders": 205,
+  "generatorPlanVersions": 0
+}

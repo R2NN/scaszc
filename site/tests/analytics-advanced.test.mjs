@@ -6,6 +6,19 @@ import { analyzeResourceGaps, analyzeShiftEfficiency, analyzeTeamCapacity, build
 const days = JSON.parse(await readFile(new URL('../public/data/analytics-history.json', import.meta.url), 'utf8')).days;
 const selected = days.at(-1);
 
+test('audited schedule conflicts take precedence over idle-skill guesses', () => {
+  const summary = 'Окончание 22:08, смена до 22:00: превышение 8 мин.';
+  const result = analyzeResourceGaps({
+    orders: [{ id: 'J', sourceData: { source_job_id: '123' }, zone: 'Юг', skill: 'INSTALL', duration: 128, start: '20:00', end: '22:00' }],
+    team: [{ id: 'idle', zone: 'Юг', skills: ['EMERGENCY'] }],
+    plan: { routes: [], candidateDiagnostics: { J: { proof_level: 'STATIC_NO_ELIGIBLE_ENGINEER', engineers: [{ rejections: ['SHIFT_WINDOW_NO_OVERLAP'], minimum_shift_overrun_minutes: 8 }] } }, unassigned: [{ orderId: 'J', diagnosticSummary: summary }] },
+  });
+  assert.equal(result.explanations[0].detail, summary);
+  assert.equal(result.explanations[0].orderNumber, '123');
+  assert.match(result.explanations[0].label, /смену/);
+  assert.doesNotMatch(result.explanations[0].label, /не умеют/);
+});
+
 test('weekly comparison uses two full, non-overlapping calendar weeks', () => {
   const result = compareWeeks(days, selected.date);
   assert.equal(result.current.start, '2026-08-10');

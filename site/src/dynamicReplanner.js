@@ -112,10 +112,51 @@ function insertionCandidate(route, engineer, order, orderById, notBefore = 0) {
   return best;
 }
 
+function exactCandidateDiagnostics(order, engineers, plan) {
+  const audit = plan.candidateDiagnostics?.[String(order.sourceId || order.id)];
+  return engineers.map(engineer => {
+    const id = String(engineer.sourceId || engineer.id);
+    const fact = audit?.engineers?.find(item => String(item.engineer_id) === id);
+    if (!fact) return { id: engineer.id, name: engineer.name || id, state: 'coordinates', label: 'Маршрутный вариант не проверен', candidate: null, checks: [{ key: 'travel', label: 'Маршрут', ok: false, detail: 'Нужен новый точный расчёт' }] };
+    const rejected = new Set(fact.rejections);
+    const positions = (audit.positions || []).filter(item => String(item.engineer_id) === id);
+    const exact = positions.filter(item => item.proof_level === 'EXACT_CURRENT_ORDER');
+    const conflicts = exact.filter(item => Number(item.violation_minutes) > 0).sort((a, b) => a.violation_minutes - b.violation_minutes);
+    const conflict = conflicts[0];
+    const clock = value => String(value || '').slice(11, 16);
+    const timeFailure = rejected.has('SHIFT_WINDOW_NO_OVERLAP');
+    const windowDetail = timeFailure && fact.minimum_shift_overrun_minutes > 0
+      ? `Окончание без дороги ${clock(fact.earliest_finish_without_travel)}, смена до ${clock(fact.shift_end)}: +${fact.minimum_shift_overrun_minutes} мин`
+      : conflict ? `Проверенный вариант: ${clock(conflict.service_start_at)}; предел ${clock(conflict.limit_at)}: +${conflict.violation_minutes} мин`
+        : timeFailure ? 'Окно заявки не пересекается с допустимой сменой' : `${order.start}–${order.end}`;
+    const checks = [
+      { key: 'skill', label: 'Навык', ok: !rejected.has('SKILL_MISSING'), detail: skillLabel(audit.required_skill) },
+      { key: 'zone', label: 'Зона', ok: !rejected.has('ZONE_MISMATCH'), detail: zoneOf(engineer) },
+      { key: 'equipment', label: 'Оснащение', ok: !rejected.has('PERSONAL_EQUIPMENT_MISSING'), detail: rejected.has('PERSONAL_EQUIPMENT_MISSING') ? 'Личного комплекта недостаточно' : 'Личное оснащение проверено отдельно от общего запаса' },
+      { key: 'window', label: 'Время', ok: !timeFailure && !conflict, detail: windowDetail },
+      { key: 'travel', label: 'Дорога', ok: exact.length > 0, detail: exact.length ? `Точных проверок: ${exact.length}` : 'Дорога не вычислялась: см. остальные ограничения' },
+      { key: 'busy', label: 'Вставки', ok: false, detail: positions.length ? `Проверено позиций: ${positions.length}; допустимая вставка не подтверждена` : 'Маршрутные вставки не проверялись' },
+    ];
+    const state = rejected.has('ZONE_MISMATCH') ? 'zone'
+      : rejected.has('ENGINEER_UNAVAILABLE') ? 'unavailable'
+        : rejected.has('SKILL_MISSING') || rejected.has('PERSONAL_EQUIPMENT_MISSING') ? 'skill'
+          : timeFailure ? 'window' : positions.length ? 'busy' : 'coordinates';
+    const label = state === 'zone' ? 'Другая зона'
+      : state === 'unavailable' ? 'Бригада недоступна'
+        : state === 'skill' ? 'Не пройдены навык или личное оснащение'
+          : timeFailure && fact.minimum_shift_overrun_minutes > 0 ? `Конец смены превышен на ${fact.minimum_shift_overrun_minutes} мин`
+            : state === 'window' ? 'Не подходит по времени смены'
+              : conflict ? `Конфликт времени: +${conflict.violation_minutes} мин`
+                : positions.length ? 'В текущий порядок не вставлена' : 'Маршрутный вариант не проверен';
+    return { id: engineer.id, name: engineer.name || id, state, label, checks, candidate: null, violationMinutes: timeFailure ? fact.minimum_shift_overrun_minutes : conflict?.violation_minutes };
+  }).sort((left, right) => (left.violationMinutes ?? Infinity) - (right.violationMinutes ?? Infinity));
+}
+
 // Explains an omitted order without pretending that the sealed plan contains an
 // exact infeasibility certificate. Travel in this check is an estimate only.
 export function diagnoseOrderCandidates(order, engineers = [], orders = [], plan = null) {
   if (!order) return [];
+  if (plan?.status === 'EXACT_VALID') return exactCandidateDiagnostics(order, engineers, plan);
   const orderById = new Map(orders.map(item => [String(item.id), item]));
   const routes = new Map((plan?.routes || []).map(route => [String(route.engineerId), route]));
   return engineers.map(engineer => {

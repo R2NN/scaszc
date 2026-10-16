@@ -273,7 +273,9 @@ function buildAnalytics(orders, team, plan, actual = null) {
     const order = orderById.get(String(assignment.orderId));
     return order?.end && assignment.plannedStart && minutesFromTime(assignment.plannedStart) > minutesFromTime(order.end);
   });
-  const distance = routeStats.length ? routeStats.reduce((sum, route) => sum + (Number(route.distanceKm) || 0), 0) : Number(metrics.distanceKm || 0);
+  const distance = assignments.length && assignments.every(item => Number.isFinite(Number(item.distanceM)))
+    ? assignments.reduce((sum, item) => sum + Number(item.distanceM), 0) / 1000
+    : routeStats.length ? routeStats.reduce((sum, route) => sum + (Number(route.distanceKm) || 0), 0) : Number(metrics.distanceKm || 0);
   const travel = routeStats.length ? routeStats.reduce((sum, route) => sum + (Number(route.travelMinutes) || 0), 0) : Number(metrics.travelMinutes || 0);
   const hasWaitingTiming = assignments.some(assignment => (assignment.arrivalAt || assignment.arrival) && assignment.plannedStart);
   const waiting = hasWaitingTiming ? routes.reduce((total, route) => total + (route.assignments || []).reduce((routeTotal, assignment) => {
@@ -296,6 +298,7 @@ function buildAnalytics(orders, team, plan, actual = null) {
   }, new Map())].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason, 'ru'));
   const needGroups = new Map();
   (plan?.unassigned || []).forEach(item => {
+    if (item.diagnosticSummary) return;
     const order = orderById.get(String(item.orderId));
     const key = `${orderZone(order)}|${sourceSkill(order)}`;
     needGroups.set(key, (needGroups.get(key) || 0) + 1);
@@ -317,7 +320,7 @@ function buildAnalytics(orders, team, plan, actual = null) {
     total, assigned, unassigned, coverage: percent(assigned, total), urgentTotal: urgentOrders.length,
     urgentAssigned, routeStats, activeEngineers: routes.length,
     availableEngineers: team.length || Math.max(routes.length, Number(metrics.activeEngineers || 0)),
-    distance, travel, waiting, service, idle, timeTotal, baseline, lowSlack, criticalSlack, lateStarts, operationalGaps, routeTimelines, shiftRecommendations, dataCompleteness,
+    distance, travel, waiting, service, idle, timeTotal, baseline, baselineComparable: plan?.status !== 'EXACT_VALID', lowSlack, criticalSlack, lateStarts, operationalGaps, routeTimelines, shiftRecommendations, dataCompleteness,
     medianLoad: quantile(loads, .5), p90Load: quantile(loads, .9),
     causes: resourceGaps.causes,
     explanations: resourceGaps.explanations,
@@ -359,7 +362,7 @@ function StatusHero({ data, onResolve }) {
     <div className="analytics-status-copy">
       <small>ИТОГ СМЕНЫ</small>
       <h2>{hasIssues ? `${data.unassigned} ${plural(data.unassigned, ['заявка требует', 'заявки требуют', 'заявок требуют'])} решения` : 'Все заявки распределены'}</h2>
-      <p>{urgentOpen ? `${urgentOpen} ${plural(urgentOpen, ['срочная заявка ещё не назначена', 'срочные заявки ещё не назначены', 'срочных заявок ещё не назначено'])}. Их нужно разобрать в первую очередь.` : mainNeed ? `Срочные заявки назначены. Наибольший дефицит — зона «${mainNeed.zone}», навык «${SKILL_LABELS[mainNeed.skill] || mainNeed.skill}».` : 'Все заявки вошли в план. Следите за запасом времени до конца клиентских окон.'}</p>
+      <p>{urgentOpen ? `${urgentOpen} ${plural(urgentOpen, ['срочная заявка ещё не назначена', 'срочные заявки ещё не назначены', 'срочных заявок ещё не назначено'])}. Их нужно разобрать в первую очередь.` : mainNeed ? `Срочные заявки назначены. Наибольший дефицит — зона «${mainNeed.zone}», навык «${SKILL_LABELS[mainNeed.skill] || mainNeed.skill}».` : hasIssues ? 'Все срочные заявки назначены. Для оставшихся сохранены проверенные ограничения.' : 'Все заявки вошли в план. Следите за запасом времени до конца клиентских окон.'}</p>
     </div>
     {hasIssues ? <button type="button" className="analytics-status-action" onClick={onResolve}>Разобрать {data.unassigned} {plural(data.unassigned, ['заявку', 'заявки', 'заявок'])}<ChevronRight/></button> : null}
   </section>;
@@ -679,13 +682,13 @@ function ShiftView({ data, durationAttention = [], onOpenUnassigned, onOpenResou
   const averageDistanceSavingPercent = data.baseline.baselineAvgKmPerOrder ? averageDistanceSaving / data.baseline.baselineAvgKmPerOrder * 100 : 0;
   return <div className="shift-workspace">
     <div className="analytics-kpis">
-      <MetricCard icon={Target} label="Заявки в плане" value={`${data.assigned} из ${data.total}`} note={`${number(data.coverage)}% спроса закрыто`} tone={data.coverage >= 99 ? 'good' : 'attention'} delta={`${orderDelta > 0 ? '+' : orderDelta < 0 ? '−' : ''}${Math.abs(orderDelta)} ${plural(Math.abs(orderDelta), ['заявка', 'заявки', 'заявок'])} vs Бейзлайн`} deltaTone={orderDelta > 0 ? 'positive' : orderDelta < 0 ? 'negative' : 'neutral'}/>
+      <MetricCard icon={Target} label="Заявки в плане" value={`${data.assigned} из ${data.total}`} note={`${number(data.coverage)}% спроса закрыто`} tone={data.coverage >= 99 ? 'good' : 'attention'} delta={data.baselineComparable ? `${orderDelta > 0 ? '+' : orderDelta < 0 ? '−' : ''}${Math.abs(orderDelta)} ${plural(Math.abs(orderDelta), ['заявка', 'заявки', 'заявок'])} vs Бейзлайн` : ''} deltaTone={orderDelta > 0 ? 'positive' : orderDelta < 0 ? 'negative' : 'neutral'}/>
       <MetricCard icon={AlertTriangle} label="Срочные заявки" value={`${data.urgentAssigned} из ${data.urgentTotal}`} note={data.urgentAssigned === data.urgentTotal ? 'Все срочные заявки назначены' : `${data.urgentTotal - data.urgentAssigned} требуют решения`} tone={data.urgentAssigned === data.urgentTotal ? 'good' : 'attention'}/>
-      <MetricCard icon={Users} label="Задействованные бригады" value={`${data.activeEngineers}/${data.availableEngineers}`} note={data.idleCount ? `${data.idleCount} ${plural(data.idleCount, ['бригада без маршрута', 'бригады без маршрута', 'бригад без маршрута'])}` : 'Вся команда задействована'} delta={`${engineerSaving > 0 ? '−' : engineerSaving < 0 ? '+' : ''}${Math.abs(engineerSaving)} ${plural(Math.abs(engineerSaving), ['бригада', 'бригады', 'бригад'])} vs Бейзлайн`} deltaTone={engineerSaving > 0 ? 'positive' : engineerSaving < 0 ? 'negative' : 'neutral'}/>
-      <MetricCard icon={MapPin} label="Общий пробег" value={`${number(data.distance)} км`} note={`${number(optimizedAverageDistance)} км на назначенную заявку`} delta={`${averageDistanceSaving > 0 ? '−' : averageDistanceSaving < 0 ? '+' : ''}${number(Math.abs(averageDistanceSaving))} км на заявку (${averageDistanceSaving > 0 ? '−' : averageDistanceSaving < 0 ? '+' : ''}${number(Math.round(Math.abs(averageDistanceSavingPercent)))}%) vs Бейзлайн`} deltaTone={averageDistanceSaving > 0 ? 'positive' : averageDistanceSaving < 0 ? 'negative' : 'neutral'}/>
+      <MetricCard icon={Users} label="Задействованные бригады" value={`${data.activeEngineers}/${data.availableEngineers}`} note={data.idleCount ? `${data.idleCount} ${plural(data.idleCount, ['бригада без маршрута', 'бригады без маршрута', 'бригад без маршрута'])}` : 'Вся команда задействована'} delta={data.baselineComparable ? `${engineerSaving > 0 ? '−' : engineerSaving < 0 ? '+' : ''}${Math.abs(engineerSaving)} ${plural(Math.abs(engineerSaving), ['бригада', 'бригады', 'бригад'])} vs Бейзлайн` : ''} deltaTone={engineerSaving > 0 ? 'positive' : engineerSaving < 0 ? 'negative' : 'neutral'}/>
+      <MetricCard icon={MapPin} label="Общий пробег" value={`${number(data.distance)} км`} note={`${number(optimizedAverageDistance)} км на назначенную заявку`} delta={data.baselineComparable ? `${averageDistanceSaving > 0 ? '−' : averageDistanceSaving < 0 ? '+' : ''}${number(Math.abs(averageDistanceSaving))} км на заявку (${averageDistanceSaving > 0 ? '−' : averageDistanceSaving < 0 ? '+' : ''}${number(Math.round(Math.abs(averageDistanceSavingPercent)))}%) vs Бейзлайн` : ''} deltaTone={averageDistanceSaving > 0 ? 'positive' : averageDistanceSaving < 0 ? 'negative' : 'neutral'}/>
     </div>
 
-    <BaselineComparison data={data}/>
+    {data.baselineComparable ? <BaselineComparison data={data}/> : null}
 
     <section className="analytics-panel analytics-actions-panel">
       <SectionHeading eyebrow={isArchived ? 'РАЗБОР СМЕНЫ' : 'СИГНАЛЫ СМЕНЫ'} title={isArchived ? 'Что требовало внимания' : 'Что сделать сейчас'} description={isArchived ? 'Сигналы, которые объясняют результат выбранного дня' : 'Только сигналы, которые могут изменить итог смены'}/>

@@ -1,0 +1,27 @@
+{
+  "command": [
+    "A:\\BeeGo-final-object-complexity\\.venv\\Scripts\\python.exe",
+    "-u",
+    "algorithm/tools/run_new_dataset_pipeline.py",
+    "--dataset",
+    "runtime\\qa\\fresh-planning-20261017\\generated\\dataset",
+    "--scenario",
+    "core",
+    "--run-dir",
+    "runtime\\qa\\fresh-planning-20261017\\run-02",
+    "--transit-index",
+    "data/transit/moscow_2026-08-17.sqlite",
+    "--shared-cache-dir",
+    "runtime/ui-shared-cache",
+    "--no-warm-start",
+    "--include-exact-improvement",
+    "--execute"
+  ],
+  "started_at": "2026-10-17T01:30:26.576478+03:00",
+  "code_commit": "90597b2aa80ea8cd66d795ced2fc4c6d2009b949",
+  "saved_plan_reuse": false,
+  "configured_budget_seconds": 840,
+  "purpose": "Fresh cold planning search with compatible road responses from run-01; no plan hints or stable-plan lookup",
+  "completed_at": "2026-10-17T01:37:19.216339+03:00",
+  "exit_code": 0
+}

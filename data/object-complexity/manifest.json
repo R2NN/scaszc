@@ -9,7 +9,24 @@
   "visits": 2074,
   "stages": "Independent simulation, hidden operation speeds and persistent conditions; not forecast plus noise",
   "limits": "Synthetic inventory, entrance/node positions not geocoded. Sample visits do not constitute full measured shifts.",
-  "planStatus": "PENDING_REAL_ROUTING",
-  "publishedPlan": "Preserved v1 artifact, not a v2 search result",
-  "baseFeature": "3035d1e36ff239b51699d8dfeae5eb3adca3be34"
+  "datasetSha256": "05f97b865f100fad0e3f1e69d9292ab3854a744e344397622fa8047bcf6edb88",
+  "modelVersion": "duration-2",
+  "planStatus": "EXACT_VALID",
+  "planArtifact": "algorithm/artifacts/complexity/initial-exact.json",
+  "planContentSha256": "44b01c4be2a40deb34e3c4518a7cd9fa5730e335619a2a64a9d19f9a408df3e9",
+  "planningRun": {
+    "startedAt": "2026-10-17T01:30:26.576478+03:00",
+    "pipelineCompletedAt": "2026-10-17T01:37:19.216339+03:00",
+    "searchCompletedAt": "2026-10-17T01:38:39.882785+03:00",
+    "verificationCompletedAt": "2026-10-17T01:43:48.816053+03:00",
+    "limitSeconds": 840,
+    "savedPlanReuse": false,
+    "warmPlanUsed": false,
+    "fullSearchRuns": 2,
+    "availableEngineers": 35,
+    "assigned": 203,
+    "urgentAssigned": 15,
+    "urgentTotal": 15,
+    "usedEngineers": 34
+  }
 }

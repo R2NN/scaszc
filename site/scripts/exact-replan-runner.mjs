@@ -160,6 +160,7 @@ export function compactExactReplan(raw, payload) {
       orderId: order.id,
       reasonCode: explanation?.decision_kind || raw.unserved_reasons?.[jobId] || 'UNSERVED',
       reason: explanation?.summary_ru || raw.unserved_reasons?.[jobId] || 'Точный планировщик не нашёл допустимое назначение',
+      diagnosticSummary: raw.unserved_detailed_audit?.jobs?.[jobId]?.summary_ru || null,
       claimLevel: explanation?.claim_level || 'BEST_CHECKED',
     };
   });
@@ -212,6 +213,7 @@ export function compactExactReplan(raw, payload) {
     event: raw.explanations?.event || null,
     changes: raw.changes || null,
     assignmentExplanations,
+    candidateDiagnostics: raw.unserved_detailed_audit?.jobs || null,
     exactRouteChecks: raw.exact_route_checks,
     searchPhase: raw.search_phase || null,
     metrics: {

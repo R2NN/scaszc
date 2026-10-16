@@ -130,6 +130,7 @@ const toMinutes=value=>{const[h,m]=String(value||'08:00').split(':').map(Number)
 const toTime=value=>`${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}`;
 const durationLabel=value=>`${Math.floor(value/60)?`${Math.floor(value/60)} ч `:''}${value%60?`${value%60} мин`:''}`.trim();
 const unassignedExplanation=(item,order,team=[])=>{
+  if(item?.diagnosticSummary)return{title:'Причина неназначения',summary:item.diagnosticSummary,action:'Откройте полный расчёт для проверки других вариантов.'};
   if(item?.reasonCode==='STATIC_ELIGIBLE_BUT_UNSERVED'){
     const normalized=value=>String(value||'').toLocaleLowerCase('ru-RU');
     const required=normalized(effectiveOrderSkill(order));
@@ -890,7 +891,7 @@ function MapCanvas({complexityMode=false,complexityPanelOpen=true,onCloseComplex
           heading.textContent=String(order.sourceId||order.id||'Заявка');
           const state=document.createElement('span');
           state.className=`map-popup-state ${issue?'needs-attention':meta?'assigned':'awaiting-plan'}`;
-          state.textContent=issue?'Не поместилась':meta?'Назначена':'К планированию';
+          state.textContent=issue?'Не назначена':meta?'Назначена':'К планированию';
           statusBadge=state;
           header.append(heading,state);
           const title=document.createElement('p');

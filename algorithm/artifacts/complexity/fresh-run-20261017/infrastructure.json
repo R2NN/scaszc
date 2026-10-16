@@ -1,0 +1,116 @@
+{
+  "checked_at": "2026-10-17T01:19:58.297851+03:00",
+  "endpoint": "http://127.0.0.1:8002/route",
+  "transit_index_sha256": "4f0351e28bf490038a1edcb11f9d87b76bdd79a05b753b5cd5fe6e96681abd00",
+  "valhalla": {
+    "version": "3.8.3-0bbb4214d",
+    "tileset_last_modified": 1789568207,
+    "available_actions": [
+      "tile",
+      "status",
+      "centroid",
+      "expansion",
+      "transit_available",
+      "trace_attributes",
+      "trace_route",
+      "isochrone",
+      "optimized_route",
+      "sources_to_targets",
+      "height",
+      "route",
+      "locate"
+    ]
+  },
+  "transit_tables": [
+    "stops",
+    "trips",
+    "connections",
+    "transfers",
+    "metadata",
+    "network_station_ids",
+    "metro_paths",
+    "walk_transfers"
+  ],
+  "routes": {
+    "CAR": {
+      "status": "OK",
+      "duration_seconds": 507,
+      "distance_m": 2037,
+      "geometry_points": 64,
+      "steps": 5,
+      "provider": "LOCAL_VALHALLA",
+      "cache_hit": false
+    },
+    "PUBLIC_TRANSIT": {
+      "status": "OK",
+      "duration_seconds": 1164,
+      "distance_m": 2817,
+      "geometry_points": 42,
+      "steps": 4,
+      "provider": "LOCAL_GTFS_RASP_VALHALLA",
+      "cache_hit": true
+    },
+    "BICYCLE": {
+      "status": "OK",
+      "duration_seconds": 430,
+      "distance_m": 2037,
+      "geometry_points": 64,
+      "steps": 5,
+      "provider": "LOCAL_VALHALLA",
+      "cache_hit": false
+    },
+    "WALKING": {
+      "status": "OK",
+      "duration_seconds": 1225,
+      "distance_m": 1719,
+      "geometry_points": 55,
+      "steps": 16,
+      "provider": "LOCAL_VALHALLA",
+      "cache_hit": false
+    }
+  },
+  "transit_metadata": {
+    "scenario_date": "2026-08-17",
+    "rail_reference_date": "2026-09-21",
+    "active_gtfs_services": 604,
+    "active_gtfs_trips": 65551,
+    "surface_stops": 17896,
+    "surface_connections": 1649396,
+    "invalid_surface_connections_skipped": 0,
+    "rail_stops": 164,
+    "official_mcc_stations": 31,
+    "mapped_mcc_stations": 31,
+    "official_mcd_stations": 139,
+    "mapped_mcd_stations": 139,
+    "unmapped_rail_stations": [],
+    "rail_trips": 8996,
+    "rail_connections": 49654,
+    "invalid_rail_connections_skipped": 109,
+    "official_network_transfers": 342,
+    "metro_stations": 278,
+    "metro_model_paths": 77006,
+    "metro_wait_assumption_seconds": 180,
+    "gtfs_sha256": {
+      "calendar.txt": "644a6c41fdecb198fd4174f0ff9b0ade9a82edc7586684ba744ead3b5eab8a5e",
+      "routes.txt": "9fac715e99396d56433c7db9b32f7f3bfaa93ceadaa37fd1064c3d4ad531c4b5",
+      "trips.txt": "c867ca801fa1755684d404527a5f6cb29a3f0350b6f44b91f4edf64ec3e5be12",
+      "stops.txt": "e02908c2e7d897bb611ab12b20995662f46f6ef4c744d6cd2d5e3fcfac34c960",
+      "stop_times.txt": "c1f22ffc72c3f076e817fb96438c3d8161fe60a5cb6be4a8d9a05059760e1282"
+    },
+    "rail_schedule_sha256": "ec0929a9967bf59e4c4212247ce8bec5702c2e1eba79fe896e5611e35fde3525",
+    "metro_schema_sha256": "86050a167627d045372373cc12959368e7ba28bffbd5d67446af1396002642c1"
+  },
+  "transit_counts": {
+    "connections": 1699050,
+    "walk_transfers": 16763,
+    "transfers": 342,
+    "metro_paths": 77006
+  },
+  "road_archive": {
+    "path": "A:/LCT2-routing/valhalla-data/valhalla_tiles.tar",
+    "size_bytes": 959170560,
+    "sha256": "709bef746203824171d416c7c3c9e960b10a7bef22453b130ab400df58dfa2b6"
+  },
+  "docker_image_id": "sha256:bc7c22f054c26effa5222a55a9d7a840369f254d314989f9040505342dc7ab84",
+  "transit_cache_hit_semantics": "The offline timetable router marks index-backed computed results cache_hit=true. This is not reuse of a saved planning result."
+}

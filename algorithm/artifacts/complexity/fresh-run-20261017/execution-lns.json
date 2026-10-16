@@ -1,0 +1,23 @@
+{
+  "command": [
+    "A:\\BeeGo-final-object-complexity\\.venv\\Scripts\\python.exe",
+    "-u",
+    "algorithm/tools/run_exact_lns_pass.py",
+    "--dataset",
+    "runtime\\qa\\fresh-planning-20261017\\generated\\dataset",
+    "--input-plan",
+    "runtime\\qa\\fresh-planning-20261017\\run-02\\core-exact-retimed.json",
+    "--output",
+    "runtime\\qa\\fresh-planning-20261017\\lns-exact.json",
+    "--cache",
+    "runtime/ui-shared-cache/routing-cache.sqlite3",
+    "--transit-index",
+    "data/transit/moscow_2026-08-17.sqlite"
+  ],
+  "started_at": "2026-10-17T01:37:53.869120+03:00",
+  "source_plan": "runtime\\qa\\fresh-planning-20261017\\run-02\\core-exact-retimed.json",
+  "search_budget_seconds": 90,
+  "purpose": "Execute main exact_lns implementation after chain passes exhausted their shared pass deadlines",
+  "completed_at": "2026-10-17T01:38:39.882785+03:00",
+  "exit_code": 0
+}

@@ -1,0 +1,22 @@
+{
+  "command": [
+    "A:\\BeeGo-final-object-complexity\\.venv\\Scripts\\python.exe",
+    "-u",
+    "algorithm/tools/diagnose_unserved_initial.py",
+    "--dataset",
+    "runtime\\qa\\fresh-planning-20261017\\generated\\dataset",
+    "--input-plan",
+    "runtime\\qa\\fresh-planning-20261017\\lns-exact.json",
+    "--output",
+    "runtime\\qa\\fresh-planning-20261017\\unserved-audit.json",
+    "--cache",
+    "runtime/ui-shared-cache/routing-cache.sqlite3",
+    "--transit-index",
+    "data/transit/moscow_2026-08-17.sqlite"
+  ],
+  "started_at": "2026-10-17T01:39:28.890265+03:00",
+  "max_wall_seconds": 300,
+  "purpose": "Independent per-engineer/per-position diagnostic, not an infeasibility claim for unsearched reorderings",
+  "completed_at": "2026-10-17T01:39:34.154692+03:00",
+  "exit_code": 0
+}
