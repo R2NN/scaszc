@@ -8,6 +8,7 @@ import exactWorker from '../worker/exact-base.js';
 import { fillExactIdentityGeometry } from './exactPlanGeometry.mjs';
 import { historicalInventory } from './exactShiftReplan.mjs';
 import { acquirePlanningSlot, planningBusyResponse, withPlanningSlot } from './planningSlot.mjs';
+import { loadComplexityArtifact, matchesComplexityArtifact } from './complexityArtifact.mjs';
 
 const siteRoot = path.resolve(import.meta.dirname, '..');
 const repositoryRoot = projectRoot(siteRoot);
@@ -20,13 +21,17 @@ const json = (value, status = 200) => new Response(JSON.stringify(value), {
   headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
 });
 
-async function calculateExactPlan(payload, onProgress = () => {}) {
+async function calculateExactPlan(payload, onProgress = () => {}, complexity) {
   artifactPromise ||= readFile(artifactFile, 'utf8').then(JSON.parse);
   const artifact = await artifactPromise;
   const planningDate = payload.planningDate || payload.date || payload.orders[0]?.serviceDate || payload.orders[0]?.sourceData?.window_start?.slice(0, 10);
-  const input = { ...payload, planningDate };
+  const input = { ...payload, planningDate, orders: complexity ? complexity.prepareOrders(payload.orders, `${planningDate}T07:00:00+03:00`) : payload.orders };
+  const retained = complexity ? await loadComplexityArtifact() : null;
   let plan;
-  if (isCanonicalPlanningInput(input, artifact, siteRoot)) {
+  if (matchesComplexityArtifact(input, retained)) {
+    onProgress({ phase: 'LOOKUP_VALIDATED_PLAN' });
+    plan = structuredClone(retained.plan);
+  } else if (isCanonicalPlanningInput(input, artifact, siteRoot)) {
     onProgress({ phase: 'LOOKUP_VALIDATED_PLAN' });
     const response = await exactWorker.fetch(new Request('http://localhost/api/plan', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
@@ -46,11 +51,14 @@ async function calculateExactPlan(payload, onProgress = () => {}) {
   if (plan.status !== 'EXACT_VALID' || plan.publicationAllowed !== true || plan.validation?.status !== 'VALID' || plan.approximateTravel === true) {
     throw new Error('Точный план не прошёл независимую проверку и не может быть опубликован.');
   }
-  return fillExactIdentityGeometry(plan, input.orders);
+  if (complexity) complexity.verifyOrders(input.orders, plan);
+  const result = { ...fillExactIdentityGeometry(plan, input.orders), durationOrders: input.orders };
+  complexity?.authorizePlan(input.orders, input.engineers, result);
+  return result;
 }
 
 /** Serve exact plans and expose real server phases for background calculations. */
-export async function handleExactPlanning(request) {
+export async function handleExactPlanning(request, { complexity } = {}) {
   const url = new URL(request.url);
   const jobId = /^\/api\/plan\/jobs\/([\w-]+)$/.exec(url.pathname)?.[1];
   if (jobId && request.method === 'GET') {
@@ -70,7 +78,7 @@ export async function handleExactPlanning(request) {
       jobs.set(job.id, job);
       setTimeout(() => jobs.delete(job.id), 30 * 60_000).unref?.();
       Promise.resolve().then(async () => {
-        const result = await calculateExactPlan(payload, progress => { job.progress = progress; });
+        const result = await calculateExactPlan(payload, progress => { job.progress = progress; }, complexity);
         job.status = 'READY';
         job.progress = { phase: 'READY' };
         job.result = result;
@@ -80,7 +88,7 @@ export async function handleExactPlanning(request) {
       }).finally(release);
       return json({ id: job.id, status: job.status, progress: job.progress, startedAt: job.startedAt }, 202);
     }
-    return json(await withPlanningSlot(() => calculateExactPlan(payload)));
+    return json(await withPlanningSlot(() => calculateExactPlan(payload, undefined, complexity)));
   } catch (error) {
     if (error?.code === 'PLANNING_BUSY') return planningBusyResponse();
     return json({ error: error?.message || 'Точный расчёт не выполнен', code: error?.code || 'EXACT_PLANNING_FAILED', details: error?.details }, error?.code === 'INVALID_INPUT' ? 422 : 503);

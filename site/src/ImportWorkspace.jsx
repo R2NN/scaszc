@@ -1,3 +1,4 @@
+import { parseDurationImport } from './durationImport.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isEmergencyWorkOrder, isInformationalOrder, translateServiceLabel } from './workTypes.js';
 import {
@@ -61,6 +62,10 @@ const ORDER_FIELD_GROUPS = [
       ['windowEnd', 'Конец окна', false],
       ['windowRange', 'Окно целиком', false],
       ['duration', 'Длительность из файла, мин', false],
+      ['durationFactors', 'Условия длительности (JSON)', false],
+      ['durationOverride', 'Ручная длительность с причиной (JSON)', false],
+      ['serviceEntities', 'Связи объекта (JSON)', false],
+      ['objectId', 'ID обслуживаемого объекта', false],
       ['workType', 'Тип работ', false],
       ['serviceType', 'Подтип / операция', false],
       ['skill', 'Требуемый навык', false],
@@ -223,6 +228,10 @@ const ORDER_ALIASES = {
   windowStart: ['window start', 'time window start', 'appointment start', 'visit start', 'start time', 'start', 'начало', 'начало окна', 'начало интервала', 'время начала', 'время начала окна', 'окно с', 'время с', 'визит с', 'от', 'с'],
   windowEnd: ['window end', 'time window end', 'appointment end', 'visit end', 'end time', 'end', 'окончание', 'конец', 'конец окна', 'конец интервала', 'время окончания', 'время окончания окна', 'окно до', 'время до', 'визит до', 'до', 'по'],
   windowRange: ['time window', 'appointment window', 'visit window', 'окно заявки', 'окно обслуживания', 'интервал', 'время визита'],
+  durationFactors: ['duration factors', 'условия длительности'],
+  durationOverride: ['duration override', 'ручная длительность'],
+  serviceEntities: ['service entities', 'связи объекта'],
+  objectId: ['object id', 'id обслуживаемого объекта'],
   duration: ['service duration min', 'duration', 'длительность', 'норматив', 'норматив мин'],
   workType: ['bk type', 'work type', 'тип работ', 'тип заявки'],
   serviceType: ['hd type', 'service type', 'подтип работ', 'операция'],
@@ -792,6 +801,11 @@ export function buildOrders(headers, rows, mappings, region, workNorms = null, s
       start: asTime(valueFor(row, 'windowStart')) || rangeStart,
       end: asTime(valueFor(row, 'windowEnd')) || rangeEnd,
       duration,
+      importedDuration: valueFor(row, 'duration'),
+      durationFactors: parseDurationImport(valueFor(row, 'durationFactors'), 'durationFactors'),
+      durationOverride: parseDurationImport(valueFor(row, 'durationOverride'), 'durationOverride'),
+      serviceEntities: parseDurationImport(valueFor(row, 'serviceEntities'), 'serviceEntities'),
+      objectId: valueFor(row, 'objectId') || undefined,
       durationSource: workNormFor({ workType, serviceType, skill, name }, workNorms)
         ? 'Нормативы.xlsx' : workNorms ? (duration === 60 ? 'Без норматива · 60 мин' : 'Изменено оператором') : 'Файл заявки',
       priority: emergencyWork ? 'Авария' : informational ? 'Обычная' : translatePriority(valueFor(row, 'priority')),
@@ -977,6 +991,10 @@ export function validateRows(rows, mappings, entityType = 'orders', workNorms = 
       [!start || start >= end || differentDays ? startColumn : null,
         !end || start >= end || differentDays ? endColumn : null, rangeColumn].filter(Number.isInteger)
         .forEach(column => invalid.add(`${rowIndex}:${column}`));
+    }
+    for (const field of ['durationFactors', 'durationOverride', 'serviceEntities']) {
+      const column = mappedColumn(field);
+      if (Number.isInteger(column)) { try { parseDurationImport(row[column], field); } catch { invalid.add(`${rowIndex}:${column}`); } }
     }
     const durationColumn = mappedColumn('duration');
     const fieldValue = field => {

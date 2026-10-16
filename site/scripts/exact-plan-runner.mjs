@@ -11,7 +11,7 @@ const run = (python, args, input, repositoryRoot, deadlineAt) => new Promise((re
   const timeoutMs = remainingMilliseconds(deadlineAt);
   const child = spawn(python, args, {
     cwd: repositoryRoot,
-    env: { ...process.env, PYTHONPATH: path.join(repositoryRoot, 'algorithm', 'src'), PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+    env: { ...process.env, BEELINE_ROUTING_USAGE_LEDGER: process.env.BEELINE_ROUTING_USAGE_LEDGER || path.join(repositoryRoot, 'runtime', 'routing-usage.sqlite3'), PYTHONPATH: path.join(repositoryRoot, 'algorithm', 'src'), PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
     windowsHide: true,
     stdio: ['pipe', 'pipe', 'pipe'],
   });

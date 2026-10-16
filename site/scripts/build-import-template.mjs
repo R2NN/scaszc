@@ -29,6 +29,7 @@ const ordersHeaders = [
   'zone_id', 'zone_name', 'district', 'window_start', 'window_end',
   'service_duration_min', 'bk_type', 'hd_type', 'required_skill', 'priority',
   'required_transport', 'required_equipment', 'phone', 'email', 'notes',
+  'duration_factors', 'duration_override', 'service_entities', 'object_id',
 ];
 
 const ordersExamples = [
@@ -42,7 +43,10 @@ const ordersGuide = [
   ['address', 'Да*', 'Полный адрес выезда', 'Текст', 'Москва, ул. Тверская, 12'],
   ['latitude / longitude', 'Да*', 'Точные координаты объекта', 'Число', '55.765922 / 37.605461'],
   ['window_start / window_end', 'Да', 'Начало и конец клиентского окна', 'YYYY-MM-DD HH:MM', '2026-09-17 09:00'],
-  ['service_duration_min', 'Да', 'Норматив работы в минутах', 'Целое число 1–1440', '90'],
+  ['service_duration_min', 'Нет', 'Исходное значение старого файла. Новая длительность рассчитывается сервером.', 'Целое число', '70'],
+  ['duration_factors', 'Нет', 'Состав работ для расчёта', 'Объект JSON', '{"line":"existing","devices":1}'],
+  ['duration_override', 'Нет', 'Ручная длительность с основанием', 'Объект JSON', '{"minutes":85,"reason":"Дополнительная точка"}'],
+  ['service_entities / object_id', 'Нет', 'ID зарегистрированных сущностей из паспорта объекта', 'JSON / текст', 'Если неизвестны, оставить пустыми'],
   ['bk_type / hd_type', 'Желательно', 'Тип и операция работ', 'Текст или код', 'INSTALL / GPON'],
   ['required_skill', 'Желательно', 'Навык исполнителя', 'Текст', 'Монтаж'],
   ['priority', 'Нет', 'Приоритет', 'NORMAL / HIGH / EMERGENCY', 'NORMAL'],
@@ -81,7 +85,7 @@ function styleDataSheet(sheet, headers, examples, widths) {
   const lastColumn = String.fromCharCode(64 + headers.length);
   sheet.showGridLines = false;
   sheet.tabColor = HEADER_FILL;
-  sheet.getRange(`A1:${lastColumn}${examples.length + 1}`).values = [headers, ...examples];
+  sheet.getRange(`A1:${lastColumn}${examples.length + 1}`).values = [headers, ...examples.map(row => headers.map((_, index) => row[index] ?? ''))];
   sheet.freezePanes.freezeRows(1);
   sheet.getRange(`A1:${lastColumn}1`).format = {
     fill: HEADER_FILL,

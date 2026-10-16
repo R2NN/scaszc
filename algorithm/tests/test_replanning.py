@@ -152,6 +152,27 @@ class ReplanningTests(unittest.TestCase):
             sum(option.selected for option in result.candidate_evaluations['U']), 1
         )
 
+    def test_changed_duration_rebuilds_the_suffix_before_validating(self) -> None:
+        source = replace(self.dataset, jobs=dict(self.jobs))
+        event = self.event(1, EventType.REPLAN_REQUEST, 'A', self.at(8))
+        jobs = {**self.jobs, 'A': replace(self.jobs['A'], service_duration_min=150)}
+        data = replace(source, jobs=jobs, events=(event,))
+        result = replan_after_event(data, ReplanningState(self.source), event, _Oracle(), source_dataset=source, departure_timing_queries=0)
+        self.assertEqual(result.status, ReplanningStatus.EXACT_VALID)
+        self.assertTrue(result.validation.is_valid)
+        self.assertGreater(result.exact_route_checks, 0)
+        visits = {visit.job_id: visit for route in result.state.plan.engineer_plans for visit in route.visits}
+        self.assertGreaterEqual(visits['B'].departure_at, visits['A'].service_start_at + timedelta(minutes=150))
+
+    def test_new_normal_visit_is_checked_before_the_existing_unserved_queue(self) -> None:
+        source = ProposedPlan(self.t0, (EngineerPlan('E1', (self.visit('A', self.at(9)),)),), ('B',))
+        self.jobs['U'] = self.job('U', 'Z1', self.at(8))
+        event = self.event(1, EventType.NEW_JOB, 'U', self.at(8))
+        result = replan_after_event(self.make_dataset((event,)), ReplanningState(source), event, _Oracle(), max_route_checks=1, departure_timing_queries=0)
+        self.assertEqual(result.status, ReplanningStatus.EXACT_VALID)
+        self.assertNotIn('U', result.state.plan.unserved_job_ids)
+        self.assertTrue(result.validation.is_valid)
+
     def test_new_normal_job_rebuilds_two_routes_without_losing_existing_jobs(self) -> None:
         self.engineers['E1'] = replace(
             self.engineers['E1'], max_jobs=2, skills=frozenset({'INSTALL', 'SPECIAL'})

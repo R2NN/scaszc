@@ -406,6 +406,9 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         duration = int(item.get('duration') or 0)
         if duration < 1:
             raise ValueError(f'У заявки {job_id} не указана длительность')
+        if item.get('durationSnapshot'):
+            from beeline_planning.duration_contract import verify_duration_snapshot
+            verify_duration_snapshot(item['durationSnapshot'], duration)
         required_skill = order_skill(item)
         bk_type, hd_type = f'UI-{required_skill}', f'UI-WORK-{index}'
         if not any(row['bk_type'] == bk_type for row in skill_mapping):
@@ -460,6 +463,12 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         write_csv(destination / scenario / 'events.csv', ['apply_order', 'event_id', 'event_time', 'event_type', 'target_id', 'zone_id', 'unavailable_until', 'payload_json'], [])
         write_csv(destination / scenario / 'shared_inventory.csv', ['scenario', 'zone_id', 'equipment_id', 'quantity_available', 'reservation_policy', 'replenishment_during_day'], [{**row, 'scenario': scenario.upper()} for row in inventory])
     manifest = {'dataset_version': '2.1.0', 'schema_version': '2.1.0', 'planning_date': planning_date.isoformat(), 'initial_planning_at': planning_at, 'timezone': 'Europe/Moscow', 'source': 'reviewed_ui_import', 'requires_public_transit': any(engineer['transport_type'] == 'PUBLIC_TRANSIT' and engineer['is_available'] == 'true' for engineer in engineers)}
+    snapshots = {source_id(item, 'job_id'): item['durationSnapshot'] for item in orders if item.get('durationSnapshot')}
+    if snapshots:
+        if len(snapshots) != len(orders):
+            raise ValueError('Снимок длительности нужен для каждой заявки нового плана')
+        (destination / 'common' / 'duration_snapshots.json').write_text(json.dumps(snapshots, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+        manifest['duration_contract'] = 'server-snapshot-v1'
     (destination / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False), encoding='utf-8')
     lines = []
     for path in sorted(destination.rglob('*')):

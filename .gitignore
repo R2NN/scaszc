@@ -30,3 +30,14 @@ site/.dev.vars
 .env.docker
 docker-data/
 
+# Isolated planning candidates, source datasets and browser acceptance evidence
+runtime/qa/
+runtime/baseline/
+runtime/candidate/
+runtime/candidate-final/
+runtime/candidate-final-v2/
+.vite/
+runtime/ui-runs/
+runtime/ui-shared-cache/
+runtime/exact-replans/
+

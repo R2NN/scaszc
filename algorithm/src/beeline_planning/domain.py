@@ -102,6 +102,8 @@ class Job:
     required_equipment: tuple[EquipmentNeed, ...]
     is_event_job: bool
     status: JobStatus
+    authoritative_duration_min: int | None = None
+    duration_snapshot_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

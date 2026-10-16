@@ -18,6 +18,7 @@ RUN pnpm install --frozen-lockfile
 WORKDIR /app
 COPY algorithm algorithm
 COPY data/dataset data/dataset
+COPY data/object-complexity data/object-complexity
 COPY data/transit data/transit
 COPY runtime runtime
 COPY site site

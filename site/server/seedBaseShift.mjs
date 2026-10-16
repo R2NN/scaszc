@@ -4,6 +4,8 @@ import { canonicalDemoInput } from '../src/canonicalDemo.js';
 import { isCanonicalPlanningInput } from '../scripts/is-canonical-planning-input.mjs';
 import exactWorker from '../worker/exact-base.js';
 import { fillExactIdentityGeometry } from './exactPlanGeometry.mjs';
+import { loadComplexityArtifact } from './complexityArtifact.mjs';
+import { digest } from './durationModel.mjs';
 
 const siteRoot = path.resolve(import.meta.dirname, '..');
 
@@ -15,6 +17,17 @@ export async function seedBaseShift(store) {
     if (JSON.stringify(repaired) !== JSON.stringify(existing.plan)) {
       store.db.prepare('UPDATE plan_versions SET plan_json = ? WHERE id = ?').run(JSON.stringify(repaired), existing.currentPlanId);
     }
+    return;
+  }
+  const candidate = await loadComplexityArtifact();
+  if (candidate) {
+    for (const order of candidate.orders) {
+      const { id, ...content } = order.durationSnapshot;
+      if (digest(content) !== id || order.duration !== content.total) throw new Error('Контрольная сумма исходной длительности не совпала.');
+      store.complexity.db.prepare('INSERT OR IGNORE INTO duration_snapshots VALUES (?,?,?)').run(id, String(order.id), JSON.stringify(order.durationSnapshot));
+    }
+    store.complexity.verifyOrders(candidate.orders, candidate.plan);
+    store.ensure({ regionId: 'moscow', date: candidate.planningDate, orders: candidate.orders, team: candidate.engineers, plan: fillExactIdentityGeometry(candidate.plan, candidate.orders) });
     return;
   }
   const artifact = JSON.parse(await readFile(path.join(siteRoot, 'public/data/beego-exact-plans.json'), 'utf8'));

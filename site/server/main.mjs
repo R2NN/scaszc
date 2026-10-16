@@ -28,7 +28,7 @@ createServer(async (request, response) => {
       const webRequest = new Request(url, { method: request.method, headers: request.headers, body: ['GET', 'HEAD'].includes(request.method) ? undefined : body, duplex: body ? 'half' : undefined });
       const operational = await operations.handle(webRequest);
       if (operational) return send(response, operational);
-      const exact = await handleExactPlanning(webRequest);
+      const exact = await handleExactPlanning(webRequest, { complexity: operations.store.complexity });
       if (exact) return send(response, exact);
       const planArtifact = await readFile(artifact, 'utf8').catch(() => null);
       return send(response, await worker.fetch(webRequest, { ...process.env, PLANNING_ARTIFACT_JSON: planArtifact, ASSETS: { fetch: async () => new Response('Not found', { status: 404 }) } }));

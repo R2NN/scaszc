@@ -43,13 +43,15 @@ export async function createDispatcherPdf(shift, options = {}) {
   const section = (n, title, y) => { label(`${n} / ${title}`, L, y, CW, C.blue); line(L, y + 18, R); };
   const para = (text, x, y, w, size = 9.5, color = C.ink, bold = false) => drawText(text, x, y, w, size, color, bold);
   const badge = (text, x, y, w, fill, color) => { box(x, y, w, 22, fill, fill, 7); drawText(text, x + 7, y + 6, w - 14, 8, color, true, { align: 'center' }); };
+  const durationVisits = m.summary.visits.filter(visit => visit.durationSnapshot);
+  const durationPages = Math.ceil(durationVisits.length / 20);
   const page = (number, heading, subtitle) => {
     doc.addPage(); doc.rect(0, 0, W, H).fill(C.cream); doc.rect(0, 0, W, 94).fill(C.graphite); doc.rect(0, 94, W, 5).fill(C.yellow);
     label('BeeGo!  /  Диспетчерский отчёт', L, 20, CW, C.yellow);
     drawText(heading, L, 38, CW, 20, C.white, true);
     drawText(subtitle, L, 72, CW, 9, '#CBD2D8');
     line(L, 805, R); drawText(`${date(shift.date)}  •  план v${shift.revision}  •  ${m.mode === 'plan' ? 'план' : m.mode === 'partial' ? 'частичный факт' : 'полный факт'}`, L, 813, 400, 8, C.muted);
-    drawText(`${number} / 8`, R - 60, 813, 60, 8, C.muted, true, { align: 'right' });
+    drawText(`${number} / ${8 + durationPages}`, R - 60, 813, 60, 8, C.muted, true, { align: 'right' });
   };
   const kpi = (x, y, w, title, figure, note, color = C.ink) => {
     box(x, y, w, 75); label(title, x + 12, y + 11, w - 24); drawText(figure, x + 12, y + 28, w - 24, 20, color, true); drawText(note, x + 12, y + 56, w - 24, 8, C.muted);
@@ -236,6 +238,22 @@ export async function createDispatcherPdf(shift, options = {}) {
   strip(L, 611, CW, 68, 'Доступно', `Сохранённый план, заявки, окна, команда, маршруты, расчёт FCFS, тарифы и исторические смены (${m.historyCount}).`, 'green');
   strip(L, 691, CW, 87, 'Недоступно / не утверждать', `${factsLine} Плановые числа нельзя подписывать как фактическую экономию, соблюдение SLA или отсутствие опозданий.`, 'red');
 
+  for (let index = 0; index < durationPages; index++) {
+    page(9 + index, 'ДЛИТЕЛЬНОСТЬ ВИЗИТОВ', 'Неизменяемые прогнозы опубликованной версии · дорога отдельно');
+    const rows = durationVisits.slice(index * 20, (index + 1) * 20);
+    drawText('Заявка / модель', L, 118, 200, 9, C.muted, true);
+    drawText('Работа / оформление / доступ', L + 200, 118, 180, 8, C.muted, true);
+    drawText('Визит / факт, тех.', L + 385, 118, 133, 8, C.muted, true);
+    rows.forEach((visit, row) => {
+      const y = 143 + row * 30;
+      const forecast = visit.durationSnapshot;
+      if (row % 2 === 0) doc.rect(L, y - 4, CW, 30).fill('#EFF2F1');
+      drawText(`${visit.sourceId} · ${forecast.modelVersion}`, L + 5, y, 195, 7.3);
+      drawText(`${forecast.technical} / ${forecast.documents} / ${forecast.access} мин · K ${fmt(forecast.coefficient, 2)}`, L + 200, y, 180, 8);
+      drawText(`${forecast.total} / ${visit.actualTechnicalMinutes == null ? 'нет измерения' : visit.actualTechnicalMinutes} мин`, L + 385, y, 130, 8);
+    });
+    para('Факт технической длительности требует начала, окончания и известных отдельных этапов. Ручная корректировка хранится со своим основанием в снимке заявки и экспорте JSON. K = техническая работа / базовая техническая работа.', L, 763, CW, 7.5, C.muted);
+  }
   doc.end();
   return finished;
 }

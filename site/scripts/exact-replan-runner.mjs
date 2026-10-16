@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { access, copyFile, mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ensureTransitIndex } from './transit-index.mjs';
@@ -84,6 +83,18 @@ const ensureExactRouting = ({ python, repositoryRoot, env, deadlineAt }) => new 
   });
 });
 
+const configureRouting = async input => {
+  const endpoint = String(input.env.VALHALLA_ROUTE_ENDPOINT || 'http://127.0.0.1:8002/route').replace(/\/route\/?$/, '');
+  if (['http://127.0.0.1:8002', 'http://localhost:8002'].includes(endpoint)) return ensureExactRouting(input);
+  const response = await fetch(`${endpoint}/status`, { signal: AbortSignal.timeout(10000) });
+  if (!response.ok) throw new Error('Дорожный сервис недоступен. Прежний план сохранён.');
+  const status = await response.json();
+  const tile = status.tile_revision || (status.version && Number.isInteger(status.tileset_last_modified) ? `valhalla-status:${status.version}:${status.tileset_last_modified}` : null);
+  if (!tile) throw new Error('Дорожный сервис не сообщил версию дорожных данных.');
+  input.env.VALHALLA_TILE_REVISION = tile;
+  input.env.VALHALLA_RUNTIME_REVISION = `${status.runtime_revision || 'external-valhalla'}:tiles:${tile}`;
+};
+
 export function compactExactReplan(raw, payload) {
   if (raw.status !== 'EXACT_VALID' || raw.publication_allowed !== true || raw.validation?.status !== 'VALID') {
     throw new Error('Перепланированный план не прошёл независимую точную валидацию');
@@ -114,7 +125,7 @@ export function compactExactReplan(raw, payload) {
         manual: false,
         claimLevel: explanation?.claim_level || 'EXACT_VALIDATED',
         explanation: explanation?.summary_ru || '',
-        geometry: Array.isArray(visit.travel?.geometry) ? visit.travel.geometry : [],
+        geometry: visit.travel?.type === 'IDENTITY' && Array.isArray(order.coords) ? [order.coords, order.coords] : Array.isArray(visit.travel?.geometry) ? visit.travel.geometry : [],
       };
     });
     const waitingMinutes = assignments.reduce((sum, assignment) => {
@@ -188,7 +199,7 @@ export function compactExactReplan(raw, payload) {
   }).filter(Boolean);
   return {
     id: `exact-${raw.content_sha256.slice(0, 12)}`,
-    algorithm: 'beeline-planning-ortools-exact-v2.1-full-coverage-28-teams',
+    algorithm: 'beeline-planning-ortools-exact-v2.1-duration-contract',
     provider: raw.routing_configuration?.provider || 'valhalla-local-transit',
     createdAt: raw.plan.planning_at,
     status: raw.status,
@@ -222,12 +233,14 @@ export function compactExactReplan(raw, payload) {
  */
 export async function runExactReplan(payload, repositoryRoot = process.cwd(), { deadlineAt = Date.now() + PLANNING_DEADLINE_MS } = {}) {
   repositoryRoot = projectRoot(repositoryRoot);
-  const output = path.join(tmpdir(), `beego-exact-replan-${randomUUID()}.json`);
+  await mkdir(path.join(repositoryRoot, 'runtime', 'exact-replans'), { recursive: true });
+  const output = path.join(repositoryRoot, 'runtime', 'exact-replans', `.pending-${randomUUID()}.json`);
   const python = process.env.BEEGO_PYTHON || 'python';
   const script = path.join(repositoryRoot, 'algorithm', 'tools', 'replan_ui_event.py');
   const env = {
     ...process.env,
     BEEGO_REPOSITORY_ROOT: repositoryRoot,
+    BEELINE_ROUTING_USAGE_LEDGER: process.env.BEELINE_ROUTING_USAGE_LEDGER || path.join(repositoryRoot, 'runtime', 'routing-usage.sqlite3'),
     PYTHONPATH: path.join(repositoryRoot, 'algorithm', 'src'),
     PYTHONIOENCODING: 'utf-8',
     PYTHONUTF8: '1',
@@ -242,6 +255,14 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd(), { 
   let savedTransitIndex = '';
   if (sourceHash !== canonical.content_sha256) {
     let matched = false;
+    const complexityPlan = path.join(repositoryRoot, 'algorithm', 'artifacts', 'complexity', 'initial-exact.json');
+    const complexity = JSON.parse(await readFile(complexityPlan, 'utf8').catch(() => 'null'));
+    if (complexity?.content_sha256 === sourceHash && complexity?.publication_allowed === true) {
+      dataset = path.join(repositoryRoot, 'data', 'object-complexity', 'dataset');
+      inputPlan = complexityPlan;
+      cache = path.join(repositoryRoot, 'runtime', 'ui-shared-cache', 'routing-cache.sqlite3');
+      matched = true;
+    }
     const retainedPlan = path.join(repositoryRoot, 'runtime', 'exact-replans', `${sourceHash}.json`);
     const retained = JSON.parse(await readFile(retainedPlan, 'utf8').catch(() => 'null'));
     if (retained?.content_sha256 === sourceHash && retained?.publication_allowed === true) {
@@ -297,9 +318,11 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd(), { 
     '--cache', cache,
     '--transit-index', transitIndex,
     '--output', output,
+    '--max-route-checks', String(Math.max(1, Math.min(400, Number(process.env.BEEGO_REPLAN_ROUTE_CHECKS) || 400))),
+    '--departure-timing-queries', String(Math.max(0, Math.min(100, Number(process.env.BEEGO_REPLAN_TIMING_QUERIES ?? 24)))),
   ];
   try {
-    await ensureExactRouting({ python, repositoryRoot, env, deadlineAt });
+    await configureRouting({ python, repositoryRoot, env, deadlineAt });
     await runPython({ python, script, args, payload, env, deadlineAt });
     const raw = JSON.parse(await readFile(output, 'utf8'));
     const result = compactExactReplan(raw, payload);

@@ -8,14 +8,15 @@ import { canonicalDemoInput } from '../src/canonicalDemo.js';
 
 const readJson = async file => JSON.parse(await readFile(new URL(file, import.meta.url), 'utf8'));
 
-test('all 182 dates are backed by the first archive and keep their exact route geometry', async () => {
+test('calculated analytics dates and available operational archives remain distinct', async () => {
   const history = await readJson('../public/data/analytics-history.json');
   const dates = await baseHistoryDates();
-  assert.equal(dates.length, 182);
-  assert.deepEqual(dates, history.days.map(day => day.date));
+  assert.equal(history.days.length, 182);
+  assert.ok(dates.includes('2026-08-17'));
+  assert.ok(dates.every(date => history.days.some(day => day.date === date)));
   const store = new ShiftStore(':memory:');
   try {
-    for (const date of [dates[0], dates[90], dates.at(-2), dates.at(-1)]) {
+    for (const date of new Set([dates[0], dates[Math.floor(dates.length / 2)], dates.at(-1)])) {
       const shift = await ensureBaseHistoricalShift(store, date);
       assert.equal(shift.plan.status, 'EXACT_VALID');
       assert.equal(shift.plan.validation.status, 'VALID');

@@ -7,13 +7,15 @@ import { askShiftAi } from './aiStudio.mjs';
 import { seedBaseShift } from './seedBaseShift.mjs';
 import { analyticsHistoryDates, baseHistoryDates, ensureBaseHistoricalShift } from './baseHistoryStore.mjs';
 import { acquirePlanningSlot, planningBusyResponse } from './planningSlot.mjs';
+import { handleComplexity } from './complexityApi.mjs';
+import { seedComplexity } from './complexitySeed.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const bodyOf = async request => request.json().catch(() => ({}));
 const errorStatus = error => /устарел|уже изменился/.test(error.message) ? 409 : /не найден/.test(error.message) ? 404 : 422;
 
 export function createOperationsApi({ store = new ShiftStore(), routing = exactShiftReplan, routingOptions = {}, ai = askShiftAi, aiOptions = {}, seedFromBase = false } = {}) {
-  const seedPromise = seedFromBase ? seedBaseShift(store) : Promise.resolve();
+  const seedPromise = seedFromBase ? (async () => { await seedComplexity(store.complexity); await seedBaseShift(store); })() : Promise.resolve();
   const aiCalls = new Map();
   const aiLimit = Math.max(1, Math.min(100, Number(process.env.BEEGO_AI_MAX_PER_HOUR || 10)));
   const monthlyTokenLimit = Math.max(6000, Number(process.env.BEEGO_AI_MONTHLY_TOKEN_BUDGET || 240000));
@@ -41,6 +43,8 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
   async function handle(request) {
     await seedPromise;
     const url = new URL(request.url);
+    const complexityResponse = await handleComplexity(request, store.complexity);
+    if (complexityResponse) return complexityResponse;
     if (url.pathname === '/api/base-data/status' && request.method === 'GET') {
       const [dates, operationalDates] = await Promise.all([analyticsHistoryDates(), baseHistoryDates()]);
       const storedDays = store.db.prepare("SELECT count(*) AS total FROM shifts WHERE region_id = 'moscow' AND current_plan_id IS NOT NULL").get().total;
@@ -79,7 +83,11 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
           : store.byDate(url.searchParams.get('regionId'), url.searchParams.get('date'));
         return shift ? json(shift) : json({ error: 'Смена ещё не создана.' }, 404);
       }
-      if (url.pathname === '/api/shifts' && request.method === 'POST') return json(store.ensure(await bodyOf(request)));
+      if (url.pathname === '/api/shifts' && request.method === 'POST') {
+        const input = await bodyOf(request);
+        if (seedFromBase && input.plan) store.complexity.requirePlanReceipt(input.orders, input.team, input.plan);
+        return json(store.ensure(input));
+      }
       const match = /^\/api\/shifts\/([^/]+)(?:\/(preview|publish|facts|rollback|report|report-data|ai\/summary|ai\/question|ai\/status))?$/.exec(url.pathname);
       if (!match) return json({ error: 'Неизвестный адрес API.' }, 404);
       const [, shiftId, action] = match;
@@ -104,6 +112,14 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
         try {
           const event = normalizeDataAdditionEvent(shift, input.event);
           const model = eventModel(shift, event);
+          const eventAt = `${shift.date}T${event.time || '07:00'}:00+03:00`;
+          const protectedIds = new Set((shift.facts || []).filter(fact => ['started', 'completed'].includes(fact.status)).map(fact => String(fact.orderId)));
+          for (const route of shift.plan?.routes || []) for (const visit of route.assignments || []) if (visit.plannedStart < (event.time || '07:00')) protectedIds.add(String(visit.orderId));
+          model.orders = model.orders.map(order => {
+            const introduced = event.type === 'NEW_ORDER' && String(order.id) === String(event.order?.id || event.orderId);
+            if (!order.durationSnapshot && !introduced && event.type !== 'RECALCULATE') return order;
+            return store.complexity.prepareOrders([order], eventAt, { preserve: protectedIds.has(String(order.id)) })[0];
+          });
           const id = store.startPreview(shiftId, Number(input.expectedRevision), event);
           Promise.resolve().then(async () => {
             const plan = await routing(shift, model, progress => store.updatePreviewProgress(id, progress));
@@ -129,6 +145,11 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
       }
       if (action === 'report-data' && request.method === 'GET') {
         const shift = store.get(shiftId);
+        if (url.searchParams.get('download') === 'durations') {
+          if (Number(url.searchParams.get('revision')) !== shift?.revision) throw new Error('План уже изменился. Обновите страницу перед экспортом.');
+          const report = shiftReportData(shift);
+          return new Response(JSON.stringify({ date: shift.date, revision: shift.revision, planId: shift.currentPlanId, units: 'minutes', travelIncluded: false, visits: report.visits }, null, 2), { headers: { 'content-type': 'application/json; charset=utf-8', 'content-disposition': `attachment; filename="beego-durations-${shift.date}-v${shift.revision}.json"`, 'cache-control': 'no-store' } });
+        }
         const previous = store.history(shift?.regionId, shift?.date, 2).find(item => item.date < shift.date);
         return json({ ...shiftReportData(shift), comparison: previous ? shiftReportData(previous) : null });
       }

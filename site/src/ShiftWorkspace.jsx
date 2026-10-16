@@ -1,3 +1,4 @@
+import { DurationFactFields, DurationDraftComparison } from './ComplexityWorkspace.jsx';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   AlertTriangle,
@@ -44,6 +45,7 @@ const reportFileName = item => {
 };
 
 const EVENT_LABELS = {
+  [EVENT_TYPES.ORDER_DURATION_CHANGED]: 'Изменить длительность визита',
   [EVENT_TYPES.RECALCULATE]: 'Пересчитать план',
   [EVENT_TYPES.ENGINEER_UNAVAILABLE]: "Бригада недоступна",
   [EVENT_TYPES.VISIT_CANCELLED]: "Отмена визита",
@@ -58,7 +60,7 @@ const EVENT_LABELS = {
   PLAN_REBUILT: "Исходный план пересчитан",
   PLAN_ROLLBACK: "Восстановлен план",
 };
-const DIRECT_EVENTS = [EVENT_TYPES.RECALCULATE, EVENT_TYPES.ENGINEER_UNAVAILABLE, EVENT_TYPES.VISIT_CANCELLED, EVENT_TYPES.ORDER_CANCELLED, EVENT_TYPES.MANUAL_ASSIGN, EVENT_TYPES.CLIENT_WINDOW_SHIFT, EVENT_TYPES.ENGINEER_REPLACED];
+const DIRECT_EVENTS = [EVENT_TYPES.ORDER_DURATION_CHANGED, EVENT_TYPES.RECALCULATE, EVENT_TYPES.ENGINEER_UNAVAILABLE, EVENT_TYPES.VISIT_CANCELLED, EVENT_TYPES.ORDER_CANCELLED, EVENT_TYPES.MANUAL_ASSIGN, EVENT_TYPES.CLIENT_WINDOW_SHIFT, EVENT_TYPES.ENGINEER_REPLACED];
 const json = async (path, options) => {
   const response = await fetch(path, options);
   const payload = await response.json().catch(() => ({}));
@@ -276,6 +278,9 @@ export function ShiftWorkspace({
   const [targetId, setTargetId] = useState("");
   const [factOrderId, setFactOrderId] = useState("");
   const [factTime, setFactTime] = useState("12:00");
+  const [durationFact, setDurationFact] = useState({});
+  const [durationMinutes, setDurationMinutes] = useState('');
+  const [automaticDuration, setAutomaticDuration] = useState(false);
   const [correctionReason, setCorrectionReason] = useState("");
   const [time, setTime] = useState(standaloneReplanning ? '07:00' : '12:00');
   const [recalculateScope, setRecalculateScope] = useState('before');
@@ -453,6 +458,8 @@ export function ShiftWorkspace({
       setEventEngineerId(saved.event?.engineerId || '');
       setEventStart(saved.event?.start || '');
       setEventEnd(saved.event?.end || '');
+      setDurationMinutes(saved.event?.durationMinutes == null ? '' : String(saved.event.durationMinutes));
+      setAutomaticDuration(Boolean(saved.event?.automatic));
       setPreview(saved);
       if (saved.status === 'RUNNING') onAlgorithmJob?.(saved);
     };
@@ -636,11 +643,13 @@ export function ShiftWorkspace({
       eventType === EVENT_TYPES.ORDER_CANCELLED ||
       eventType === EVENT_TYPES.VISIT_CANCELLED ||
       eventType === EVENT_TYPES.MANUAL_ASSIGN ||
-      eventType === EVENT_TYPES.CLIENT_WINDOW_SHIFT
+      eventType === EVENT_TYPES.CLIENT_WINDOW_SHIFT ||
+      eventType === EVENT_TYPES.ORDER_DURATION_CHANGED
     )
       base.orderId = targetId;
     if (eventType === EVENT_TYPES.MANUAL_ASSIGN) base.engineerId = eventEngineerId;
     if (eventType === EVENT_TYPES.CLIENT_WINDOW_SHIFT) { base.start = eventStart; base.end = eventEnd; }
+    if(eventType === EVENT_TYPES.ORDER_DURATION_CHANGED) { base.durationMinutes = Number(durationMinutes); base.automatic = automaticDuration; }
     return base;
   };
   const discardDraft = async () => {
@@ -813,6 +822,7 @@ export function ShiftWorkspace({
     try {
       onApply(
         await post(`/api/shifts/${shift.id}/facts`, {
+          ...durationFact,
           orderId,
           status,
           time: factTime,
@@ -1055,7 +1065,7 @@ export function ShiftWorkspace({
                   <span className="order-main"><b>{order.name || order.sourceId || order.id}</b><small>{order.address || 'Адрес не указан'}</small><em className={`shift-status status-${status}`}>{visitStatusLabel(status, clock.mode)}</em></span>
                   <span className="order-window">{order.start ? `${order.start}–${order.end}` : 'Гибкое'}</span><ChevronRight size={17} aria-hidden="true"/>
                 </button>
-                {active ? <div className="shift-order-actions"><div className="shift-order-meta"><span>{order.workType || order.skill || 'Вид работ не указан'}</span><span>{route ? `${route.engineerName || 'Бригада'} · ${assignment?.plannedStart || 'в плане'}` : 'Не назначена · требуется решение диспетчера'}</span></div><div className="shift-order-action-buttons"><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.CLIENT_WINDOW_SHIFT)}>Перенести время</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.MANUAL_ASSIGN)}>{route ? 'Сменить бригаду' : 'Назначить бригаду'}</button>{route ? <button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.VISIT_CANCELLED)}>Отменить визит</button> : null}<button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.ORDER_CANCELLED)}>Отменить заявку</button>{route ? <button type="button" onClick={() => { setFactOrderId(String(order.id)); setFactTime(timeOf(Math.floor(clock.minute))); setTab('fact'); }}>Факт визита</button> : null}</div></div> : null}
+                {active ? <div className="shift-order-actions"><div className="shift-order-meta"><span>{order.workType || order.skill || 'Вид работ не указан'}</span><span>{route ? `${route.engineerName || 'Бригада'} · ${assignment?.plannedStart || 'в плане'}` : 'Не назначена · требуется решение диспетчера'}</span></div><div className="shift-order-action-buttons"><button type='button' onClick={() => { setDurationMinutes(String(order.duration)); editOrder(order.id, EVENT_TYPES.ORDER_DURATION_CHANGED); }}>Длительность</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.CLIENT_WINDOW_SHIFT)}>Перенести время</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.MANUAL_ASSIGN)}>{route ? 'Сменить бригаду' : 'Назначить бригаду'}</button>{route ? <button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.VISIT_CANCELLED)}>Отменить визит</button> : null}<button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.ORDER_CANCELLED)}>Отменить заявку</button>{route ? <button type="button" onClick={() => { setFactOrderId(String(order.id)); setFactTime(timeOf(Math.floor(clock.minute))); setTab('fact'); }}>Факт визита</button> : null}</div></div> : null}
               </article>;
             }) : <p className="shift-muted">Заявок в этой группе нет.</p>}
             </div>
@@ -1190,6 +1200,7 @@ export function ShiftWorkspace({
                 </label>
               ) : null}
               {!pendingEvent && eventType === EVENT_TYPES.MANUAL_ASSIGN ? <label>Бригада для заявки<BusinessSelect ariaLabel="Бригада для заявки" value={eventEngineerId} disabled={Boolean(preview)} onChange={value=>{setEventEngineerId(value);setPreview(null)}} searchable options={[{value:'',label:'Выберите бригаду…'},...shift.team.map(item=>({value:String(item.id),label:item.name||String(item.id)}))]}/></label> : null}
+              {!pendingEvent && eventType === EVENT_TYPES.ORDER_DURATION_CHANGED ? <section className='cx-fact-fields'><label><input type='checkbox' checked={automaticDuration} disabled={Boolean(preview)} onChange={event=>setAutomaticDuration(event.target.checked)}/>Вернуться к автоматическому расчёту</label>{!automaticDuration?<label>Длительность всего визита, мин<input type='number' min='1' max='10080' value={durationMinutes} disabled={Boolean(preview)} onChange={event=>setDurationMinutes(event.target.value)}/></label>:null}<p>Причина ниже сохранится в истории. Будущие визиты и запас смены проверит алгоритм; прошлое останется защищено.</p></section>:null}
               {!pendingEvent && eventType === EVENT_TYPES.CLIENT_WINDOW_SHIFT ? <div className="shift-window-edit"><TimePicker label="Начало нового окна" value={eventStart} disabled={Boolean(preview)} onChange={value=>{setEventStart(value);setPreview(null)}}/><TimePicker label="Конец нового окна" value={eventEnd} disabled={Boolean(preview)} onChange={value=>{setEventEnd(value);setPreview(null)}}/><small>После проверки время визита может отличаться от начала окна: учитываются дорога, занятость и ограничения.</small></div> : null}
               {!pendingEvent && eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE && !preview ? <div className="shift-absence-presets" role="group" aria-label="Причина отсутствия">{['Больничный', 'Отпуск', 'Не вышел на смену'].map(label=><button key={label} type="button" onClick={()=>setReason(label)}>{label}</button>)}</div> : null}
               {![EVENT_TYPES.CAPACITY_ADDED, EVENT_TYPES.NEW_ORDER].includes((pendingEvent || restoredManualAddition)?.type || eventType) && (eventType !== EVENT_TYPES.RECALCULATE || recalculateScope === 'during') ? <div className="replanning-effective-time"><TimePicker label={eventType === EVENT_TYPES.RECALCULATE ? 'Перестроить с' : [EVENT_TYPES.ORDER_CANCELLED, EVENT_TYPES.VISIT_CANCELLED].includes(eventType) ? 'Отменить с' : eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE ? 'Недоступна с' : 'Применить изменение с'} value={time} disabled={Boolean(preview)} onChange={value=>{setTime(value);setPreview(null);setError('')}}/>{standaloneReplanning ? <small>План до этого момента сохранится. Алгоритм изменит только оставшуюся часть дня.</small> : null}</div> : null}
@@ -1230,8 +1241,8 @@ export function ShiftWorkspace({
               ) : null}
               {preview?.status === "READY" ? (
                 <div className="shift-preview">
-                  <h3>Было → стало</h3>
-                  <p>Событие {preview.event?.time}: {preview.event?.reason}. {preview.result?.plan?.validation?.exactCheckedVisits ? `По реальным дорогам проверено ${preview.result.plan.validation.exactCheckedVisits} изменённых участков.` : 'Изменённых дорожных участков нет.'} {preview.result?.plan?.validation?.retainedEstimatedVisits ? `В неизменённой части прежнего плана: ${estimatedLegsLabel(preview.result.plan.validation.retainedEstimatedVisits)}.` : ''}</p>
+                  <h3>Было → стало</h3><DurationDraftComparison shift={shift} preview={preview}/>
+                  <p>Событие {preview.event?.time}: {preview.event?.reason}. Независимая проверка расписания пройдена. {preview.result?.plan?.exactRouteChecks != null ? `Проверено вариантов маршрутов: ${preview.result.plan.exactRouteChecks}.` : ''} {preview.result?.plan?.validation?.retainedEstimatedVisits ? `В неизменённой части прежнего плана: ${estimatedLegsLabel(preview.result.plan.validation.retainedEstimatedVisits)}.` : ''}</p>
                   {preview.result?.plan?.validation?.deferredAssignments ? <p className="shift-risk"><b>Требуется назначение:</b> дорожный сервис недоступен, поэтому будущие заявки снятой бригады оставлены в очереди. Снятие со смены можно опубликовать без неподтверждённых маршрутов.</p> : null}
                   <div>
                     <span>
@@ -1257,7 +1268,7 @@ export function ShiftWorkspace({
                     {change.moved.length ? <details open><summary>Изменены бригада или время · {change.moved.length}</summary><ul>{change.moved.map((item, index) => <li key={`moved-${index}`}>{item}</li>)}</ul></details> : null}
                     {change.inserted.length ? <details open><summary>Добавлены в маршруты · {change.inserted.length}</summary><ul>{change.inserted.map((item, index) => <li key={`inserted-${index}`}>{item}</li>)}</ul></details> : null}
                     {change.removed.length ? <details open><summary>Убраны из маршрутов · {change.removed.length}</summary><ul>{change.removed.map((item, index) => <li key={`removed-${index}`}>{item}</li>)}</ul></details> : null}
-                  </div> : <p>Назначения и время визитов не изменились. Сравните общие показатели перед публикацией.</p>}
+                  </div> : <p>Исполнители и время начала визитов сохранены. Проверьте длительности и окончания выше.</p>}
                   {(preview.result?.team || []).filter(item => { const old = shift.team.find(teamItem => String(teamItem.id) === String(item.id)); return !old || old.shiftStart !== item.shiftStart || old.shiftEnd !== item.shiftEnd || old.status !== item.status; }).length ? <p><b>Часы и состав:</b> {(preview.result.team || []).filter(item => { const old = shift.team.find(teamItem => String(teamItem.id) === String(item.id)); return !old || old.shiftStart !== item.shiftStart || old.shiftEnd !== item.shiftEnd || old.status !== item.status; }).slice(0, 4).map(item => `${item.name || item.id} ${item.shiftStart || '—'}–${item.shiftEnd || '—'}${item.status ? ` · ${item.status}` : ''}`).join('; ')}</p> : null}
                   {change.risky.length ? <p className="shift-risk"><b>Риск по клиентским окнам:</b> запас до конца окна не более 15 минут у {change.risky.slice(0, 4).join(', ')}.</p> : null}
                   {preview.result?.plan?.unassigned?.length ? (
@@ -1302,6 +1313,7 @@ export function ShiftWorkspace({
               </label>
               {selectedFact ? <p className="shift-muted">Последняя отметка: {selectedFact.status === 'completed' ? 'завершено' : selectedFact.status === 'started' ? 'начато' : 'не выполнено'} в {selectedFact.time}.</p> : null}
               <TimePicker label="Время факта" value={factTime} onChange={setFactTime}/>
+              <DurationFactFields value={durationFact} onChange={setDurationFact} snapshot={shift.orders.find(order=>String(order.id)===String(factOrderId))?.durationSnapshot} fact={selectedFact}/>
               <label>
                 Причина невыполнения
                 <input
@@ -1336,7 +1348,7 @@ export function ShiftWorkspace({
               </div>
             </div>
           ) : null}
-          {tab === "report" && reportSection === 'pdf' ? <div className="daily-report-toolbar"><div><small>ДАТА ОТЧЁТА</small>{reportDateControl || <strong>{displayDate(selectedDate)}</strong>}</div><span>Выберите день с сохранённым планом</span></div> : null}
+          {tab === "report" && reportSection === 'pdf' ? <div className="daily-report-toolbar"><div><small>ДАТА ОТЧЁТА</small>{reportDateControl || <strong>{displayDate(selectedDate)}</strong>}</div><span>Выберите день с сохранённым планом</span>{shift?.plan?<a href={`/api/shifts/${shift.id}/report-data?download=durations&revision=${shift.revision}`} download>Экспорт длительностей (JSON)</a>:null}</div> : null}
           {tab === "report" && reportSection === 'pdf' && !shift?.plan ? (
             <section className="shift-report-onboarding report-empty-state" aria-label="Как подготовить отчёт">
               <div className="shift-report-onboarding-intro">

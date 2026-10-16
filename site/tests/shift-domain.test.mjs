@@ -7,6 +7,18 @@ const order = { id: 'a', coords: [55.75, 37.62], start: '10:00', end: '12:00' };
 const engineer = { id: 'e', shiftStart: '08:00', shiftEnd: '18:00', startCoords: [55.7, 37.6] };
 const plan = { status: 'EXACT_VALID', contentSha256: 'test-validated-plan', publicationAllowed: true, validation: { status: 'VALID' }, provider: 'LOCAL_VALHALLA', routes: [{ engineerId: 'e', shiftStart: '08:00', shiftEnd: '18:00', assignments: [{ orderId: 'a', departureAt: '09:00', arrivalAt: '09:30', plannedStart: '10:00', plannedFinish: '11:00', geometry: [[55.7, 37.6], [55.75, 37.62]] }] }], unassigned: [] };
 
+test('duration changes protect past visits and preserve an explained override or automatic reset', () => {
+  const shift = { orders: [order], team: [engineer], plan, facts: [] };
+  const event = { type: 'ORDER_DURATION_CHANGED', orderId: 'a', time: '09:00', reason: 'Дополнительное оборудование', durationMinutes: 95 };
+  const changed = eventModel(shift, event);
+  assert.deepEqual(changed.orders[0].durationOverride, { minutes: 95, reason: event.reason });
+  assert.equal(order.durationOverride, undefined);
+  assert.equal(eventModel({ ...shift, orders: changed.orders }, { ...event, automatic: true }).orders[0].durationOverride, undefined);
+  assert.throws(() => eventModel(shift, { ...event, time: '10:01' }), /изменять нельзя/);
+  assert.throws(() => eventModel({ ...shift, facts: [{ orderId: 'a', status: 'started' }] }, event), /изменять нельзя/);
+  assert.throws(() => eventModel(shift, { ...event, durationMinutes: 1.5 }), /целое/);
+});
+
 test('an event does not erase a cancelled order from the shift history', () => {
   const shift = { orders: [order], team: [engineer], plan, facts: [] };
   const change = eventModel(shift, { type: 'ORDER_CANCELLED', time: '09:00', orderId: 'a', reason: 'Клиент отказался' });

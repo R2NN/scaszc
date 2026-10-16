@@ -161,7 +161,7 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
     offices = dict(dataset.offices)
     locations = dict(dataset.locations)
     digest = hashlib.sha256(
-        json.dumps(event_payload, ensure_ascii=False, sort_keys=True).encode('utf-8')
+        json.dumps({'event': event_payload, 'durations': [(item.get('id'), item.get('durationSnapshot')) for item in payload.get('orders', []) if item.get('durationSnapshot')]}, ensure_ascii=False, sort_keys=True).encode('utf-8')
     ).hexdigest()[:16]
     event_id = f'UI-EVT-{digest}'
 
@@ -182,11 +182,6 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
         if order is None:
             raise ValueError('Новая заявка отсутствует в переданной модели')
         source_job_id = _source_id(order.get('sourceId') or order.get('id'))
-        if source_job_id == 'EAST-EVENT-001':
-            canonical_event = next(
-                item for item in dataset.events if item.target_id == source_job_id
-            )
-            return dataset, canonical_event
         if not source_job_id or source_job_id in regular_jobs:
             raise ValueError('ID новой заявки пуст или уже существует')
         coords = order.get('coords')
@@ -317,6 +312,12 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
     else:
         raise ValueError(f'Неподдерживаемое событие: {event_type}')
 
+    from beeline_planning.duration_contract import verify_duration_snapshot
+    for order in payload.get('orders', []):
+        job_id = _source_id(order.get('sourceId') or order.get('id'))
+        if order.get('durationSnapshot') and job_id in regular_jobs:
+            minutes, snapshot_id = verify_duration_snapshot(order['durationSnapshot'], int(order.get('duration') or 0))
+            regular_jobs[job_id] = replace(regular_jobs[job_id], service_duration_min=minutes, authoritative_duration_min=minutes, duration_snapshot_id=snapshot_id)
     event_hash = hashlib.sha256(
         f'{dataset.dataset_sha256}:{event_id}'.encode('utf-8')
     ).hexdigest()
@@ -368,6 +369,7 @@ def main() -> int:
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--max-route-checks', type=int, default=400)
     parser.add_argument('--rebuild-route-checks', type=int, default=5000)
+    parser.add_argument('--departure-timing-queries', type=int, default=24)
     args = parser.parse_args()
 
     payload = json.load(sys.stdin)
@@ -426,6 +428,7 @@ def main() -> int:
         event,
         oracle,
         max_route_checks=args.max_route_checks,
+        departure_timing_queries=args.departure_timing_queries,
         forced_engineer_by_job=(
             {event.target_id: str(event.payload['engineer_id'])}
             if event.event_type == EventType.MANUAL_ASSIGNMENT else None
@@ -444,6 +447,7 @@ def main() -> int:
             event,
             oracle,
             max_route_checks=args.rebuild_route_checks,
+            departure_timing_queries=args.departure_timing_queries,
             source_dataset=canonical,
             rebuild_future=True,
         )

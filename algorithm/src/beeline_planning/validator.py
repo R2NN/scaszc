@@ -21,6 +21,7 @@ class ValidationStatus(StrEnum):
 
 
 class ViolationCode(StrEnum):
+    DURATION_SNAPSHOT_MISMATCH = 'DURATION_SNAPSHOT_MISMATCH'
     DUPLICATE_ENGINEER_PLAN = 'DUPLICATE_ENGINEER_PLAN'
     UNKNOWN_ENGINEER = 'UNKNOWN_ENGINEER'
     UNKNOWN_OR_INACTIVE_JOB = 'UNKNOWN_OR_INACTIVE_JOB'
@@ -122,6 +123,9 @@ def _validate_plan(
         if previous_plan is not None else {}
     )
     unavailable = unavailable_until_by_engineer or {}
+    for job in dataset.jobs.values():
+        if job.authoritative_duration_min is not None and (job.service_duration_min != job.authoritative_duration_min or not job.duration_snapshot_id):
+            violations.append(Violation(ViolationCode.DURATION_SNAPSHOT_MISMATCH, job.job_id, 'Service duration differs from the immutable server snapshot'))
 
     if plan.planning_at.tzinfo is None or plan.planning_at.utcoffset() is None:
         violations.append(

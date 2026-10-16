@@ -1,0 +1,4 @@
+﻿office_id;zone_id;zone_name;address;latitude;longitude;geocode_status;location_id;coordinate_accuracy;geocode_provider;geocode_object_id
+OFFICE-EAST;EAST;Восток;Город Москва, ул.Юных Ленинцев, д. 83 к 4;55.7022013;37.7739593;VERIFIED_BUILDING;LOC-0154;BUILDING_CENTROID;OpenStreetMap/Nominatim;way/85397778
+OFFICE-SOUTHEAST;SOUTHEAST;Юго-восток;Город Москва, ул.Бирюлёвская, д. 1 к 1;55.6020854;37.6653422;VERIFIED_BUILDING;LOC-0058;BUILDING_CENTROID;OpenStreetMap/Nominatim;way/28456829
+OFFICE-SOUTHCENTER;SOUTHCENTER;Югоцентр;г. Москва, Симферопольский проезд, д. 7;55.6647568;37.6158385;VERIFIED_BUILDING;LOC-0190;BUILDING_CENTROID;OpenStreetMap/Nominatim;way/655680993

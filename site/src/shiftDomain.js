@@ -11,6 +11,7 @@ export const EVENT_TYPES = Object.freeze({
   SHIFT_BOUNDARY_CHANGED: 'SHIFT_BOUNDARY_CHANGED',
   SHIFT_EXTENDED: 'SHIFT_EXTENDED',
   CLIENT_WINDOW_SHIFT: 'CLIENT_WINDOW_SHIFT',
+  ORDER_DURATION_CHANGED: 'ORDER_DURATION_CHANGED',
 });
 
 export const minuteOf = value => {
@@ -75,6 +76,13 @@ export function eventModel(shift, event) {
     } else if (engineer && /недоступ/i.test(engineer.status || '')) {
       nextTeam = team.map(item => String(item.id) === String(engineer.id) ? { ...item, status: 'Доступен', unavailableFrom: null } : item);
     } else throw new Error('Укажите новую или возвращаемую бригаду.');
+  } else if (event.type === EVENT_TYPES.ORDER_DURATION_CHANGED) {
+    if (!order) throw new Error('Выберите заявку для изменения длительности.');
+    const started = (shift.facts || []).some(fact => String(fact.orderId) === String(order.id) && ['started', 'completed'].includes(fact.status));
+    const assignment = shift.plan.routes.flatMap(route => route.assignments || []).find(visit => String(visit.orderId) === String(order.id));
+    if (started || (assignment && assignment.plannedStart < event.time)) throw new Error('Длительность начатого или прошедшего визита изменять нельзя.');
+    if (!event.automatic && (!Number.isInteger(Number(event.durationMinutes)) || Number(event.durationMinutes) < 1 || Number(event.durationMinutes) > 10080)) throw new Error('Укажите положительное целое время визита.');
+    nextOrders = orders.map(item => String(item.id) === String(order.id) ? { ...item, durationOverride: event.automatic ? undefined : { minutes: Number(event.durationMinutes), reason: event.reason }, ...(event.durationFactors ? { durationFactors: event.durationFactors } : {}) } : item);
   } else if (event.type === EVENT_TYPES.MANUAL_ASSIGN) {
     if (!order || !engineer) throw new Error('Укажите заявку и бригаду для назначения.');
     const assigned = shift.plan.routes.flatMap(route => (route.assignments || []).map(item => ({ route, item }))).find(entry => String(entry.item.orderId) === String(order.id));

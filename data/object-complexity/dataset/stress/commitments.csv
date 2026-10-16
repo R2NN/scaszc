@@ -1,0 +1,2 @@
+﻿commitment_id;job_id;engineer_id;constraint_type;effective_from;release_event_id;reason
+STRESS-COMMIT-001;SOUTHEAST-84466;SOUTHEAST-ENG-01;HARD_ASSIGNMENT;2026-08-17T07:00:00+03:00;STRESS-EVT-002;Контрольное предварительное назначение: гарантирует проверку перепланирования при недоступности инженера.

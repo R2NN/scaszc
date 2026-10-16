@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { nextFact, minuteOf } from '../src/shiftDomain.js';
+import { ComplexityStore } from './complexityStore.mjs';
 
 const encode = value => JSON.stringify(value ?? null);
 const decode = value => value == null ? null : JSON.parse(value);
@@ -80,6 +81,7 @@ export class ShiftStore {
       this.db.exec('ALTER TABLE replan_previews ADD COLUMN progress_json TEXT');
     }
     this.db.prepare('INSERT OR IGNORE INTO migrations(version) VALUES (1)').run();
+    this.complexity = new ComplexityStore(this.db);
     this.seedRosterFromShifts();
     this.db.prepare("UPDATE replan_previews SET status = 'FAILED', error = 'Сервер перезапущен во время расчёта. Создайте новый черновик.' WHERE status = 'RUNNING'").run();
   }
@@ -157,6 +159,7 @@ export class ShiftStore {
   }
 
   ensure({ regionId, date, orders = [], team = [], plan = null }) {
+    this.complexity.verifyOrders(orders, plan);
     if (!regionId || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('Укажите регион и дату смены.');
     if (plan) requireExactPlan(plan);
     const saved = this.db.transaction(() => {
@@ -295,6 +298,7 @@ export class ShiftStore {
       if (newerFacts) throw new Error('После расчёта появился новый факт визита. Пересчитайте черновик, чтобы не изменить выполненную работу.');
       const { plan, orders, team } = preview.result;
       requireExactPlan(plan);
+      this.complexity.verifyOrders(orders, plan);
       const stamp = now();
       const versionId = randomUUID();
       const eventId = randomUUID();
@@ -320,6 +324,9 @@ export class ShiftStore {
       if (['started', 'completed'].includes(update.status) && !currentlyAssigned) throw new Error('Начать или завершить можно только визит в текущем плане.');
       const prior = shift.facts.find(item => String(item.orderId) === String(update.orderId));
       const fact = nextFact(prior, update, { correction: Boolean(update.correctionReason) });
+      fact.startedAt = update.startedAt || (fact.status === 'started' ? fact.time : prior?.startedAt || (prior?.status === 'started' ? prior.time : null));
+      fact.engineerId = prior?.engineerId || shift.plan?.routes?.find(route => route.assignments.some(visit => String(visit.orderId) === String(update.orderId)))?.engineerId;
+      this.complexity.recordShiftFact(shift, fact, prior, actor);
       this.db.prepare('INSERT INTO visit_facts(id,shift_id,order_id,status,fact_time,payload_json,actor,created_at) VALUES (?,?,?,?,?,?,?,?)').run(randomUUID(), shiftId, String(update.orderId), fact.status, fact.time, encode(fact), actor, now());
       return this.get(shiftId);
     })();

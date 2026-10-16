@@ -5,6 +5,7 @@ import { BusinessSelect } from './BusinessSelect.jsx';
 import { TimePicker } from './TimePicker.jsx';
 import { parseReplanningOrderFile } from './ImportWorkspace.jsx';
 import './manual-entry.css';
+import { DurationFields } from './ComplexityWorkspace.jsx';
 
 const SKILLS = [
   { value: 'Подключение', label: 'Подключение' },
@@ -35,7 +36,7 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
   const isOrder = type === 'orders';
   const update = (key, value) => { setForm(current => ({ ...current, [key]: value })); setError(''); };
   useEffect(() => {
-    if (!isOrder || form.locationSource === 'suggestion' || form.locationSource === 'map' || form.address.trim().length < 3) {
+    if (!isOrder || ['suggestion', 'map', 'file'].includes(form.locationSource) || form.address.trim().length < 3) {
       setSuggestions([]);
       return undefined;
     }
@@ -79,7 +80,7 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
   }, [form.coords, mapOpen]);
   const loadOrder = order => {
     setForm(current => ({ ...current,
-      sourceId: order.sourceId || '', name: order.name || '', address: order.address || '',
+      durationFactors: order.durationFactors || {}, durationOverride: order.durationOverride, objectId: order.objectId, serviceEntities: order.serviceEntities, sourceId: order.sourceId || '', name: order.name || '', address: order.address || '',
       coords: order.coords || null, locationSource: order.coords ? 'file' : '',
       zone: order.zone || current.zone, skill: order.skill || current.skill,
       equipment: Array.isArray(order.equipment) ? order.equipment.join(', ') : order.equipment || '',
@@ -124,11 +125,11 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
       <label>{isOrder ? 'Название заявки' : 'Имя / название бригады'}<input value={form.name} onChange={event => update('name', event.target.value)} placeholder={isOrder ? 'Подключение абонента' : 'Бригада Иванов'} required/></label>
       <label>Зона{zones.length ? <BusinessSelect ariaLabel="Зона" value={form.zone} onChange={value => update('zone', value)} options={zones.map(zone => ({ value: zone, label: zone }))}/> : <input value={form.zone} onChange={event => update('zone', event.target.value)} placeholder="Название зоны" required/>}</label>
       {isOrder ? <>
-        <label>Вид работ<BusinessSelect ariaLabel="Вид работ" value={form.skill} onChange={value => update('skill', value)} options={SKILLS}/></label>
+        <label>Вид работ<BusinessSelect ariaLabel="Вид работ" value={form.skill} onChange={value => {update('skill', value);update('durationFactors', {});}} options={SKILLS}/></label>
         <label>Приоритет<BusinessSelect ariaLabel="Приоритет" value={form.priority} onChange={value => update('priority', value)} options={[{ value: 'Обычная', label: 'Обычная' }, { value: 'Срочная', label: 'Срочная' }, { value: 'Авария', label: 'Авария' }]}/></label>
         <div className="wide manual-address-field"><label>Адрес в Москве<input value={form.address} onChange={event => { setForm(current => ({ ...current, address: event.target.value, coords: null, locationSource: '' })); setError(''); }} placeholder="Улица, дом" autoComplete="off"/></label>{suggestions.length ? <div className="manual-address-suggestions" role="listbox" aria-label="Подсказки адресов">{suggestions.map((item, index) => <button type="button" role="option" aria-selected={false} key={`${item.address}-${index}`} onClick={() => { setForm(current => ({ ...current, address: item.address, coords: item.coords, locationSource: 'suggestion' })); setSuggestions([]); }}><MapPin size={15}/>{item.address}</button>)}</div> : null}<button type="button" className="manual-map-toggle" onClick={() => setMapOpen(value => !value)}><MapPin size={16}/>{mapOpen ? 'Скрыть карту' : 'Выбрать точку на карте'}</button>{form.coords ? <small>Точка: {form.coords[0].toFixed(6)}, {form.coords[1].toFixed(6)} · {form.locationSource === 'map' ? 'выбрана на карте' : 'из адреса или файла'}</small> : null}{mapOpen ? <div ref={mapContainerRef} className="manual-entry-map" aria-label="Карта для выбора точки заявки"/> : null}</div>
         <TimePicker label="Начало окна" value={form.start} onChange={value => update('start', value)}/><TimePicker label="Конец окна" value={form.end} onChange={value => update('end', value)}/>
-        <label>Работа, минут<input type="number" min="1" max="600" value={form.duration} onChange={event => update('duration', event.target.value)} required/></label>
+        <DurationFields form={form} onChange={update} date={date}/>
         <label>Оборудование<input value={form.equipment} onChange={event => update('equipment', event.target.value)} placeholder="Роутер, ТВ-приставка"/></label>
       </> : <>
         <fieldset className="wide manual-skill-picker"><legend>Навыки</legend>{SKILLS.map(skill => <label className="manual-skill-option" key={skill.value}><input type="checkbox" checked={form.skills.includes(skill.value)} onChange={event => update('skills', event.target.checked ? [...form.skills, skill.value] : form.skills.filter(value => value !== skill.value))}/><span className="manual-checkbox" aria-hidden="true"><Check/></span><span>{skill.label}</span></label>)}</fieldset>

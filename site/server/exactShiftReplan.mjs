@@ -97,11 +97,12 @@ export const historicalInventory = async (date, root = projectRoot()) => {
 export async function exactShiftReplan(shift, model, onProgress = () => {}) {
   const deadlineAt = Date.now() + PLANNING_DEADLINE_MS;
   const event = { ...model.event };
-  const eventTypes = ['RECALCULATE', 'NEW_ORDER', 'ORDER_CANCELLED', 'VISIT_CANCELLED', 'ENGINEER_UNAVAILABLE', 'CAPACITY_ADDED', 'SHIFT_BOUNDARY_CHANGED', 'SHIFT_EXTENDED', 'MANUAL_ASSIGN', 'CLIENT_WINDOW_SHIFT'];
+  const eventTypes = ['RECALCULATE', 'NEW_ORDER', 'ORDER_CANCELLED', 'VISIT_CANCELLED', 'ENGINEER_UNAVAILABLE', 'CAPACITY_ADDED', 'SHIFT_BOUNDARY_CHANGED', 'SHIFT_EXTENDED', 'MANUAL_ASSIGN', 'CLIENT_WINDOW_SHIFT', 'ORDER_DURATION_CHANGED'];
   const useEventSolver = eventTypes.includes(event.type);
   if (useEventSolver && !shift.plan?.contentSha256) throw new Error('У опубликованного плана нет исходного точного артефакта для безопасного перепланирования.');
   let plan;
   if (useEventSolver) {
+    if (event.type === 'ORDER_DURATION_CHANGED') event.type = 'RECALCULATE';
     if (event.type === 'VISIT_CANCELLED') event.type = 'ORDER_CANCELLED';
     if (event.type === 'MANUAL_ASSIGN') event.type = 'FORCED_ASSIGNMENT';
     onProgress({ phase: 'EXACT_EVENT', checkedRoads: 0 });

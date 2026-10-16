@@ -14,6 +14,9 @@ runtime/*.sqlite3
 runtime/ui-runs
 runtime/ui-shared-cache
 runtime/exact-replans
+runtime/qa
+runtime/baseline
+runtime/candidate*
 data/original_extract
 data/screening
 data/traffic4cast

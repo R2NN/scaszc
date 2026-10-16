@@ -1,0 +1,40 @@
+﻿check;status;details
+Обязательные файлы;PASS;Отсутствуют: нет
+Версия набора;PASS;"dataset=2.1.0; schema=2.1.0"
+Начальный момент планирования;PASS;2026-08-17T07:00:00+03:00
+Семантика окна и зоны;PASS;"SERVICE_START_WITHIN_WINDOW; interval=CLOSED; completion=ALLOWED_IF_WITHIN_SHIFT; zone=HARD"
+Лексикографическая цель без смягчения жёстких ограничений;PASS;"initial=['unserved_urgent_jobs', 'unserved_normal_jobs', 'used_engineers', 'total_distance_m', 'total_travel_minutes', 'total_waiting_minutes', 'workload_imbalance_minutes', 'deterministic_tie_break']; replanning=['unserved_urgent_jobs', 'unserved_normal_jobs', 'changed_not_started_assignments', 'preserved_job_start_shift_minutes', 'used_engineers', 'total_distance_m', 'total_travel_minutes', 'workload_imbalance_minutes', 'deterministic_tie_break']"
+Обязательные метрики персонала и пробега;PASS;['distance_m_by_engineer', 'total_distance_m', 'total_travel_minutes', 'travel_minutes_by_engineer', 'used_engineers']
+Однозначное резервирование расходников;PASS;"{""event_jobs_use_remaining_stock"": true, ""in_progress_reservations_on_replan"": ""KEEP_RESERVED"", ""not_started_reservations_on_replan"": ""RELEASE_AND_REALLOCATE"", ""replenishment_during_day"": false, ""shared_consumables_decrement"": ""ON_JOB_COMPLETION_FROM_RESERVED_QUANTITY"", ""shared_consumables_reservation"": ""RESERVE_FOR_ASSIGNED_JOBS_AT_PLAN_PUBLICATION"", ""shortage_behavior"": ""JOB_MUST_REMAIN_UNSERVED_WITH_EXPLICIT_REASON"", ""toolkits_reusable"": true}"
+Начало активности и состояния перепланирования;PASS;"{""activity_start"": ""DEPARTURE_TO_JOB"", ""cancel_not_started"": ""CANCELED_AND_RESERVATION_RELEASED"", ""cancel_started"": ""REJECTED_ALREADY_STARTED"", ""completed_jobs"": ""FROZEN"", ""consumed_inventory"": ""NOT_RESTORED"", ""elapsed_travel_and_service"": ""ACCOUNTED"", ""engineer_unavailable"": ""EFFECTIVE_AFTER_CURRENT_STARTED_ACTIVITY"", ""in_service_jobs"": ""FROZEN"", ""in_transit_to_job"": ""FROZEN"", ""not_started_jobs"": ""REOPTIMIZABLE""}"
+UNKNOWN и UNREACHABLE разделены;PASS;"UNKNOWN=BLOCK_RUN_WITH_ROUTING_INCOMPLETE; UNREACHABLE=FORBID_ARC"
+CSV UTF-8 BOM;PASS;Без BOM: нет
+CORE: число заявок;PASS;206 / 206
+CORE: уникальность job_id;PASS;206 записей
+STRESS: число заявок;PASS;207 / 207
+STRESS: уникальность job_id;PASS;207 записей
+Исходные заявки по зонам;PASS;{'EAST': 66, 'SOUTHEAST': 83, 'SOUTHCENTER': 56}
+Одинаковые исходные заявки CORE/STRESS;PASS;205 ID
+Уникальность локаций;PASS;200 локаций
+Координаты и происхождение;PASS;Ошибки: 0
+Явная аномалия Дубининской;PASS;[('LOC-0082', 'Город Москва, ул.Дубининская, д. 59 к 2')]
+Связь заявок/офисов с locations;PASS;Расхождения: 0
+Аудит геокодирования полон;PASS;200 записей
+Адреса синтетических офисов исправлены;PASS;{'OFFICE-EAST': 'Город Москва, ул.Юных Ленинцев, д. 83 к 4', 'OFFICE-SOUTHEAST': 'Город Москва, ул.Бирюлёвская, д. 1 к 1', 'OFFICE-SOUTHCENTER': 'г. Москва, Симферопольский проезд, д. 7'}
+max_route_minutes согласован со сменой;PASS;Ошибки: 0
+Ссылочная целостность;PASS;Ошибки: 0
+Минимум 2 статических кандидата на CORE-заявку;PASS;"Минимум=3; ошибки=[]"
+Все required_skill определены;PASS;Допустимые: ['EMERGENCY', 'INSTALL', 'LOCAL']
+Все типы работ имеют правило;PASS;18 правил
+Временная целостность заявок;PASS;Ошибки: 0
+Адреса срочных заявок новые;PASS;['Город Москва, ул.Зеленодольская, д. 32 к 1', 'Домодедово, Каширское шоссе, д. 7']
+Порядок stress-событий;PASS;[('2026-08-17T13:30:00+03:00', 1), ('2026-08-17T14:00:00+03:00', 2), ('2026-08-17T14:10:00+03:00', 3), ('2026-08-17T15:00:00+03:00', 4)]
+Ссылки событий;PASS;Ошибки: 0
+Контрольное назначение делает недоступность значимой;PASS;[{'commitment_id': 'STRESS-COMMIT-001', 'job_id': 'SOUTHEAST-84466', 'engineer_id': 'SOUTHEAST-ENG-01', 'constraint_type': 'HARD_ASSIGNMENT', 'effective_from': '2026-08-17T07:00:00+03:00', 'release_event_id': 'STRESS-EVT-002', 'reason': 'Контрольное предварительное назначение: гарантирует проверку перепланирования при недоступности инженера.'}]
+CORE: инвентарь покрывает спрос;PASS;{}
+STRESS: единственный дефицит ONT=1;PASS;{('SOUTHEAST', 'ONT_GIGABIT'): 1}
+Все 4 типа транспорта;PASS;['BICYCLE', 'CAR', 'PUBLIC_TRANSIT', 'WALKING']
+Нет синтетических коэффициентов трафика;PASS;Поля: ['day_type', 'profile_id', 'required_outputs', 'router_capability', 'time_dependency', 'transport_type', 'unknown_behavior', 'unreachable_behavior']
+Маршрутные профили полны и проверяемы;PASS;"Профили=4; ошибки=0"
+Точное совпадение CSV/JSON;PASS;Расхождения: 0
+Целостность SHA-256;PASS;Расхождения: 0

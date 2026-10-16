@@ -1,0 +1,12 @@
+{
+  "generator": "complexity-v1",
+  "seed": 17082026,
+  "anchor": "2026-08-17",
+  "sourceMain": "02d4811a93a1e17d6a45364a8a705e0f93fc6053",
+  "originalIdsPreserved": true,
+  "originalCoordinatesPreserved": true,
+  "objects": 197,
+  "visits": 1780,
+  "stages": "Independent simulation, hidden operation speeds and persistent conditions; not forecast plus noise",
+  "limits": "Synthetic inventory, entrance/node positions not geocoded. Sample visits do not constitute full measured shifts."
+}

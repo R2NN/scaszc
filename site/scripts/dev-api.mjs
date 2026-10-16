@@ -37,7 +37,7 @@ const server = createServer(async (request, response) => {
       body: ['GET', 'HEAD'].includes(request.method) ? undefined : body,
       duplex: body ? 'half' : undefined,
     });
-    const webResponse = await operations.handle(webRequest) || await handleExactPlanning(webRequest) || await worker.fetch(webRequest, loadVariables());
+    const webResponse = await operations.handle(webRequest) || await handleExactPlanning(webRequest, { complexity: operations.store.complexity }) || await worker.fetch(webRequest, loadVariables());
     response.writeHead(webResponse.status, Object.fromEntries(webResponse.headers));
     response.end(Buffer.from(await webResponse.arrayBuffer()));
   } catch (error) {

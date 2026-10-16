@@ -1,3 +1,4 @@
+import { DurationAccuracy } from './ComplexityWorkspace.jsx';
 import { Fragment, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as maplibregl from 'maplibre-gl';
@@ -1863,7 +1864,7 @@ export function AnalyticsWorkspace({ orders = [], team = [], plan, date, onDateC
       {view === 'shift' ? <><StatusHero data={data} onResolve={openUnassigned}/><ShiftView data={data} onOpenUnassigned={openUnassigned} onOpenResource={openResourceForNeed} onOpenRoutes={openRoutes} onOpenWindows={openWindows} onInspect={openInspector} isArchived={Boolean(selectedRecord && liveDateKey && selectedRecord.date < liveDateKey)}/></> : null}
       {view === 'history' ? <HistoryView records={historyRecords} comparisonRecords={comparisonHistoryRecords} mlForecast={mlForecast} forecastStatus={forecastStatus} selectedDate={selectedKey} planningDate={liveDateKey} onSelectDate={onDateChange} onOpenDecision={onStartLiveReplan} region={cluster} section={historySection} onSectionChange={setHistorySection}/> : null}
       {view === 'resources' ? <ResourcesView data={data} record={activeRecord} decisionScope={selectedKey} viewMode={resourceViewMode} focusNeed={resourceFocus} isLive={isPlanningDay && Boolean(plan)} onViewModeChange={setResourceViewMode} onOpenUnassigned={openUnassigned} onOpenRoute={openRoutes} onOpenOrder={onOpenOrder} onPreviewReplan={onPreviewReplan} onApplyReplan={onApplyReplan}/> : null}
-      {view === 'comparison' ? <div className="efficiency-workspace"><FinancePanel record={activeRecord} baseline={data.baseline} rates={preferences.rates} onRateChange={(key, value) => updatePreference('rates', key, value)} onInspect={openInspector}/><EfficiencyView record={activeRecord} rates={preferences.rates} onOpenRoutes={openRoutes}/></div> : null}
+      {view === 'comparison' ? <div className="efficiency-workspace"><DurationAccuracy date={date} regionId={orders[0]?.regionId || team[0]?.regionId || 'moscow'} zone={cluster==='all'?'':cluster}/><FinancePanel record={activeRecord} baseline={data.baseline} rates={preferences.rates} onRateChange={(key, value) => updatePreference('rates', key, value)} onInspect={openInspector}/><EfficiencyView record={activeRecord} rates={preferences.rates} onOpenRoutes={openRoutes}/></div> : null}
     </div>
   </div>;
 }

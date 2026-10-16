@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import re
+from .duration_contract import verify_duration_snapshot
 from collections import Counter, defaultdict
 from datetime import date, datetime, time
 from pathlib import Path
@@ -420,6 +421,10 @@ def load_planning_dataset(dataset_root: Path, scenario: str) -> PlanningDataset:
     )
     jobs: dict[str, Job] = {}
     expected_scenario = scenario_name.upper()
+    snapshot_file = root / 'common' / 'duration_snapshots.json'
+    if manifest.get('duration_contract') and not snapshot_file.exists():
+        raise InvalidPlanningData('Authoritative duration snapshot file is missing')
+    duration_snapshots = json.loads(snapshot_file.read_text(encoding='utf-8')) if snapshot_file.exists() else None
     for row in job_rows:
         job_id = _required(row, 'job_id', f'{scenario_name}/jobs.csv')
         source = f'{scenario_name}/jobs.csv:{job_id}'
@@ -441,7 +446,10 @@ def load_planning_dataset(dataset_root: Path, scenario: str) -> PlanningDataset:
                 f'{source}: bk_type/hd_type is absent from work_rules.csv'
             )
         duration = _parse_positive_int(row['service_duration_min'], f'{source}:service_duration_min')
-        if duration != _parse_positive_int(rule['service_duration_min'], 'work_rules.csv'):
+        authoritative_duration, duration_snapshot_id = None, None
+        if duration_snapshots is not None:
+            authoritative_duration, duration_snapshot_id = verify_duration_snapshot(duration_snapshots.get(job_id), duration)
+        if authoritative_duration is None and duration != _parse_positive_int(rule['service_duration_min'], 'work_rules.csv'):
             raise InvalidPlanningData(f'{source}: service duration disagrees with work_rules.csv')
         window_start = _parse_datetime(row['window_start'], f'{source}:window_start', timezone)
         window_end = _parse_datetime(row['window_end'], f'{source}:window_end', timezone)
@@ -464,6 +472,8 @@ def load_planning_dataset(dataset_root: Path, scenario: str) -> PlanningDataset:
             window_end=window_end,
             created_at=created_at,
             service_duration_min=duration,
+            authoritative_duration_min=authoritative_duration,
+            duration_snapshot_id=duration_snapshot_id,
             priority=priority,
             required_skill=required_skill,
             required_transport=required_transport,

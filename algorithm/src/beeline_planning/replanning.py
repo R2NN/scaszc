@@ -195,6 +195,7 @@ def replan_after_event(
     source_dataset: PlanningDataset | None = None,
     progress_callback: Callable[[int], None] | None = None,
     rebuild_future: bool = False,
+    departure_timing_queries: int = 24,
 ) -> ReplanningResult:
     """Apply one ordered event and return an exactly validated full-day plan.
 
@@ -364,7 +365,12 @@ def replan_after_event(
         )
         # The source plan is independently validated above. An untouched route
         # has the same job order and exact route evidence after this event.
-        if order == original_suffix and not newly_unavailable and not shifted_window:
+        duration_changed = source_dataset is not None and any(
+            dataset.jobs[visit.job_id].service_duration_min
+            != source_dataset.jobs[visit.job_id].service_duration_min
+            for visit in original_route.visits
+        ) if original_route else False
+        if order == original_suffix and not newly_unavailable and not shifted_window and not duration_changed:
             result = _RouteTrial(original_route.visits if original_route else ())
             trial_cache[key] = result
             return result
@@ -548,7 +554,7 @@ def replan_after_event(
     pending = sorted(
         active_job_ids - assigned_jobs(),
         key=lambda job_id: (
-            not (rebuild_future and job_id == event.target_id
+            not (job_id == event.target_id
                  and event.event_type in {EventType.NEW_JOB, EventType.NEW_URGENT_JOB}),
             dataset.jobs[job_id].priority != Priority.URGENT,
             dataset.jobs[job_id].window_end,
@@ -908,6 +914,7 @@ def replan_after_event(
         applied_event_ids=frozenset(new_applied),
         canceled_job_ids=frozenset(canceled),
         unavailable_until_by_engineer=unavailable,
+        max_total_queries=departure_timing_queries,
     )
     plan = timing.plan
     validation = validate_replanned_plan(
