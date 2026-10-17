@@ -46,6 +46,13 @@ class ImportEquipmentTests(unittest.TestCase):
             self.assertEqual(result['status'], 'PREPARED')
             self.assertIn('DIAG_SET', (target / 'common' / 'work_equipment_matrix.csv').read_text(encoding='utf-8-sig'))
             self.assertIn('DIAG_SET', (target / 'common' / 'engineer_equipment.csv').read_text(encoding='utf-8-sig'))
+            # A confirmed home/office at the service point needs IdentityTravel,
+            # not a zero-length provider trip with unrelated location IDs.
+            with (target / 'common' / 'offices.csv').open(encoding='utf-8-sig', newline='') as source:
+                office = next(csv.DictReader(source, delimiter=';'))
+            with (target / 'core' / 'jobs.csv').open(encoding='utf-8-sig', newline='') as source:
+                job = next(csv.DictReader(source, delimiter=';'))
+            self.assertEqual(job['location_id'], office['location_id'])
 
         payload['orders'][0]['coords'] = None
         with TemporaryDirectory() as directory:

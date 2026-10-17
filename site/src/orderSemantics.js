@@ -15,7 +15,10 @@ export function orderSemantics(order) {
   const rule = information ? null : emergencyPriority || matches(contract.globalPattern, group)
     ? contract.kinds[0] : contract.kinds.find(item => matches(item.pattern, `${group} ${skill}`));
   const kind = information ? 'information' : rule?.kind || null;
+  const reviewedSkill = String(source.required_skill || '').toUpperCase();
+  const preserveReviewedSkill = kind === 'equipment' && group === normalize(source.bk_type)
+    && skill === normalize(reviewedSkill) && contract.reviewedEquipmentSkills.includes(reviewedSkill);
   const priority = kind === 'emergency' || emergencyPriority || contract.urgentPriorities.includes(rawPriority) ? 'URGENT'
     : contract.normalPriorities.includes(rawPriority) ? 'NORMAL' : null;
-  return { kind, requiredSkill: information ? contract.informationSkill : rule?.skill || null, priority, skillLabel: information ? contract.kinds[0].label : rule?.label || null };
+  return { kind, requiredSkill: information ? contract.informationSkill : preserveReviewedSkill ? reviewedSkill : rule?.skill || null, priority, skillLabel: information ? contract.kinds[0].label : rule?.label || null };
 }

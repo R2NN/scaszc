@@ -91,8 +91,11 @@ def order_semantics(item: dict[str, Any]) -> dict[str, Any]:
         else:
             rule = next((rule for rule in SEMANTICS['kinds'] if re.search(rule['pattern'], f'{group} {qualification}')), None)
     kind = 'information' if information else rule['kind'] if rule else None
+    reviewed_skill = str(source.get('required_skill') or '').upper()
+    preserve_reviewed_skill = (kind == 'equipment' and group == normalized(source.get('bk_type'))
+        and qualification == normalized(reviewed_skill) and reviewed_skill in SEMANTICS['reviewedEquipmentSkills'])
     queue = 'URGENT' if kind == 'emergency' or emergency_priority or raw_priority in SEMANTICS['urgentPriorities'] else 'NORMAL' if raw_priority in SEMANTICS['normalPriorities'] else None
-    return {'kind': kind, 'requiredSkill': SEMANTICS['informationSkill'] if information else rule['skill'] if rule else None, 'priority': queue, 'skillLabel': SEMANTICS['kinds'][0]['label'] if information else rule['label'] if rule else None}
+    return {'kind': kind, 'requiredSkill': SEMANTICS['informationSkill'] if information else reviewed_skill if preserve_reviewed_skill else rule['skill'] if rule else None, 'priority': queue, 'skillLabel': SEMANTICS['kinds'][0]['label'] if information else rule['label'] if rule else None}
 
 
 def is_emergency_work_type(item: dict[str, Any]) -> bool:
@@ -412,6 +415,7 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
     skill_mapping = []
     seen_jobs: set[str] = set()
     shared_demand: Counter[tuple[str, str]] = Counter()
+    location_by_coords = {(row['latitude'], row['longitude']): row['location_id'] for row in locations}
     for index, item in enumerate(orders, 1):
         job_id = source_id(item, 'job_id')
         if job_id in seen_jobs:
@@ -423,8 +427,11 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         if str(item.get('geocodeStatus') or '').casefold() in {'needs_geocoding', 'error'}:
             raise ValueError(f'Координаты заявки {job_id} требуют подтверждения')
         lat, lon = coordinates(item, 'coords')
-        location_id = f'LOC-JOB-UI-{index}'
-        locations.append({'location_id': location_id, 'latitude': lat, 'longitude': lon, 'geocode_status': 'VERIFIED_UI', 'address': item.get('address') or ''})
+        location_id = location_by_coords.get((lat, lon))
+        if location_id is None:
+            location_id = f'LOC-JOB-UI-{index}'
+            location_by_coords[lat, lon] = location_id
+            locations.append({'location_id': location_id, 'latitude': lat, 'longitude': lon, 'geocode_status': 'VERIFIED_UI', 'address': item.get('address') or ''})
         start, end = clock(item.get('start'), 'Начало окна'), clock(item.get('end'), 'Конец окна')
         if end < start:
             raise ValueError(f'Окно заявки {job_id} заканчивается до начала')

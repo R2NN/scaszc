@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -18,6 +19,15 @@ from replan_ui_event import _event_dataset
 
 
 class UiWorkSemanticsTests(unittest.TestCase):
+    def test_reviewed_original_day_preserves_all_205_required_qualifications(self):
+        root = Path(__file__).parents[2]
+        reviewed = json.loads((root / 'site/public/data/beego-complexity-plan.json').read_text(encoding='utf8'))
+        original = load_planning_dataset(root / 'data/object-complexity/dataset', 'core')
+        self.assertEqual(len(reviewed['orders']), 205)
+        for order in reviewed['orders']:
+            with self.subTest(order=order['id']):
+                self.assertEqual(order_semantics(order)['requiredSkill'], original.jobs[order['sourceId']].required_skill)
+
     def payload(self):
         return {
             'planningDate': '2026-08-17',

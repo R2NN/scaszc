@@ -91,12 +91,16 @@ test('JS and Python use the same semantic contract for qualification, duration a
     { workType: 'Глобальная проблема', serviceType: 'Информация', skill: 'EMERGENCY', priority: 'URGENT' },
     { workType: 'Аварийные работы', priority: 'Обычная' },
     { workType: 'Дозаказ', skill: 'UPSELL', priority: 'Обычная' },
+    { workType: 'Дозаказ', skill: 'INSTALL', priority: 'NORMAL', sourceData: { bk_type: 'Дозаказ', required_skill: 'INSTALL' } },
+    { workType: 'Дозаказ', skill: 'INSTALL', priority: 'EMERGENCY', sourceData: { bk_type: 'Дозаказ', required_skill: 'INSTALL' } },
     { sourceData: { bk_type: 'Подключение', required_skill: 'INSTALL', priority: 'Авария' } },
     { workType: 'Подключение', priority: 'critical' },
   ];
   const python = spawnSync(process.env.BEEGO_PYTHON || fileURLToPath(new URL('../../.venv/Scripts/python.exe', import.meta.url)), ['-c', 'import json,sys; from algorithm.tools.prepare_ui_dataset import order_semantics; print(json.dumps([order_semantics(item) for item in json.load(sys.stdin)],ensure_ascii=False))'], { cwd: root, input: JSON.stringify(cases), encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, windowsHide: true });
   assert.equal(python.status, 0, python.stderr);
   assert.deepEqual(JSON.parse(python.stdout), cases.map(orderSemantics));
+  assert.equal(orderSemantics(cases[8]).requiredSkill, 'INSTALL');
+  assert.equal(orderSemantics(cases[9]).requiredSkill, 'EMERGENCY');
   assert.equal(calculateDuration(cases[0], { asOf: at }).total, 80);
   assert.equal(effectiveOrderSkill(cases[0]), 'Аварийные работы');
   assert.equal(workPointType(cases[0]), 'emergency');

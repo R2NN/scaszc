@@ -34,7 +34,14 @@ export class EmergencyDispatch {
     return (shiftId ? this.store.db.prepare('SELECT payload FROM dispatch_incidents WHERE shift_id=? ORDER BY rowid').all(shiftId) : this.store.db.prepare('SELECT payload FROM dispatch_incidents ORDER BY rowid').all()).map(decode);
   }
   get(id) { return decode(this.store.db.prepare('SELECT payload FROM dispatch_incidents WHERE id=?').get(id)); }
-  save(item) { this.store.db.prepare('UPDATE dispatch_incidents SET payload=? WHERE id=?').run(encode(item), item.id); return item; }
+  save(item) {
+    return this.store.db.transaction(() => {
+      const current = this.get(item.id);
+      if (current && terminal(current) && current.status !== item.status) return current;
+      this.store.db.prepare('UPDATE dispatch_incidents SET payload=? WHERE id=?').run(encode(item), item.id);
+      return item;
+    }).immediate();
+  }
   policy(shiftId) { return { ...DEFAULT_DISPATCH_POLICY, ...decode(this.store.db.prepare('SELECT payload FROM dispatch_preferences WHERE shift_id=?').get(shiftId)) }; }
   setPolicy(shiftId, input) {
     const waitSeconds = Number(input.waitSeconds);
@@ -188,8 +195,23 @@ export class EmergencyDispatch {
     return result;
   }
 
-  cancel(id) { const item = this.get(id); if (!item || terminal(item)) return item; this.notification(item, 'Авария отменена', item.order.address); this.controllers.get(id)?.abort(); return this.save({ ...item, status: 'CANCELLED', candidates: [] }); }
-  read(id, notificationId) { const item = this.get(id); const notice = item?.notifications.find(n => n.id === notificationId); if (notice) { notice.read = true; this.save(item); } return item; }
+  cancel(id) {
+    const result = this.store.db.transaction(() => {
+      const item = this.get(id);
+      if (!item || terminal(item)) return item;
+      this.notification(item, 'Авария отменена', item.order.address);
+      return this.save({ ...item, status: 'CANCELLED', candidates: [] });
+    }).immediate();
+    if (result && terminal(result)) this.controllers.get(id)?.abort();
+    return result;
+  }
+  read(id, notificationId) {
+    return this.store.db.transaction(() => {
+      const item = this.get(id), notice = item?.notifications.find(n => n.id === notificationId);
+      if (notice) { notice.read = true; return this.save(item); }
+      return item;
+    }).immediate();
+  }
   async tick() {
     if (!this.store.db.open) return;
     for (const item of this.all()) if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { this.accept(item.id,item.recommendedId,'system');return; }

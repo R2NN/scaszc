@@ -1,5 +1,5 @@
 {
-  "version": "order-semantics-1",
+  "version": "order-semantics-2",
   "normalPriorities": ["", "normal", "обычная", "обычный"],
   "urgentPriorities": ["urgent", "high", "срочная", "срочный", "срочно", "высокий", "высокая"],
   "emergencyPriorities": ["emergency", "critical", "авария", "аварийная", "аварийный"],
@@ -11,5 +11,6 @@
     {"kind": "connection", "pattern": "подключ|install|монтаж|connection", "skill": "INSTALL", "label": "Подключение"},
     {"kind": "local", "pattern": "локаль|local|repair|service|диагност|ремонт", "skill": "LOCAL", "label": "Локальные работы"}
   ],
-  "informationSkill": "EMERGENCY"
+  "informationSkill": "EMERGENCY",
+  "reviewedEquipmentSkills": ["INSTALL"]
 }

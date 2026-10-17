@@ -31,6 +31,21 @@ test('incident creation is idempotent and reading a notice never solves it',()=>
 test('manual decision wins once; duplicate callbacks return that same decision',async()=>{
   const f=fixture();try{const item=await f.dispatch.search(f.create().id);assert.equal(item.status,'WAITING');const selected=item.candidates[0];const accepted=f.dispatch.accept(item.id,selected.id,'Диспетчер');f.advance(301);await f.dispatch.tick();assert.deepEqual(f.dispatch.accept(item.id,selected.id,'system').decision,accepted.decision);assert.equal(f.store.get(f.shift.id).revision,2);assert.equal(f.store.get(f.shift.id).events.length,1);}finally{f.store.close();}
 });
+
+test('a stale worker snapshot cannot resurrect an accepted or cancelled incident',async()=>{
+  const f=fixture();
+  try {
+    const ready=await f.dispatch.search(f.create().id);
+    const stale=structuredClone(ready);
+    const accepted=f.dispatch.accept(ready.id,ready.candidates[0].id);
+    assert.equal(f.dispatch.save({...stale,status:'SEARCHING'}).decision.contentSha256,accepted.decision.contentSha256);
+    assert.equal(f.dispatch.cancel(ready.id).status,'ACCEPTED');
+    const second=f.create('U2');
+    f.dispatch.cancel(second.id);
+    assert.equal(f.dispatch.save({...second,status:'QUEUED'}).status,'CANCELLED');
+    assert.equal(f.store.get(f.shift.id).revision,2);
+  } finally { f.store.close(); }
+});
 test('server deadline accepts with actor=system without an open browser',async()=>{
   const f=fixture();try{const item=await f.dispatch.search(f.create().id);f.advance(299);await f.dispatch.tick();assert.equal(f.dispatch.get(item.id).status,'WAITING');f.advance(1);await f.dispatch.tick();assert.equal(f.dispatch.get(item.id).decision.actor,'system');assert.equal(f.store.get(f.shift.id).revision,2);}finally{f.store.close();}
 });
@@ -82,6 +97,15 @@ test('failed routing keeps old plan, exposes expiry and resumes queued work afte
 });
 test('actual unfinished service remains working past planned finish with no invented release',()=>{
   const shift={date:'2026-08-17',revision:1,plan:initial,team:[engineer],orders:[order],facts:[{engineerId:'E1',orderId:'J1',status:'started',time:'12:00'}]};const state=operationalStates(shift,850)[0];assert.equal(state.status,'working');assert.equal(state.availableAt,null);assert.equal(state.source,'dispatcher_fact');
+});
+
+test('actual mode without an observation does not promote playback coordinates to a measured position',()=>{
+  const shift={date:'2026-08-17',revision:1,plan:initial,team:[engineer],orders:[order],facts:[]};
+  const state=operationalStates(shift,700,'fact')[0];
+  assert.equal(state.status,'unknown');
+  assert.equal(state.coords,null);
+  assert.equal(state.availableAt,null);
+  assert.equal(state.source,'unknown');
 });
 test('day start requires a confirmed dated point and cannot rewrite an executing day',()=>{
   const f=fixture();try{const event={type:'START_CHANGED',time:'07:00',engineerId:'E1',reason:'Старт из дома',startPoint:{kind:'home',confirmed:true,date:'2026-08-17',coords:[55.72,37.64],address:'Дом',source:'confirmed-registry',availableFrom:'08:30'}};assert.deepEqual(eventModel(f.shift,event).team[0].startCoords,event.startPoint.coords);assert.throws(()=>eventModel({...f.shift,facts:[{status:'started'}]},event),/начала дня/);assert.throws(()=>eventModel(f.shift,{...event,startPoint:{...event.startPoint,confirmed:false}}),/Подтвердите/);}finally{f.store.close();}

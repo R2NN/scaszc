@@ -16,8 +16,8 @@ export function operationalStates(shift, minute, mode = 'plan') {
     if (/недоступ/i.test(engineer.status || '') && (!engineer.unavailableFrom || minute >= minuteOf(engineer.unavailableFrom))) status = 'unavailable';
     if (fact) { status = 'working'; availableAt = null; }
     else if (status === 'working') availableAt = visit?.plannedFinish || null;
-    const coords = fact ? shift.orders.find(item => String(item.id) === String(fact.orderId))?.coords : crew?.coords;
-    if (!coords && !['before_shift', 'after_shift', 'unavailable'].includes(status)) status = 'unknown';
+    const coords = fact ? shift.orders.find(item => String(item.id) === String(fact.orderId))?.coords : mode === 'plan' ? crew?.coords : null;
+    if (!coords && !['before_shift', 'after_shift', 'unavailable'].includes(status)) { status = 'unknown'; availableAt = null; }
     return { engineerId: engineer.id, moment: `${shift.date}T${timeOf(minute)}:00+03:00`, timezone: 'Europe/Moscow', revision: shift.revision, status,
       orderId: fact?.orderId || crew?.orderId || null, coords: coords || null, availableAt,
       source: fact ? 'dispatcher_fact' : mode === 'plan' ? 'SCENARIO_ROUTE_LENGTH' : crew?.source || 'unknown',
