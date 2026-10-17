@@ -47,7 +47,9 @@ export function createDispatchApi(store, options) {
         const id = randomUUID();
         const first = base.versions[0];
         const shift = store.ensure({ regionId: `${base.regionId.split(':')[0]}:scenario:${id}`, date: base.date, orders: first.orders, team: first.team, plan: first.plan });
-        const session = { id, baseShiftId: input.baseShiftId, shiftId: shift.id, clock: { minute: 360, playing: false, speed: 60, anchorAt: Date.now() }, lastMinute: 360, fired: false };
+        const requestedSpeed = Number(input.speed);
+        const speed = [30, 60, 120, 300].includes(requestedSpeed) ? requestedSpeed : 60;
+        const session = { id, baseShiftId: input.baseShiftId, shiftId: shift.id, clock: { minute: 360, playing: false, speed, anchorAt: Date.now() }, lastMinute: 360, fired: false };
         store.db.prepare('INSERT INTO dispatch_sessions VALUES (?,?,?,?)').run(id, input.baseShiftId, shift.id, JSON.stringify(session));
         return json({ ...session, shift }, 201);
       }

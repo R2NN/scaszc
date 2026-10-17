@@ -36,12 +36,12 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
           const fresh = await api('sessions', { baseShiftId: shift.id });
           sessionStorage.setItem(marker, 'active');
           setSession(fresh); refs.current.onApply(fresh.shift);
-          shiftClock.set({ minute: fresh.clock.minute, playing: false });
+          shiftClock.set({ minute: fresh.clock.minute, playing: false, speed: fresh.clock.speed });
           return;
         }
         sessionStorage.setItem(marker, 'active');
         setSession(value); refs.current.onApply(value.shift);
-        shiftClock.set({ minute: value.clock.minute, playing: false });
+        shiftClock.set({ minute: value.clock.minute, playing: false, speed: value.clock.speed });
       } catch (e) { if (alive) setError(e.message); }
     };
     restore();
@@ -131,11 +131,11 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   };
   const startSession = async () => {
     try {
-      const value = await api('sessions', { baseShiftId: session?.baseShiftId || shift.id });
+      const value = await api('sessions', { baseShiftId: session?.baseShiftId || shift.id, speed: shiftClock.getSnapshot().speed });
       window.dispatchEvent(new CustomEvent('beego:dispatch-clear'));
       sessionStorage.setItem(`beego-dispatch-session:${session?.baseShiftId || shift.id}`, 'active');
       setSession(value); setSelectedId(''); setCandidateId(''); setIncidents([]); refs.current.onApply(value.shift);
-      shiftClock.set({minute:360,playing:false,selectedEngineerId:'',follow:false});
+      shiftClock.set({ minute:360, playing:false, speed:value.clock.speed, selectedEngineerId:'', follow:false });
       refs.current.onOpen();
     } catch (e) { setError(e.message); }
   };
