@@ -1,33 +1,6 @@
 import { useEffect } from 'react';
 import { Marker } from 'maplibre-gl';
-
-const asLine = geometry => Array.isArray(geometry) && geometry.length > 1
-  ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: geometry.map(([lat, lon]) => [lon, lat]) } }
-  : null;
-const currentTime = detail => detail.current?.time || '';
-const future = (visit, time) => !time || String(visit.plannedStart || '99:99') >= time;
-
-/** Draw the selected engineer's remaining day from the current position. */
-const routeData = (plan, detail, includeMovements) => ({
-  type: 'FeatureCollection',
-  features: (plan?.routes || []).filter(route => detail.ids.includes(route.engineerId)).flatMap(route => {
-    const time = currentTime(detail);
-    const visits = (route.assignments || []).filter(visit => future(visit, time));
-    const features = visits.map(visit => asLine(visit.geometry)).filter(Boolean);
-    if (includeMovements) for (const movement of route.movements || []) {
-      if (!time || String(movement.measured_at || '').slice(11, 16) >= time) {
-        const line = asLine(movement.geometry);
-        if (line) features.unshift(line);
-      }
-    }
-    if (route.engineerId === detail.current?.engineerId && detail.current?.origin && features[0]) {
-      const [lat, lon] = detail.current.origin;
-      const first = features[0].geometry.coordinates[0];
-      features.unshift({ type: 'Feature', properties: { branch: true }, geometry: { type: 'LineString', coordinates: [[lon, lat], first] } });
-    }
-    return features;
-  }),
-});
+import { dispatchRouteData, renderDispatchRoutes } from './dispatchComparison.js';
 
 /** Draw a comparison on the existing map, starting both lines at the current position. */
 export function useDispatchMap(map) {
@@ -35,7 +8,17 @@ export function useDispatchMap(map) {
     if (!map) return undefined;
     let marker;
     let originMarker;
+    let legend;
     let latestPreview;
+    const hiddenLayers = new Map();
+    const hideBackgroundRoutes = () => {
+      if (!latestPreview) return;
+      for (const id of ['planned-route', 'planned-route-casing', 'planned-route-arrows', 'planned-route-hit', 'shift-route-remaining', 'shift-route-travelled']) {
+        if (!map.getLayer(id)) continue;
+        if (!hiddenLayers.has(id)) hiddenLayers.set(id, map.getLayoutProperty(id, 'visibility') || 'visible');
+        if (map.getLayoutProperty(id, 'visibility') !== 'none') map.setLayoutProperty(id, 'visibility', 'none');
+      }
+    };
     const focus = event => {
       const coords = event.detail?.coords;
       if (!coords) return;
@@ -52,25 +35,35 @@ export function useDispatchMap(map) {
     };
     const clear = () => {
       latestPreview = null;
+      map.off('idle', restore);
       for (const key of ['before', 'after']) {
         if (map.getLayer(`dispatch-${key}`)) map.removeLayer(`dispatch-${key}`);
         if (map.getSource(`dispatch-${key}`)) map.removeSource(`dispatch-${key}`);
       }
       marker?.remove(); originMarker?.remove(); marker = null; originMarker = null;
+      legend?.remove(); legend = null;
+      for (const [id, visibility] of hiddenLayers) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
+      hiddenLayers.clear();
     };
     const preview = event => {
       latestPreview = event.detail;
       const intercept = event.detail.current?.kind === 'Перехват в пути';
-      const styles = intercept ? [['before', '#7c3aed', [1, 0]], ['after', '#ef4444', [1, 0]]] : [['before', '#737b87', [3, 3]], ['after', '#7c3aed', [1, 0]]];
-      for (const [key, color, dash] of styles) {
-        const data = routeData(event.detail[key], event.detail, key === 'after');
-        const source = map.getSource(`dispatch-${key}`);
-        if (source) source.setData(data);
-        else if (map.isStyleLoaded()) {
-          map.addSource(`dispatch-${key}`, { type: 'geojson', data });
-          map.addLayer({ id: `dispatch-${key}`, type: 'line', source: `dispatch-${key}`, paint: { 'line-color': color, 'line-width': intercept ? 6 : key === 'after' ? 5 : 4, 'line-dasharray': dash, 'line-opacity': .94 } });
-        }
+      if (!map.isStyleLoaded()) {
+        map.off('idle', restore);
+        map.once('idle', restore);
+        return;
       }
+      renderDispatchRoutes(map, event.detail);
+      hideBackgroundRoutes();
+      legend?.remove();
+      legend = document.createElement('div');
+      legend.className = `dispatch-comparison-legend${intercept ? ' intercept' : ''}`;
+      legend.setAttribute('aria-label', 'Сравнение маршрутов');
+      for (const [className, label] of [['origin', `Точка выбора · ${event.detail.current?.time || ''}`], ['before', 'Продолжить свои заявки'], ['after', 'Направить на аварию']]) {
+        const row = document.createElement('div');
+        row.className = className; row.textContent = label; legend.appendChild(row);
+      }
+      map.getContainer().appendChild(legend);
       originMarker?.remove();
       if (event.detail.current?.origin) {
         const element = document.createElement('div');
@@ -78,8 +71,8 @@ export function useDispatchMap(map) {
         originMarker = new Marker({ element }).setLngLat([event.detail.current.origin[1], event.detail.current.origin[0]]).addTo(map);
       }
       if (event.detail.focusRoute) {
-        const data = routeData(event.detail.after, event.detail, true);
-        const points = data.features.flatMap(feature => feature.geometry.coordinates);
+        const points = [dispatchRouteData(event.detail.before, event.detail), dispatchRouteData(event.detail.after, event.detail, true)]
+          .flatMap(data => data.features.flatMap(feature => feature.geometry.coordinates));
         if (points.length) {
           const bounds = map.getContainer().getBoundingClientRect(), panel = document.querySelector('.shift-panel')?.getBoundingClientRect();
           map.fitBounds([[Math.min(...points.map(p => p[0])), Math.min(...points.map(p => p[1]))], [Math.max(...points.map(p => p[0])), Math.max(...points.map(p => p[1]))]], { padding: { left: Math.min(bounds.width * .65, Math.max(40, (panel?.right || bounds.left) - bounds.left + 20)), right: 60, top: 90, bottom: 150 }, maxZoom: 13.5, duration: 850 });
@@ -88,7 +81,8 @@ export function useDispatchMap(map) {
     };
     const restore = () => { if (latestPreview) preview({ detail: { ...latestPreview, focusRoute: false } }); };
     map.on('style.load', restore);
+    map.on('styledata', hideBackgroundRoutes);
     window.addEventListener('beego:incident-focus', focus); window.addEventListener('beego:dispatch-preview', preview); window.addEventListener('beego:dispatch-clear', clear);
-    return () => { map.off('style.load', restore); window.removeEventListener('beego:incident-focus', focus); window.removeEventListener('beego:dispatch-preview', preview); window.removeEventListener('beego:dispatch-clear', clear); clear(); };
+    return () => { map.off('style.load', restore); map.off('styledata', hideBackgroundRoutes); window.removeEventListener('beego:incident-focus', focus); window.removeEventListener('beego:dispatch-preview', preview); window.removeEventListener('beego:dispatch-clear', clear); clear(); };
   }, [map]);
 }
