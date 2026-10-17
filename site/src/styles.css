@@ -2966,6 +2966,7 @@ html,body,#root{overflow:hidden}
    points, while remaining immediately distinguishable from a request. */
 .route-start-marker{z-index:820!important;width:54px;height:54px;padding:0;border:0;background:transparent;display:flex;align-items:center;justify-content:center;overflow:visible;cursor:pointer;box-shadow:none!important;color:#17262a}
 .route-start-orb{position:relative;width:54px;height:54px;flex:0 0 54px;border:0;border-radius:50%;background:transparent;display:grid;place-items:center;overflow:visible;box-shadow:none;filter:drop-shadow(0 5px 9px rgba(43,20,75,.3));transition:transform .18s ease,filter .18s ease}
+.route-start-marker.is-home .route-start-orb{width:40px;height:40px;flex-basis:40px}
 .route-start-orb:before{content:none}
 .route-start-orb img{position:relative;z-index:1;width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}
 .route-start-marker:after{content:none}
