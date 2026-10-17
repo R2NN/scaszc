@@ -29,6 +29,17 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
       try {
         const value = await api(`context?baseShiftId=${shift.id}`);
         if (!alive || !value) return;
+        const marker = `beego-dispatch-session:${shift.id}`;
+        const incidents = await api(`shifts/${value.shiftId}/incidents`);
+        const completed = incidents.incidents.some(item => item.status === 'ACCEPTED');
+        if (completed && !sessionStorage.getItem(marker)) {
+          const fresh = await api('sessions', { baseShiftId: shift.id });
+          sessionStorage.setItem(marker, 'active');
+          setSession(fresh); refs.current.onApply(fresh.shift);
+          shiftClock.set({ minute: fresh.clock.minute, playing: false });
+          return;
+        }
+        sessionStorage.setItem(marker, 'active');
         setSession(value); refs.current.onApply(value.shift);
         shiftClock.set({ minute: value.clock.minute, playing: false });
       } catch (e) { if (alive) setError(e.message); }
@@ -62,6 +73,13 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
             const response = await fetch(`/api/shifts/${shift.id}`);
             if (alive && response.ok) refs.current.onApply(await response.json());
           }
+        }
+        // A persisted decision is a historical snapshot. Reopen it at the
+        // incident moment instead of leaving playback before 11:17.
+        const latestAccepted = value.incidents.filter(incident => incident.status === 'ACCEPTED').at(-1);
+        if (latestAccepted) {
+          const incidentMinute = Number(latestAccepted.time.slice(0, 2)) * 60 + Number(latestAccepted.time.slice(3));
+          if (shiftClock.getSnapshot().minute < incidentMinute) shiftClock.set({ minute: incidentMinute, playing: false });
         }
       } catch (e) { if (alive) setError(e.message); }
     };
@@ -106,8 +124,9 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     try {
       const value = await api('sessions', { baseShiftId: session?.baseShiftId || shift.id });
       window.dispatchEvent(new CustomEvent('beego:dispatch-clear'));
+      sessionStorage.setItem(`beego-dispatch-session:${session?.baseShiftId || shift.id}`, 'active');
       setSession(value); setSelectedId(''); setCandidateId(''); setIncidents([]); refs.current.onApply(value.shift);
-      shiftClock.set({minute:660,playing:false,selectedEngineerId:'',follow:false});
+      shiftClock.set({minute:360,playing:false,selectedEngineerId:'',follow:false});
       refs.current.onOpen();
     } catch (e) { setError(e.message); }
   };
@@ -148,8 +167,9 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const seconds = item ? Math.max(0, Math.ceil((item.deadlineAt-now-controller.serverOffset)/1000)) : 0;
   return <section className='emergency-dispatch' aria-label='Решение аварии'>
     <div className='dispatch-heading'><div><small>ОПЕРАТИВНОЕ РЕШЕНИЕ</small><h3>Аварийный выезд</h3></div><AlertTriangle size={24}/></div>
-    {!item ? <div className='dispatch-empty'><p>{controller.session ? 'Сценарная смена готова. Нажмите «Воспроизвести» на шкале времени. Авария поступит в 11:17.' : 'При поступлении аварии здесь появятся проверенные варианты всей смены.'}</p><button type='button' className='primary' onClick={controller.startSession}>{controller.session ? 'Новая изолированная сессия' : 'Запустить сценарий с 11:00'}</button><small>Отдельная смена · событие в 11:17</small></div> : <>
+    {!item ? <div className='dispatch-empty'><p>{controller.session ? 'Сценарная смена готова с начала дня. Нажмите «Воспроизвести» на шкале времени. Авария поступит в 11:17.' : 'При поступлении аварии здесь появятся проверенные варианты всей смены.'}</p><button type='button' className='primary' onClick={controller.startSession}>{controller.session ? 'Новая изолированная сессия' : 'Запустить сценарий с 06:00'}</button><small>17 августа · отдельная смена · событие в 11:17</small></div> : <>
       <div className='dispatch-incident'><b>{item.order.address}</b><span>{item.time} · {item.status === 'ACCEPTED' ? 'Решение принято' : item.status === 'CANCELLED' ? 'Отменена' : 'Требуется решение'}</span></div>
+      {item.status === 'ACCEPTED' ? <div className='dispatch-saved-note'><span>Это сохранённый результат предыдущего прогона.</span><button type='button' onClick={controller.startSession}>Начать новую демонстрацию</button></div> : null}
       {!terminal(item) ? <div className='dispatch-countdown' role='status'><Clock3 size={19}/><div><b>{item.policy.enabled ? seconds ? `Автовыбор через ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}` : 'Срок выбора истёк' : 'Решение принимает диспетчер'}</b><span>{item.status === 'SEARCHING' || item.status === 'QUEUED' ? 'Рассчитываем маршруты и проверяем ограничения всей смены…' : item.status === 'ERROR' ? 'Проверенного решения пока нет' : 'Сценарное время приостановлено до решения'}</span></div></div> : null}
       {item.progress && !terminal(item) ? <small role='status'>Проверено инженеров: {Math.min(item.progress.completed,item.progress.total)} из {item.progress.total} · вариантов: {item.progress.candidates} · точных проверок маршрутов: {item.progress.routeChecks}</small> : null}
       {item.error ? <p className='dispatch-error' role='alert'>{item.error}</p> : null}
