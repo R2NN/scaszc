@@ -58,7 +58,8 @@ export class EmergencyDispatch {
   }
 
   create(shiftId, { order, time, eventKey = order?.id, mode = 'scenario' }) {
-    return this.store.db.transaction(() => {
+    const prior = this.store.db.prepare('SELECT payload FROM dispatch_incidents WHERE shift_id=? AND event_key=?').get(shiftId, eventKey);
+    const item = this.store.db.transaction(() => {
       const prior = decode(this.store.db.prepare('SELECT payload FROM dispatch_incidents WHERE shift_id=? AND event_key=?').get(shiftId, eventKey));
       if (prior) return prior;
       const shift = this.store.get(shiftId);
@@ -75,6 +76,18 @@ export class EmergencyDispatch {
       this.store.db.prepare('INSERT INTO dispatch_incidents VALUES (?,?,?,?)').run(item.id, shiftId, eventKey, encode(item));
       return item;
     })();
+    if (!prior && this.store.get(shiftId)?.regionId?.includes(':scenario:')) this.prioritize(shiftId);
+    return item;
+  }
+
+  /** Stop stale scenario searches so a newly opened demonstration gets the shared planner first. */
+  prioritize(shiftId) {
+    for (const [id, controller] of this.controllers) {
+      const item = this.get(id);
+      if (!item || item.shiftId === shiftId || terminal(item)) continue;
+      const shift = this.store.get(item.shiftId);
+      if (shift?.regionId?.includes(':scenario:')) controller.abort();
+    }
   }
 
   currentMinute(item) { return minuteOf(item.time) + (item.mode === 'live' ? Math.floor((this.now()-item.createdAt)/60000) : 0); }
@@ -216,7 +229,7 @@ export class EmergencyDispatch {
     if (!this.store.db.open) return;
     for (const item of this.all()) if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { this.accept(item.id,item.recommendedId,'system');return; }
     if (this.busy) return;
-    for (const item of this.all()) {
+    for (const item of this.all().sort((left, right) => Date.parse(right.createdAt || '') - Date.parse(left.createdAt || ''))) {
       if (terminal(item)) continue;
       if (item.status === 'QUEUED' || (item.status === 'ERROR' && item.retryAt <= this.now())) { await this.search(item.id); return; }
       if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { this.accept(item.id, item.recommendedId, 'system'); return; }
