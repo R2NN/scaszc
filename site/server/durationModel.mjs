@@ -64,25 +64,47 @@ export function validateModel(model) {
 
 /** Match a condition by the component it changes, then by its actual service entity. */
 export function matchesConditionWork(condition, work) {
-  if ((condition.component !== 'access' || condition.scope === 'operation') && (condition.kind !== work.kind || condition.operation !== work.operation)) return false;
+  if ((!['access', 'customer'].includes(condition.component) || condition.scope === 'operation') && (condition.kind !== work.kind || condition.operation !== work.operation)) return false;
   if (condition.scope !== 'operation' && work.entities?.[condition.scope] !== condition.entityId) return false;
   return condition.scope !== 'node' || Boolean(work.factors?.requiresNode || work.forecast?.factors?.requiresNode);
 }
 
 /** Select measured, current evidence without spreading visit-only decisions or counting duplicates. */
-export function conditionEvidence(condition, visits, at, model) {
+export function conditionEvidence(condition, visits, at, model, { trim = true } = {}) {
   const seen = new Set();
   const measured = [];
   for (const visit of visits) {
     const ended = Date.parse(visit.endedAt), known = Date.parse(visit.knownAt), moment = Date.parse(at);
-    if (seen.has(visit.id) || visit.excluded || !visit.eligible || ['pending', 'visit', 'rejected'].includes(visit.learningDecision) || visit.reason !== condition.reason || (condition.findingKey && visit.findingKey !== condition.findingKey) || !Number.isFinite(ended) || !Number.isFinite(known) || ended > moment || known > moment || moment - ended > model.history.maxAgeDays * 86400000 || !matchesConditionWork(condition, visit)) continue;
+    if (seen.has(visit.id) || visit.excluded || !visit.eligible || visit.forecast?.override || ['pending', 'visit', 'rejected'].includes(visit.learningDecision) || visit.reason !== condition.reason || (condition.findingKey && visit.findingKey !== condition.findingKey) || !Number.isFinite(ended) || !Number.isFinite(known) || ended > moment || known > moment || moment - ended > model.history.maxAgeDays * 86400000 || !matchesConditionWork(condition, visit)) continue;
     seen.add(visit.id);
-    const residual = condition.component === 'access' ? visit.accessMinutes : Number.isFinite(visit.actualTechnical) && Number.isFinite(visit.factorTechnical) ? visit.actualTechnical - visit.factorTechnical : null;
+    const residual = condition.component === 'access' ? visit.accessMinutes : condition.component === 'customer' ? visit.customerMinutes : Number.isFinite(visit.actualTechnical) && Number.isFinite(visit.factorTechnical) ? visit.actualTechnical - visit.factorTechnical : null;
     if (Number.isFinite(residual) && Math.abs(residual) <= model.history.outlierMinutes) measured.push({ visit, residual });
   }
   const center = median(measured.map(item => item.residual));
+  if (!trim) return measured;
   const mad = median(measured.map(item => Math.abs(item.residual - center)));
   return measured.filter(item => Math.abs(item.residual - center) <= Math.max(8, 3 * mad));
+}
+
+/** Revalidate feedback corrections on later measurements so a confirmed rule can stop applying after drift. */
+export function feedbackEvidenceCheck(evidence, model, component = 'technical') {
+  const rows = [...evidence].sort((a, b) => a.visit.endedAt.localeCompare(b.visit.endedAt));
+  let minimum = Math.max(4, model.history.minimum + 1);
+  while (minimum - Math.ceil(minimum * .2) < model.history.minimum) minimum++;
+  const testCount = Math.max(1, Math.ceil(rows.length * .2));
+  const train = rows.slice(0, -testCount), holdout = rows.slice(-testCount);
+  const correction = Math.round(median(train.map(item => item.residual)) * train.length / (train.length + model.history.shrinkage));
+  const baselineError = holdout.length ? holdout.reduce((sum, item) => sum + Math.abs(item.residual), 0) / holdout.length : null;
+  const adjustedError = holdout.length ? holdout.reduce((sum, item) => sum + Math.abs(item.residual - correction), 0) / holdout.length : null;
+  const referenceError = holdout.length ? holdout.reduce((sum, item) => {
+    const forecast = item.visit.forecast;
+    const adjustment = component === 'technical' ? forecast && Number.isFinite(forecast.technical) ? forecast.technical - item.visit.factorTechnical : 0 : forecast?.[component] || 0;
+    return sum + Math.abs(item.residual - adjustment);
+  }, 0) / holdout.length : null;
+  const days = new Set(rows.map(item => item.visit.endedAt.slice(0, 10))).size;
+  const engineers = new Set(rows.map(item => item.visit.engineerId || item.visit.engineerName).filter(Boolean)).size;
+  const directionShare = rows.length ? Math.max(rows.filter(item => item.residual > 0).length, rows.filter(item => item.residual < 0).length) / rows.length : 0;
+  return { safe: rows.length >= minimum && train.length >= model.history.minimum && days >= 2 && engineers >= 2 && directionShare >= .75 && adjustedError < baselineError && adjustedError <= referenceError, minimum, days, engineers, directionShare, trainCount: train.length, testCount: holdout.length, correction, baselineError, referenceError, adjustedError };
 }
 
 /** Calculate the sole authoritative duration in whole minutes; travel is never included. */
@@ -130,11 +152,13 @@ export function calculateDuration(order, { model = DEFAULT_MODEL, asOf, visits =
   if (!Number.isFinite(Date.parse(at))) throw new Error('Укажите момент расчёта.');
   const applicable = conditions.filter(condition => condition.status === 'confirmed' && Date.parse(condition.knownAt) <= Date.parse(at) && Date.parse(condition.validFrom) <= Date.parse(at) && (!condition.validUntil || Date.parse(condition.validUntil) > Date.parse(at)) && (!condition.closedAt || Date.parse(condition.closedAt) > Date.parse(at)) && matchesConditionWork(condition, { kind, operation, factors, entities }));
   const histories = [];
-  for (const component of ['technical', 'access']) {
-    const candidates = applicable.filter(condition => condition.component === component).sort((a, b) => ['line', 'node', 'entrance', 'object', 'operation'].indexOf(a.scope) - ['line', 'node', 'entrance', 'object', 'operation'].indexOf(b.scope));
+  for (const component of ['technical', 'access', 'customer']) {
+    const candidates = applicable.filter(condition => condition.component === component).sort((a, b) => ['line', 'node', 'entrance', 'client', 'object', 'operation'].indexOf(a.scope) - ['line', 'node', 'entrance', 'client', 'object', 'operation'].indexOf(b.scope));
     for (const condition of candidates) {
       const inliers = conditionEvidence(condition, visits, at, model);
       if (inliers.length < model.history.minimum) continue;
+      if (condition.feedbackPolicy && !feedbackEvidenceCheck(conditionEvidence(condition, visits, at, model, { trim: false }), model, condition.component).safe) continue;
+      if (condition.feedbackPolicy && !feedbackEvidenceCheck(inliers, model, condition.component).safe) continue;
       const minutes = Math.round(median(inliers.map(item => item.residual)) * inliers.length / (inliers.length + model.history.shrinkage));
       histories.push({ component, minutes, count: inliers.length, evidence: inliers.map(item => ({ id: item.visit.id, revision: item.visit.revision || 1 })), conditionId: condition.id, scope: condition.scope, entityId: condition.entityId, reason: condition.reason, latestAt: inliers.map(item => item.visit.endedAt).sort().at(-1) });
       break;
@@ -143,8 +167,9 @@ export function calculateDuration(order, { model = DEFAULT_MODEL, asOf, visits =
   const historyMinutes = histories.filter(item => item.component === 'technical').reduce((sum, item) => sum + item.minutes, 0);
   const technical = Math.max(1, factorTechnical + historyMinutes);
   const access = Math.max(0, histories.filter(item => item.component === 'access').reduce((sum, item) => sum + item.minutes, 0));
-  const calculatedTotal = technical + documents + access;
+  const customer = Math.max(0, histories.filter(item => item.component === 'customer').reduce((sum, item) => sum + item.minutes, 0));
+  const calculatedTotal = technical + documents + access + customer;
   const override = order.durationOverride;
   if (override && (!Number.isInteger(override.minutes) || override.minutes < 1 || override.minutes > 10080 || !String(override.reason || '').trim())) throw new Error('Ручная длительность: укажите положительные целые минуты и причину (до 7 суток).');
-  return { modelVersion: model.version, normVersion: 'v2.2-published-normatives', kind, asOf: at, factors, operation, entities, baseTechnical, documents, factorTechnical, technical, access, historyMinutes, histories, components, coefficient: Number((technical / baseTechnical).toFixed(3)), calculatedTotal, total: override?.minutes ?? calculatedTotal, override: override || null, observationCount: histories.reduce((sum, item) => sum + item.count, 0), uncertainty: Object.keys(factors).length ? 'Объём указан; веса требуют калибровки' : 'Исходный сценарий: состав работ не уточнён', travelIncluded: false, units: 'minutes', rounding: 'whole-minute' };
+  return { modelVersion: model.version, normVersion: 'v2.2-published-normatives', kind, asOf: at, factors, operation, entities, baseTechnical, documents, factorTechnical, technical, access, ...(customer ? { customer } : {}), historyMinutes, histories, components, coefficient: Number((technical / baseTechnical).toFixed(3)), calculatedTotal, total: override?.minutes ?? calculatedTotal, override: override || null, observationCount: histories.reduce((sum, item) => sum + item.count, 0), uncertainty: Object.keys(factors).length ? 'Объём указан; веса требуют калибровки' : 'Исходный сценарий: состав работ не уточнён', travelIncluded: false, units: 'minutes', rounding: 'whole-minute' };
 }

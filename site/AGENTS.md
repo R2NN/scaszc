@@ -1,5 +1,8 @@
 # Prototype Instructions
 
+- Put engineer feedback immediately below the duration formula in the passport overview. Show measured plan/actual differences, the engineer's explanation, review state, scope, future affected orders, retained calculations and every reply/decision version. Keep one common passport scroll and reveal full lists explicitly. Preserve unsaved reply drafts when switching passport tabs. Remove the extra full-width map extent button from the time panel; keep the existing map controls.
+- Engineer explanations are evidence, never direct minute overrides. New feedback transfers require at least four comparable measured visits, multiple days and two engineers, robust residuals after work-volume factors, chronological holdout improvement and no deterioration versus saved adaptive forecasts. Never broaden one line's evidence to a whole house; shared operations require several houses. Client waiting is a separate stage, scoped only to an explicitly linked account. Keep zero distinct from unknown, exclude manual/erroneous measurements, honour expiry/closure and stop applying new feedback policies when later evidence contradicts them. Seed engineer messages separately without rewriting archived measurements, snapshots or published plans.
+
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.

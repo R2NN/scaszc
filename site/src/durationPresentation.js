@@ -21,6 +21,7 @@ export function durationFormula(snapshot, conditions = []) {
   }
   const accessSum = histories.filter(item => item.component === 'access').reduce((sum, item) => sum + item.minutes, 0);
   if (snapshot.access !== accessSum) rows.push({ key: 'access-remainder', label: accessSum ? 'Минимальное время доступа' : 'Доступ на объект', minutes: snapshot.access - accessSum });
+  if (snapshot.customer) rows.push({ key: 'customer', label: 'Ожидание этого клиента · по подтверждённой истории', minutes: snapshot.customer });
   if (snapshot.override) rows.push({ key: 'override', label: 'Корректировка диспетчера', minutes: snapshot.total - snapshot.calculatedTotal, detail: snapshot.override.reason });
   return { rows, total: snapshot.total, expression: rows.map((item, index) => index ? `${item.minutes < 0 ? '−' : '+'} ${Math.abs(item.minutes)}` : String(item.minutes)).join(' ') + ` = ${snapshot.total} мин`, signed };
 }

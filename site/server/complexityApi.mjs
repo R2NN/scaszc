@@ -1,4 +1,5 @@
 import { objectAttention } from './complexityAttention.mjs';
+import { decideEngineerFeedback, engineerFeedback, engineerFeedbackImpact, saveEngineerFeedback } from './engineerFeedback.mjs';
 import { conditionEvidence, matchesConditionWork } from './durationModel.mjs';
 import { DEFAULT_MODEL, REASONS, WORK_KINDS, WORK_RULES } from './durationModel.mjs';
 
@@ -39,6 +40,13 @@ export async function handleComplexity(request, registry) {
     }
     if (url.pathname === '/api/complexity/accuracy' && request.method === 'GET') return json(registry.accuracy(at, url.searchParams.get('zone'), url.searchParams.get('regionId') || 'moscow', url.searchParams.get('review') === 'current' ? new Date().toISOString() : at));
     if (url.pathname === '/api/complexity/decisions' && request.method === 'POST') return json(registry.decide(await request.json()));
+    const feedbackMatch = /^\/api\/complexity\/visits\/([^/]+)\/feedback(?:\/(impact|decision))?$/.exec(url.pathname);
+    if (feedbackMatch) {
+      const id = decodeURIComponent(feedbackMatch[1]);
+      if (feedbackMatch[2] === 'impact' && request.method === 'GET') return json(engineerFeedbackImpact(registry, id, { at: url.searchParams.get('review') === 'current' ? new Date().toISOString() : at, scope: url.searchParams.get('scope') || undefined }));
+      if (feedbackMatch[2] === 'decision' && request.method === 'POST') return json(decideEngineerFeedback(registry, id, await request.json()));
+      if (!feedbackMatch[2] && request.method === 'POST') return json(saveEngineerFeedback(registry, id, await request.json()));
+    }
     const close = /^\/api\/complexity\/conditions\/([^/]+)$/.exec(url.pathname);
     if (close && request.method === 'PATCH') return json(registry.closeCondition(decodeURIComponent(close[1]), await request.json()));
     const visitMatch = /^\/api\/complexity\/visits\/([^/]+)$/.exec(url.pathname);
@@ -62,7 +70,7 @@ export async function handleComplexity(request, registry) {
       const estimate = registry.estimate(example, at);
       const reviewAt = url.searchParams.get('review') === 'current' ? new Date().toISOString() : at;
       const visits = registry.visits(reviewAt);
-      return json({ reviewAt, object, entities: registry.entities(object.id), estimate, example, visits: visits.filter(visit => visit.entities?.object === object.id && Date.parse(visit.endedAt || visit.startedAt) <= Date.parse(at)).sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt))), conditions: registry.conditions(object.id).filter(condition => Date.parse(condition.knownAt) <= Date.parse(reviewAt)).map(condition => ({ ...condition, closedAt: condition.closedAt && Date.parse(condition.closedAt) > Date.parse(reviewAt) ? null : condition.closedAt, relevant: matchesConditionWork(condition, estimate), evidenceCount: conditionEvidence(condition, visits, reviewAt, registry.model(reviewAt)).length, evidence: (condition.evidenceIds || []).map(id => visits.find(visit => visit.id === id)).filter(Boolean).map(visit => ({ ...visit, id: visit.id, objectId: visit.entities.object, address: registry.object(visit.entities.object)?.address, kind: visit.kind, endedAt: visit.endedAt, orderId: visit.orderId, engineerName: visit.engineerName || visit.engineerId, finding: visit.finding })) })), audit: registry.history(object.id).filter(item => Date.parse(item.at) <= Date.parse(reviewAt)), kinds: WORK_KINDS, reasons: REASONS });
+      return json({ reviewAt, object, clientLinks: registry.db.prepare('SELECT line_id AS lineId,client_id AS clientId,label FROM service_client_links WHERE object_id=?').all(object.id), feedback: engineerFeedback(registry, object.id).filter(item => Date.parse(item.submittedAt) <= Date.parse(reviewAt)), entities: registry.entities(object.id), estimate, example, visits: visits.filter(visit => visit.entities?.object === object.id && Date.parse(visit.endedAt || visit.startedAt) <= Date.parse(at)).sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt))), conditions: registry.conditions(object.id).filter(condition => Date.parse(condition.knownAt) <= Date.parse(reviewAt)).map(condition => ({ ...condition, closedAt: condition.closedAt && Date.parse(condition.closedAt) > Date.parse(reviewAt) ? null : condition.closedAt, relevant: matchesConditionWork(condition, estimate), evidenceCount: conditionEvidence(condition, visits, reviewAt, registry.model(reviewAt)).length, evidence: (condition.evidenceIds || []).map(id => visits.find(visit => visit.id === id)).filter(Boolean).map(visit => ({ ...visit, id: visit.id, objectId: visit.entities.object, address: registry.object(visit.entities.object)?.address, kind: visit.kind, endedAt: visit.endedAt, orderId: visit.orderId, engineerName: visit.engineerName || visit.engineerId, finding: visit.finding })) })), audit: registry.history(object.id).filter(item => Date.parse(item.at) <= Date.parse(reviewAt)), kinds: WORK_KINDS, reasons: REASONS });
     }
     if (url.pathname === '/api/complexity/objects' && request.method === 'GET') {
       const q = (url.searchParams.get('q') || '').toLocaleLowerCase('ru-RU');

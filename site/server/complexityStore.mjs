@@ -1,5 +1,6 @@
 import { durationImpactWeek } from '../src/durationPresentation.js';
 import { addressIdentity, assertServiceLocation } from '../src/serviceLocation.js';
+import { engineerFeedback, feedbackClient, saveEngineerFeedback, setupEngineerFeedback } from './engineerFeedback.mjs';
 import { randomUUID } from 'node:crypto';
 import { calculateDuration, conditionEvidence, matchesConditionWork, DEFAULT_MODEL, digest, normalizeFactors, REASONS, validateModel, workKind } from './durationModel.mjs';
 
@@ -7,7 +8,7 @@ const encode = value => JSON.stringify(value);
 const decode = row => row ? JSON.parse(row.payload_json) : null;
 const stamp = () => new Date().toISOString();
 const minute = value => { const [h, m] = String(value || '').split(':').map(Number); return h * 60 + m; };
-const scopeKeys = ['object', 'entrance', 'node', 'line', 'operation'];
+const scopeKeys = ['object', 'entrance', 'node', 'line', 'client', 'operation'];
 const immutable = value => { if (value && typeof value === 'object' && !Object.isFrozen(value)) { for (const item of Object.values(value)) immutable(item); Object.freeze(value); } return value; };
 
 /** Transactional registry, immutable forecasts, versioned facts and scoped decisions. */
@@ -15,6 +16,7 @@ export class ComplexityStore {
   constructor(db) {
     this.db = db;
     this.visitRows = new Map();
+    setupEngineerFeedback(db);
     db.transaction(() => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS duration_models(id TEXT PRIMARY KEY, effective_at TEXT NOT NULL, payload_json TEXT NOT NULL);
@@ -84,9 +86,12 @@ export class ComplexityStore {
   }
   visits(at = '9999-12-31T23:59:59Z', objectId) {
     const rows = this.db.prepare(`SELECT v.rowid FROM duration_visits v WHERE julianday(v.known_at)<=julianday(?) ${objectId ? 'AND v.object_id=?' : ''} AND v.revision=(SELECT max(n.revision) FROM duration_visits n WHERE n.id=v.id AND julianday(n.known_at)<=julianday(?))`).all(...(objectId ? [at, objectId, at] : [at, at]));
+    const clients = new Map(this.db.prepare('SELECT object_id,line_id,client_id FROM service_client_links').all().map(item => [JSON.stringify([item.object_id, item.line_id]), item.client_id]));
     return rows.map(row => {
       if (!this.visitRows.has(row.rowid)) this.visitRows.set(row.rowid, immutable(decode(this.db.prepare('SELECT payload_json FROM duration_visits WHERE rowid=?').get(row.rowid))));
-      return this.visitRows.get(row.rowid);
+      const visit = this.visitRows.get(row.rowid);
+      const client = clients.get(JSON.stringify([visit.entities?.object, visit.entities?.line]));
+      return client ? { ...visit, entities: { ...visit.entities, client } } : visit;
     });
   }
   conditions(objectId) { return this.db.prepare(`SELECT payload_json FROM object_conditions ${objectId ? 'WHERE object_id=? OR object_id IS NULL' : ''}`).all(...(objectId ? [objectId] : [])).map(decode); }
@@ -119,6 +124,10 @@ export class ComplexityStore {
       this.registerObject({ id, address: order.address || 'Подтверждённая точка обслуживания', coords: order.coords, regionId: order.regionId || 'moscow', zone: order.zone, zoneId: order.zoneId, district: order.district, source: 'Зарегистрирована оператором из заявки. Связи с подъездом, узлом и линией пока не установлены.' });
       entities.object = id;
     }
+    const client = feedbackClient(this, entities);
+    if (order.clientId && order.clientId !== client?.id) throw new Error('Лицевой счёт не соответствует линии объекта в реестре.');
+    if (entities.client && entities.client !== client?.id) throw new Error('Клиент не связан с линией объекта в реестре.');
+    if (client) entities.client = client.id;
     return entities;
   }
   estimate(order, at, persist = false) {
@@ -127,7 +136,7 @@ export class ComplexityStore {
     const defaults = object?.orderDefaults?.[String(order.sourceId || order.id)] || {};
     const enriched = { ...order, durationFactors: { ...defaults.durationFactors, ...order.durationFactors }, factorSources: { ...defaults.factorSources, ...order.factorSources } };
     const conditions = this.conditions(entities.object);
-    const evidence = conditions.some(condition => condition.scope === 'operation') ? this.visits(at) : this.visits(at, entities.object);
+    const evidence = conditions.some(condition => ['operation', 'client'].includes(condition.scope)) ? this.visits(at) : this.visits(at, entities.object);
     const forecast = calculateDuration(enriched, { asOf: at, entities, model: this.model(at), visits: evidence, conditions });
     const id = digest({ orderId: String(order.id), ...forecast });
     const snapshot = { id, orderId: String(order.id), ...forecast };
@@ -199,9 +208,13 @@ export class ComplexityStore {
     const previous = this.visits().find(visit => visit.id === `FACT-${shift.id}-${fact.orderId}`);
     const engineerId = previous?.engineerId || prior?.engineerId || route?.engineerId;
     const engineerName = previous?.engineerName || shift.team?.find(member => String(member.id) === String(engineerId))?.name;
-    this.recordVisit({ id: `FACT-${shift.id}-${fact.orderId}`, orderId: fact.orderId, shiftId: shift.id, entities: forecast.entities, kind: forecast.kind, operation: forecast.operation, forecast, factorTechnical: forecast.factorTechnical, startedAt: start ? `${shift.date}T${start}:00+03:00` : null, endedAt: end ? `${shift.date}T${end}:00+03:00` : null, knownAt: stamp(), total, actualTechnical: knownStages && total != null ? total - stageSum : null, accessMinutes: fact.accessMinutes != null && fact.accessMinutes !== '' ? Number(fact.accessMinutes) : null, documentMinutes: fact.documentMinutes != null && fact.documentMinutes !== '' ? Number(fact.documentMinutes) : null, customerMinutes: fact.customerMinutes != null && fact.customerMinutes !== '' ? Number(fact.customerMinutes) : null, eligible: fact.status === 'completed' && knownStages && total != null, excluded: Boolean(fact.excluded), reason, comment: String(fact.comment || '').slice(0, 2000), engineerId, engineerName, source: 'dispatcher', status: fact.status }, fact.correctionReason || 'Отметка факта визита', actor);
+    const saved = this.recordVisit({ id: `FACT-${shift.id}-${fact.orderId}`, orderId: fact.orderId, shiftId: shift.id, entities: forecast.entities, kind: forecast.kind, operation: forecast.operation, forecast, factorTechnical: forecast.factorTechnical, startedAt: start ? `${shift.date}T${start}:00+03:00` : null, endedAt: end ? `${shift.date}T${end}:00+03:00` : null, knownAt: stamp(), total, actualTechnical: knownStages && total != null ? total - stageSum : null, accessMinutes: fact.accessMinutes != null && fact.accessMinutes !== '' ? Number(fact.accessMinutes) : null, documentMinutes: fact.documentMinutes != null && fact.documentMinutes !== '' ? Number(fact.documentMinutes) : null, customerMinutes: fact.customerMinutes != null && fact.customerMinutes !== '' ? Number(fact.customerMinutes) : null, eligible: fact.status === 'completed' && knownStages && total != null, excluded: Boolean(fact.excluded), reason, comment: String(fact.comment || '').slice(0, 2000), engineerId, engineerName, source: 'dispatcher', status: fact.status }, fact.correctionReason || 'Отметка факта визита', actor);
+    if (fact.status === 'completed' && total != null && total !== forecast.total) {
+      const priorReply = engineerFeedback(this, forecast.entities.object).find(item => item.visitId === saved.id);
+      saveEngineerFeedback(this, saved.id, { expectedRevision: priorReply?.revision || 0, at: saved.knownAt, reason, comment: fact.comment, finding: fact.feedbackFinding || saved.finding, preparation: fact.feedbackPreparation, proposedScope: fact.feedbackScope || 'object', repeatability: fact.feedbackRepeatability || 'unsure', actor }, { request: !String(fact.comment || '').trim() });
+    }
   }
-  decide(input) {
+  decide(input, { feedbackChecked = false } = {}) {
     return this.db.transaction(() => {
       const at = input.at;
       if (!String(input.reason || '').trim()) throw new Error('Укажите основание решения.');
@@ -209,12 +222,13 @@ export class ComplexityStore {
       const visit = this.visits(at).find(item => item.id === input.visitId);
       if (!visit || Date.parse(at) < Date.parse(this.visits().find(item => item.id === visit.id).knownAt)) throw new Error('Визит не найден или решение предшествует известному исправлению.');
       if (!['confirm', 'visit', 'reject'].includes(input.action)) throw new Error('Неизвестное решение.');
+      if (input.action === 'confirm' && !feedbackChecked && engineerFeedback(this, visit.entities.object, at).some(item => item.visitId === visit.id)) throw new Error('Для этого визита есть ответ инженера. Проверьте перенос в блоке «Обратная связь инженеров» в обзоре паспорта.');
       let condition = null;
       if (input.action === 'confirm') {
         if (!visit.eligible || visit.excluded) throw new Error('Подтверждение требует пригодного измерения; сначала восстановите исключённый визит.');
-        if (['unknown', 'customer', 'other'].includes(visit.reason)) throw new Error('Неустановленная причина и ожидание клиента относятся только к этому визиту.');
+        if (['unknown', 'other'].includes(visit.reason) || (visit.reason === 'customer' && (input.scope !== 'client' || !feedbackClient(this, visit.entities)))) throw new Error('Неустановленная причина и разовое ожидание клиента относятся только к этому визиту. Для повторяемого ожидания нужен подтверждённый лицевой счёт.');
         if (!scopeKeys.includes(input.scope) || (input.scope !== 'operation' && !visit.entities?.[input.scope])) throw new Error('Выберите существующую область применения.');
-        const component = visit.reason === 'access' ? 'access' : 'technical';
+        const component = visit.reason === 'access' ? 'access' : visit.reason === 'customer' ? 'customer' : 'technical';
         const probe = { scope: input.scope, component, findingKey: visit.findingKey, kind: visit.kind, operation: visit.operation, entityId: input.scope === 'operation' ? visit.operation : visit.entities?.[input.scope], reason: visit.reason };
         const comparable = conditionEvidence(probe, this.visits(at).map(item => item.id === visit.id || item.learningDecision === 'pending' ? { ...item, learningDecision: 'confirmed' } : item), at, this.model(at)).map(item => item.visit);
         if (comparable.length < this.model(at).history.minimum) throw new Error('Недостаточно сопоставимых пригодных наблюдений для переноса на следующие заявки.');
@@ -226,7 +240,7 @@ export class ComplexityStore {
           this.closeCondition(previous.id, { at, reason: input.reason, actor: input.actor });
         }
         condition = { id: randomUUID(), objectId: visit.entities.object, entityId: input.scope === 'operation' ? visit.operation : visit.entities[input.scope], scope: input.scope, kind: visit.kind, operation: visit.operation, reason: visit.reason, findingKey: visit.findingKey, component, knownAt: at, validFrom: at, validUntil: input.validUntil || null, status: 'confirmed', evidenceIds: comparable.map(item => item.id), source: input.reason, finding: input.finding || visit.finding || visit.comment || '', preparation: input.preparation || visit.preparation || '', actor: input.actor || 'Диспетчер' };
-        this.db.prepare('INSERT INTO object_conditions VALUES (?,?,?)').run(condition.id, input.scope === 'operation' ? null : visit.entities.object, encode(condition));
+        this.db.prepare('INSERT INTO object_conditions VALUES (?,?,?)').run(condition.id, ['operation', 'client'].includes(input.scope) ? null : visit.entities.object, encode(condition));
         for (const evidence of comparable) if (evidence.id !== visit.id && evidence.learningDecision === 'confirmed') {
           const original = this.visits(at).find(item => item.id === evidence.id);
           if (original?.learningDecision === 'pending') this.recordVisit({ ...original, knownAt: at, learningDecision: 'confirmed', decisionReason: input.reason }, input.reason, input.actor);
@@ -269,7 +283,7 @@ export class ComplexityStore {
       return after;
     })();
   }
-  history(objectId) { return this.db.prepare('SELECT * FROM complexity_audit WHERE object_id=? OR object_id IS NULL ORDER BY rowid DESC LIMIT 100').all(objectId).map(row => ({ ...row, ...JSON.parse(row.payload_json), payload_json: undefined })); }
+  history(objectId) { return this.db.prepare('SELECT * FROM complexity_audit WHERE object_id=? OR object_id IS NULL ORDER BY rowid DESC').all(objectId).map(row => ({ ...row, ...JSON.parse(row.payload_json), payload_json: undefined })); }
   accuracy(at, zone, regionId = 'moscow', knowledgeAt = at) {
     const objects = new Set(this.objects().filter(item => item.regionId === regionId && (!zone || item.zone === zone || item.zoneId === zone)).map(item => item.id));
     const all = this.visits(knowledgeAt).filter(visit => objects.has(visit.entities?.object) && visit.endedAt && Date.parse(visit.endedAt) <= Date.parse(at));

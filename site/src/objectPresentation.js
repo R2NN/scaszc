@@ -100,7 +100,7 @@ export function visitTimeRows(visit) {
   if (Number.isFinite(visit.documentMinutes) && Number.isFinite(visit.customerMinutes)) {
     rows.push(
       { key: 'documents', label: 'Оформление', plan: measured(forecast.documents), actual: visit.documentMinutes },
-      { key: 'customer', label: 'Ожидание клиента', plan: null, actual: visit.customerMinutes },
+      { key: 'customer', label: 'Ожидание клиента', plan: measured(forecast.customer), actual: visit.customerMinutes },
     );
   } else {
     const known = [visit.total, visit.actualTechnical, visit.accessMinutes].every(Number.isFinite);

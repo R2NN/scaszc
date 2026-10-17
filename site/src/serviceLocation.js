@@ -61,6 +61,7 @@ export function resolveServiceEntities(objectId, infrastructure, selected = {}) 
 /** Changing a parent clears incompatible descendants before resolving unique links. */
 export function changeServiceEntity(objectId, infrastructure, selected, scope, value) {
   const links = { ...selected };
+  if (['entrance', 'node', 'line'].includes(scope)) delete links.client;
   if (value) links[scope] = value; else delete links[scope];
   if (scope === 'entrance') {
     const node = infrastructure.find(entity => entity.id === links.node);

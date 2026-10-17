@@ -9,13 +9,14 @@ import { analyticsHistoryDates, baseHistoryDates, ensureBaseHistoricalShift } fr
 import { acquirePlanningSlot, planningBusyResponse } from './planningSlot.mjs';
 import { handleComplexity } from './complexityApi.mjs';
 import { seedComplexity } from './complexitySeed.mjs';
+import { seedEngineerFeedback } from './engineerFeedbackSeed.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const bodyOf = async request => request.json().catch(() => ({}));
 const errorStatus = error => /устарел|уже изменился/.test(error.message) ? 409 : /не найден/.test(error.message) ? 404 : 422;
 
 export function createOperationsApi({ store = new ShiftStore(), routing = exactShiftReplan, routingOptions = {}, ai = askShiftAi, aiOptions = {}, seedFromBase = false } = {}) {
-  const seedPromise = seedFromBase ? (async () => { await seedComplexity(store.complexity); await seedBaseShift(store); })() : Promise.resolve();
+  const seedPromise = seedFromBase ? (async () => { await seedComplexity(store.complexity); seedEngineerFeedback(store.complexity); await seedBaseShift(store); })() : Promise.resolve();
   const aiCalls = new Map();
   const aiLimit = Math.max(1, Math.min(100, Number(process.env.BEEGO_AI_MAX_PER_HOUR || 10)));
   const monthlyTokenLimit = Math.max(6000, Number(process.env.BEEGO_AI_MONTHLY_TOKEN_BUDGET || 240000));

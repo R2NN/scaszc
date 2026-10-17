@@ -1,7 +1,7 @@
 import { workKind } from './durationKind.js';
 
 export const FACT_STAGES = [['accessMinutes', 'Доступ'], ['documentMinutes', 'Оформление'], ['customerMinutes', 'Ожидание клиента']];
-const stageKeys = ['deviationReason', ...FACT_STAGES.map(([key]) => key), 'comment'];
+const stageKeys = ['deviationReason', ...FACT_STAGES.map(([key]) => key), 'comment', 'feedbackScope', 'feedbackRepeatability', 'feedbackFinding', 'feedbackPreparation'];
 
 /** Report measurement gaps without replacing an unknown stage with zero. */
 export function factLearningStatus(fact, snapshot) {
