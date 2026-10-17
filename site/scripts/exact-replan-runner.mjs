@@ -22,7 +22,7 @@ const inProject = (root, file) => {
 };
 const fromProject = (root, file) => path.isAbsolute(file) ? file : path.join(root, file);
 
-const runPython = ({ python, script, args, payload, env, deadlineAt }) => new Promise((resolve, reject) => {
+const runPython = ({ python, script, args, payload, env, deadlineAt, signal }) => new Promise((resolve, reject) => {
   const timeoutMs = remainingMilliseconds(deadlineAt);
   const child = spawn(python, [script, ...args], {
     cwd: env.BEEGO_REPOSITORY_ROOT,
@@ -33,6 +33,8 @@ const runPython = ({ python, script, args, payload, env, deadlineAt }) => new Pr
   let stdout = '';
   let stderr = '';
   let timedOut = false;
+  const abort = () => stopProcessTree(child);
+  signal?.addEventListener('abort', abort, {once:true});
   const timer = setTimeout(() => { timedOut = true; stopProcessTree(child); }, timeoutMs);
   timer.unref();
   child.stdout.setEncoding('utf8');
@@ -41,6 +43,7 @@ const runPython = ({ python, script, args, payload, env, deadlineAt }) => new Pr
   child.stderr.on('data', chunk => { stderr += chunk; });
   child.on('error', error => { clearTimeout(timer); reject(error); });
   child.on('close', code => {
+    signal?.removeEventListener('abort', abort);
     clearTimeout(timer);
     if (timedOut) { reject(new Error('Перепланирование остановлено после 15 минут: проверенный план не получен')); return; }
     const lastLine = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
@@ -144,10 +147,11 @@ export function compactExactReplan(raw, payload) {
       shiftStart,
       shiftEnd,
       assignments,
+      movements: route.movements || [],
       workloadMinutes: Math.max(0, finishMinutes - startMinutes),
-      distanceKm: Math.round(assignments.reduce((sum, item) => sum + item.distanceM, 0) / 100) / 10,
-      travelMinutes: assignments.reduce((sum, item) => sum + item.travelMinutes, 0),
-      waitingMinutes,
+      distanceKm: Math.round((assignments.reduce((sum, item) => sum + item.distanceM, 0) + (route.movements || []).reduce((sum, item) => sum + item.distance_m, 0)) / 100) / 10,
+      travelMinutes: assignments.reduce((sum, item) => sum + item.travelMinutes, 0) + (route.movements || []).reduce((sum, item) => sum + item.travel_minutes, 0),
+      waitingMinutes: Number(raw.validation?.metrics?.waiting_minutes_by_engineer?.[route.engineer_id] ?? waitingMinutes),
       delayedDepartures: 0,
     };
   });
@@ -233,7 +237,7 @@ export function compactExactReplan(raw, payload) {
 /**
  * Runs the Python exact replanner. Missing routing evidence is an error; no estimate is substituted.
  */
-export async function runExactReplan(payload, repositoryRoot = process.cwd(), { deadlineAt = Date.now() + PLANNING_DEADLINE_MS } = {}) {
+export async function runExactReplan(payload, repositoryRoot = process.cwd(), { deadlineAt = Date.now() + PLANNING_DEADLINE_MS, onProgress = () => {}, signal } = {}) {
   repositoryRoot = projectRoot(repositoryRoot);
   await mkdir(path.join(repositoryRoot, 'runtime', 'exact-replans'), { recursive: true });
   const output = path.join(repositoryRoot, 'runtime', 'exact-replans', `.pending-${randomUUID()}.json`);
@@ -325,18 +329,53 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd(), { 
   ];
   try {
     await configureRouting({ python, repositoryRoot, env, deadlineAt });
-    await runPython({ python, script, args, payload, env, deadlineAt });
-    const raw = JSON.parse(await readFile(output, 'utf8'));
+    const progressFile = output.replace(/\.json$/, '.progress.json');
+    const poll = setInterval(async () => {
+      const progress = JSON.parse(await readFile(progressFile, 'utf8').catch(() => 'null'));
+      if (progress) {
+        const dispatchCandidates = [];
+        for (const sha of progress.candidateArtifacts || []) {
+          const file = path.join(repositoryRoot,'runtime','exact-replans',`${sha}.json`);
+          const candidate = JSON.parse(await readFile(file,'utf8').catch(() => 'null'));
+          if (!candidate) continue;
+          await writeFile(`${file}.meta.json`,JSON.stringify({dataset:inProject(repositoryRoot,dataset),cache:inProject(repositoryRoot,cache),transitIndex:inProject(repositoryRoot,transitIndex)}));
+          dispatchCandidates.push({engineerSourceId:candidate.dispatch_engineer_id,plan:compactExactReplan(candidate,payload),artifact:inProject(repositoryRoot,file)});
+        }
+        onProgress({...progress,dispatchCandidates});
+      }
+    }, 1500);
+    poll.unref();
+    try {
+      await runPython({ python, script, args, payload, env, deadlineAt, signal });
+    } catch (error) {
+      const partial = JSON.parse(await readFile(output, 'utf8').catch(() => 'null'));
+      if (!payload.dispatch || !partial?.dispatch_candidates?.length) throw error;
+      partial.dispatch_search = { ...partial.dispatch_search, complete:false, stoppedReason:error.message };
+      await writeFile(output, JSON.stringify(partial));
+    } finally { clearInterval(poll); await unlink(progressFile).catch(() => {}); }
+    const bundle = JSON.parse(await readFile(output, 'utf8'));
+    const raw = bundle.dispatch_candidates?.[0] || bundle;
     const result = compactExactReplan(raw, payload);
     const retainedRoot = path.join(repositoryRoot, 'runtime', 'exact-replans');
     await mkdir(retainedRoot, { recursive: true });
     const retainedPlan = path.join(retainedRoot, `${raw.content_sha256}.json`);
-    await copyFile(output, retainedPlan);
+    if (!bundle.dispatch_candidates) await copyFile(output, retainedPlan);
+    else await access(retainedPlan);
     await writeFile(`${retainedPlan}.meta.json`, JSON.stringify({
       dataset: inProject(repositoryRoot, dataset),
       cache: inProject(repositoryRoot, cache),
       transitIndex: inProject(repositoryRoot, transitIndex),
     }));
+    if (bundle.dispatch_candidates) {
+      result.dispatchCandidates = [];
+      for (const candidate of bundle.dispatch_candidates) {
+        const file = path.join(retainedRoot, `${candidate.content_sha256}.json`);
+        await access(file);
+        await writeFile(`${file}.meta.json`, JSON.stringify({ dataset: inProject(repositoryRoot, dataset), cache: inProject(repositoryRoot, cache), transitIndex: inProject(repositoryRoot, transitIndex) }));
+        result.dispatchCandidates.push({ engineerSourceId: candidate.dispatch_engineer_id, plan: compactExactReplan(candidate, payload), artifact: inProject(repositoryRoot, file) });
+      }
+      result.dispatchSearch = bundle.dispatch_search;
+    }
     return result;
   } finally {
     await unlink(output).catch(() => {});

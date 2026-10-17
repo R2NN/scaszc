@@ -1,0 +1,97 @@
+{
+  "ai_usage": {
+    "beforeCount": 0,
+    "afterCount": 0,
+    "originalRowsUnchanged": true
+  },
+  "complexity_audit": {
+    "beforeCount": 3953,
+    "afterCount": 3953,
+    "originalRowsUnchanged": true
+  },
+  "duration_models": {
+    "beforeCount": 1,
+    "afterCount": 1,
+    "originalRowsUnchanged": true
+  },
+  "duration_plan_receipts": {
+    "beforeCount": 0,
+    "afterCount": 0,
+    "originalRowsUnchanged": true
+  },
+  "duration_snapshots": {
+    "beforeCount": 207,
+    "afterCount": 210,
+    "originalRowsUnchanged": true
+  },
+  "duration_visits": {
+    "beforeCount": 2105,
+    "afterCount": 2105,
+    "originalRowsUnchanged": true
+  },
+  "engineer_feedback": {
+    "beforeCount": 1822,
+    "afterCount": 1822,
+    "originalRowsUnchanged": true
+  },
+  "infrastructure_entities": {
+    "beforeCount": 1669,
+    "afterCount": 1669,
+    "originalRowsUnchanged": true
+  },
+  "migrations": {
+    "beforeCount": 2,
+    "afterCount": 3,
+    "originalRowsUnchanged": true
+  },
+  "object_conditions": {
+    "beforeCount": 25,
+    "afterCount": 25,
+    "originalRowsUnchanged": true
+  },
+  "plan_versions": {
+    "beforeCount": 1,
+    "afterCount": 6,
+    "originalRowsUnchanged": true
+  },
+  "replan_previews": {
+    "beforeCount": 0,
+    "afterCount": 2,
+    "originalRowsUnchanged": true
+  },
+  "report_artifacts": {
+    "beforeCount": 0,
+    "afterCount": 0,
+    "originalRowsUnchanged": true
+  },
+  "service_client_links": {
+    "beforeCount": 400,
+    "afterCount": 400,
+    "originalRowsUnchanged": true
+  },
+  "service_objects": {
+    "beforeCount": 197,
+    "afterCount": 197,
+    "originalRowsUnchanged": true
+  },
+  "shift_events": {
+    "beforeCount": 0,
+    "afterCount": 2,
+    "originalRowsUnchanged": true
+  },
+  "shifts": {
+    "beforeCount": 1,
+    "afterCount": 4,
+    "originalRowsUnchanged": true
+  },
+  "staff_roster": {
+    "beforeCount": 35,
+    "afterCount": 35,
+    "originalRowsUnchanged": true
+  },
+  "visit_facts": {
+    "beforeCount": 0,
+    "afterCount": 0,
+    "originalRowsUnchanged": true
+  }
+}

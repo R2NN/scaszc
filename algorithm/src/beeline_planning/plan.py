@@ -49,6 +49,8 @@ class PlannedVisit:
 class EngineerPlan:
     engineer_id: str
     visits: tuple[PlannedVisit, ...]
+    movements: tuple[dict, ...] = ()
+    dispatches: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

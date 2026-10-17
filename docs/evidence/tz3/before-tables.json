@@ -1,0 +1,78 @@
+{
+  "ai_usage": {
+    "count": 0,
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "complexity_audit": {
+    "count": 3953,
+    "sha256": "4805248dcffbbdcdc118038aa2b46d6b020bc151ae96983681c0f3e0e695fcd0"
+  },
+  "duration_models": {
+    "count": 1,
+    "sha256": "eaf00f6ddb3571cb935bdc0fbd6afa692fa36d173ec8e2eb662990c1223f9c87"
+  },
+  "duration_plan_receipts": {
+    "count": 0,
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "duration_snapshots": {
+    "count": 207,
+    "sha256": "a84fcfce252688eddabf635e4064b04f919ac9680559ae88bff82c09fae3b5ec"
+  },
+  "duration_visits": {
+    "count": 2105,
+    "sha256": "aef99bda081a1d2a9b075131c4c6befeaa2a8fc7b8afa42b835b6a82fe8ada10"
+  },
+  "engineer_feedback": {
+    "count": 1822,
+    "sha256": "2bd797dcb5971faa39ee9605b279105ed97faef15ca332346d11185df6333615"
+  },
+  "infrastructure_entities": {
+    "count": 1669,
+    "sha256": "95927ac47efff72e4e23a3373590f813e2820023b3e4dc7e92ddfc2e58ec1090"
+  },
+  "migrations": {
+    "count": 2,
+    "sha256": "c2ed2b5e4dd6fe50c645ab029b2d17523c9229142b4db0cecd15a01a984f0c53"
+  },
+  "object_conditions": {
+    "count": 25,
+    "sha256": "047ab592b4399c374b4cc9d48dff44ec3c2cacdb4de921f3a309db22cb34d462"
+  },
+  "plan_versions": {
+    "count": 1,
+    "sha256": "e15a5988c6c596fd94d61d30774242ede3a5039d266619a2c2b17eed4c5908f4"
+  },
+  "replan_previews": {
+    "count": 0,
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "report_artifacts": {
+    "count": 0,
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "service_client_links": {
+    "count": 400,
+    "sha256": "83b2647e7439ba948f869740997ca804d91bd9bb02c9edfe1f61118050dba7f9"
+  },
+  "service_objects": {
+    "count": 197,
+    "sha256": "7505843fc3845222f4a3fee2c573a65a1a91af2a4588ea7618797073c0ebe528"
+  },
+  "shift_events": {
+    "count": 0,
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "shifts": {
+    "count": 1,
+    "sha256": "db268e0804111963a1bf1b9a5688e6f343312df83375449b4de06d656f33df72"
+  },
+  "staff_roster": {
+    "count": 35,
+    "sha256": "0c89efb57476bb63d3d749af7b10343963ee2e22e21c079d652406341870e828"
+  },
+  "visit_facts": {
+    "count": 0,
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  }
+}

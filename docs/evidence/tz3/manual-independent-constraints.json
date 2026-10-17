@@ -1,0 +1,80 @@
+{
+  "verifiedAt": "2026-10-17T21:07:56.871561+03:00",
+  "reports": [
+    {
+      "artifact": "A:\\BeeGo-tz3-emergency-dispatch\\runtime\\exact-replans\\df3a3ae0632930be1c423e4b5a785528bd0cbf952225ea4d49fd10fb14806aad.json",
+      "contentSha256": "df3a3ae0632930be1c423e4b5a785528bd0cbf952225ea4d49fd10fb14806aad",
+      "datasetSha256": "791abb8c2c76ef3b3245d239c79714b2e9184b67e3f8e77ec788982e1917451d",
+      "status": "VALID",
+      "violations": [],
+      "recomputedMetrics": {
+        "waitingMinutes": 2621,
+        "travelMinutes": 4838,
+        "distanceM": 1449911
+      },
+      "freshRoadChecks": 0,
+      "roadDifferences": 0,
+      "trips": []
+    },
+    {
+      "artifact": "A:\\BeeGo-tz3-emergency-dispatch\\runtime\\exact-replans\\169ff2dc9d64cdde9d58371329f8f84c160c8176ae4796aef4abdc6517826665.json",
+      "contentSha256": "169ff2dc9d64cdde9d58371329f8f84c160c8176ae4796aef4abdc6517826665",
+      "datasetSha256": "791abb8c2c76ef3b3245d239c79714b2e9184b67e3f8e77ec788982e1917451d",
+      "status": "VALID",
+      "violations": [],
+      "recomputedMetrics": {
+        "waitingMinutes": 2251,
+        "travelMinutes": 4870,
+        "distanceM": 1443362
+      },
+      "freshRoadChecks": 0,
+      "roadDifferences": 0,
+      "trips": []
+    },
+    {
+      "artifact": "A:\\BeeGo-tz3-emergency-dispatch\\runtime\\exact-replans\\203b93d3df7055d2683bb9e1a9ea63627557c810d3c676461966eced0ed69d16.json",
+      "contentSha256": "203b93d3df7055d2683bb9e1a9ea63627557c810d3c676461966eced0ed69d16",
+      "datasetSha256": "791abb8c2c76ef3b3245d239c79714b2e9184b67e3f8e77ec788982e1917451d",
+      "status": "VALID",
+      "violations": [],
+      "recomputedMetrics": {
+        "waitingMinutes": 2399,
+        "travelMinutes": 4721,
+        "distanceM": 1432373
+      },
+      "freshRoadChecks": 0,
+      "roadDifferences": 0,
+      "trips": []
+    },
+    {
+      "artifact": "A:\\BeeGo-tz3-emergency-dispatch\\runtime\\exact-replans\\39c54c83b187c17b2c432726b25cabdff1cfdcd2685f05e2ee8a0e069bd3c2bc.json",
+      "contentSha256": "39c54c83b187c17b2c432726b25cabdff1cfdcd2685f05e2ee8a0e069bd3c2bc",
+      "datasetSha256": "791abb8c2c76ef3b3245d239c79714b2e9184b67e3f8e77ec788982e1917451d",
+      "status": "VALID",
+      "violations": [],
+      "recomputedMetrics": {
+        "waitingMinutes": 1759,
+        "travelMinutes": 4837,
+        "distanceM": 1453271
+      },
+      "freshRoadChecks": 0,
+      "roadDifferences": 0,
+      "trips": []
+    },
+    {
+      "artifact": "A:\\BeeGo-tz3-emergency-dispatch\\runtime\\exact-replans\\883e53b48226b3d8dc83e260f6a11bf4ff95b5a0cc56370339eebf01b8f503a4.json",
+      "contentSha256": "883e53b48226b3d8dc83e260f6a11bf4ff95b5a0cc56370339eebf01b8f503a4",
+      "datasetSha256": "791abb8c2c76ef3b3245d239c79714b2e9184b67e3f8e77ec788982e1917451d",
+      "status": "VALID",
+      "violations": [],
+      "recomputedMetrics": {
+        "waitingMinutes": 1876,
+        "travelMinutes": 4772,
+        "distanceM": 1448856
+      },
+      "freshRoadChecks": 0,
+      "roadDifferences": 0,
+      "trips": []
+    }
+  ]
+}

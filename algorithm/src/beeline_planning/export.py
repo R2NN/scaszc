@@ -170,6 +170,8 @@ def materialization_result_dict(result: MaterializationResult) -> dict[str, Any]
             'engineer_plans': [
                 {
                     'engineer_id': route.engineer_id,
+                    **({'movements': list(route.movements)} if route.movements else {}),
+                    **({'dispatches': list(route.dispatches)} if route.dispatches else {}),
                     'visits': [
                         {
                             'job_id': visit.job_id,
@@ -292,7 +294,7 @@ def load_exact_plan_artifact(path: Path, dataset_sha256: str) -> tuple[ProposedP
                 service_start_at=datetime.fromisoformat(raw_visit['service_start_at']),
                 travel=travel,
             ))
-        routes.append(EngineerPlan(raw_route['engineer_id'], tuple(visits)))
+        routes.append(EngineerPlan(raw_route['engineer_id'], tuple(visits), tuple(raw_route.get('movements', [])), tuple(raw_route.get('dispatches', []))))
     return ProposedPlan(
         planning_at=datetime.fromisoformat(raw_plan['planning_at']),
         engineer_plans=tuple(routes),

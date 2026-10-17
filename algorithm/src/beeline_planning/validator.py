@@ -154,11 +154,32 @@ def _validate_plan(
             violations.append(
                 Violation(ViolationCode.ENGINEER_UNAVAILABLE, engineer_id, 'engineer is unavailable')
             )
+        from .dispatch import verify_checkpoint
+        interruptions = {item['source_job_id']: item for item in engineer_plan.movements if item['measured_at'] == (event_time.isoformat() if event_time else '')}
+        old_movement_route = next((r for r in previous_plan.engineer_plans if r.engineer_id == engineer_id), None) if previous_plan else None
+        if old_movement_route and engineer_plan.movements[:len(old_movement_route.movements)] != old_movement_route.movements:
+            violations.append(Violation(ViolationCode.FROZEN_ACTIVITY_CHANGED, engineer_id, 'elapsed movement history changed'))
+        for item in engineer_plan.movements:
+            try:
+                valid_movement = verify_checkpoint(item, dataset.locations)
+                if old_movement_route and item not in old_movement_route.movements:
+                    source_visit = next((v for v in old_movement_route.visits if v.job_id == item['source_job_id']), None)
+                    from beeline_routing.export import detailed_route_dict
+                    valid_movement = valid_movement and source_visit is not None and detailed_route_dict(source_visit.travel) == item['source_travel'] and source_visit.service_start_at > event_time
+                if not valid_movement:
+                    raise ValueError('movement differs from routed history')
+            except (ValueError, KeyError, TypeError, AttributeError):
+                violations.append(Violation(ViolationCode.ROUTE_CHAIN_BROKEN, engineer_id, 'invalid elapsed movement checkpoint'))
         frozen_count = 0
+        for dispatch in engineer_plan.dispatches:
+            dispatch_at = datetime.fromisoformat(dispatch['at'])
+            first_future = next((visit for visit in engineer_plan.visits if visit.service_start_at > dispatch_at), None)
+            if first_future is None or first_future.job_id != dispatch['job_id']:
+                violations.append(Violation(ViolationCode.FROZEN_ACTIVITY_CHANGED, engineer_id, 'emergency must be the first unstarted service after dispatch'))
         if event_time is not None and previous_plan is not None:
             frozen = tuple(
                 visit for visit in old_routes.get(engineer_id, ())
-                if visit.departure_at <= event_time
+                if visit.departure_at <= event_time and visit.job_id not in interruptions
             )
             frozen_count = len(frozen)
             if engineer_plan.visits[:frozen_count] != frozen:
@@ -181,10 +202,24 @@ def _validate_plan(
         previous_location = dataset.offices[engineer.start_office_id].location_id
         previous_completion: datetime | None = None
         first_departure: datetime | None = None
-        total_distance = 0
-        total_travel = 0
+        total_distance = sum(item['distance_m'] for item in engineer_plan.movements)
+        total_travel = sum(item['travel_minutes'] for item in engineer_plan.movements)
         total_waiting = 0
         for sequence, visit in enumerate(engineer_plan.visits, start=1):
+            boundary = engineer_plan.visits[sequence-2].job_id if sequence > 1 else None
+            for movement in engineer_plan.movements:
+                if movement['after_job_id'] == boundary:
+                    if movement['origin_id'] != previous_location or (previous_completion and datetime.fromisoformat(movement['departure_at']) < previous_completion):
+                        violations.append(Violation(ViolationCode.ROUTE_CHAIN_BROKEN, engineer_id, 'interruption is disconnected from earlier activity'))
+                    movement_departure = datetime.fromisoformat(movement['departure_at'])
+                    movement_end = datetime.fromisoformat(movement['at'])
+                    if previous_completion and movement_departure >= previous_completion:
+                        total_waiting += _minutes(movement_departure - previous_completion)
+                    total_waiting += max(0, _minutes(movement_end - movement_departure) - movement['travel_minutes'])
+                    previous_location = movement['location_id']
+                    previous_completion = movement_end
+                    if first_departure is None:
+                        first_departure = datetime.fromisoformat(movement['departure_at'])
             subject = f'{engineer_id}:{sequence}:{visit.job_id}'
             job = active_jobs.get(visit.job_id)
             if job is None:
@@ -289,6 +324,10 @@ def _validate_plan(
                     total_waiting += _minutes(visit.departure_at - previous_completion)
 
             travel = visit.travel
+            origin_point = dataset.locations.get(previous_location)
+            if origin_point and origin_point.heading is not None and engineer.transport_mode.value == 'CAR':
+                if not hasattr(travel, 'provenance') or travel.provenance.provider_metadata.get('origin_heading') != origin_point.heading:
+                    violations.append(Violation(ViolationCode.ROUTE_CHAIN_BROKEN, subject, 'road direction at interruption was not checked'))
             if travel.origin_id != previous_location or travel.destination_id != job.location_id:
                 violations.append(
                     Violation(

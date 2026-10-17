@@ -27,6 +27,7 @@ class Coordinate:
     location_id: str
     latitude: float
     longitude: float
+    heading: float | None = None
 
     def __post_init__(self) -> None:
         if not self.location_id.strip():
@@ -37,6 +38,8 @@ class Coordinate:
             raise InvalidRoutingInput(f'Invalid longitude for {self.location_id}: {self.longitude}')
         if self.latitude == 0 and self.longitude == 0:
             raise InvalidRoutingInput(f'Coordinates 0,0 are forbidden for {self.location_id}')
+        if self.heading is not None and (not math.isfinite(self.heading) or not 0 <= self.heading < 360):
+            raise InvalidRoutingInput('Heading must be in [0,360)')
 
     def as_provider_value(self) -> str:
         return f'{self.latitude!r},{self.longitude!r}'

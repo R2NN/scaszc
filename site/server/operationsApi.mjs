@@ -10,12 +10,14 @@ import { acquirePlanningSlot, planningBusyResponse } from './planningSlot.mjs';
 import { handleComplexity } from './complexityApi.mjs';
 import { seedComplexity } from './complexitySeed.mjs';
 import { seedEngineerFeedback } from './engineerFeedbackSeed.mjs';
+import { createDispatchApi } from './dispatchApi.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const bodyOf = async request => request.json().catch(() => ({}));
 const errorStatus = error => /устарел|уже изменился/.test(error.message) ? 409 : /не найден/.test(error.message) ? 404 : 422;
 
 export function createOperationsApi({ store = new ShiftStore(), routing = exactShiftReplan, routingOptions = {}, ai = askShiftAi, aiOptions = {}, seedFromBase = false } = {}) {
+  const dispatchApi = createDispatchApi(store);
   const seedPromise = seedFromBase ? (async () => { await seedComplexity(store.complexity); seedEngineerFeedback(store.complexity); await seedBaseShift(store); })() : Promise.resolve();
   const aiCalls = new Map();
   const aiLimit = Math.max(1, Math.min(100, Number(process.env.BEEGO_AI_MAX_PER_HOUR || 10)));
@@ -44,6 +46,8 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
   async function handle(request) {
     await seedPromise;
     const url = new URL(request.url);
+    const incidentResponse = await dispatchApi.handle(request);
+    if (incidentResponse) return incidentResponse;
     const complexityResponse = await handleComplexity(request, store.complexity);
     if (complexityResponse) return complexityResponse;
     if (url.pathname === '/api/base-data/status' && request.method === 'GET') {

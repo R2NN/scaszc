@@ -1,4 +1,6 @@
 import { workPointType } from './workTypes.js';
+import { EmergencyDispatchPanel } from './EmergencyDispatch.jsx';
+import { EngineerStartSettings } from './EngineerStartSettings.jsx';
 import { factOrderOptions, savedFactDraft, updateFactDraft, visitFactDraft } from './visitFactDraft.js';
 import { DurationFactFields, DurationDraftComparison } from './ComplexityWorkspace.jsx';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -59,6 +61,7 @@ const EVENT_LABELS = {
   [EVENT_TYPES.SHIFT_BOUNDARY_CHANGED]: "Границы смены",
   [EVENT_TYPES.SHIFT_EXTENDED]: "Продлить смену",
   [EVENT_TYPES.CLIENT_WINDOW_SHIFT]: "Новое окно клиента",
+  START_CHANGED: 'Старт инженера',
   PLAN_REBUILT: "Исходный план пересчитан",
   PLAN_ROLLBACK: "Восстановлен план",
 };
@@ -267,12 +270,16 @@ export function ShiftWorkspace({
   onClose,
   actor = "Диспетчер",
   profile,
+  emergency,
+  onEmergencyRoute,
+  onStartDraft,
 }) {
   const clock = useSyncExternalStore(
     shiftClock.subscribe,
     shiftClock.getSnapshot,
   );
   const [tab, setTab] = useState(initialTab);
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
   const lastSelectedOrderIdRef = useRef(selectedOrderId);
   const lastSelectedCrewIdRef = useRef(clock.selectedEngineerId);
   useEffect(() => { if (!reportOnly) onTabChange?.(tab); }, [tab, reportOnly, onTabChange]);
@@ -964,6 +971,7 @@ export function ShiftWorkspace({
           {(standaloneReplanning ? [['event', 'Изменить план'], ['events', 'История версий']] : [
             ["crews", "Бригады"],
             ["orders", "Заявки"],
+            ['incident', 'Аварии'],
             ["event", "Изменить план"],
             ["fact", "Факт визита"],
             ["events", "Журнал"],
@@ -982,6 +990,8 @@ export function ShiftWorkspace({
           ))}
         </nav> : null}
         <div className="shift-panel-body">
+          {tab === 'crews' && shift?.plan ? <EngineerStartSettings shift={shift} onDraft={onStartDraft}/> : null}
+          {tab === 'incident' && emergency ? <EmergencyDispatchPanel controller={emergency} onRoute={onEmergencyRoute}/> : null}
           {standaloneReplanning && shift?.plan ? <section className="replanning-overview" aria-label="Текущий план"><div><small>ОПУБЛИКОВАННЫЙ ПЛАН</small><strong>Версия {shift.versions?.at(-1)?.version || 1}</strong></div><div><b>{current.assigned}</b><span>назначено</span></div><div><b>{current.unassigned}</b><span>в очереди</span></div><div><b>{shift.team?.length || 0}</b><span>бригад</span></div></section> : null}
           {standaloneReplanning && publishedNotice ? <div className="replanning-published" role="status"><Check size={19}/><span>{publishedNotice}</span><button type="button" onClick={() => setTab('events')}>История</button></div> : null}
           {shift?.plan &&

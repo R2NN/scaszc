@@ -21,7 +21,7 @@ from beeline_planning import (
     load_planning_dataset,
     replan_after_event,
 )
-from beeline_planning.domain import EventType, JobStatus, Office
+from beeline_planning.domain import EventType, JobStatus, Office, Commitment, CommitmentType
 from beeline_planning.export import load_exact_plan_artifact, materialization_result_dict
 from beeline_planning.materialize import MaterializationResult, MaterializationStatus
 from beeline_routing.cache import RoutingCache
@@ -160,10 +160,14 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
     engineers = dict(dataset.engineers)
     offices = dict(dataset.offices)
     locations = dict(dataset.locations)
+    commitments = list(dataset.commitments)
     digest = hashlib.sha256(
         json.dumps({'event': event_payload, 'durations': [(item.get('id'), item.get('durationSnapshot')) for item in payload.get('orders', []) if item.get('durationSnapshot')]}, ensure_ascii=False, sort_keys=True).encode('utf-8')
     ).hexdigest()[:16]
     event_id = f'UI-EVT-{digest}'
+    from beeline_planning.dispatch import checkpoint_location
+    for anchor in event_payload.get('dispatchAnchors', {}).values():
+        locations[anchor['location_id']] = checkpoint_location(anchor)
 
     if event_type == 'RECALCULATE':
         if not regular_jobs:
@@ -188,6 +192,7 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
         if not isinstance(coords, list) or len(coords) != 2:
             raise ValueError('Для новой заявки нужны подтверждённые координаты')
         location_id = f'UI-LOC-{digest}'
+        location_id = next((key for key, point in locations.items() if abs(point.latitude-float(coords[0])) < 1e-8 and abs(point.longitude-float(coords[1])) < 1e-8), location_id)
         locations[location_id] = Coordinate(location_id, float(coords[0]), float(coords[1]))
         zone_id = _zone_id(payload, order, dataset)
         priority = Priority(order_priority(order))
@@ -304,6 +309,8 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
             raise ValueError(f'Инженер для закрепления не найден: {engineer_id}')
         if engineer.zone_id != job.zone_id:
             raise ValueError('Заявка и инженер относятся к разным территориям')
+        commitments = [item for item in commitments if item.job_id != source_job_id]
+        commitments.append(Commitment(f'UI-PIN-{digest}', source_job_id, engineer_id, CommitmentType.HARD_ASSIGNMENT, event_time, f'UI-RELEASE-{digest}'))
         event = Event(
             1, event_id, event_time, EventType.MANUAL_ASSIGNMENT,
             source_job_id, job.zone_id, None,
@@ -328,6 +335,7 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
         engineers=engineers,
         offices=offices,
         locations=locations,
+        commitments=tuple(commitments),
         events=(event,),
     ), event
 
@@ -358,6 +366,81 @@ def _changes(before, after) -> dict[str, list[dict[str, str]]]:
             for job_id in sorted(old.keys() & new.keys()) if old[job_id][1] != new[job_id][1]
         ],
     }
+
+
+def dispatch_variants(args, payload, canonical, dataset, state, event, source, history, oracle):
+    """Search every statically eligible engineer with one shared routing budget."""
+    from beeline_planning.eligibility import build_candidate_index
+    index = build_candidate_index(dataset, event.event_time, applied_event_ids=frozenset((*state.applied_event_ids, event.event_id)))
+    eligible = index.eligible_engineers_by_job.get(event.target_id, ())
+    checked, artifacts, rejected = 0, [], []
+    def score(a):
+        metrics = a['validation']['metrics']
+        visit = next(v for r in a['plan']['engineer_plans'] for v in r['visits'] if v['job_id'] == event.target_id)
+        return (metrics['unserved_urgent_jobs'], metrics['unserved_normal_jobs'], metrics['used_engineers'], visit['service_start_at'], metrics['total_distance_m'])
+    def save_progress(complete=False):
+        if artifacts:
+            artifacts.sort(key=score)
+            for artifact in artifacts:
+                retained = args.output.parent / f'{artifact["content_sha256"]}.json'
+                if not retained.exists():
+                    write_json_atomic(retained, artifact)
+            output = dict(artifacts[0])
+            output['dispatch_candidates'] = artifacts
+            output['dispatch_search'] = {'eligible': list(eligible), 'rejected': rejected, 'route_checks': checked, 'route_check_budget': args.rebuild_route_checks, 'global_optimality_proven': False, 'complete': complete}
+            write_json_atomic(args.output, output)
+        write_json_atomic(args.output.with_suffix('.progress.json'), {'phase':'DISPATCH', 'completed':len(artifacts)+len(rejected), 'total':len(eligible), 'candidates':len(artifacts), 'routeChecks':checked, 'candidateArtifacts':[a['content_sha256'] for a in artifacts]})
+    blocked = {str(f.get('engineerId', '')).split(':')[-1] for f in payload.get('facts', []) if f.get('status') == 'started' and _at(dataset,f.get('time')) <= event.event_time}
+    blocked.update(payload['event'].get('unknownPositions', []))
+    for engineer_id, rebuild in [(key, False) for key in eligible] + [(key, True) for key in eligible]:
+        if rebuild and any(item['dispatch_engineer_id'] == engineer_id for item in artifacts):
+            continue
+        rejected[:] = [item for item in rejected if item['engineerId'] != engineer_id]
+        save_progress()
+        engineer = dataset.engineers[engineer_id]
+        if not engineer.shift_start <= event.event_time < engineer.shift_end:
+            rejected.append({'engineerId': engineer_id, 'reason': 'Инженер ещё не вышел на смену или смена закончилась'})
+            continue
+        if engineer_id in blocked:
+            rejected.append({'engineerId': engineer_id, 'reason': 'Начатая фактическая работа не завершена: уточните окончание'})
+            continue
+        remaining = args.rebuild_route_checks - checked
+        if remaining <= 0:
+            rejected.append({'engineerId': engineer_id, 'reason': 'Общий бюджет поиска исчерпан; невозможность не доказана'})
+            continue
+        try:
+            result = replan_after_event(dataset, state, event, oracle,
+                max_route_checks=min(1000 if rebuild else args.max_route_checks, remaining), departure_timing_queries=0,
+                forced_engineer_by_job={event.target_id: engineer_id}, source_dataset=canonical,
+                dispatch_engineer_id=engineer_id, rebuild_future=rebuild)
+            checked += result.exact_route_checks
+            if result.state is None or event.target_id in result.state.plan.unserved_job_ids:
+                rejected.append({'engineerId': engineer_id, 'reason': result.detail or result.unserved_reasons.get(event.target_id, 'Допустимая вставка не найдена в пределах поиска')})
+                continue
+            artifact = materialization_result_dict(MaterializationResult(
+                status=MaterializationStatus.EXACT_VALID, plan=result.state.plan,
+                validation=result.validation, failure=None, exact_provider_queries=0, identity_legs=0))
+            artifact.update({
+                'artifact_type': 'EXACT_PLAN_REPLANNING', 'dataset_sha256': dataset.dataset_sha256,
+                'source_plan_content_sha256': source['content_sha256'],
+                'event_time': event.event_time.isoformat(), 'event_id': event.event_id,
+                'exact_route_checks': result.exact_route_checks, 'budget_exhausted': result.budget_exhausted,
+                'search_phase': 'DISPATCH_FORCED_FULL_SHIFT', 'dispatch_engineer_id': engineer_id,
+                'changes': _changes(state.plan, result.state.plan), 'global_optimality_proven': False,
+                'routing_configuration': {'provider': 'valhalla-local-transit', 'transit_index': str(args.transit_index)},
+                'ui_history': [*history, {'event': payload['event'], 'orders': payload['orders'], 'team': payload['team']}],
+                'dispatch_input': payload,
+            })
+            artifact['content_sha256'] = payload_sha256(artifact)
+            artifacts.append(artifact)
+            save_progress()
+        except Exception as error:
+            rejected.append({'engineerId': engineer_id, 'reason': str(error)})
+    if not artifacts:
+        raise ValueError('Проверенный вариант не найден: ' + json.dumps(rejected, ensure_ascii=False))
+    save_progress(True)
+    print(json.dumps({'status': 'EXACT_VALID', 'candidates': len(artifacts), 'exactRouteChecks': checked}))
+    return 0
 
 
 def main() -> int:
@@ -391,6 +474,20 @@ def main() -> int:
     expected_hash = str(payload.get('basePlanContentSha256') or '')
     if expected_hash and expected_hash != source['content_sha256']:
         raise ValueError('Перепланирование разрешено только от актуального точного плана')
+    if payload.get('dispatch'):
+        from beeline_planning.dispatch import checkpoint
+        anchors = {}
+        unknown_positions = []
+        for route in plan.engineer_plans:
+            try:
+                anchor = checkpoint(route, _at(canonical, payload['event']['time']), canonical.engineers[route.engineer_id].transport_mode)
+            except ValueError:
+                unknown_positions.append(route.engineer_id)
+                continue
+            if anchor:
+                anchors[route.engineer_id] = anchor
+        payload['event']['dispatchAnchors'] = anchors
+        payload['event']['unknownPositions'] = unknown_positions
     dataset, event = _event_dataset(canonical, payload)
     prior_events = tuple(canonical.events) if history else ()
     event = replace(event, apply_order=len(prior_events) + 1)
@@ -422,6 +519,8 @@ def main() -> int:
         transit_index=args.transit_index,
         metro_wait_seconds=180,
     ))
+    if payload.get('dispatch'):
+        return dispatch_variants(args, payload, canonical, dataset, state, event, source, history, oracle)
     result = replan_after_event(
         dataset,
         state,

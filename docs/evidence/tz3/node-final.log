@@ -1,0 +1,1538 @@
+TAP version 13
+# Subtest: waiting-time estimate uses only measured comparable calculations
+ok 1 - waiting-time estimate uses only measured comparable calculations
+  ---
+  duration_ms: 1.4998
+  type: 'test'
+  ...
+# Subtest: audited schedule conflicts take precedence over idle-skill guesses
+ok 2 - audited schedule conflicts take precedence over idle-skill guesses
+  ---
+  duration_ms: 5.1963
+  type: 'test'
+  ...
+# Subtest: weekly comparison uses two full, non-overlapping calendar weeks
+ok 3 - weekly comparison uses two full, non-overlapping calendar weeks
+  ---
+  duration_ms: 197.9336
+  type: 'test'
+  ...
+# Subtest: area summaries reconcile with demand and support a separate region dimension
+ok 4 - area summaries reconcile with demand and support a separate region dimension
+  ---
+  duration_ms: 140.4725
+  type: 'test'
+  ...
+# Subtest: segmented forecast uses previous occurrences of the target weekday
+ok 5 - segmented forecast uses previous occurrences of the target weekday
+  ---
+  duration_ms: 11.1474
+  type: 'test'
+  ...
+# Subtest: route plan keeps missing historical facts unknown
+ok 6 - route plan keeps missing historical facts unknown
+  ---
+  duration_ms: 1.8861
+  type: 'test'
+  ...
+# Subtest: plan reliability is generated from the real planned start and client window
+ok 7 - plan reliability is generated from the real planned start and client window
+  ---
+  duration_ms: 1.6363
+  type: 'test'
+  ...
+# Subtest: economics uses complete default tariffs while goals preserve missing fact
+ok 8 - economics uses complete default tariffs while goals preserve missing fact
+  ---
+  duration_ms: 18.3136
+  type: 'test'
+  ...
+# Subtest: transport economics uses mode-specific tariffs and reconciles with direct cost
+ok 9 - transport economics uses mode-specific tariffs and reconciles with direct cost
+  ---
+  duration_ms: 4.5958
+  type: 'test'
+  ...
+# Subtest: efficiency evidence is computed from routes and prioritised by reviewable minutes
+ok 10 - efficiency evidence is computed from routes and prioritised by reviewable minutes
+  ---
+  duration_ms: 6.7709
+  type: 'test'
+  ...
+# Subtest: scenario outputs are labelled estimates and never exceed eligible backlog
+ok 11 - scenario outputs are labelled estimates and never exceed eligible backlog
+  ---
+  duration_ms: 86.7253
+  type: 'test'
+  ...
+# Subtest: capacity scenario schedules only work that fits selected skill, client windows and shift time
+ok 12 - capacity scenario schedules only work that fits selected skill, client windows and shift time
+  ---
+  duration_ms: 2.1005
+  type: 'test'
+  ...
+# Subtest: capacity recommendation names the largest concrete territory and skill gap
+ok 13 - capacity recommendation names the largest concrete territory and skill gap
+  ---
+  duration_ms: 0.7045
+  type: 'test'
+  ...
+# Subtest: window reserves are derived from a planned arrival and start, not made up from shift slack
+ok 14 - window reserves are derived from a planned arrival and start, not made up from shift slack
+  ---
+  duration_ms: 0.5971
+  type: 'test'
+  ...
+# Subtest: operational gaps offer a matching queued job before suggesting a shift change
+ok 15 - operational gaps offer a matching queued job before suggesting a shift change
+  ---
+  duration_ms: 2.112
+  type: 'test'
+  ...
+# Subtest: crew recommendations keep preparation and wrap-up while removing unused shift time
+ok 16 - crew recommendations keep preparation and wrap-up while removing unused shift time
+  ---
+  duration_ms: 0.4879
+  type: 'test'
+  ...
+# Subtest: a long gap before the next visit suggests calling the client for an earlier start
+ok 17 - a long gap before the next visit suggests calling the client for an earlier start
+  ---
+  duration_ms: 0.2948
+  type: 'test'
+  ...
+# Subtest: early-visit proposal keeps departure, arrival and saved idle internally consistent
+ok 18 - early-visit proposal keeps departure, arrival and saved idle internally consistent
+  ---
+  duration_ms: 0.5764
+  type: 'test'
+  ...
+# Subtest: area anomalies compare the selected territory with matching weekdays
+ok 19 - area anomalies compare the selected territory with matching weekdays
+  ---
+  duration_ms: 23.6015
+  type: 'test'
+  ...
+# Subtest: period narratives are generated from the actual queue, skills and territories
+ok 20 - period narratives are generated from the actual queue, skills and territories
+  ---
+  duration_ms: 87.659
+  type: 'test'
+  ...
+# Subtest: week explanation points to real peak days and the dominant current constraint
+ok 21 - week explanation points to real peak days and the dominant current constraint
+  ---
+  duration_ms: 45.68
+  type: 'test'
+  ...
+# Subtest: period anomaly search keeps the strongest data-backed event per territory metric
+ok 22 - period anomaly search keeps the strongest data-backed event per territory metric
+  ---
+  duration_ms: 1004.4985
+  type: 'test'
+  ...
+# Subtest: resource explanation uses the real window, zone, skill and idle-team capability
+ok 23 - resource explanation uses the real window, zone, skill and idle-team capability
+  ---
+  duration_ms: 0.9172
+  type: 'test'
+  ...
+# Subtest: generic planner reason is presented as a candidate check request, not a precise diagnosis
+ok 24 - generic planner reason is presented as a candidate check request, not a precise diagnosis
+  ---
+  duration_ms: 5.7367
+  type: 'test'
+  ...
+# Subtest: team capacity includes idle crews and explains only facts supported by the plan inputs
+ok 25 - team capacity includes idle crews and explains only facts supported by the plan inputs
+  ---
+  duration_ms: 17.9276
+  type: 'test'
+  ...
+# Subtest: team capacity normalizes imported Russian transport labels for resource filters
+ok 26 - team capacity normalizes imported Russian transport labels for resource filters
+  ---
+  duration_ms: 6.4903
+  type: 'test'
+  ...
+# Subtest: team capacity does not invent a tie-break reason absent from planner output
+ok 27 - team capacity does not invent a tie-break reason absent from planner output
+  ---
+  duration_ms: 0.3416
+  type: 'test'
+  ...
+# Subtest: history preserves every consecutive date from the source archive
+ok 28 - history preserves every consecutive date from the source archive
+  ---
+  duration_ms: 1.5547
+  type: 'test'
+  ...
+# Subtest: daily exact plans reference their source orders and engineers
+ok 29 - daily exact plans reference their source orders and engineers
+  ---
+  duration_ms: 37.8195
+  type: 'test'
+  ...
+# Subtest: history keeps planned times separate from missing observed visits
+ok 30 - history keeps planned times separate from missing observed visits
+  ---
+  duration_ms: 8.86
+  type: 'test'
+  ...
+# Subtest: each date retains independent exact-plan provenance
+ok 31 - each date retains independent exact-plan provenance
+  ---
+  duration_ms: 0.5678
+  type: 'test'
+  ...
+# Subtest: period summary separates planned visits from observed execution
+ok 32 - period summary separates planned visits from observed execution
+  ---
+  duration_ms: 122.7993
+  type: 'test'
+  ...
+# Subtest: decision count is recomputed from assignments and the unresolved list, not copied from metrics
+ok 33 - decision count is recomputed from assignments and the unresolved list, not copied from metrics
+  ---
+  duration_ms: 3.8353
+  type: 'test'
+  ...
+# Subtest: filtered route aggregates override stale all-region plan metrics
+ok 34 - filtered route aggregates override stale all-region plan metrics
+  ---
+  duration_ms: 8.6774
+  type: 'test'
+  ...
+# Subtest: visit drill-down does not turn historical plans into completed visits
+ok 35 - visit drill-down does not turn historical plans into completed visits
+  ---
+  duration_ms: 0.7635
+  type: 'test'
+  ...
+# Subtest: forecast is based on available shifts and remains unavailable with too little history
+ok 36 - forecast is based on available shifts and remains unavailable with too little history
+  ---
+  duration_ms: 46.5292
+  type: 'test'
+  ...
+# Subtest: insights use dates and fields rather than a fixture hash
+ok 37 - insights use dates and fields rather than a fixture hash
+  ---
+  duration_ms: 563.6089
+  type: 'test'
+  ...
+# Subtest: no fact never becomes zero punctuality, including an empty fact collection
+ok 38 - no fact never becomes zero punctuality, including an empty fact collection
+  ---
+  duration_ms: 3.4413
+  type: 'test'
+  ...
+# Subtest: a completed visit without a timestamp does not count as late or punctual
+ok 39 - a completed visit without a timestamp does not count as late or punctual
+  ---
+  duration_ms: 0.5159
+  type: 'test'
+  ...
+# Subtest: shift history remains available when optional historical source files are absent
+ok 40 - shift history remains available when optional historical source files are absent
+  ---
+  duration_ms: 16395.7238
+  type: 'test'
+  ...
+# Subtest: calculated analytics dates and available operational archives remain distinct
+ok 41 - calculated analytics dates and available operational archives remain distinct
+  ---
+  duration_ms: 16980.3217
+  type: 'test'
+  ...
+# Subtest: canonical input yields 205 exact assignments and altered input never yields an estimate
+ok 42 - canonical input yields 205 exact assignments and altered input never yields an estimate
+  ---
+  duration_ms: 216.4335
+  type: 'test'
+  ...
+# Subtest: background planning job reports its real state and returns the validated plan
+ok 43 - background planning job reports its real state and returns the validated plan
+  ---
+  duration_ms: 157.8569
+  type: 'test'
+  ...
+# Subtest: baseline uses emergency qualification for an emergency-priority connection
+ok 44 - baseline uses emergency qualification for an emergency-priority connection
+  ---
+  duration_ms: 4.2762
+  type: 'test'
+  ...
+# Subtest: baseline keeps file order and selects the first feasible engineer
+ok 45 - baseline keeps file order and selects the first feasible engineer
+  ---
+  duration_ms: 1.3687
+  type: 'test'
+  ...
+# Subtest: baseline enforces territory, skill and transport constraints
+ok 46 - baseline enforces territory, skill and transport constraints
+  ---
+  duration_ms: 1.1567
+  type: 'test'
+  ...
+# Subtest: baseline does not reorder visits to rescue a later window
+ok 47 - baseline does not reorder visits to rescue a later window
+  ---
+  duration_ms: 0.4369
+  type: 'test'
+  ...
+# Subtest: baseline inputs are hydrated automatically for every available day
+ok 48 - baseline inputs are hydrated automatically for every available day
+  ---
+  duration_ms: 0.6755
+  type: 'test'
+  ...
+# Subtest: system work norms exclude travel and preserve technical and document time
+ok 49 - system work norms exclude travel and preserve technical and document time
+  ---
+  duration_ms: 82.6223
+  type: 'test'
+  ...
+# X [ERROR] The build was canceled
+# Subtest: district files merge with different ID and window headings before one review
+ok 50 - district files merge with different ID and window headings before one review
+  ---
+  duration_ms: 6137.9734
+  type: 'test'
+  ...
+# WebSocket server error: Port 24678 is already in use
+# X [ERROR] The build was canceled
+# Subtest: district filenames provide an operational sector only when the CSV has none
+ok 51 - district filenames provide an operational sector only when the CSV has none
+  ---
+  duration_ms: 7009.8338
+  type: 'test'
+  ...
+# WebSocket server error: Port 24678 is already in use
+# X [ERROR] The build was canceled
+# Subtest: information keeps emergency qualification without acquiring urgent priority
+ok 52 - information keeps emergency qualification without acquiring urgent priority
+  ---
+  duration_ms: 1983.4225
+  type: 'test'
+  ...
+# Subtest: geocoder accepts the same exact street before or after its type and rejects another street
+ok 53 - geocoder accepts the same exact street before or after its type and rejects another street
+  ---
+  duration_ms: 22.3061
+  type: 'test'
+  ...
+# Subtest: geocoder finds an approximate street point when the house number is missing
+ok 54 - geocoder finds an approximate street point when the house number is missing
+  ---
+  duration_ms: 1038.1051
+  type: 'test'
+  ...
+# Subtest: formula sums the authoritative components, paperwork, access and both history components exactly once
+ok 55 - formula sums the authoritative components, paperwork, access and both history components exactly once
+  ---
+  duration_ms: 3.6656
+  type: 'test'
+  ...
+# Subtest: formula preserves discounts, minimum duration and dispatcher override without changing snapshots
+ok 56 - formula preserves discounts, minimum duration and dispatcher override without changing snapshots
+  ---
+  duration_ms: 1.0246
+  type: 'test'
+  ...
+# Subtest: weekly impact respects calendar boundaries and excludes missing, future, revised and override forecasts
+ok 57 - weekly impact respects calendar boundaries and excludes missing, future, revised and override forecasts
+  ---
+  duration_ms: 2.1288
+  type: 'test'
+  ...
+# Subtest: weekly chart groups by Moscow calendar day and sums increases without subtracting faster visits
+ok 58 - weekly chart groups by Moscow calendar day and sums increases without subtracting faster visits
+  ---
+  duration_ms: 0.3577
+  type: 'test'
+  ...
+# Subtest: map keeps signed deltas separate from confirmed access and never invents coordinates
+ok 59 - map keeps signed deltas separate from confirmed access and never invents coordinates
+  ---
+  duration_ms: 1.6769
+  type: 'test'
+  ...
+# Subtest: show the whole layer fits every filtered coordinate with panel padding and leaves ordinary toggles alone
+ok 60 - show the whole layer fits every filtered coordinate with panel padding and leaves ordinary toggles alone
+  ---
+  duration_ms: 1.3068
+  type: 'test'
+  ...
+# Subtest: dynamic replanning inserts a real request into a feasible regional gap
+ok 61 - dynamic replanning inserts a real request into a feasible regional gap
+  ---
+  duration_ms: 6.0871
+  type: 'test'
+  ...
+# Subtest: dynamic replanning never moves a request to another region
+ok 62 - dynamic replanning never moves a request to another region
+  ---
+  duration_ms: 1.3857
+  type: 'test'
+  ...
+# Subtest: dynamic replanning removes a cancelled request from the published route
+ok 63 - dynamic replanning removes a cancelled request from the published route
+  ---
+  duration_ms: 0.5647
+  type: 'test'
+  ...
+# Subtest: engineer incident time freezes started visits and redistributes only future visits
+ok 64 - engineer incident time freezes started visits and redistributes only future visits
+  ---
+  duration_ms: 1.936
+  type: 'test'
+  ...
+# Subtest: removal can leave future visits in queue without inventing an unchecked route
+ok 65 - removal can leave future visits in queue without inventing an unchecked route
+  ---
+  duration_ms: 0.4614
+  type: 'test'
+  ...
+# Subtest: an unrelated unassigned request is preserved instead of being replanned on every event
+ok 66 - an unrelated unassigned request is preserved instead of being replanned on every event
+  ---
+  duration_ms: 0.6887
+  type: 'test'
+  ...
+# Subtest: new work is never inserted before the recorded event time
+ok 67 - new work is never inserted before the recorded event time
+  ---
+  duration_ms: 0.8873
+  type: 'test'
+  ...
+# Subtest: candidate diagnostics report every constraint instead of one generic diagnosis
+ok 68 - candidate diagnostics report every constraint instead of one generic diagnosis
+  ---
+  duration_ms: 1.3343
+  type: 'test'
+  ...
+# Subtest: exact-plan diagnostics use stored route checks and never infer travel from distance
+ok 69 - exact-plan diagnostics use stored route checks and never infer travel from distance
+  ---
+  duration_ms: 1.8797
+  type: 'test'
+  ...
+# Subtest: a client-approved window shift is recalculated before it can be published
+ok 70 - a client-approved window shift is recalculated before it can be published
+  ---
+  duration_ms: 1.0034
+  type: 'test'
+  ...
+# Subtest: changed shift boundaries rebuild the affected crew route
+ok 71 - changed shift boundaries rebuild the affected crew route
+  ---
+  duration_ms: 0.5289
+  type: 'test'
+  ...
+# Subtest: changed shift boundaries preserve every assignment that still fits the new shift
+ok 72 - changed shift boundaries preserve every assignment that still fits the new shift
+  ---
+  duration_ms: 0.2473
+  type: 'test'
+  ...
+# Subtest: returning a released crew actually assigns feasible backlog work
+ok 73 - returning a released crew actually assigns feasible backlog work
+  ---
+  duration_ms: 0.4558
+  type: 'test'
+  ...
+# Subtest: manual assignment is published only when the selected crew can take the order
+ok 74 - manual assignment is published only when the selected crew can take the order
+  ---
+  duration_ms: 1.0935
+  type: 'test'
+  ...
+# Subtest: dispatcher can move a future assigned order to another eligible brigade
+ok 75 - dispatcher can move a future assigned order to another eligible brigade
+  ---
+  duration_ms: 0.4106
+  type: 'test'
+  ...
+# Subtest: incident creation is idempotent and reading a notice never solves it
+ok 76 - incident creation is idempotent and reading a notice never solves it
+  ---
+  duration_ms: 17.2212
+  type: 'test'
+  ...
+# Subtest: manual decision wins once; duplicate callbacks return that same decision
+ok 77 - manual decision wins once; duplicate callbacks return that same decision
+  ---
+  duration_ms: 21.0287
+  type: 'test'
+  ...
+# Subtest: server deadline accepts with actor=system without an open browser
+ok 78 - server deadline accepts with actor=system without an open browser
+  ---
+  duration_ms: 19.4943
+  type: 'test'
+  ...
+# Subtest: deadline can accept a checked partial result while remaining alternatives are still searching
+ok 79 - deadline can accept a checked partial result while remaining alternatives are still searching
+  ---
+  duration_ms: 31.808
+  type: 'test'
+  ...
+# Subtest: new facts and new incidents invalidate a formerly ready candidate
+ok 80 - new facts and new incidents invalidate a formerly ready candidate
+  ---
+  duration_ms: 19.2662
+  type: 'test'
+  ...
+# Subtest: cancellation prevents expiry and an in-flight search from publishing
+ok 81 - cancellation prevents expiry and an in-flight search from publishing
+  ---
+  duration_ms: 6.6309
+  type: 'test'
+  ...
+# Subtest: reading a notification during search remains durable when the result arrives
+ok 82 - reading a notification during search remains durable when the result arrives
+  ---
+  duration_ms: 12.1219
+  type: 'test'
+  ...
+# Subtest: durable timer and selected plans survive restart and competing connections
+ok 83 - durable timer and selected plans survive restart and competing connections
+  ---
+  duration_ms: 98.9803
+  type: 'test'
+  ...
+# Subtest: failed routing keeps old plan, exposes expiry and resumes queued work after restart
+ok 84 - failed routing keeps old plan, exposes expiry and resumes queued work after restart
+  ---
+  duration_ms: 9.2737
+  type: 'test'
+  ...
+# Subtest: actual unfinished service remains working past planned finish with no invented release
+ok 85 - actual unfinished service remains working past planned finish with no invented release
+  ---
+  duration_ms: 1.0107
+  type: 'test'
+  ...
+# Subtest: day start requires a confirmed dated point and cannot rewrite an executing day
+ok 86 - day start requires a confirmed dated point and cannot rewrite an executing day
+  ---
+  duration_ms: 9.7248
+  type: 'test'
+  ...
+# Subtest: notification type is explicit and elapsed road geometry remains visible
+ok 87 - notification type is explicit and elapsed road geometry remains visible
+  ---
+  duration_ms: 0.8995
+  type: 'test'
+  ...
+# Subtest: recommendation uses a chronological holdout, matches actual next calculation and preserves past forecasts
+ok 88 - recommendation uses a chronological holdout, matches actual next calculation and preserves past forecasts
+  ---
+  duration_ms: 83.5307
+  type: 'test'
+  ...
+# Subtest: customer waiting transfers only through the explicit account and stays separate from technical work
+ok 89 - customer waiting transfers only through the explicit account and stays separate from technical work
+  ---
+  duration_ms: 65.0561
+  type: 'test'
+  ...
+# Subtest: consistent faster work reduces the next estimate without changing the base normative
+ok 90 - consistent faster work reduces the next estimate without changing the base normative
+  ---
+  duration_ms: 36.3861
+  type: 'test'
+  ...
+# Subtest: one-off, unknown, incomplete and manual measurements never become a transferable rule
+ok 91 - one-off, unknown, incomplete and manual measurements never become a transferable rule
+  ---
+  duration_ms: 21.3721
+  type: 'test'
+  ...
+# Subtest: contradictory later results, one engineer and unsupported building-wide transfer are blocked
+ok 92 - contradictory later results, one engineer and unsupported building-wide transfer are blocked
+  ---
+  duration_ms: 23.5001
+  type: 'test'
+  ...
+# Subtest: confirmed feedback stops affecting new estimates after fresh measurements contradict it
+ok 93 - confirmed feedback stops affecting new estimates after fresh measurements contradict it
+  ---
+  duration_ms: 18.3472
+  type: 'test'
+  ...
+# Subtest: reply revisions reject stale writes, retain prior versions and remain queryable at their original time
+ok 94 - reply revisions reject stale writes, retain prior versions and remain queryable at their original time
+  ---
+  duration_ms: 13.4797
+  type: 'test'
+  ...
+# Subtest: synthetic enrichment is idempotent and changes neither original facts nor forecast snapshots
+ok 95 - synthetic enrichment is idempotent and changes neither original facts nor forecast snapshots
+  ---
+  duration_ms: 15.5496
+  type: 'test'
+  ...
+# Subtest: engineer prose follows visit context and keeps machine timing and transfer decisions out of the message
+ok 96 - engineer prose follows visit context and keeps machine timing and transfer decisions out of the message
+  ---
+  duration_ms: 12.9537
+  type: 'test'
+  ...
+# Subtest: fixture copy refresh is idempotent and preserves human replies, decisions and measured data
+ok 97 - fixture copy refresh is idempotent and preserves human replies, decisions and measured data
+  ---
+  duration_ms: 33.6367
+  type: 'test'
+  ...
+# Subtest: HTTP confirmation enforces the same evidence checks as the store
+ok 98 - HTTP confirmation enforces the same evidence checks as the store
+  ---
+  duration_ms: 51.7898
+  type: 'test'
+  ...
+# Subtest: a completed deviation requests an explanation while retaining all measured stages
+ok 99 - a completed deviation requests an explanation while retaining all measured stages
+  ---
+  duration_ms: 17.9133
+  type: 'test'
+  ...
+# Subtest: a new correction must not be worse than forecasts that already include history
+ok 100 - a new correction must not be worse than forecasts that already include history
+  ---
+  duration_ms: 71.3773
+  type: 'test'
+  ...
+# Subtest: a single engineer and an expired cause cannot authorize transfer
+ok 101 - a single engineer and an expired cause cannot authorize transfer
+  ---
+  duration_ms: 33.4275
+  type: 'test'
+  ...
+# Subtest: closed conditions cannot be revived from measurements made before their closure
+ok 102 - closed conditions cannot be revived from measurements made before their closure
+  ---
+  duration_ms: 20.8769
+  type: 'test'
+  ...
+# Subtest: a full rebuild may move future work while preserving earlier visits
+ok 103 - a full rebuild may move future work while preserving earlier visits
+  ---
+  duration_ms: 2.1653
+  type: 'test'
+  ...
+# Subtest: a recorded start freezes its assignment even after the event time
+ok 104 - a recorded start freezes its assignment even after the event time
+  ---
+  duration_ms: 0.3347
+  type: 'test'
+  ...
+# Subtest: an alternative time is shown only after a second exact window check
+ok 105 - an alternative time is shown only after a second exact window check
+  ---
+  duration_ms: 1.4832
+  type: 'test'
+  ...
+# Subtest: a queued order is checked through a real client-window event
+ok 106 - a queued order is checked through a real client-window event
+  ---
+  duration_ms: 0.5446
+  type: 'test'
+  ...
+# Subtest: full rebuild takes stock limits from the matching base dataset
+ok 107 - full rebuild takes stock limits from the matching base dataset
+  ---
+  duration_ms: 529.5374
+  type: 'test'
+  ...
+# Subtest: filter values keep source codes while displaying Russian labels
+ok 108 - filter values keep source codes while displaying Russian labels
+  ---
+  duration_ms: 1.3239
+  type: 'test'
+  ...
+# Subtest: work filters show one Russian option for each source code and label
+ok 109 - work filters show one Russian option for each source code and label
+  ---
+  duration_ms: 2.7018
+  type: 'test'
+  ...
+# Subtest: multiple selections match either value within a group
+ok 110 - multiple selections match either value within a group
+  ---
+  duration_ms: 0.2846
+  type: 'test'
+  ...
+# Subtest: search finds IDs, source text and visible Russian skill labels
+ok 111 - search finds IDs, source text and visible Russian skill labels
+  ---
+  duration_ms: 0.4379
+  type: 'test'
+  ...
+# Subtest: request filters keep work type and required skill independent
+ok 112 - request filters keep work type and required skill independent
+  ---
+  duration_ms: 0.4328
+  type: 'test'
+  ...
+# Subtest: candidate binds the current duration snapshots to newly searched exact evidence
+ok 113 - candidate binds the current duration snapshots to newly searched exact evidence
+  ---
+  duration_ms: 193.2369
+  type: 'test'
+  ...
+# Subtest: a fresh operational database seeds only the new candidate plan and duration version
+ok 114 - a fresh operational database seeds only the new candidate plan and duration version
+  ---
+  duration_ms: 15229.7647
+  type: 'test'
+  ...
+# Subtest: parses common imported calendar formats
+ok 115 - parses common imported calendar formats
+  ---
+  duration_ms: 8.0031
+  type: 'test'
+  ...
+# Subtest: selects the most common past work date from imported rows
+ok 116 - selects the most common past work date from imported rows
+  ---
+  duration_ms: 3.8983
+  type: 'test'
+  ...
+# Subtest: does not move the calendar to a future imported date
+ok 117 - does not move the calendar to a future imported date
+  ---
+  duration_ms: 0.6429
+  type: 'test'
+  ...
+# Subtest: does not interpret durations and time-only fields as dates
+ok 118 - does not interpret durations and time-only fields as dates
+  ---
+  duration_ms: 1.6856
+  type: 'test'
+  ...
+# Subtest: equipment import keeps all source codes and does not invent a replacement
+ok 119 - equipment import keeps all source codes and does not invent a replacement
+  ---
+  duration_ms: 4.162
+  type: 'test'
+  ...
+# Subtest: an equipment validation error does not become an emergency-plan notification
+ok 120 - an equipment validation error does not become an emergency-plan notification
+  ---
+  duration_ms: 0.4457
+  type: 'test'
+  ...
+# Subtest: a retained day supplies its recorded shared stock to a new calculation
+ok 121 - a retained day supplies its recorded shared stock to a new calculation
+  ---
+  duration_ms: 265.6011
+  type: 'test'
+  ...
+# WebSocket server error: Port 24678 is already in use
+# Subtest: reviewed orders and engineers retain every equipment requirement
+ok 122 - reviewed orders and engineers retain every equipment requirement
+  ---
+  duration_ms: 13384.0268
+  type: 'test'
+  ...
+# Subtest: table history restores and reapplies a cell edit
+ok 123 - table history restores and reapplies a cell edit
+  ---
+  duration_ms: 1.0066
+  type: 'test'
+  ...
+# Subtest: typing in one cell coalesces into one undo step
+ok 124 - typing in one cell coalesces into one undo step
+  ---
+  duration_ms: 0.1957
+  type: 'test'
+  ...
+# Subtest: a new edit clears the redo branch
+ok 125 - a new edit clears the redo branch
+  ---
+  duration_ms: 2.2055
+  type: 'test'
+  ...
+# Subtest: district file can be appended to the open day without replacing existing orders
+ok 126 - district file can be appended to the open day without replacing existing orders
+  ---
+  duration_ms: 37.8431
+  type: 'test'
+  ...
+# Subtest: the same source ID on a different day is not a collision
+ok 127 - the same source ID on a different day is not a collision
+  ---
+  duration_ms: 0.3814
+  type: 'test'
+  ...
+# Subtest: undated records belong to the open day, not every imported day
+ok 128 - undated records belong to the open day, not every imported day
+  ---
+  duration_ms: 0.3157
+  type: 'test'
+  ...
+# Subtest: order and engineer IDs are separate namespaces
+ok 129 - order and engineer IDs are separate namespaces
+  ---
+  duration_ms: 0.568
+  type: 'test'
+  ...
+# Subtest: permission state chooses the correct geolocation flow
+ok 130 - permission state chooses the correct geolocation flow
+  ---
+  duration_ms: 1.0695
+  type: 'test'
+  ...
+# Subtest: camera snapshot preserves every visible map parameter
+ok 131 - camera snapshot preserves every visible map parameter
+  ---
+  duration_ms: 1.9658
+  type: 'test'
+  ...
+# Subtest: camera restoration returns to the exact snapshot
+ok 132 - camera restoration returns to the exact snapshot
+  ---
+  duration_ms: 0.2761
+  type: 'test'
+  ...
+# Subtest: manual order resolves a confirmed building address without typed coordinates
+ok 133 - manual order resolves a confirmed building address without typed coordinates
+  ---
+  duration_ms: 39.2773
+  type: 'test'
+  ...
+# Subtest: manual order never accepts a street centroid or a suggested different house
+ok 134 - manual order never accepts a street centroid or a suggested different house
+  ---
+  duration_ms: 3.5483
+  type: 'test'
+  ...
+# Subtest: an engineer start address cannot silently fall back to the city centre
+ok 135 - an engineer start address cannot silently fall back to the city centre
+  ---
+  duration_ms: 0.6516
+  type: 'test'
+  ...
+# Subtest: route colors are stable and come from the approved palette
+ok 136 - route colors are stable and come from the approved palette
+  ---
+  duration_ms: 1.1243
+  type: 'test'
+  ...
+# Subtest: brigade colors fall back to focus above eight visible routes
+ok 137 - brigade colors fall back to focus above eight visible routes
+  ---
+  duration_ms: 0.245
+  type: 'test'
+  ...
+# Subtest: route numbers appear only for a focused route at useful zoom
+ok 138 - route numbers appear only for a focused route at useful zoom
+  ---
+  duration_ms: 0.1668
+  type: 'test'
+  ...
+# Subtest: repeated time differences use symmetric ten-minute boundaries and preserve insufficient history
+ok 139 - repeated time differences use symmetric ten-minute boundaries and preserve insufficient history
+  ---
+  duration_ms: 0.2396
+  type: 'test'
+  ...
+# Subtest: CatBoost forecast artifact is complete and internally reconciled
+ok 140 - CatBoost forecast artifact is complete and internally reconciled
+  ---
+  duration_ms: 4.0075
+  type: 'test'
+  ...
+# Subtest: trained CatBoost model is included in the handoff
+ok 141 - trained CatBoost model is included in the handoff
+  ---
+  duration_ms: 4.8654
+  type: 'test'
+  ...
+# Subtest: exact historical routes respect shifts, client windows and service durations
+ok 142 - exact historical routes respect shifts, client windows and service durations
+  ---
+  duration_ms: 84.9555
+  type: 'test'
+  ...
+# Subtest: all original subtypes retain their technical and paperwork norms, without travel
+ok 143 - all original subtypes retain their technical and paperwork norms, without travel
+  ---
+  duration_ms: 25.2375
+  type: 'test'
+  ...
+# Subtest: K varies both ways; devices, sites, paperwork and cable affect the appropriate component
+ok 144 - K varies both ways; devices, sites, paperwork and cable affect the appropriate component
+  ---
+  duration_ms: 2.3699
+  type: 'test'
+  ...
+# Subtest: conservative history works both ways, is idempotent, scoped and excludes future/unknown evidence
+ok 145 - conservative history works both ways, is idempotent, scoped and excludes future/unknown evidence
+  ---
+  duration_ms: 4.8684
+  type: 'test'
+  ...
+# Subtest: measured access is separate from technical K and cannot count twice
+ok 146 - measured access is separate from technical K and cannot count twice
+  ---
+  duration_ms: 0.49
+  type: 'test'
+  ...
+# Subtest: equivalent timezone offsets cannot disclose future history or model revisions
+ok 147 - equivalent timezone offsets cannot disclose future history or model revisions
+  ---
+  duration_ms: 10.0689
+  type: 'test'
+  ...
+# Subtest: scope correction closes the previous condition and changes only a future matching entity
+ok 148 - scope correction closes the previous condition and changes only a future matching entity
+  ---
+  duration_ms: 8.8389
+  type: 'test'
+  ...
+# Subtest: immutable snapshots, manual override reasons, and server plan receipts reject tampering
+ok 149 - immutable snapshots, manual override reasons, and server plan receipts reject tampering
+  ---
+  duration_ms: 6.4613
+  type: 'test'
+  ...
+# Subtest: SQLite migration, immutable history revisions, restart and model versioning preserve old forecasts
+ok 150 - SQLite migration, immutable history revisions, restart and model versioning preserve old forecasts
+  ---
+  duration_ms: 61.2698
+  type: 'test'
+  ...
+# Subtest: unknown stages never become exact technical measurements; performer remains bound to visit
+ok 151 - unknown stages never become exact technical measurements; performer remains bound to visit
+  ---
+  duration_ms: 5.066
+  type: 'test'
+  ...
+# Subtest: imported factors and overrides validate without a competing client formula
+ok 152 - imported factors and overrides validate without a competing client formula
+  ---
+  duration_ms: 1.0474
+  type: 'test'
+  ...
+# Subtest: independent holdout quality is reported across multiple reproducible seeds
+ok 153 - independent holdout quality is reported across multiple reproducible seeds
+  ---
+  duration_ms: 38149.7395
+  type: 'test'
+  ...
+# Subtest: published snapshots stay frozen; a changed formula cannot reuse or forge their receipt
+ok 154 - published snapshots stay frozen; a changed formula cannot reuse or forge their receipt
+  ---
+  duration_ms: 8987.3109
+  type: 'test'
+  ...
+# Subtest: preloading and opening reuse a request; context changes and invalidation load fresh details
+ok 155 - preloading and opening reuse a request; context changes and invalidation load fresh details
+  ---
+  duration_ms: 44.8956
+  type: 'test'
+  ...
+# Subtest: failed preloads can be retried and never poison the object cache
+ok 156 - failed preloads can be retried and never poison the object cache
+  ---
+  duration_ms: 1.7907
+  type: 'test'
+  ...
+# Subtest: visit stages distinguish work from the complete visit and retain measured zeroes
+ok 157 - visit stages distinguish work from the complete visit and retain measured zeroes
+  ---
+  duration_ms: 1.1469
+  type: 'test'
+  ...
+# Subtest: legacy visits show combined non-work time without inventing its individual stages
+ok 158 - legacy visits show combined non-work time without inventing its individual stages
+  ---
+  duration_ms: 0.2629
+  type: 'test'
+  ...
+# Subtest: unsaved fact fields stay with their order and shift; saved zeroes and unknown stages survive refresh
+ok 159 - unsaved fact fields stay with their order and shift; saved zeroes and unknown stages survive refresh
+  ---
+  duration_ms: 2.2927
+  type: 'test'
+  ...
+# Subtest: confirmed same-operation evidence transfers across objects, never across a different operation
+ok 160 - confirmed same-operation evidence transfers across objects, never across a different operation
+  ---
+  duration_ms: 22.0983
+  type: 'test'
+  ...
+# Subtest: node access survives an unrelated change of work volume, but never affects a visit that skips the node
+ok 161 - node access survives an unrelated change of work volume, but never affects a visit that skips the node
+  ---
+  duration_ms: 9.0248
+  type: 'test'
+  ...
+# Subtest: larger cable categories never shorten a visit; included standard work is not billed twice
+ok 162 - larger cable categories never shorten a visit; included standard work is not billed twice
+  ---
+  duration_ms: 1.4049
+  type: 'test'
+  ...
+# Subtest: location edits clear old links and server rejects a mismatched address or map point
+ok 163 - location edits clear old links and server rejects a mismatched address or map point
+  ---
+  duration_ms: 12.4995
+  type: 'test'
+  ...
+# Subtest: decision revisions, clarification and exclusion have distinct lasting effects
+ok 164 - decision revisions, clarification and exclusion have distinct lasting effects
+  ---
+  duration_ms: 22.7637
+  type: 'test'
+  ...
+# Subtest: group medians never mix work types or volumes; missing evidence stays separate
+ok 165 - group medians never mix work types or volumes; missing evidence stays separate
+  ---
+  duration_ms: 0.7486
+  type: 'test'
+  ...
+# Subtest: attention follows repeated impact and decisions, independently of object ID
+ok 166 - attention follows repeated impact and decisions, independently of object ID
+  ---
+  duration_ms: 30.4914
+  type: 'test'
+  ...
+# Subtest: information needs emergency qualification while urgency follows only explicit priority
+ok 167 - information needs emergency qualification while urgency follows only explicit priority
+  ---
+  duration_ms: 0.5849
+  type: 'test'
+  ...
+# Subtest: late clarification is visible in review while the historical estimate keeps its cutoff
+ok 168 - late clarification is visible in review while the historical estimate keeps its cutoff
+  ---
+  duration_ms: 47.6758
+  type: 'test'
+  ...
+# Subtest: a late exclusion changes current analytics without rewriting the historical report
+ok 169 - a late exclusion changes current analytics without rewriting the historical report
+  ---
+  duration_ms: 6.5279
+  type: 'test'
+  ...
+# Subtest: a shared condition exposes its foreign source visit and can be revised from another object
+ok 170 - a shared condition exposes its foreign source visit and can be revised from another object
+  ---
+  duration_ms: 15.7517
+  type: 'test'
+  ...
+# Subtest: a linked historical visit is rendered immediately and more pagination continues after it
+ok 171 - a linked historical visit is rendered immediately and more pagination continues after it
+  ---
+  duration_ms: 0.2937
+  type: 'test'
+  ...
+# Subtest: group actions filter identical addresses without mixing composition or missing measurements
+ok 172 - group actions filter identical addresses without mixing composition or missing measurements
+  ---
+  duration_ms: 1.757
+  type: 'test'
+  ...
+# Subtest: mean overrun uses only overrunning visits, independently for each work type
+ok 173 - mean overrun uses only overrunning visits, independently for each work type
+  ---
+  duration_ms: 10.2419
+  type: 'test'
+  ...
+# Subtest: cluster information keeps exact counts without abbreviations or invented missing values
+ok 174 - cluster information keeps exact counts without abbreviations or invented missing values
+  ---
+  duration_ms: 5.2809
+  type: 'test'
+  ...
+# Subtest: filtered aggregation keeps insufficient evidence separate from increased duration
+ok 175 - filtered aggregation keeps insufficient evidence separate from increased duration
+  ---
+  duration_ms: 0.5759
+  type: 'test'
+  ...
+# Subtest: tile duplicates produce one chip; source updates replace stale counts and cleanup removes overlays
+ok 176 - tile duplicates produce one chip; source updates replace stale counts and cleanup removes overlays
+  ---
+  duration_ms: 8.0465
+  type: 'test'
+  ...
+# Subtest: a pending expansion cannot change camera or selection after switching map mode
+ok 177 - a pending expansion cannot change camera or selection after switching map mode
+  ---
+  duration_ms: 3.7011
+  type: 'test'
+  ...
+# Subtest: address focus uses real coordinates, building zoom and the corridor between both drawers at CSS zoom
+ok 178 - address focus uses real coordinates, building zoom and the corridor between both drawers at CSS zoom
+  ---
+  duration_ms: 4.1294
+  type: 'test'
+  ...
+# Subtest: overlapping drawers close only the list and leave room for the house beside the passport
+ok 179 - overlapping drawers close only the list and leave room for the house beside the passport
+  ---
+  duration_ms: 1.0182
+  type: 'test'
+  ...
+# Subtest: invalid coordinates never move the camera and an already closer zoom is retained within map limits
+ok 180 - invalid coordinates never move the camera and an already closer zoom is retained within map limits
+  ---
+  duration_ms: 0.6105
+  type: 'test'
+  ...
+# Subtest: one calculation blocks another and frees the slot when complete
+ok 181 - one calculation blocks another and frees the slot when complete
+  ---
+  duration_ms: 3.9072
+  type: 'test'
+  ...
+# Subtest: background calculations release their reservation after a failure
+ok 182 - background calculations release their reservation after a failure
+  ---
+  duration_ms: 1.7504
+  type: 'test'
+  ...
+# Subtest: explicit improvement bypasses a matching retained schedule; lookup does not run the planner
+ok 183 - explicit improvement bypasses a matching retained schedule; lookup does not run the planner
+  ---
+  duration_ms: 410.4073
+  type: 'test'
+  ...
+# Subtest: replanning CSV accepts Russian semicolon headers without coordinates
+ok 184 - replanning CSV accepts Russian semicolon headers without coordinates
+  ---
+  duration_ms: 3.8112
+  type: 'test'
+  ...
+# Subtest: global region selection overrides a conflicting region from CSV
+ok 185 - global region selection overrides a conflicting region from CSV
+  ---
+  duration_ms: 0.4946
+  type: 'test'
+  ...
+# Subtest: replanning CSV rejects files without address column
+ok 186 - replanning CSV rejects files without address column
+  ---
+  duration_ms: 0.6428
+  type: 'test'
+  ...
+# Subtest: server rejects conflicting territories by object ID, source ID and exact address without writing snapshots
+ok 187 - server rejects conflicting territories by object ID, source ID and exact address without writing snapshots
+  ---
+  duration_ms: 38.1773
+  type: 'test'
+  ...
+# Subtest: initial planning and NEW_ORDER reject a wrong territory before invoking routing or creating a draft
+ok 188 - initial planning and NEW_ORDER reject a wrong territory before invoking routing or creating a draft
+  ---
+  duration_ms: 61.706
+  type: 'test'
+  ...
+# WebSocket server error: Port 24678 is already in use
+# Subtest: CSV parsing keeps emergency and urgent semantics, and server import validation cannot be bypassed
+ok 189 - CSV parsing keeps emergency and urgent semantics, and server import validation cannot be bypassed
+  ---
+  duration_ms: 1989.959
+  type: 'test'
+  ...
+# Subtest: JS and Python use the same semantic contract for qualification, duration and priority
+ok 190 - JS and Python use the same semantic contract for qualification, duration and priority
+  ---
+  duration_ms: 574.111
+  type: 'test'
+  ...
+# Subtest: automatic playback accumulates sub-minute frames without rerendering every frame
+ok 191 - automatic playback accumulates sub-minute frames without rerendering every frame
+  ---
+  duration_ms: 11.7236
+  type: 'test'
+  ...
+# Subtest: duration changes protect past visits and preserve an explained override or automatic reset
+ok 192 - duration changes protect past visits and preserve an explained override or automatic reset
+  ---
+  duration_ms: 4.5914
+  type: 'test'
+  ...
+# Subtest: an event does not erase a cancelled order from the shift history
+ok 193 - an event does not erase a cancelled order from the shift history
+  ---
+  duration_ms: 0.3036
+  type: 'test'
+  ...
+# Subtest: recalculation keeps source records and validates the planning boundary
+ok 194 - recalculation keeps source records and validates the planning boundary
+  ---
+  duration_ms: 0.321
+  type: 'test'
+  ...
+# Subtest: fact transitions require confirmation, reasons and correction audit
+ok 195 - fact transitions require confirmation, reasons and correction audit
+  ---
+  duration_ms: 0.3969
+  type: 'test'
+  ...
+# Subtest: a fact entered after preview invalidates publication without changing the plan
+ok 196 - a fact entered after preview invalidates publication without changing the plan
+  ---
+  duration_ms: 15.0238
+  type: 'test'
+  ...
+# Subtest: playback does not turn simulated completion into a fact
+ok 197 - playback does not turn simulated completion into a fact
+  ---
+  duration_ms: 1.7348
+  type: 'test'
+  ...
+# Subtest: newly added day records stay visible before a later route-plan version takes effect
+ok 198 - newly added day records stay visible before a later route-plan version takes effect
+  ---
+  duration_ms: 0.9455
+  type: 'test'
+  ...
+# Subtest: map completion follows the latest dispatcher fact at the playback time
+ok 199 - map completion follows the latest dispatcher fact at the playback time
+  ---
+  duration_ms: 0.2356
+  type: 'test'
+  ...
+# Subtest: crew coordinates follow the same geographic route at each playback minute
+ok 200 - crew coordinates follow the same geographic route at each playback minute
+  ---
+  duration_ms: 0.836
+  type: 'test'
+  ...
+# Subtest: travelled and remaining playback lines preserve road bends
+ok 201 - travelled and remaining playback lines preserve road bends
+  ---
+  duration_ms: 0.8842
+  type: 'test'
+  ...
+# Subtest: timeline and map share time-sensitive visit states without inventing facts
+ok 202 - timeline and map share time-sensitive visit states without inventing facts
+  ---
+  duration_ms: 0.795
+  type: 'test'
+  ...
+# Subtest: future assigned work can be reassigned, but never after its planned start
+ok 203 - future assigned work can be reassigned, but never after its planned start
+  ---
+  duration_ms: 0.3942
+  type: 'test'
+  ...
+# Subtest: shift versions, facts and stale-preview rejection survive store reads
+ok 204 - shift versions, facts and stale-preview rejection survive store reads
+  ---
+  duration_ms: 7.3482
+  type: 'test'
+  ...
+# Subtest: staff roster addition and archiving do not change published shift history
+ok 205 - staff roster addition and archiving do not change published shift history
+  ---
+  duration_ms: 73.3034
+  type: 'test'
+  ...
+# Subtest: adding a staff member to a shift and taking them off duty are separate publications
+ok 206 - adding a staff member to a shift and taking them off duty are separate publications
+  ---
+  duration_ms: 87.3337
+  type: 'test'
+  ...
+# Subtest: manual request addition needs no event time or reason after an earlier publication
+ok 207 - manual request addition needs no event time or reason after an earlier publication
+  ---
+  duration_ms: 34.1332
+  type: 'test'
+  ...
+# Subtest: discarding an unpublished preview survives reload without changing the published shift
+ok 208 - discarding an unpublished preview survives reload without changing the published shift
+  ---
+  duration_ms: 11.6477
+  type: 'test'
+  ...
+# Subtest: event preview, exact validation gate, atomic publish, replay and PDF
+ok 209 - event preview, exact validation gate, atomic publish, replay and PDF
+  ---
+  duration_ms: 1157.1297
+  type: 'test'
+  ...
+# Subtest: events preserve unique orders, blocked facts and replacement team
+ok 210 - events preserve unique orders, blocked facts and replacement team
+  ---
+  duration_ms: 0.911
+  type: 'test'
+  ...
+# Subtest: journal can restore any saved plan, not only the immediately previous one
+ok 211 - journal can restore any saved plan, not only the immediately previous one
+  ---
+  duration_ms: 6.6328
+  type: 'test'
+  ...
+# Subtest: Geoapify response supplies real geometry and independent validation rejects lost orders
+ok 212 - Geoapify response supplies real geometry and independent validation rejects lost orders
+  ---
+  duration_ms: 2.7855
+  type: 'test'
+  ...
+# Subtest: unreachable transit stop reports an actionable routing failure
+ok 213 - unreachable transit stop reports an actionable routing failure
+  ---
+  duration_ms: 0.8648
+  type: 'test'
+  ...
+# Subtest: geocoding key alone does not switch road validation away from local Valhalla
+ok 214 - geocoding key alone does not switch road validation away from local Valhalla
+  ---
+  duration_ms: 1.042
+  type: 'test'
+  ...
+# Subtest: operational publication rejects an estimated baseline even after changed roads are checked
+ok 215 - operational publication rejects an estimated baseline even after changed roads are checked
+  ---
+  duration_ms: 3.0516
+  type: 'test'
+  ...
+# Subtest: changing the window of an unassigned request does not call the road provider
+ok 216 - changing the window of an unassigned request does not call the road provider
+  ---
+  duration_ms: 1.0804
+  type: 'test'
+  ...
+# Subtest: an assigned visit keeps its verified route when its new window still contains the planned start
+ok 217 - an assigned visit keeps its verified route when its new window still contains the planned start
+  ---
+  duration_ms: 0.4733
+  type: 'test'
+  ...
+# Subtest: road routing failure leaves an unavailable engineer change unpublished
+ok 218 - road routing failure leaves an unavailable engineer change unpublished
+  ---
+  duration_ms: 17.0433
+  type: 'test'
+  ...
+# Subtest: daily report includes idle crews and remains paginated for a full-sized shift
+ok 219 - daily report includes idle crews and remains paginated for a full-sized shift
+  ---
+  duration_ms: 470.6689
+  type: 'test'
+  ...
+# Subtest: daily report uses precise coverage and judges client windows by visit start
+ok 220 - daily report uses precise coverage and judges client windows by visit start
+  ---
+  duration_ms: 4.0599
+  type: 'test'
+  ...
+# Subtest: AI receives a bounded shift snapshot and never controls numeric report data
+ok 221 - AI receives a bounded shift snapshot and never controls numeric report data
+  ---
+  duration_ms: 1.9752
+  type: 'test'
+  ...
+# Subtest: AI monthly token reservation survives reads and enforces the configured ceiling
+ok 222 - AI monthly token reservation survives reads and enforces the configured ceiling
+  ---
+  duration_ms: 2.6567
+  type: 'test'
+  ...
+# Subtest: background preview exposes real road-check progress before publication
+ok 223 - background preview exposes real road-check progress before publication
+  ---
+  duration_ms: 6.2935
+  type: 'test'
+  ...
+# Subtest: операционные сценарии исходной смены сохраняют ревизии и различают отмены
+ok 224 - операционные сценарии исходной смены сохраняют ревизии и различают отмены
+  ---
+  duration_ms: 46.5029
+  type: 'test'
+  ...
+# Subtest: операционные сценарии импортированной смены сохраняют ревизии и различают отмены
+ok 225 - операционные сценарии импортированной смены сохраняют ревизии и различают отмены
+  ---
+  duration_ms: 53.1677
+  type: 'test'
+  ...
+# Subtest: SQLite backup restores the published plan, event log and fact after restart
+ok 226 - SQLite backup restores the published plan, event log and fact after restart
+  ---
+  duration_ms: 63.4224
+  type: 'test'
+  ...
+# Subtest: a new order cannot receive a fact before it entered the shift
+ok 227 - a new order cannot receive a fact before it entered the shift
+  ---
+  duration_ms: 5.0911
+  type: 'test'
+  ...
+# Subtest: derives the location catalog only from imported cities
+ok 228 - derives the location catalog only from imported cities
+  ---
+  duration_ms: 15.7405
+  type: 'test'
+  ...
+# Subtest: does not turn Moscow streets, districts, or oblast labels into cities
+ok 229 - does not turn Moscow streets, districts, or oblast labels into cities
+  ---
+  duration_ms: 9.8151
+  type: 'test'
+  ...
+# Subtest: keeps the Moscow territory fixture in one city
+ok 230 - keeps the Moscow territory fixture in one city
+  ---
+  duration_ms: 20.7276
+  type: 'test'
+  ...
+# Subtest: keeps all 205 jobs from the initial planning fixture in the Moscow workspace
+ok 231 - keeps all 205 jobs from the initial planning fixture in the Moscow workspace
+  ---
+  duration_ms: 15.9768
+  type: 'test'
+  ...
+# Subtest: exposes planning backend contracts
+ok 232 - exposes planning backend contracts
+  ---
+  duration_ms: 139.7303
+  type: 'test'
+  ...
+# Subtest: matches exact-plan engineers by imported source id
+ok 233 - matches exact-plan engineers by imported source id
+  ---
+  duration_ms: 110.6987
+  type: 'test'
+  ...
+# Subtest: rejects a source-matched engineer whose transport differs from the sealed plan
+ok 234 - rejects a source-matched engineer whose transport differs from the sealed plan
+  ---
+  duration_ms: 121.5368
+  type: 'test'
+  ...
+# Subtest: rejects estimated planning for a new dataset without an exact backend
+ok 235 - rejects estimated planning for a new dataset without an exact backend
+  ---
+  duration_ms: 34.3359
+  type: 'test'
+  ...
+# Subtest: rejects a manual extension without an exact backend
+ok 236 - rejects a manual extension without an exact backend
+  ---
+  duration_ms: 36.5184
+  type: 'test'
+  ...
+# Subtest: does not invent a route when the verified artifact is unavailable
+ok 237 - does not invent a route when the verified artifact is unavailable
+  ---
+  duration_ms: 1.3081
+  type: 'test'
+  ...
+# Subtest: serves the canonical urgent event used by exact replanning
+ok 238 - serves the canonical urgent event used by exact replanning
+  ---
+  duration_ms: 47.4488
+  type: 'test'
+  ...
+# Subtest: refuses to publish an unvalidated manual reassignment
+ok 239 - refuses to publish an unvalidated manual reassignment
+  ---
+  duration_ms: 1.3545
+  type: 'test'
+  ...
+# Subtest: serves existing static assets without a fallback
+ok 240 - serves existing static assets without a fallback
+  ---
+  duration_ms: 0.5987
+  type: 'test'
+  ...
+# Subtest: falls back to index.html for an unknown app route
+ok 241 - falls back to index.html for an unknown app route
+  ---
+  duration_ms: 0.9809
+  type: 'test'
+  ...
+# Subtest: does not turn missing API or write requests into the app shell
+ok 242 - does not turn missing API or write requests into the app shell
+  ---
+  duration_ms: 0.5059
+  type: 'test'
+  ...
+# Subtest: emits the files required by Sites packaging
+ok 243 - emits the files required by Sites packaging
+  ---
+  duration_ms: 1.9178
+  type: 'test'
+  ...
+# Subtest: opening the existing engineer dialog with everyone in the shift shows its empty state
+ok 244 - opening the existing engineer dialog with everyone in the shift shows its empty state
+  ---
+  duration_ms: 8336.1603
+  type: 'test'
+  ...
+# Subtest: effective-dated roster membership preserves archived gaps and shift snapshots
+ok 245 - effective-dated roster membership preserves archived gaps and shift snapshots
+  ---
+  duration_ms: 1.7232
+  type: 'test'
+  ...
+# Subtest: idle engineers already in the shift remain selectable for manual assignment
+ok 246 - idle engineers already in the shift remain selectable for manual assignment
+  ---
+  duration_ms: 3.7926
+  type: 'test'
+  ...
+# Subtest: manual preview and saved forecast agree for emergency priority, normal priority and volume
+ok 247 - manual preview and saved forecast agree for emergency priority, normal priority and volume
+  ---
+  duration_ms: 27.166
+  type: 'test'
+  ...
+# Subtest: registry selection replaces territory and old links; unique hierarchy resolves without guessing
+ok 248 - registry selection replaces territory and old links; unique hierarchy resolves without guessing
+  ---
+  duration_ms: 1.5049
+  type: 'test'
+  ...
+# Subtest: unknown measurements and explicit zero remain different in saved visit and readiness
+ok 249 - unknown measurements and explicit zero remain different in saved visit and readiness
+  ---
+  duration_ms: 11.3808
+  type: 'test'
+  ...
+# Subtest: fact choices expose searchable visit identity and retain independent drafts
+ok 250 - fact choices expose searchable visit identity and retain independent drafts
+  ---
+  duration_ms: 0.8159
+  type: 'test'
+  ...
+# Subtest: map explanation separates extra scope, history and access, including reductions and overrides
+ok 251 - map explanation separates extra scope, history and access, including reductions and overrides
+  ---
+  duration_ms: 0.4032
+  type: 'test'
+  ...
+# WebSocket server error: Port 24678 is already in use
+# Subtest: new-order form opens without a selected object and visit status exposes missing measurements
+ok 252 - new-order form opens without a selected object and visit status exposes missing measurements
+  ---
+  duration_ms: 8243.522
+  type: 'test'
+  ...
+# WebSocket server error: Port 24678 is already in use
+# WebSocket server error: Port 24678 is already in use
+# Subtest: parallel SSR imports do not open or seed a shared operational SQLite file
+ok 253 - parallel SSR imports do not open or seed a shared operational SQLite file
+  ---
+  duration_ms: 1400.4502
+  type: 'test'
+  ...
+1..253
+# tests 253
+# suites 0
+# pass 253
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 50126.3027

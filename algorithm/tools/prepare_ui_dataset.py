@@ -367,6 +367,11 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         zone_id = zone(item)
         zones.add(zone_id)
         start_point = item.get('startCoords')
+        configured = item.get('startPoint')
+        if configured:
+            if not configured.get('confirmed') or configured.get('date') != planning_date.isoformat() or not configured.get('source'):
+                raise ValueError(f'Для инженера {engineer_id} старт не подтверждён на дату смены')
+            start_point = configured.get('coords')
         if start_point is None:
             reference_office = reference_offices.get(str(source_data(item).get('start_office_id') or ''))
             if reference_office is None or reference_office['zone_id'] != zone_id:
@@ -386,6 +391,8 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         if mode not in {'CAR', 'WALKING', 'BICYCLE', 'PUBLIC_TRANSIT'}:
             raise ValueError(f'Неизвестный транспорт инженера {engineer_id}: {raw_mode}')
         start, end = clock(item.get('shiftStart'), 'Начало смены'), clock(item.get('shiftEnd'), 'Конец смены')
+        if configured and configured.get('availableFrom'):
+            start = max(start, clock(configured['availableFrom'], 'Доступность к выезду'))
         if end <= start:
             raise ValueError(f'Смена инженера {engineer_id} заканчивается до начала')
         skills = item.get('skills') or str(source_data(item).get('skills') or '').split('|')
@@ -480,6 +487,9 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         write_csv(destination / scenario / 'events.csv', ['apply_order', 'event_id', 'event_time', 'event_type', 'target_id', 'zone_id', 'unavailable_until', 'payload_json'], [])
         write_csv(destination / scenario / 'shared_inventory.csv', ['scenario', 'zone_id', 'equipment_id', 'quantity_available', 'reservation_policy', 'replenishment_during_day'], [{**row, 'scenario': scenario.upper()} for row in inventory])
     manifest = {'dataset_version': '2.1.0', 'schema_version': '2.1.0', 'planning_date': planning_date.isoformat(), 'initial_planning_at': planning_at, 'timezone': 'Europe/Moscow', 'source': 'reviewed_ui_import', 'requires_public_transit': any(engineer['transport_type'] == 'PUBLIC_TRANSIT' and engineer['is_available'] == 'true' for engineer in engineers)}
+    starts = {source_id(item, 'engineer_id'): item['startPoint'] for item in team if item.get('startPoint')}
+    if starts:
+        (destination / 'common' / 'start_points.json').write_text(json.dumps(starts, ensure_ascii=False, sort_keys=True), encoding='utf-8')
     snapshots = {source_id(item, 'job_id'): item['durationSnapshot'] for item in orders if item.get('durationSnapshot')}
     if snapshots:
         if len(snapshots) != len(orders):

@@ -26,6 +26,7 @@ const samePoint = (point, latitude, longitude) => Array.isArray(point) && point.
 
 /** Use a sealed artifact only when every model relevant input matches its source dataset. */
 export function isCanonicalPlanningInput(payload, artifact, repositoryRoot = process.cwd()) {
+  if (payload?.engineers?.some(engineer => engineer.startPoint)) return false;
   const orders = payload?.orders;
   const engineers = payload?.engineers;
   const ids = artifact?.canonical?.initialJobIds;

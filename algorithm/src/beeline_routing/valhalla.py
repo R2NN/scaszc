@@ -73,6 +73,8 @@ class ValhallaRoutingClient:
             'units': 'kilometers',
             'alternates': 0,
         }
+        if origin.heading is not None and mode == TransportMode.CAR:
+            body['locations'][0].update({'heading': origin.heading, 'heading_tolerance': 30, 'radius': 10, 'search_cutoff': 25})
         if mode == TransportMode.CAR:
             body['date_time'] = {
                 'type': 1,
@@ -115,6 +117,7 @@ class ValhallaRoutingClient:
                 'costing': _COSTING[mode],
                 'local_service': True,
                 'runtime_revision': self.runtime_revision,
+                **({'origin_heading': origin.heading, 'heading_tolerance': 30, 'search_cutoff':25} if origin.heading is not None else {}),
             },
         )
         if payload.get('error_code') is not None:

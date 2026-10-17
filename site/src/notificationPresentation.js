@@ -1,5 +1,6 @@
 /** Choose a notification title from its event, without treating equipment names as event types. */
 export function notificationPresentation(item) {
+  if (item?.type === 'EMERGENCY_INCIDENT') return { kind: 'alert', title: item.title || 'Аварийный вызов' };
   const suppliedTitle = (item?.title || '').trim();
   const text = `${suppliedTitle} ${item?.message || ''}`.toLocaleLowerCase('ru-RU');
   if (/ошиб|не выполн|не удалось|недоступ/.test(text)) {

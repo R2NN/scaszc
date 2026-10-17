@@ -12,6 +12,7 @@ export const EVENT_TYPES = Object.freeze({
   SHIFT_EXTENDED: 'SHIFT_EXTENDED',
   CLIENT_WINDOW_SHIFT: 'CLIENT_WINDOW_SHIFT',
   ORDER_DURATION_CHANGED: 'ORDER_DURATION_CHANGED',
+  START_CHANGED: 'START_CHANGED',
 });
 
 export const minuteOf = value => {
@@ -52,6 +53,12 @@ export function eventModel(shift, event) {
   let planningEvent = { ...event };
   if (event.type === EVENT_TYPES.RECALCULATE) {
     if (event.time < '07:00') throw new Error('Пересчёт до начала смены начинается с 07:00.');
+  } else if (event.type === EVENT_TYPES.START_CHANGED) {
+    const point = event.startPoint;
+    if (!engineer || !point?.confirmed || !['office', 'home', 'confirmed_address'].includes(point.kind) || !Array.isArray(point.coords) || point.coords.length !== 2 || !point.coords.every(Number.isFinite) || !point.source || !point.address?.trim() || point.date !== shift.date) throw new Error('Подтвердите точный адрес старта, источник и дату');
+    if (event.time !== '07:00' || shift.facts?.length || shift.events?.length || shift.versions.some(version => version.effectiveAt > '07:00')) throw new Error('Старт меняется до начала дня. Для исполняемой смены выберите другую дату');
+    if (point.availableFrom && (minuteOf(point.availableFrom) == null || point.availableFrom < engineer.shiftStart || point.availableFrom >= engineer.shiftEnd)) throw new Error('Время доступности должно находиться внутри смены');
+    nextTeam = team.map(item => item.id === engineer.id ? { ...item, startPoint: point, startCoords: point.coords, startAddress: point.address, officeStart: item.officeStart || { coords:item.startCoords,address:item.startAddress } } : item);
   } else if ([EVENT_TYPES.ORDER_CANCELLED, EVENT_TYPES.VISIT_CANCELLED].includes(event.type)) {
     if (!order) throw new Error('Заявка не найдена.');
     if (completed.has(String(order.id))) throw new Error('Выполненную заявку нельзя отменить.');
@@ -116,9 +123,15 @@ export function nextFact(previous, update, { correction = false } = {}) {
   return { ...update, source: 'dispatcher' };
 }
 
+function geometryLength(a, b) {
+  const rad = value => value * Math.PI / 180;
+  const lat1=rad(a[0]),lat2=rad(b[0]);
+  return 2*Math.asin(Math.min(1,Math.sqrt(Math.sin((lat2-lat1)/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(rad(b[1]-a[1])/2)**2)));
+}
+
 function along(points, fraction) {
   if (!Array.isArray(points) || points.length < 2) return null;
-  const lengths = points.slice(1).map((point, index) => Math.hypot((point[0] - points[index][0]) * 111, (point[1] - points[index][1]) * 64));
+  const lengths = points.slice(1).map((point, index) => geometryLength(points[index], point));
   const total = lengths.reduce((sum, value) => sum + value, 0);
   if (!total) return points[0];
   let remaining = Math.max(0, Math.min(1, fraction)) * total;
@@ -133,7 +146,7 @@ function along(points, fraction) {
 }
 
 function splitGeometry(points, fraction) {
-  const lengths = points.slice(1).map((point, index) => Math.hypot((point[0] - points[index][0]) * 111, (point[1] - points[index][1]) * 64));
+  const lengths = points.slice(1).map((point, index) => geometryLength(points[index], point));
   let remaining = Math.max(0, Math.min(1, fraction)) * lengths.reduce((sum, value) => sum + value, 0);
   for (let index = 0; index < lengths.length; index += 1) {
     if (remaining <= lengths[index] || index === lengths.length - 1) {
@@ -163,6 +176,11 @@ export function playbackFrame(shift, atMinute, mode = 'plan') {
       const coords = confirmed ? orders.get(String(confirmed.item.orderId))?.coords : null;
       return { engineerId: route.engineerId, orderId: confirmed?.item.orderId || null, status: confirmed?.fact.status || 'no_fact', coords: Array.isArray(coords) ? coords : null, positionKnown: Array.isArray(coords), source: confirmed ? 'dispatcher_fact' : 'unknown' };
     }
+    const unfinished = [...facts.values()].find(fact => fact.status === 'started' && (String(fact.engineerId || '') === String(route.engineerId) || (route.assignments || []).some(visit=>String(visit.orderId)===String(fact.orderId))));
+    if (unfinished) {
+      const coords = orders.get(String(unfinished.orderId))?.coords || null;
+      return { engineerId:route.engineerId, orderId:unfinished.orderId, status:'working', coords, positionKnown:Boolean(coords), source:'dispatcher_fact', availableAt:null };
+    }
     const start = minuteOf(engineer?.shiftStart || route.shiftStart) ?? 0;
     const end = minuteOf(engineer?.shiftEnd || route.shiftEnd) ?? 1440;
     if (atMinute < start || atMinute >= end) return { engineerId: route.engineerId, status: 'off_shift', coords: null };
@@ -187,6 +205,8 @@ export function playbackFrame(shift, atMinute, mode = 'plan') {
       if (atMinute < finish) { status = 'working'; break; }
       status = 'idle';
     }
+    const latestMovement = (route.movements || []).findLast(item => minuteOf(item.at.slice(11,16)) <= atMinute);
+    if (status === 'idle' && latestMovement && !(route.assignments || []).some(item => (minuteOf(item.departureAt) ?? Infinity) >= minuteOf(latestMovement.at.slice(11,16)) && (minuteOf(item.departureAt) ?? Infinity) <= atMinute)) coords=latestMovement.coords;
     return { engineerId: route.engineerId, orderId, status, coords, positionKnown: Boolean(coords) };
   });
   const visits = routes.flatMap(route => (route.assignments || []).map(assignment => {
@@ -244,7 +264,7 @@ export function crewOperationalSummary(shift, frame, engineerId, atMinute, mode 
 }
 
 export function playbackRouteSegments(route, atMinute) {
-  const travelled = [], remaining = [];
+  const travelled = (route?.movements || []).filter(item=>Number(item.at.slice(11,13))*60+Number(item.at.slice(14,16))<=atMinute).map(item=>item.geometry), remaining = [];
   for (const assignment of route?.assignments || []) {
     const geometry = (assignment.geometry || []).filter(point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite));
     if (geometry.length < 2) continue;
