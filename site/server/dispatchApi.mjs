@@ -60,7 +60,9 @@ export function createDispatchApi(store, options) {
         if (action === 'states') return json(operationalStates(shift, Number(url.searchParams.get('minute') || 677), url.searchParams.get('mode') || 'plan'));
         if (action === 'incidents') {
           if (request.method === 'POST') return json(dispatch.create(shiftId, input), 201);
-          return json({ incidents: dispatch.all(shiftId), serverNow: Date.now() });
+          const sessionRow = store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(shiftId);
+          const session = sessionRow ? JSON.parse(sessionRow.payload) : null;
+          return json({ incidents: dispatch.all(shiftId), serverNow: Date.now(), clock: session?.clock || null });
         }
         if (action === 'clock') {
           const row = store.db.prepare('SELECT id,payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(shiftId);
@@ -103,7 +105,8 @@ export function createDispatchApi(store, options) {
               }
             }
           }
-          return json(result);
+          const sessionRow = store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(result.shiftId);
+          return json({ ...result, playback: sessionRow ? JSON.parse(sessionRow.payload).clock : null });
         }
         if (action === 'cancel') return json(dispatch.cancel(id));
         if (action === 'read') return json(dispatch.read(id, input.notificationId));

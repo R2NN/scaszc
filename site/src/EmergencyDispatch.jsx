@@ -62,6 +62,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
         if (!alive) return;
         setServerOffset(value.serverNow-Date.now());
         setIncidents(value.incidents);
+        if (value.clock && value.clock.speed !== shiftClock.getSnapshot().speed) shiftClock.set({ speed: value.clock.speed });
         for (const incident of value.incidents) {
           for (const notice of incident.notifications) {
             if (notified.current.has(notice.id)) continue;
@@ -74,11 +75,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
             refs.current.onOpen(incident, refs.current.shift);
             requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('beego:incident-focus', { detail: { coords: incident.order.coords } })));
           }
-          if (!terminal(incident)) {
-            const incidentMinute = Number(incident.time.slice(0,2))*60+Number(incident.time.slice(3));
-            const current = shiftClock.getSnapshot();
-            shiftClock.set({ minute: Math.max(current.minute, incidentMinute), playing: current.playing, speed: 1 });
-          }
+          if (!terminal(incident) && shiftClock.getSnapshot().speed !== 1) shiftClock.set({ speed: 1 });
           if (incident.decision && incident.decision.revision > refs.current.shift.revision) {
             const response = await fetch(`/api/shifts/${shift.id}`);
             if (alive && response.ok) refs.current.onApply(await response.json());
@@ -104,7 +101,11 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     try {
       const value = await api(`shifts/${current.id}/clock`, shiftClock.getSnapshot());
       setIncidents(value.incidents || []);
-      shiftClock.set({ minute: value.clock.minute, playing: value.clock.playing, speed: value.clock.speed });
+      const current = shiftClock.getSnapshot();
+      const reanchor = !current.playing || !value.clock.playing || Math.abs(Number(value.clock.minute) - Number(current.minute)) > 2;
+      shiftClock.set(reanchor
+        ? { minute: value.clock.minute, playing: value.clock.playing, speed: value.clock.speed }
+        : { speed: value.clock.speed });
     } catch (e) { setError(e.message); }
     finally { clockPending.current = false; }
   }), []);
@@ -126,7 +127,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   };
   const preview = candidate => {
     setCandidateId(candidate.id);
-    window.dispatchEvent(new CustomEvent('beego:dispatch-preview', { detail: { before: shift.plan, after: candidate.plan, ids: candidate.changedEngineerIds } }));
+    window.dispatchEvent(new CustomEvent('beego:dispatch-preview', { detail: { before: shift.plan, after: candidate.plan, ids: [candidate.engineer.id] } }));
   };
   const startSession = async () => {
     try {
@@ -139,7 +140,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     } catch (e) { setError(e.message); }
   };
   const accept = async (incident, candidate) => {
-    try { setError(''); const result = await api(`incidents/${incident.id}/accept`, { candidateId:candidate.id, actor:'Диспетчер' }); setIncidents(current => current.map(item => item.id === result.id ? result : item)); }
+      try { setError(''); const result = await api(`incidents/${incident.id}/accept`, { candidateId:candidate.id, actor:'Диспетчер' }); setIncidents(current => current.map(item => item.id === result.id ? result : item)); if (result.playback) shiftClock.set({ speed: result.playback.speed, playing: result.playback.playing }); }
     catch (e) { setError(e.message); }
   };
   const read = async item => {
@@ -192,7 +193,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
         {option.coverage.after.unassigned > option.coverage.before.unassigned ? <span className='dispatch-error'>Ещё {option.coverage.after.unassigned-option.coverage.before.unassigned} визита в очереди</span> : null}
       </button>)}</div>
       {candidate ? <div className='dispatch-details'>
-        <h4>{candidate.engineer.name}</h4><p>{candidate.engineer.skills.map(filterLabel).join(', ')} · {filterLabel(candidate.engineer.transport)}</p>
+        <h4>{candidate.engineer.name}</h4><p className='dispatch-route-summary'>На карте: полный маршрут этой бригады за день — серый пунктир «как было», фиолетовый «как станет».</p><p>{candidate.engineer.skills.map(filterLabel).join(', ')} · {filterLabel(candidate.engineer.transport)}</p>
         <p>Оснащение: {(candidate.engineer.equipment || []).map(filterLabel).join(', ') || 'Не указано'}</p>
         <p>{candidate.experience.count} завершённых аварийных визитов в архиве · Нет оценок</p>
         <button type='button' className='primary' disabled={item.status !== 'WAITING'} onClick={() => controller.accept(item, candidate)}>Подтвердить этот вариант</button>
