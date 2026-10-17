@@ -1,3 +1,4 @@
+import { orderSemantics } from './orderSemantics.js';
 const normalize = value => String(value || '').trim().toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
 
 const DISPLAY_LABELS = [
@@ -19,24 +20,15 @@ export const displayOrderName = order => translateServiceLabel(order?.name || '�
 export const isGlobalProblemOrder = order => [order?.workType, order?.serviceType, order?.skill]
   .some(value => /^(?:глобальная проблема|global problem|global issue)(?=\s|$)/.test(normalize(value)));
 
-/** Match the solver priority, independently of the qualification needed for the job. */
-export const isUrgentOrder = order => ['urgent', 'авария', 'critical'].includes(normalize(order?.priority));
-
-export const isEmergencyWorkOrder = order => isUrgentOrder(order)
-  || [order?.workType, order?.serviceType].some(value => /^(?:авария|аварийные работы|emergency)(?=\s|$)/.test(normalize(value)));
-
-export const isInformationalOrder = order => [order?.serviceType, order?.workType, order?.name]
-  .some(value => /^(?:информация|информационная(?:\s+заявка)?|information)(?=\s|$)/.test(normalize(value)))
-  && !isEmergencyWorkOrder(order);
-
-export const effectiveOrderSkill = order => {
-  if (isEmergencyWorkOrder(order)) return 'Аварийные работы';
-  if (isInformationalOrder(order)) return 'Аварийные работы';
-  const skill = String(order?.skill || order?.workType || '').trim();
-  return skill;
-};
+/** Queue priority and work qualification use the duration/planner contract. */
+export const isUrgentOrder = order => orderSemantics(order).priority === 'URGENT';
+export const isEmergencyWorkOrder = order => orderSemantics(order).kind === 'emergency';
+export const isInformationalOrder = order => orderSemantics(order).kind === 'information';
+export const effectiveOrderSkill = order => orderSemantics(order).skillLabel || String(order?.skill || order?.workType || '').trim();
 
 export const workPointType = order => {
+  const semantics = orderSemantics(order);
+  if (semantics.kind) return ({ connection: 'connection', local: 'service', equipment: 'upgrade', emergency: 'emergency', information: 'other' })[semantics.kind];
   const priority = normalize(order?.priority);
   const workType = normalize(order?.workType);
   const serviceType = normalize(order?.serviceType);

@@ -239,6 +239,7 @@ export class ShiftStore {
   startPreview(shiftId, baseRevision, event) {
     const shift = this.get(shiftId);
     if (!shift) throw new Error('Смена не найдена.');
+    if (event?.type === 'NEW_ORDER' && event.order) this.complexity.validateServiceOrder(event.order);
     if (shift.revision !== baseRevision) throw new Error('План изменился. Обновите смену и повторите расчёт.');
     const eventTime = minuteOf(event?.time);
     if (eventTime == null) throw new Error('Укажите корректное время события.');
@@ -254,6 +255,7 @@ export class ShiftStore {
   }
 
   completePreview(id, result) {
+    this.complexity.verifyOrders(result.orders || [], result.plan);
     this.db.prepare('UPDATE replan_previews SET status = ?, result_json = ?, progress_json = ? WHERE id = ? AND status = ?').run('READY', encode(result), encode({ phase: 'READY', checkedRoads: Number(result?.plan?.validation?.exactCheckedVisits) || 0 }), id, 'RUNNING');
   }
 

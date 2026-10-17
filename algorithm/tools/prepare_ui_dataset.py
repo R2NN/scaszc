@@ -17,6 +17,7 @@ from typing import Any
 
 ROOT = Path(__file__).parents[2]
 REFERENCE = ROOT / 'data' / 'dataset'
+SEMANTICS = json.loads((ROOT / 'site' / 'src' / 'orderSemantics.json').read_text(encoding='utf-8'))
 EQUIPMENT_LABELS = {
     'диагностический комплект': 'DIAG_SET', 'аварийный комплект': 'DIAG_SET',
     'монтажный комплект': 'INSTALL_SET',
@@ -72,32 +73,49 @@ def skill(value: Any) -> str:
     return result
 
 
+def order_semantics(item: dict[str, Any]) -> dict[str, Any]:
+    """Interpret the same work/qualification/priority contract as the JS entry forms."""
+    source = source_data(item)
+    def normalized(value):
+        return str(value if value is not None else '').strip().casefold().replace('ё', 'е')
+    group = normalized(item.get('workType') or source.get('bk_type') or item.get('skill'))
+    subtype = normalized(item.get('serviceType') or source.get('hd_type'))
+    qualification = normalized(item.get('skill') or source.get('required_skill'))
+    raw_priority = normalized(item.get('priority') if item.get('priority') is not None else source.get('priority'))
+    emergency_priority = raw_priority in SEMANTICS['emergencyPriorities']
+    information = bool((re.search(SEMANTICS['globalPattern'], group) and re.search(SEMANTICS['informationPattern'], subtype)) or re.search(SEMANTICS['informationPattern'], group))
+    rule = None
+    if not information:
+        if emergency_priority or re.search(SEMANTICS['globalPattern'], group):
+            rule = SEMANTICS['kinds'][0]
+        else:
+            rule = next((rule for rule in SEMANTICS['kinds'] if re.search(rule['pattern'], f'{group} {qualification}')), None)
+    kind = 'information' if information else rule['kind'] if rule else None
+    queue = 'URGENT' if kind == 'emergency' or emergency_priority or raw_priority in SEMANTICS['urgentPriorities'] else 'NORMAL' if raw_priority in SEMANTICS['normalPriorities'] else None
+    return {'kind': kind, 'requiredSkill': SEMANTICS['informationSkill'] if information else rule['skill'] if rule else None, 'priority': queue, 'skillLabel': SEMANTICS['kinds'][0]['label'] if information else rule['label'] if rule else None}
+
+
 def is_emergency_work_type(item: dict[str, Any]) -> bool:
-    """Treat global outages and explicit accidents as emergency work."""
-    values = (item.get('workType'), item.get('serviceType'), item.get('skill'))
-    return any(str(value or '').strip().casefold().replace('ё', 'е') in {
-        'глобальная проблема', 'global problem', 'global issue',
-        'авария', 'аварийные работы', 'emergency',
-    } for value in values)
+    return order_semantics(item)['kind'] == 'emergency'
 
 
 def order_skill(item: dict[str, Any]) -> str:
-    """Resolve the skill required by a request using its BK emergency type first."""
-    if is_emergency_work_type(item):
-        return 'EMERGENCY'
-    return skill(item.get('skill') or item.get('workType') or source_data(item).get('required_skill'))
+    semantics = order_semantics(item)
+    return semantics['requiredSkill'] or skill(item.get('skill') or item.get('workType') or source_data(item).get('required_skill'))
 
 
 def priority(value: Any) -> str:
-    raw = str('NORMAL' if value is None else value).strip().casefold()
-    if raw in {'', 'normal', 'обычная', 'обычный'}:
-        return 'NORMAL'
-    if raw in {
-        'urgent', 'high', 'emergency', 'critical', 'срочная', 'срочный',
-        'срочно', 'высокий', 'высокая', 'авария', 'аварийная', 'аварийный',
-    }:
-        return 'URGENT'
-    raise ValueError(f'Неизвестный приоритет заявки: {value}')
+    result = order_semantics({'priority': value})['priority']
+    if result is None:
+        raise ValueError(f'Неизвестный приоритет заявки: {value}')
+    return result
+
+
+def order_priority(item: dict[str, Any]) -> str:
+    result = order_semantics(item)['priority']
+    if result is None:
+        raise ValueError(f'Неизвестный приоритет заявки: {item.get("priority", source_data(item).get("priority"))}')
+    return result
 
 
 def equipment(value: Any) -> list[str]:
@@ -287,7 +305,7 @@ def preflight_ui_rows(orders: list[Any], team: list[Any], planning_date: date,
                 except ValueError as error:
                     issues.append(f'{label}, навык: {error}')
                 try:
-                    priority(item.get('priority', imported.get('priority')))
+                    order_priority(item)
                 except ValueError as error:
                     issues.append(f'{label}, приоритет: {error}')
                 try:
@@ -423,8 +441,7 @@ def prepare(payload: dict[str, Any], destination: Path) -> dict[str, Any]:
         raw_transport = TRANSPORT.get(transport_value.casefold(), transport_value.upper())
         if raw_transport not in {'ANY', 'CAR', 'PUBLIC_TRANSIT', 'BICYCLE', 'WALKING'}:
             raise ValueError(f'Неизвестное требование к транспорту заявки {job_id}: {transport_value}')
-        priority_value = item['priority'] if 'priority' in item else source_data(item).get('priority')
-        job_priority = 'URGENT' if is_emergency_work_type(item) else priority(priority_value)
+        job_priority = order_priority(item)
         jobs.append({'scenario': 'CORE', 'job_id': job_id, 'source_job_id': job_id, 'zone_id': zone_id, 'location_id': location_id, 'bk_type': bk_type, 'hd_type': hd_type, 'window_start': f'{planning_date}T{start}:00+03:00', 'window_end': f'{planning_date}T{end}:00+03:00', 'created_at': planning_at, 'service_duration_min': duration, 'priority': job_priority, 'required_skill': required_skill, 'required_transport': raw_transport, 'required_equipment': '|'.join(codes), 'gigabit_required': 'Нет', 'is_event_job': 'false', 'status': 'PENDING'})
     stock_source: dict[tuple[str, str], int] = {}
     overrides = payload.get('sharedInventory', [])

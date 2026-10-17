@@ -8,6 +8,15 @@ const engineers = [
   { id: 'south', zone: 'Югоцентр', skills: ['Аварийные работы'], transport: 'Пешком', shiftStart: '08:00', shiftEnd: '18:00', startCoords: [55.7, 37.6] },
 ];
 
+test('baseline uses emergency qualification for an emergency-priority connection', () => {
+  const order = { id: 'emergency-connection', zone: 'Восток', workType: 'Подключение', skill: 'INSTALL', priority: 'Авария', start: '09:00', end: '12:00', duration: 80, coords: [55.76, 37.63] };
+  const team = [engineers[0], { ...engineers[1], skills: ['EMERGENCY'] }];
+  const emergency = calculateBaseline([order], team);
+  assert.equal(emergency.routes[0].engineerId, 'second');
+  const urgent = calculateBaseline([{ ...order, priority: 'Срочная', duration: 70 }], team);
+  assert.equal(urgent.routes[0].engineerId, 'first');
+});
+
 test('baseline keeps file order and selects the first feasible engineer', () => {
   const orders = [
     { id: 'one', zone: 'Восток', skill: 'Подключение', start: '09:00', end: '12:00', duration: 60, coords: [55.76, 37.63] },

@@ -70,7 +70,7 @@ export function DurationFields({ form, onChange, date }) {
       } catch (issue) { if (live) { setError(issue.message); setPreview(null); } }
     }, 180);
     return () => { live = false; clearTimeout(timer); };
-  }, [form.skill, form.priority, form.sourceId, form.objectId, JSON.stringify(form.serviceEntities), JSON.stringify(factors), JSON.stringify(form.durationOverride), day(date)]);
+  }, [JSON.stringify(input), day(date)]);
   useEffect(() => { if (!form.objectId) { setInfrastructure(null); return; } let live = true; const load = async () => { try { const result = await requestJson(`/api/complexity/objects/${encodeURIComponent(form.objectId)}?at=${encodeURIComponent(asOf(date))}`); if (live) setInfrastructure({ objectId: form.objectId, entities: result.entities }); } catch (issue) { if (live) setError(issue.message); } }; load(); return () => { live = false; }; }, [form.objectId, day(date)]);
   useEffect(() => {
     if (!form.objectId || infrastructureData?.objectId !== form.objectId) return;

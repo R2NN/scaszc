@@ -1,4 +1,5 @@
 import { manualDurationInput } from './durationKind.js';
+import { validateOrderImport } from './validateOrderImport.js';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import * as maplibregl from 'maplibre-gl';
@@ -1825,6 +1826,8 @@ export function App(){
     return '';
   };
   const importRows=async({orders:nextOrders=[],engineers:nextEngineers=[]},reviewSnapshot,mode='merge')=>{
+    try { nextOrders=await validateOrderImport(nextOrders); }
+    catch(error){notify(error.message,{title:'Исправьте территории заявок'});return}
     if(reviewSnapshot){
       const normalizedSnapshot={...reviewSnapshot,fileId:reviewSnapshot.fileId||`${reviewSnapshot.fileName||'file'}:${Date.now()}`,importedAt:reviewSnapshot.importedAt||Date.now()};
       setReviewFiles(current=>[...current.filter(file=>file.fileId!==normalizedSnapshot.fileId&&file.fileName!==normalizedSnapshot.fileName),normalizedSnapshot]);
@@ -1928,7 +1931,7 @@ export function App(){
       const planningOrders=regionOrders.map(order=>({
         ...order,
         skill:effectiveOrderSkill(order),
-        priority:isEmergencyWorkOrder(order)?'Авария':isInformationalOrder(order)?'Обычная':order.priority,
+        priority:isEmergencyWorkOrder(order)?'Авария':order.priority,
       }));
       const next=await requestPlan(planningOrders,team,region.id,{planningDate:selectedDayKey,recompute:Boolean(plan)},job=>setAlgorithmActivity(current=>current?.startedAt===startedAt?{
         ...current,id:job.id||current.id,progress:job.status==='READY'?{phase:'SAVING_SHIFT'}:job.progress||current.progress,

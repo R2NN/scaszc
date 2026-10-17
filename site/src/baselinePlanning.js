@@ -1,3 +1,5 @@
+import { orderSemantics } from './orderSemantics.js';
+
 const ROAD_DISTANCE_FACTOR = 1.25;
 
 const TRANSPORT_SPEED_KMH = {
@@ -119,7 +121,7 @@ export function calculateBaseline(orders = [], engineers = []) {
     for (const state of states) {
       const { engineer } = state;
       if (!sameTerritory(engineer, order)) continue;
-      const requiredSkill = skillCode(order.skill || order.requiredSkill || order.workType || order.sourceData?.required_skill);
+      const requiredSkill = orderSemantics(order).requiredSkill || skillCode(order.skill || order.requiredSkill || order.workType || order.sourceData?.required_skill);
       if (!(engineer.skills || []).map(skillCode).includes(requiredSkill)) continue;
       const requiredTransport = transportCode(requiredTransportOf(order));
       const engineerTransport = transportCode(engineer.transport);

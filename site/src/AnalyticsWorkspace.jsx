@@ -1,4 +1,5 @@
 import { isUrgentOrder } from './workTypes.js';
+import { orderSemantics } from './orderSemantics.js';
 import { DurationAccuracy, openObjectPassport, useDurationAttention } from './ComplexityWorkspace.jsx';
 import { Fragment, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -47,7 +48,7 @@ const quantile = (values, part) => {
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * part) - 1))];
 };
 const orderZone = order => String(order?.zone || order?.zoneId || 'Без зоны').trim();
-const sourceSkill = order => String(order?.sourceData?.required_skill || order?.skill || 'Навык не указан').trim();
+const sourceSkill = order => orderSemantics(order).requiredSkill || String(order?.sourceData?.required_skill || order?.skill || 'Навык не указан').trim();
 const timeLabel = minutes => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 const isValidTimeValue = value => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
 const cleanTimeDraft = value => String(value || '').replace(/[^\d:]/g, '').slice(0, 5);

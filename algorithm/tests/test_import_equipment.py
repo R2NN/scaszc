@@ -81,4 +81,4 @@ class ImportEquipmentTests(unittest.TestCase):
             with (target / 'core' / 'jobs.csv').open(encoding='utf-8-sig', newline='') as source:
                 jobs = list(csv.DictReader(source, delimiter=';'))
             self.assertEqual([job['required_skill'] for job in jobs], ['EMERGENCY', 'EMERGENCY'])
-            self.assertEqual([job['priority'] for job in jobs], ['URGENT', 'URGENT'])
+            self.assertEqual([job['priority'] for job in jobs], ['NORMAL', 'URGENT'])

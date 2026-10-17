@@ -17,6 +17,18 @@ export async function handleComplexity(request, registry) {
     if (!allKinds && !Object.hasOwn(WORK_KINDS, kind)) throw new Error('Неизвестный вид работ.');
     if (url.pathname === '/api/complexity/model' && request.method === 'GET') return json({ model: registry.model(), versions: registry.models(), kinds: WORK_KINDS, reasons: REASONS, workRules: WORK_RULES, defaults: DEFAULT_MODEL });
     if (url.pathname === '/api/complexity/model' && request.method === 'POST') return json(registry.saveModel(await request.json()));
+    if (url.pathname === '/api/complexity/validate-orders' && request.method === 'POST') {
+      const input = await request.json();
+      if (!Array.isArray(input.orders)) throw new Error('Передайте список заявок для проверки.');
+      const errors = [];
+      const orders = input.orders.map((order, index) => {
+        try {
+          if (!order || typeof order !== 'object' || Array.isArray(order)) throw new Error('Ожидается заявка с полями.');
+          return registry.validateServiceOrder(order);
+        } catch (error) { errors.push(`Строка ${index + 1}, заявка ${order?.sourceId || order?.id || 'без номера'}: ${error.message}`); return order; }
+      });
+      return errors.length ? json({ error: errors.join('\n'), details: errors }, 422) : json({ orders });
+    }
     if (url.pathname === '/api/complexity/estimate' && request.method === 'POST') {
       const input = await request.json();
       if (!input.order || typeof input.order !== 'object') throw new Error('Передайте заявку для расчёта.');

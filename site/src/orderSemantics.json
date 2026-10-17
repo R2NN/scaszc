@@ -1,0 +1,15 @@
+{
+  "version": "order-semantics-1",
+  "normalPriorities": ["", "normal", "обычная", "обычный"],
+  "urgentPriorities": ["urgent", "high", "срочная", "срочный", "срочно", "высокий", "высокая"],
+  "emergencyPriorities": ["emergency", "critical", "авария", "аварийная", "аварийный"],
+  "globalPattern": "^(глобальная проблема|global problem|global issue)$",
+  "informationPattern": "^(информация|информационная( заявка)?|information)$",
+  "kinds": [
+    {"kind": "emergency", "pattern": "авар|emergency", "skill": "EMERGENCY", "label": "Аварийные работы"},
+    {"kind": "equipment", "pattern": "дозаказ|upsell|equipment|оборуд", "skill": "UPSELL", "label": "Дозаказ"},
+    {"kind": "connection", "pattern": "подключ|install|монтаж|connection", "skill": "INSTALL", "label": "Подключение"},
+    {"kind": "local", "pattern": "локаль|local|repair|service|диагност|ремонт", "skill": "LOCAL", "label": "Локальные работы"}
+  ],
+  "informationSkill": "EMERGENCY"
+}

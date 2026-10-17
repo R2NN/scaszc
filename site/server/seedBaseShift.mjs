@@ -6,6 +6,7 @@ import exactWorker from '../worker/exact-base.js';
 import { fillExactIdentityGeometry } from './exactPlanGeometry.mjs';
 import { loadComplexityArtifact } from './complexityArtifact.mjs';
 import { digest } from './durationModel.mjs';
+import { seedComplexity } from './complexitySeed.mjs';
 
 const siteRoot = path.resolve(import.meta.dirname, '..');
 
@@ -21,6 +22,7 @@ export async function seedBaseShift(store) {
   }
   const candidate = await loadComplexityArtifact();
   if (candidate) {
+    await seedComplexity(store.complexity);
     for (const order of candidate.orders) {
       const { id, ...content } = order.durationSnapshot;
       if (digest(content) !== id || order.duration !== content.total) throw new Error('Контрольная сумма исходной длительности не совпала.');

@@ -1,3 +1,4 @@
+import { orderSemantics } from './orderSemantics.js';
 import { parseDurationImport } from './durationImport.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isEmergencyWorkOrder, isInformationalOrder, translateServiceLabel } from './workTypes.js';
@@ -385,6 +386,7 @@ const mappedWork = (row, mappings) => ({
   serviceType: mappedValue(row, mappings, 'serviceType'),
   skill: mappedValue(row, mappings, 'skill'),
   name: mappedValue(row, mappings, 'name'),
+  priority: mappedValue(row, mappings, 'priority'),
 });
 
 /** Add an editable planned duration while keeping any incoming duration visible for audit. */
@@ -480,10 +482,10 @@ const fieldMatchesProfile = (fieldId, profile) => {
 };
 
 const translatePriority = value => {
-  const text = normalize(value);
-  if (/urgent|emergency|critical|авар/.test(text)) return 'Авария';
-  if (/high|высок/.test(text)) return 'Высокий';
-  return 'Обычная';
+  const semantics = orderSemantics({ priority: value });
+  if (semantics.kind === 'emergency') return 'Авария';
+  if (semantics.priority === 'URGENT') return 'Срочная';
+  return semantics.priority === 'NORMAL' ? 'Обычная' : String(value || '');
 };
 
 const translateSkill = (skill, workType) => {
@@ -765,9 +767,10 @@ export function buildOrders(headers, rows, mappings, region, workNorms = null, s
     const name = valueFor(row, 'name');
     const [rangeStart, rangeEnd] = windowFromRange(valueFor(row, 'windowRange'));
     const windowDate = parseImportedDate(valueFor(row, 'windowStart') || valueFor(row, 'windowRange'));
-    const duration = workDurationFor({ workType, serviceType, skill, name }, workNorms, valueFor(row, 'duration'));
+    const priority = translatePriority(valueFor(row, 'priority'));
+    const duration = workDurationFor({ workType, serviceType, skill, name, priority }, workNorms, valueFor(row, 'duration'));
     const informational = isInformationalOrder({ serviceType, workType, name: valueFor(row, 'name') });
-    const emergencyWork = isEmergencyWorkOrder({ serviceType, workType });
+    const emergencyWork = isEmergencyWorkOrder({ serviceType, workType, skill, priority });
     const lat = asNumber(valueFor(row, 'latitude'));
     const lon = asNumber(valueFor(row, 'longitude'));
     const customFields = supplementaryFields(row, mappings, 'orders', ORDER_CORE_FIELDS);
@@ -805,9 +808,9 @@ export function buildOrders(headers, rows, mappings, region, workNorms = null, s
       durationOverride: parseDurationImport(valueFor(row, 'durationOverride'), 'durationOverride'),
       serviceEntities: parseDurationImport(valueFor(row, 'serviceEntities'), 'serviceEntities'),
       objectId: valueFor(row, 'objectId') || undefined,
-      durationSource: workNormFor({ workType, serviceType, skill, name }, workNorms)
+      durationSource: workNormFor({ workType, serviceType, skill, name, priority }, workNorms)
         ? 'Нормативы.xlsx' : workNorms ? (duration === 60 ? 'Без норматива · 60 мин' : 'Изменено оператором') : 'Файл заявки',
-      priority: emergencyWork ? 'Авария' : informational ? 'Обычная' : translatePriority(valueFor(row, 'priority')),
+      priority: emergencyWork ? 'Авария' : priority,
       workType,
       skill: emergencyWork || informational ? 'Аварийные работы' : translateSkill(skill, workType || serviceType),
       equipment: importedEquipmentRequirements(valueFor(row, 'equipment')),

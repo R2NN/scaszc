@@ -1,3 +1,4 @@
+import { orderSemantics } from './orderSemantics.js';
 const normalize = value => String(value ?? '').trim().toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
 
 const categoryOf = value => {
@@ -50,7 +51,8 @@ export function parseWorkNorms(matrix) {
 
 /** Find the configured service norm for an imported request. */
 export function workNormFor(order, norms) {
-  const category = [order.workType, order.serviceType, order.skill, order.name].map(categoryOf).find(Boolean);
+  const kind = orderSemantics(order).kind;
+  const category = ({ equipment: 'upgrade', information: 'emergency' })[kind] || kind || [order.workType, order.serviceType, order.skill, order.name].map(categoryOf).find(Boolean);
   return category ? norms?.[category] || null : null;
 }
 

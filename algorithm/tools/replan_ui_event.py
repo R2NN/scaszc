@@ -29,7 +29,7 @@ from beeline_routing.cli import create_route_client
 from beeline_routing.export import payload_sha256, write_json_atomic
 from beeline_routing.models import Coordinate, TransportMode
 from beeline_routing.oracle import ExactRoutingOracle
-from prepare_ui_dataset import equipment as parse_equipment, priority as parse_priority
+from prepare_ui_dataset import equipment as parse_equipment, order_priority, order_skill
 
 
 def _source_id(value: Any) -> str:
@@ -190,7 +190,7 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
         location_id = f'UI-LOC-{digest}'
         locations[location_id] = Coordinate(location_id, float(coords[0]), float(coords[1]))
         zone_id = _zone_id(payload, order, dataset)
-        priority = Priority(parse_priority(order.get('priority') or order.get('sourceData', {}).get('priority')))
+        priority = Priority(order_priority(order))
         job = Job(
             job_id=source_job_id,
             zone_id=zone_id,
@@ -200,7 +200,7 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
             created_at=event_time,
             service_duration_min=int(order.get('duration') or 0),
             priority=priority,
-            required_skill=_skill(order.get('skill') or order.get('workType')),
+            required_skill=order_skill(order),
             required_transport=_transport(
                 order.get('requiredTransport')
                 or order.get('sourceData', {}).get('required_transport')

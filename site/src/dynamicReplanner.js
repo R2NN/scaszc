@@ -1,3 +1,4 @@
+import { orderSemantics } from './orderSemantics.js';
 import { transportCode } from './transport.js';
 
 const minutesFromTime = value => {
@@ -54,7 +55,7 @@ const equipmentList = value => (Array.isArray(value) ? value : String(value || '
   .filter(Boolean);
 
 const staticChecks = (engineer, order) => {
-  const requiredSkill = skillCode(order.skill || order.workType || order.sourceData?.required_skill);
+  const requiredSkill = orderSemantics(order).requiredSkill || skillCode(order.skill || order.workType || order.sourceData?.required_skill);
   const engineerSkills = (engineer.skills || []).map(skillCode);
   const requiredEquipment = equipmentList(order.equipment);
   const availableEquipment = equipmentList(engineer.equipment);
@@ -74,7 +75,7 @@ export const canServe = (engineer, order) => {
   return checks.zone && checks.available && checks.skill && checks.equipment;
 };
 
-const isUrgent = order => /urgent|emergency|авар|срочн/i.test(`${order?.priority || ''} ${order?.skill || ''}`);
+const isUrgent = order => orderSemantics(order).priority === 'URGENT';
 
 const routeDistance = assignments => assignments.reduce((sum, assignment) => sum + (Number(assignment.distanceM) || 0), 0);
 
@@ -332,7 +333,7 @@ export function buildDynamicReplan(orders, engineers, basePlan, event = {}) {
       engineerId: engineer.id,
       engineerName: engineer.name || route.engineerName || engineer.id,
       zone: zoneOf(order),
-      requiredSkill: skillCode(order.skill || order.workType || order.sourceData?.required_skill),
+      requiredSkill: orderSemantics(order).requiredSkill || skillCode(order.skill || order.workType || order.sourceData?.required_skill),
       engineerSkills: (engineer.skills || []).map(skillCode),
       transport: String(engineer.transport || '').toUpperCase(),
       transportLabel: TRANSPORT_LABEL[String(engineer.transport || '').toUpperCase()] || 'доступном транспорте',

@@ -10,6 +10,25 @@ export function addressIdentity(address) {
     .map(word => ({ к: 'корпус', корп: 'корпус', стр: 'строение', пркт: 'проспект', 'пр-т': 'проспект' })[word] || word).join(' ');
 }
 
+const territoryKey = value => {
+  const key = String(value || '').normalize('NFKC').toLocaleLowerCase('ru-RU').replaceAll('ё', 'е').replace(/[\s_-]+/g, '');
+  return ({ восток: 'east', юговосток: 'southeast', югоцентр: 'southcenter', southcenter: 'southcenter' })[key] || key;
+};
+
+/** Check every declared operational territory, including original import fields. */
+export function assertServiceTerritory(order, object) {
+  if (order.regionId && object.regionId && order.regionId !== object.regionId) throw new Error(`Регион заявки не совпадает с регионом объекта «${object.address}».`);
+  const territories = [object.zone, object.zoneId].filter(Boolean).map(territoryKey);
+  if (!territories.length) return;
+  const declared = [order.zone, order.zoneId, order.sourceData?.zone_name, order.sourceData?.zone_id].filter(value => String(value || '').trim());
+  const wrong = declared.find(value => !territories.includes(territoryKey(value)));
+  if (wrong) {
+    const error = new Error(`Объект «${object.address}» относится к территории «${object.zone || object.zoneId}», в заявке указано «${wrong}». Исправьте территорию заявки.`);
+    error.code = 'INVALID_INPUT';
+    throw error;
+  }
+}
+
 /** Moving the service point requires a new explicit object/infrastructure association. */
 export function changeServiceLocation(form, location) {
   return { ...form, ...location, objectId: undefined, objectZone: undefined, zoneId: undefined, district: undefined, serviceEntities: undefined, durationSnapshot: undefined };
@@ -61,6 +80,7 @@ export function changeServiceEntity(objectId, infrastructure, selected, scope, v
 
 /** Reject a registered object paired with a different house or geographic point. */
 export function assertServiceLocation(order, object) {
+  assertServiceTerritory(order, object);
   if (order.address && object.address && addressIdentity(order.address) !== addressIdentity(object.address)) throw new Error('Адрес заявки не совпадает с выбранным объектом. Выберите объект для нового адреса.');
   if (Array.isArray(order.coords) && Array.isArray(object.coords)) {
     const radians = Math.PI / 180;

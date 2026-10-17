@@ -24,7 +24,7 @@ const basePlan = {
 };
 
 test('dynamic replanning inserts a real request into a feasible regional gap', () => {
-  const urgent = { id: 'urgent', zone: 'Восток', skill: 'INSTALL', priority: 'Авария', start: '11:00', end: '13:30', duration: 45, coords: [55.77, 37.64] };
+  const urgent = { id: 'urgent', zone: 'Восток', skill: 'INSTALL', priority: 'Срочная', start: '11:00', end: '13:30', duration: 45, coords: [55.77, 37.64] };
   const plan = buildDynamicReplan([...baseOrders, urgent], engineers.filter(engineer => engineer.id !== 'east-2'), basePlan);
   const route = plan.routes.find(item => item.engineerId === 'east-1');
   assert.deepEqual(route.assignments.map(item => item.orderId), ['a', 'urgent', 'b']);

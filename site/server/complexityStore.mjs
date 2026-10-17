@@ -1,6 +1,6 @@
-import { assertServiceLocation } from '../src/serviceLocation.js';
+import { addressIdentity, assertServiceLocation } from '../src/serviceLocation.js';
 import { randomUUID } from 'node:crypto';
-import { calculateDuration, conditionEvidence, matchesConditionWork, DEFAULT_MODEL, digest, normalizeFactors, REASONS, validateModel } from './durationModel.mjs';
+import { calculateDuration, conditionEvidence, matchesConditionWork, DEFAULT_MODEL, digest, normalizeFactors, REASONS, validateModel, workKind } from './durationModel.mjs';
 
 const encode = value => JSON.stringify(value);
 const decode = row => row ? JSON.parse(row.payload_json) : null;
@@ -53,6 +53,29 @@ export class ComplexityStore {
   }
   objects() { return this.db.prepare('SELECT payload_json FROM service_objects ORDER BY id').all().map(decode); }
   object(id) { return decode(this.db.prepare('SELECT payload_json FROM service_objects WHERE id=?').get(id)); }
+  registeredObject(order) {
+    const explicit = order.serviceEntities?.object || order.objectId;
+    if (explicit) return this.object(explicit);
+    const source = order.sourceData || {};
+    const sourceId = order.geocodeObjectId || source.geocode_object_id || order.locationId || source.location_id;
+    const known = sourceId && this.object(`OBJ-${digest([order.regionId || 'moscow', sourceId]).slice(0, 18)}`);
+    if (known) return known;
+    const address = addressIdentity(order.address);
+    if (!address) return null;
+    const matches = this.objects().filter(object => addressIdentity(object.address) === address);
+    if (matches.length > 1) throw new Error(`Для адреса «${order.address}» найдено несколько объектов. Укажите объект из реестра.`);
+    return matches[0] || null;
+  }
+  validateServiceOrder(order) {
+    if (order.serviceEntities?.object && order.objectId && order.serviceEntities.object !== order.objectId) throw new Error('Объект заявки противоречит связанным сущностям.');
+    const object = this.registeredObject(order);
+    if (!object) {
+      if (order.objectId || order.serviceEntities?.object) throw new Error('Объект не найден в реестре.');
+      return order;
+    }
+    assertServiceLocation(order, object);
+    return { ...order, objectId: object.id, serviceEntities: { ...order.serviceEntities, object: object.id }, zone: order.zone || object.zone, zoneId: order.zoneId || object.zoneId, regionId: order.regionId || object.regionId };
+  }
   entities(id) { return this.db.prepare('SELECT payload_json FROM infrastructure_entities WHERE object_id=? ORDER BY id').all(id).map(decode); }
   registerObject(object, entities = []) {
     this.db.prepare('INSERT OR IGNORE INTO service_objects VALUES (?,?,?)').run(object.id, object.regionId || 'moscow', encode(object));
@@ -67,6 +90,7 @@ export class ComplexityStore {
   }
   conditions(objectId) { return this.db.prepare(`SELECT payload_json FROM object_conditions ${objectId ? 'WHERE object_id=? OR object_id IS NULL' : ''}`).all(...(objectId ? [objectId] : [])).map(decode); }
   links(order, registerUnknown = false) {
+    order = this.validateServiceOrder(order);
     const entities = { ...(order.serviceEntities || {}) };
     if (entities.object && order.objectId && entities.object !== order.objectId) throw new Error('Объект заявки противоречит связанным сущностям.');
     const explicitObject = entities.object || order.objectId;
@@ -114,9 +138,10 @@ export class ComplexityStore {
   }
   prepareOrders(orders, at, { preserve = false } = {}) {
     return this.db.transaction(() => orders.map(order => {
+      order = this.validateServiceOrder(order);
       if (preserve && order.durationSnapshot?.id) {
         const snapshot = this.snapshot(order.durationSnapshot.id);
-        if (!snapshot || snapshot.orderId !== String(order.id) || digest(snapshot) !== digest(order.durationSnapshot) || order.duration !== snapshot.total) throw new Error('Снимок длительности изменён или не подтверждён сервером.');
+        if (!snapshot || snapshot.orderId !== String(order.id) || digest(snapshot) !== digest(order.durationSnapshot) || order.duration !== snapshot.total || snapshot.kind !== workKind(order)) throw new Error('Снимок длительности изменён или не подтверждён сервером.');
         return order;
       }
       const durationSnapshot = this.estimate(order, at, true);
@@ -139,9 +164,11 @@ export class ComplexityStore {
   }
   verifyOrders(orders, plan) {
     for (const order of orders) {
+      this.validateServiceOrder(order);
       if (!order.durationSnapshot) continue;
       const saved = this.snapshot(order.durationSnapshot.id);
       if (!saved || saved.orderId !== String(order.id) || digest(saved) !== digest(order.durationSnapshot) || saved.total !== order.duration) throw new Error('Независимая проверка: подмена длительности заявки.');
+      if (saved.kind !== workKind(order)) throw new Error('Вид работы заявки не совпадает с сохранённым расчётом. Пересчитайте длительность.');
       for (const route of plan?.routes || []) for (const visit of route.assignments || []) if (String(visit.orderId) === String(order.id) && minute(visit.plannedFinish) - minute(visit.plannedStart) !== saved.total) throw new Error('Длительность в маршруте не совпадает с авторитетным снимком.');
     }
   }
