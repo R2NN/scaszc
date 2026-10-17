@@ -30,9 +30,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
         const value = await api(`context?baseShiftId=${shift.id}`);
         if (!alive || !value) return;
         const marker = `beego-dispatch-session:${shift.id}`;
-        const incidents = await api(`shifts/${value.shiftId}/incidents`);
-        const completed = incidents.incidents.some(item => item.status === 'ACCEPTED');
-        if (completed && !sessionStorage.getItem(marker)) {
+        if (!sessionStorage.getItem(marker)) {
           const fresh = await api('sessions', { baseShiftId: shift.id });
           sessionStorage.setItem(marker, 'active');
           setSession(fresh); refs.current.onApply(fresh.shift);
