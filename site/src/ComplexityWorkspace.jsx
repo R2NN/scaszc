@@ -1,3 +1,6 @@
+import { manualDurationInput, workKind } from './durationKind.js';
+import { changeServiceEntity, resolveServiceEntities } from './serviceLocation.js';
+import { FACT_STAGES, factLearningStatus } from './visitFactDraft.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Marker } from 'maplibre-gl';
@@ -5,7 +8,7 @@ import { useDropdownPresence } from './useDropdownPresence.js';
 import { Building2, Check, ChevronRight, Clock3, MapPin, Search, X } from 'lucide-react';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { cachedObjectPassport, clearObjectPassports, loadObjectPassport } from './objectPassport.js';
-import { OBJECT_TIME_LEGEND, conditionVisitChoices, filterObjectGroup, objectTimeCategory, standardVolumeLabel, summarizeObjectGroup, visibleVisitLimit, visitTimeRows } from './objectPresentation.js';
+import { OBJECT_TIME_LEGEND, objectTimeExplanation, conditionVisitChoices, filterObjectGroup, objectTimeCategory, standardVolumeLabel, summarizeObjectGroup, visibleVisitLimit, visitTimeRows } from './objectPresentation.js';
 import { mountObjectTimeClusters } from './objectTimeClusters.js';
 import './complexity.css';
 
@@ -49,9 +52,12 @@ export function DurationBreakdown({ snapshot, compact = false, expanded = false 
 export function DurationFields({ form, onChange, date }) {
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
-  const [places, setPlaces] = useState([]);
-  const [infrastructure, setInfrastructure] = useState([]);
-  const kind = /Подключ/.test(form.skill) ? 'connection' : /Дозаказ/.test(form.skill) ? 'equipment' : /Авар/.test(form.skill) ? 'emergency' : 'local';
+  const [infrastructureData, setInfrastructure] = useState(null);
+  const infrastructure = form.objectId && infrastructureData?.objectId === form.objectId ? infrastructureData.entities : [];
+  const input = manualDurationInput(form);
+  let kind = '';
+  let kindError = '';
+  try { kind = workKind(input); } catch (issue) { kindError = issue.message; }
   const factors = form.durationFactors || {};
   const setFactor = (key, value) => onChange('durationFactors', { ...factors, [key]: value });
   useEffect(() => {
@@ -59,26 +65,30 @@ export function DurationFields({ form, onChange, date }) {
     setPreview(null);
     const timer = setTimeout(async () => {
       try {
-        const result = await send('/api/complexity/estimate', { persist: false, order: { id: form.sourceId || 'preview', objectId: form.objectId, serviceEntities: form.serviceEntities, workType: form.skill, durationFactors: factors, durationOverride: form.durationOverride }, asOf: `${day(date)}T07:00:00+03:00` });
-        if (live) { setPreview(result.snapshot); onChange('duration', String(result.snapshot.total)); setError(''); }
+        const result = await send('/api/complexity/estimate', { persist: false, order: { id: form.sourceId || 'preview', ...input }, asOf: `${day(date)}T07:00:00+03:00` });
+        if (live) { setPreview(result.snapshot); onChange('duration', String(result.snapshot.total)); onChange('durationPreviewKey', JSON.stringify(input)); setError(''); }
       } catch (issue) { if (live) { setError(issue.message); setPreview(null); } }
     }, 180);
     return () => { live = false; clearTimeout(timer); };
-  }, [form.skill, form.objectId, JSON.stringify(form.serviceEntities), JSON.stringify(factors), JSON.stringify(form.durationOverride), day(date)]);
-  useEffect(() => { let live = true; const load = async () => { try { const items = await requestJson(`/api/complexity/objects?at=${encodeURIComponent(asOf(date))}`); if (live) setPlaces(items); } catch (issue) { if (live) setError(issue.message); } }; load(); return () => { live = false; }; }, [day(date)]);
-  useEffect(() => { if (!form.objectId) { setInfrastructure([]); return; } let live = true; const load = async () => { try { const result = await requestJson(`/api/complexity/objects/${encodeURIComponent(form.objectId)}?at=${encodeURIComponent(asOf(date))}`); if (live) setInfrastructure(result.entities); } catch (issue) { if (live) setError(issue.message); } }; load(); return () => { live = false; }; }, [form.objectId, day(date)]);
+  }, [form.skill, form.priority, form.sourceId, form.objectId, JSON.stringify(form.serviceEntities), JSON.stringify(factors), JSON.stringify(form.durationOverride), day(date)]);
+  useEffect(() => { if (!form.objectId) { setInfrastructure(null); return; } let live = true; const load = async () => { try { const result = await requestJson(`/api/complexity/objects/${encodeURIComponent(form.objectId)}?at=${encodeURIComponent(asOf(date))}`); if (live) setInfrastructure({ objectId: form.objectId, entities: result.entities }); } catch (issue) { if (live) setError(issue.message); } }; load(); return () => { live = false; }; }, [form.objectId, day(date)]);
+  useEffect(() => {
+    if (!form.objectId || infrastructureData?.objectId !== form.objectId) return;
+    const links = resolveServiceEntities(form.objectId, infrastructure, form.serviceEntities);
+    if (JSON.stringify(links) !== JSON.stringify(form.serviceEntities)) onChange('serviceEntities', links);
+  }, [infrastructureData, form.objectId, JSON.stringify(form.serviceEntities)]);
   const select = (key, label, choices, fallback) => <label key={key}>{label}<BusinessSelect ariaLabel={label} value={factors[key] ?? fallback} onChange={value => setFactor(key, value)} options={choices.map(([value, text]) => ({ value, label: text }))}/></label>;
   const count = (key, label, max = 100) => <label key={key}>{label}<input type='number' min='1' max={max} value={factors[key] ?? 1} onChange={event => setFactor(key, event.target.value)}/></label>;
   const flag = (key, label) => <label className='cx-check' key={key}><input type='checkbox' checked={Boolean(factors[key])} onChange={event => setFactor(key, event.target.checked)}/>{label}</label>;
-  return <section className='cx-fields wide'><div className='cx-section-heading'><Clock3 size={18}/><h3>Расчёт длительности</h3><span>Автоматически</span></div><label>Объект из реестра<BusinessSelect ariaLabel='Объект для новой заявки' searchable value={form.objectId || ''} onChange={value => { onChange('objectId', value || undefined); onChange('serviceEntities', value ? { object: value } : undefined); const place = places.find(item => item.id === value); if (place) { onChange('address', place.address); onChange('coords', place.coords); onChange('locationSource', 'file'); } }} options={[{ value: '', label: 'Новый объект или точка обслуживания' }, ...places.map(place => ({ value: place.id, label: places.filter(item => item.address === place.address).length > 1 ? `${place.address} · ${place.id.slice(-6)}` : place.address }))]}/></label>{form.objectId ? <div className='cx-field-grid'>{['entrance', 'node', 'line'].map(scope => <label key={scope}>{SCOPES[scope]}<BusinessSelect ariaLabel={`Связь новой заявки: ${SCOPES[scope]}`} value={form.serviceEntities?.[scope] || ''} onChange={value => { const links = { ...form.serviceEntities }; if (value) links[scope] = value; else delete links[scope]; onChange('serviceEntities', links); }} options={[{ value: '', label: 'Связь не установлена' }, ...infrastructure.filter(entity => entity.kind === scope).map(entity => ({ value: entity.id, label: entity.label }))]}/></label>)}</div> : null}<div className='cx-field-grid'>
+  return <section className='cx-fields wide'><div className='cx-section-heading'><Clock3 size={18}/><h3>Расчёт длительности</h3><span>Автоматически</span></div>{form.objectId && infrastructure.length ? <details className='cx-infrastructure-fields'><summary>{['entrance', 'node', 'line'].some(scope => infrastructure.some(entity => entity.kind === scope) && !form.serviceEntities?.[scope]) ? 'Уточнить связи объекта' : 'Связи объекта заполнены'}</summary><div className='cx-field-grid'>{['entrance', 'node', 'line'].filter(scope => infrastructure.some(entity => entity.kind === scope)).map(scope => <label key={scope}>{SCOPES[scope]}<BusinessSelect ariaLabel={`Связь новой заявки: ${SCOPES[scope]}`} value={form.serviceEntities?.[scope] || ''} onChange={value => onChange('serviceEntities', changeServiceEntity(form.objectId, infrastructure, form.serviceEntities, scope, value))} options={[{ value: '', label: 'Не уточнено' }, ...infrastructure.filter(entity => entity.kind === scope).map(entity => ({ value: entity.id, label: entity.label }))]}/></label>)}</div></details> : null}{kindError ? <p className='cx-error' role='alert'>{kindError}</p> : <p className='cx-duration-kind'>Расчёт: {KINDS[kind]}</p>}<div className='cx-field-grid'>
     {kind === 'connection' ? <>{select('line', 'Линия до квартиры', [['unknown', 'Не уточнено'], ['existing', 'Есть пригодная линия'], ['new', 'Новая прокладка']], 'unknown')}{count('points', 'Согласованные точки')}</> : null}
     {kind === 'local' ? <>{select('diagnosis', 'Проявление неисправности', [['unknown', 'Нужна диагностика'], ['known', 'Место неисправности известно'], ['intermittent', 'Периодические сбои']], 'unknown')}{count('segments', 'Проверяемые сегменты')}{flag('replaceDevice', 'Замена и восстановление настройки')}</> : null}
     {kind === 'equipment' ? <>{select('action', 'Состав дозаказа', [['add', 'Добавление'], ['replace', 'Замена'], ['move', 'Перенос']], 'add')}{flag('firmwareRequired', 'Подтверждено обязательное обновление устройства')}</> : null}
     {['connection', 'equipment'].includes(kind) ? count('devices', 'Количество устройств') : null}
     {kind === 'emergency' ? <>{select('damage', 'Подтверждённое повреждение', [['unknown', 'Состав ещё не установлен'], ['cable', 'Кабельная линия'], ['equipment', 'Замена оборудования'], ['multiple', 'Несколько элементов']], 'unknown')}{flag('nodeSearch', 'Узел аварии нужно локализовать')}{flag('readyConfig', 'Есть готовая пригодная конфигурация')}</> : null}
-    {factors.line !== 'existing' ? select('cable', 'Объём прокладки или замены', [['none', 'Без кабельных работ'], ['short', 'Малый'], ['standard', 'Стандартный'], ['large', 'Значительный']], 'none') : null}
+    {!(kind === 'connection' && factors.line === 'existing') ? select('cable', 'Объём прокладки или замены', [['none', 'Без кабельных работ'], ['short', 'Малый'], ['standard', 'Стандартный'], ['large', 'Значительный']], 'none') : null}
     {count('sites', 'Технические площадки', 50)}{flag('requiresNode', 'Требуется посещение узла')}
-  </div>{error ? <p role='alert' className='cx-error'>{error}</p> : preview ? <DurationBreakdown snapshot={preview} compact/> : <p>Считаем длительность…</p>}<details><summary>Изменить время вручную</summary><label>Длительность визита, мин<input type='number' min='1' max='10080' value={form.durationOverride?.minutes ?? ''} onChange={event => onChange('durationOverride', event.target.value ? { minutes: Number(event.target.value), reason: form.durationOverride?.reason || '' } : undefined)}/></label><label>Причина изменения<input value={form.durationOverride?.reason || ''} onChange={event => onChange('durationOverride', { minutes: form.durationOverride?.minutes || Number(form.duration), reason: event.target.value })}/></label></details></section>;
+  </div>{error ? <p role='alert' className='cx-error'>{error}</p> : preview && form.durationPreviewKey === JSON.stringify(input) ? <DurationBreakdown snapshot={preview} compact/> : <p>Считаем длительность…</p>}<details><summary>Изменить время вручную</summary><label>Длительность визита, мин<input type='number' min='1' max='10080' value={form.durationOverride?.minutes ?? ''} onChange={event => onChange('durationOverride', event.target.value ? { minutes: Number(event.target.value), reason: form.durationOverride?.reason || '' } : undefined)}/></label><label>Причина изменения<input value={form.durationOverride?.reason || ''} onChange={event => onChange('durationOverride', { minutes: form.durationOverride?.minutes || Number(form.duration), reason: event.target.value })}/></label></details></section>;
 }
 
 /** Group objects only in the visit-time mode; opening a passport preserves the camera. */
@@ -207,7 +217,7 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
       })}</div></details>
     </section> : null}
     {error ? <p role='alert' className='cx-error'>{error}</p> : null}
-    <div className='cx-object-list' aria-busy={loading}>{loading ? <p role='status'>Загружаем объекты…</p> : visible.length ? visible.map(object => <button type='button' key={object.id} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => openObjectPassport(passportTarget(object, kind, volume))}><Building2 size={17}/><span><strong>{object.address}</strong><small>{KINDS[object.kind]}</small>{object.insufficient || object.delta !== 0 ? <small>{object.insufficient ? 'Предварительное время' : deltaLabel(object.delta)}</small> : null}</span><b>{object.total} мин</b></button>) : <p className='cx-empty'>Объектов не найдено. Измените фильтры или найдите адрес.</p>}</div>
+    <div className='cx-object-list' aria-busy={loading}>{loading ? <p role='status'>Загружаем объекты…</p> : visible.length ? visible.map(object => <button type='button' key={object.id} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => openObjectPassport(passportTarget(object, kind, volume))}><Building2 size={17}/><span><strong>{object.address}</strong><small>{KINDS[object.kind]}</small>{object.insufficient || object.delta !== 0 ? <small>{object.insufficient ? 'Предварительное время' : deltaLabel(object.delta)}</small> : null}{objectTimeExplanation(object.estimate) ? <small className='cx-time-explanation'>{objectTimeExplanation(object.estimate)}</small> : null}</span><b>{object.total} мин</b></button>) : <p className='cx-empty'>Объектов не найдено. Измените фильтры или найдите адрес.</p>}</div>
     </div>
   </section>, panelHost);
 }
@@ -386,9 +396,15 @@ export function DurationSettings() {
 }
 
 /** Structured facts retain unknown stages rather than inventing technical measurements. */
-export function DurationFactFields({ value, onChange, snapshot, fact }) {
+export function DurationFactFields({ value, onChange, snapshot, fact, order }) {
   const update = (key, next) => onChange({ ...value, [key]: next });
-  return <section className='cx-fact-fields'><h4>Время визита</h4>{snapshot ? <p>В плане: {snapshot.total} мин</p> : null}<p>Начало: {fact?.startedAt || 'не отмечено'}</p><BusinessSelect ariaLabel='Причина отклонения длительности' value={value.deviationReason || ''} onChange={next => update('deviationReason', next)} options={[{ value: '', label: 'Причина отклонения от плана' }, ...options(REASONS)]}/><details><summary>Время этапов и комментарий</summary>{[['accessMinutes', 'Доступ, мин'], ['documentMinutes', 'Оформление, мин'], ['customerMinutes', 'Ожидание клиента, мин']].map(([key, label]) => <label key={key}>{label}<input type='number' min='0' placeholder='Не измерено' value={value[key] ?? ''} onChange={event => update(key, event.target.value)}/></label>)}<label>Комментарий<input value={value.comment || ''} onChange={event => update('comment', event.target.value)}/></label></details>{snapshot?.entities?.object ? <button type='button' onClick={() => openObjectPassport(snapshot.entities.object, 'visits')}>История объекта</button> : null}</section>;
+  const learning = factLearningStatus(fact, snapshot);
+  return <section className='cx-fact-fields'><h4>Время визита</h4>{snapshot ? <p>В плане: {snapshot.total} мин</p> : null}<p>Начало: {fact?.startedAt || 'не отмечено'}</p>
+    {fact?.status === 'completed' ? <div className={`cx-learning-status ${learning.eligible ? 'ready' : ''}`} role='status'><strong>Выполнение сохранено</strong><span>{learning.eligible ? 'Измерение пригодно для уточнения времени' : learning.missing.length ? `Для обучения не хватает: ${learning.missing.join(', ')}` : 'Измерение исключено из обучения'}</span></div> : null}
+    <BusinessSelect ariaLabel='Причина отклонения длительности' value={value.deviationReason || ''} onChange={next => update('deviationReason', next)} options={[{ value: '', label: 'Причина отклонения от плана' }, ...options(REASONS)]}/>
+    <details><summary>Время этапов и комментарий</summary>{FACT_STAGES.map(([key, label]) => <div className='cx-stage-measurement' key={key}><label>{label}, мин<input type='number' min='0' max='1440' placeholder='Не измерено' value={value[key] ?? ''} onChange={event => update(key, event.target.value)}/></label><button type='button' className='cx-stage-choice' aria-label={`${label}: ${value[key] === '' || value[key] == null ? 'не было — 0 минут' : 'не измерено'}`} onClick={() => update(key, value[key] === '' || value[key] == null ? '0' : '')}>{value[key] === '' || value[key] == null ? 'Не было · 0 мин' : 'Не измерено'}</button></div>)}<label>Комментарий<input value={value.comment || ''} onChange={event => update('comment', event.target.value)}/></label></details>
+    {snapshot?.entities?.object ? <button type='button' className='cx-action' onClick={() => openObjectPassport({ ...order, objectId: snapshot.entities.object, durationSnapshot: snapshot, passportKind: snapshot.kind }, 'visits')}>История объекта<ChevronRight size={15}/></button> : null}
+  </section>;
 }
 
 /** Compare applied duration and downstream client-window reserve before publication. */

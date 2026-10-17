@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { workKind } from '../src/durationKind.js';
+export { workKind } from '../src/durationKind.js';
 
 const ruleRows = readFileSync(new URL('../../data/dataset/common/work_rules.csv', import.meta.url), 'utf8').trim().split(/\r?\n/).slice(1);
 export const WORK_RULES = ruleRows.map(row => {
@@ -21,20 +23,6 @@ const KEYS = new Set([...Object.keys(ENUMS), ...Object.keys(COUNTS), ...BOOLEANS
 const LABELS = { line: 'Пригодная существующая линия', cable: 'Объём кабельных работ', devices: 'Дополнительные устройства', points: 'Дополнительные точки', sites: 'Дополнительные площадки', diagnosis: 'Диагностика', segments: 'Проверяемые сегменты', replaceDevice: 'Замена и настройка устройства', firmwareRequired: 'Обязательное первоначальное обновление', nodeSearch: 'Поиск узла аварии', damage: 'Состав восстановления', readyConfig: 'Готовая пригодная конфигурация', floors: 'Подъём с оборудованием' };
 const median = values => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? (sorted[Math.floor((sorted.length - 1) / 2)] + sorted[Math.ceil((sorted.length - 1) / 2)]) / 2 : 0; };
 export const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-
-/** Determine work semantics from the actual subtype, never from equipment. */
-export function workKind(order) {
-  const group = order.workType || order.sourceData?.bk_type || order.skill || '';
-  const subtype = order.serviceType || order.sourceData?.hd_type || '';
-  if (group === 'Глобальная проблема' && subtype === 'Информация') return 'information';
-  if (/Авар|EMERGENCY/i.test(`${group} ${order.skill || ''} ${order.priority || ''}`) || (group === 'Глобальная проблема' && subtype === 'Авария')) return 'emergency';
-  const classification = `${group} ${order.skill || ''}`;
-  if (/Дозаказ|UPSELL|EQUIPMENT/i.test(classification)) return 'equipment';
-  if (/Подключ|INSTALL|Монтаж/i.test(classification)) return 'connection';
-  if (/Локаль|LOCAL|REPAIR|SERVICE|Диагност/i.test(classification)) return 'local';
-  if (group === 'Глобальная проблема') throw new Error('Для глобальной проблемы укажите подтип: авария или информация.');
-  throw new Error('Для расчёта длительности укажите поддерживаемый вид работ.');
-}
 
 /** Validate structured order factors. Missing values mean an explicit baseline scenario. */
 export function normalizeFactors(value = {}) {

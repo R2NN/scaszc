@@ -39,3 +39,5 @@
 .manual-address-suggestions button{font-size:14px;padding:13px}.manual-map-toggle{font-size:14px;min-height:33px}
 .dark .manual-entry-dropzone{background:#332f21;border-color:#9f8330}.dark .manual-entry-dropzone>div>span{color:#c5c9cd}.dark .manual-entry-dropzone strong{color:#f5f3ed}
 @media(max-width:640px){.manual-entry-modal header{padding:20px}.manual-entry-modal form{padding:20px}.manual-entry-dropzone{flex-wrap:wrap;gap:10px}.manual-entry-dropzone>div{flex-basis:calc(100% - 65px)}.manual-entry-import .manual-entry-file-button{width:100%}.manual-entry-grid{grid-template-columns:1fr}}
+.manual-address-suggestions button>span{display:grid;gap:3px;min-width:0}.manual-address-suggestions button b{font:inherit;font-weight:600}.manual-address-suggestions button small{font-size:11px;color:var(--cx-muted,#75808c)}
+.manual-registry-selection{display:flex;gap:6px;align-items:center;margin:8px 0;color:var(--cx-muted,#75808c);font-size:12px}

@@ -1,5 +1,5 @@
 import { workPointType } from './workTypes.js';
-import { savedFactDraft, updateFactDraft, visitFactDraft } from './visitFactDraft.js';
+import { factOrderOptions, savedFactDraft, updateFactDraft, visitFactDraft } from './visitFactDraft.js';
 import { DurationFactFields, DurationDraftComparison } from './ComplexityWorkspace.jsx';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -620,6 +620,9 @@ export function ShiftWorkspace({
     return matchesSearch(crewQuery, [engineer.name, engineer.sourceId, engineer.startAddress, engineer.status, engineer.transport, skills, equipment, territories]) && (crewLoadFilter === 'all' || (crewLoadFilter === 'idle' ? !route?.assignments?.length : route?.assignments?.length > 0 && route.assignments.length <= 3)) && matchesAnySelection(crewSkillFilter, skills) && matchesAnySelection(crewEquipmentFilter, equipment) && (crewTerritoryFilter === 'all' || territories.includes(crewTerritoryFilter)) && (crewTransportFilter === 'all' || engineer.transport === crewTransportFilter) && (crewStatusFilter === 'all' || engineer.status === crewStatusFilter);
   });
   const selectedFact = (shift?.facts || []).find(item => String(item.orderId) === String(factOrderId));
+  const factOptions = factOrderOptions(selectableOrders, shift?.plan, shift?.facts);
+  const selectedFactOrder = shift?.orders?.find(order => String(order.id) === String(factOrderId));
+  const selectedFactOption = factOptions.find(option => option.value === factOrderId);
   const factKey = `${shift?.id}/${shift?.date}/${factOrderId}`;
   const durationFact = visitFactDraft(factDrafts, factKey, selectedFact);
   const setDurationFact = value => setFactDrafts(current => updateFactDraft(current, factKey, selectedFact, typeof value === 'function' ? value(visitFactDraft(current, factKey, selectedFact)) : value));
@@ -844,7 +847,6 @@ export function ShiftWorkspace({
         }),
       );
       resetFactDraft();
-      setFactOrderId('');
     } catch (issue) {
       setError(issue.message);
     } finally {
@@ -1321,12 +1323,13 @@ export function ShiftWorkspace({
               <h3>Факт визита</h3>
               <label>
                 Заявка
-                <BusinessSelect ariaLabel="Заявка для отметки факта" value={factOrderId} onChange={setFactOrderId} searchable options={[{value:'',label:'Выберите…'},...selectableOrders.map(item=>({value:String(item.id),label:item.name||item.sourceId||String(item.id)}))]}/>
+                <BusinessSelect ariaLabel="Заявка для отметки факта" value={factOrderId} onChange={setFactOrderId} searchable options={[{value:'',label:'Выберите…'},...factOptions]}/>
               </label>
+              {selectedFactOption ? <div className='cx-selected-order'><strong>{selectedFactOption.label}</strong><span>{selectedFactOption.hint}</span></div> : null}
               {selectedFact ? <p className="shift-muted">Последняя отметка: {selectedFact.status === 'completed' ? 'завершено' : selectedFact.status === 'started' ? 'начато' : 'не выполнено'} в {selectedFact.time}.</p> : null}
               <TimePicker label="Время факта" value={factTime} onChange={setFactTime}/>
               {factDrafts[factKey] ? <div className='cx-fact-draft-status'><span>{factChangedOnServer ? 'Сохранённый факт изменился. В форме ваш несохранённый ввод.' : 'Несохранённый ввод этой заявки'}</span><button type='button' onClick={resetFactDraft}>Сбросить ввод</button></div> : null}
-              <DurationFactFields value={durationFact} onChange={setDurationFact} snapshot={shift.orders.find(order=>String(order.id)===String(factOrderId))?.durationSnapshot} fact={selectedFact}/>
+              <DurationFactFields value={durationFact} onChange={setDurationFact} snapshot={selectedFactOrder?.durationSnapshot} order={selectedFactOrder} fact={selectedFact}/>
               <label>
                 Причина невыполнения
                 <input
@@ -1340,7 +1343,7 @@ export function ShiftWorkspace({
                 <button
                   type="button"
                   onClick={() => markFact("started")}
-                  disabled={busy || !factOrderId}
+                  disabled={busy || !factOrderId || selectedFact?.status === 'started'}
                 >
                   Начать
                 </button>

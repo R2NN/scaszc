@@ -12,7 +12,51 @@ export function addressIdentity(address) {
 
 /** Moving the service point requires a new explicit object/infrastructure association. */
 export function changeServiceLocation(form, location) {
-  return { ...form, ...location, objectId: undefined, serviceEntities: undefined, durationSnapshot: undefined };
+  return { ...form, ...location, objectId: undefined, objectZone: undefined, zoneId: undefined, district: undefined, serviceEntities: undefined, durationSnapshot: undefined };
+}
+
+/** Select one registered place and its operational territory atomically. */
+export function selectServiceObject(form, object) {
+  return { ...changeServiceLocation(form, {}), objectId: object.id, address: object.address, coords: object.coords, locationSource: 'registry', zone: object.zone || form.zone, objectZone: object.zone, zoneId: object.zoneId, district: object.district, serviceEntities: { object: object.id } };
+}
+
+/** Fill only unique, mutually compatible infrastructure links; never guess between candidates. */
+export function resolveServiceEntities(objectId, infrastructure, selected = {}) {
+  const links = { ...selected, object: objectId };
+  const byId = id => infrastructure.find(entity => entity.id === id);
+  const line = byId(links.line);
+  if (!links.node && line?.nodeId) links.node = line.nodeId;
+  const node = byId(links.node);
+  if (!links.entrance && node?.entranceId) links.entrance = node.entranceId;
+  for (const scope of ['entrance', 'node', 'line']) {
+    if (links[scope]) continue;
+    const candidates = infrastructure.filter(entity => entity.kind === scope
+      && (scope !== 'node' || !links.entrance || !entity.entranceId || entity.entranceId === links.entrance)
+      && (scope !== 'entrance' || !byId(links.node)?.entranceId || entity.id === byId(links.node).entranceId)
+      && (scope !== 'line' || !links.node || !entity.nodeId || entity.nodeId === links.node));
+    if (candidates.length === 1) links[scope] = candidates[0].id;
+  }
+  return links;
+}
+
+/** Changing a parent clears incompatible descendants before resolving unique links. */
+export function changeServiceEntity(objectId, infrastructure, selected, scope, value) {
+  const links = { ...selected };
+  if (value) links[scope] = value; else delete links[scope];
+  if (scope === 'entrance') {
+    const node = infrastructure.find(entity => entity.id === links.node);
+    if (node?.entranceId && node.entranceId !== value) { delete links.node; delete links.line; }
+  }
+  if (scope === 'node') {
+    const line = infrastructure.find(entity => entity.id === links.line);
+    if (line?.nodeId && line.nodeId !== value) delete links.line;
+    delete links.entrance;
+  }
+  if (scope === 'line') {
+    const line = infrastructure.find(entity => entity.id === value);
+    if (line?.nodeId) { links.node = line.nodeId; delete links.entrance; }
+  }
+  return resolveServiceEntities(objectId, infrastructure, links);
 }
 
 /** Reject a registered object paired with a different house or geographic point. */

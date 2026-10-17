@@ -13,6 +13,18 @@ export function objectTimeCategory(object) {
   return 'normal';
 }
 
+/** Explain the displayed difference using only the authoritative snapshot components. */
+export function objectTimeExplanation(snapshot) {
+  if (!snapshot) return '';
+  const signed = minutes => `${minutes > 0 ? '+' : '−'}${Math.abs(minutes)} мин`;
+  if (snapshot.override) return `Время задано вручную: ${snapshot.total} мин`;
+  const volume = snapshot.factorTechnical - snapshot.baseTechnical;
+  const history = snapshot.technical - snapshot.factorTechnical;
+  return [[volume, 'Объём'], [history, 'История'], [snapshot.access, 'Доступ']]
+    .filter(([minutes]) => Number.isFinite(minutes) && minutes !== 0)
+    .map(([minutes, label]) => `${label} ${signed(minutes)}`).join(' · ');
+}
+
 /** Describe only the standard quantities relevant to this work type. */
 export function standardVolumeLabel(kind) {
   return ({ connection: '1 устройство, 1 точка, 1 площадка', equipment: '1 устройство, 1 точка, 1 площадка', local: '1 сегмент диагностики, 1 площадка', emergency: '1 площадка аварийных работ', information: 'Информационная проверка' })[kind] || 'Для каждого вида работ';

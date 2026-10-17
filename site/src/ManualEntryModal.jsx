@@ -1,4 +1,5 @@
-import { changeServiceLocation } from './serviceLocation.js';
+import { manualDurationInput } from './durationKind.js';
+import { addressIdentity, changeServiceLocation, selectServiceObject } from './serviceLocation.js';
 import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { Check, FileUp, MapPin, Plus, X } from 'lucide-react';
@@ -27,6 +28,8 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  const [places, setPlaces] = useState([]);
+  const [registryError, setRegistryError] = useState('');
   const [importedOrders, setImportedOrders] = useState([]);
   const [importedFileName, setImportedFileName] = useState('');
   const [draggingFile, setDraggingFile] = useState(false);
@@ -35,9 +38,27 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const isOrder = type === 'orders';
+  const zoneConflict = Boolean(form.objectId && form.objectZone && form.zone !== form.objectZone);
+  const durationReady = form.durationPreviewKey === JSON.stringify(manualDurationInput(form));
+  const registryMatches = !['registry', 'suggestion', 'map', 'file'].includes(form.locationSource) && form.address.trim().length >= 3 ? places.filter(place => addressIdentity(place.address).includes(addressIdentity(form.address))).slice(0, 8) : [];
+  const addressSuggestions = suggestions.filter(item => !registryMatches.some(place => addressIdentity(place.address) === addressIdentity(item.address)));
+  useEffect(() => {
+    if (!isOrder) return;
+    const controller = new AbortController();
+    const load = async () => {
+      try {
+        const response = await fetch(`/api/complexity/objects?kind=all&regionId=${encodeURIComponent(region?.id || 'moscow')}`, { signal: controller.signal });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Реестр объектов недоступен.');
+        setPlaces(result); setRegistryError('');
+      } catch (issue) { if (!controller.signal.aborted) setRegistryError(issue.message); }
+    };
+    load();
+    return () => controller.abort();
+  }, [isOrder, region?.id]);
   const update = (key, value) => { setForm(current => ({ ...current, [key]: value })); setError(''); };
   useEffect(() => {
-    if (!isOrder || ['suggestion', 'map', 'file'].includes(form.locationSource) || form.address.trim().length < 3) {
+    if (!isOrder || ['registry', 'suggestion', 'map', 'file'].includes(form.locationSource) || form.address.trim().length < 3) {
       setSuggestions([]);
       return undefined;
     }
@@ -81,7 +102,7 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
   }, [form.coords, mapOpen]);
   const loadOrder = order => {
     setForm(current => ({ ...current,
-      durationFactors: order.durationFactors || {}, durationOverride: order.durationOverride, objectId: order.objectId, serviceEntities: order.serviceEntities, sourceId: order.sourceId || '', name: order.name || '', address: order.address || '',
+      durationFactors: order.durationFactors || {}, durationOverride: order.durationOverride, objectZone: undefined, zoneId: order.zoneId, district: order.district, objectId: order.objectId, serviceEntities: order.serviceEntities, sourceId: order.sourceId || '', name: order.name || '', address: order.address || '',
       coords: order.coords || null, locationSource: order.coords ? 'file' : '',
       zone: order.zone || current.zone, skill: order.skill || current.skill,
       equipment: Array.isArray(order.equipment) ? order.equipment.join(', ') : order.equipment || '',
@@ -103,6 +124,8 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
   const submit = async event => {
     event.preventDefault();
     if (saving) return;
+    if (isOrder && zoneConflict) { setError(`Объект относится к территории «${form.objectZone}». Исправьте зону заявки.`); return; }
+    if (isOrder && !durationReady) { setError('Дождитесь актуального расчёта длительности.'); return; }
     const sourceId = form.sourceId.trim();
     if (!sourceId || !form.name.trim() || !form.zone.trim()) { setError('Укажите ID, название и зону.'); return; }
     if (existingIds.some(value => String(value).toLocaleLowerCase('ru-RU') === sourceId.toLocaleLowerCase('ru-RU'))) { setError('Такой ID уже существует. Выберите другой.'); return; }
@@ -124,11 +147,17 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
     <form onSubmit={submit}>{isOrder ? <div className="manual-entry-import"><div className={`manual-entry-dropzone${draggingFile ? ' dragging' : ''}`} onDragOver={event => { event.preventDefault(); setDraggingFile(true); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDraggingFile(false); }} onDrop={event => { event.preventDefault(); setDraggingFile(false); importFile(event.dataTransfer.files?.[0]); }}><span className="manual-entry-upload-icon"><FileUp size={25}/></span><div><strong>{importedFileName || 'Загрузить заявку из файла'}</strong><span>Перетащите файл сюда или выберите на компьютере</span><small>CSV · JSON · XLS · XLSX</small></div><label className="manual-entry-file-button">Выбрать файл<input type="file" accept=".csv,.json,.xls,.xlsx,application/json" onChange={event => { importFile(event.target.files?.[0]); event.target.value = ''; }}/></label></div>{importedOrders.length > 1 ? <label>Заявка из файла<select onChange={event => loadOrder(importedOrders[Number(event.target.value)])}>{importedOrders.map((order, index) => <option value={index} key={`${order.id}-${index}`}>{order.name} · {order.sourceId}</option>)}</select></label> : null}</div> : null}<div className="manual-entry-grid">
       <label>ID {isOrder ? 'заявки' : 'инженера'}<input value={form.sourceId} onChange={event => update('sourceId', event.target.value)} placeholder={isOrder ? 'CRM-12345' : 'ENG-123'} required/></label>
       <label>{isOrder ? 'Название заявки' : 'Имя / название бригады'}<input value={form.name} onChange={event => update('name', event.target.value)} placeholder={isOrder ? 'Подключение абонента' : 'Бригада Иванов'} required/></label>
-      <label>Зона{zones.length ? <BusinessSelect ariaLabel="Зона" value={form.zone} onChange={value => update('zone', value)} options={zones.map(zone => ({ value: zone, label: zone }))}/> : <input value={form.zone} onChange={event => update('zone', event.target.value)} placeholder="Название зоны" required/>}</label>
+      <label>Зона{zones.length ? <BusinessSelect ariaLabel="Зона" value={form.zone} onChange={value => update('zone', value)} options={[...new Set([...zones, form.objectZone].filter(Boolean))].map(zone => ({ value: zone, label: zone }))}/> : <input value={form.zone} onChange={event => update('zone', event.target.value)} placeholder="Название зоны" required/>}</label>
       {isOrder ? <>
         <label>Вид работ<BusinessSelect ariaLabel="Вид работ" value={form.skill} onChange={value => {update('skill', value);update('durationFactors', {});}} options={SKILLS}/></label>
         <label>Приоритет<BusinessSelect ariaLabel="Приоритет" value={form.priority} onChange={value => update('priority', value)} options={[{ value: 'Обычная', label: 'Обычная' }, { value: 'Срочная', label: 'Срочная' }, { value: 'Авария', label: 'Авария' }]}/></label>
-        <div className="wide manual-address-field"><label>Адрес в Москве<input value={form.address} onChange={event => { setForm(current => changeServiceLocation(current, { address: event.target.value, coords: null, locationSource: '' })); setError(''); }} placeholder="Улица, дом" autoComplete="off"/></label>{suggestions.length ? <div className="manual-address-suggestions" role="listbox" aria-label="Подсказки адресов">{suggestions.map((item, index) => <button type="button" role="option" aria-selected={false} key={`${item.address}-${index}`} onClick={() => { setForm(current => changeServiceLocation(current, { address: item.address, coords: item.coords, locationSource: 'suggestion' })); setSuggestions([]); }}><MapPin size={15}/>{item.address}</button>)}</div> : null}<button type="button" className="manual-map-toggle" onClick={() => setMapOpen(value => !value)}><MapPin size={16}/>{mapOpen ? 'Скрыть карту' : 'Выбрать точку на карте'}</button>{form.coords ? <small>Точка: {form.coords[0].toFixed(6)}, {form.coords[1].toFixed(6)} · {form.locationSource === 'map' ? 'выбрана на карте' : 'из адреса или файла'}</small> : null}{mapOpen ? <div ref={mapContainerRef} className="manual-entry-map" aria-label="Карта для выбора точки заявки"/> : null}</div>
+        <div className='wide manual-address-field'><label>Адрес или объект<input aria-label='Адрес или объект' value={form.address} onChange={event => { setForm(current => changeServiceLocation(current, { address: event.target.value, coords: null, locationSource: '' })); setError(''); }} placeholder='Улица, дом или адрес объекта' autoComplete='off'/></label>
+          {registryMatches.length || addressSuggestions.length ? <div className='manual-address-suggestions' role='listbox' aria-label='Адреса и объекты'>{registryMatches.map(place => <button type='button' role='option' aria-selected={false} key={place.id} onClick={() => { setForm(current => selectServiceObject(current, place)); setSuggestions([]); setError(''); }}><MapPin size={15}/><span><b>{place.address}</b><small>Из реестра{place.zone ? ` · ${place.zone}` : ''}</small></span></button>)}{addressSuggestions.map((item, index) => <button type='button' role='option' aria-selected={false} key={`${item.address}-${index}`} onClick={() => { setForm(current => changeServiceLocation(current, { address: item.address, coords: item.coords, locationSource: 'suggestion' })); setSuggestions([]); }}><MapPin size={15}/><span>{item.address}<small>Новый адрес</small></span></button>)}</div> : null}
+          {form.objectId ? <div className='manual-registry-selection'><Check size={15}/><span>Объект из реестра{form.objectZone ? ` · ${form.objectZone}` : ''}</span></div> : null}
+          {zoneConflict ? <p role='alert' className='manual-entry-error'>Объект относится к «{form.objectZone}», в форме выбрано «{form.zone}». <button type='button' onClick={() => update('zone', form.objectZone)}>Подставить территорию объекта</button></p> : null}
+          {registryError ? <p className='manual-entry-error' role='alert'>{registryError}</p> : null}
+          <button type='button' className='manual-map-toggle' onClick={() => setMapOpen(value => !value)}><MapPin size={16}/>{mapOpen ? 'Скрыть карту' : 'Выбрать точку на карте'}</button>{form.coords && !form.objectId ? <small>Точка: {form.coords[0].toFixed(6)}, {form.coords[1].toFixed(6)} · {form.locationSource === 'map' ? 'выбрана на карте' : 'из адреса или файла'}</small> : null}{mapOpen ? <div ref={mapContainerRef} className='manual-entry-map' aria-label='Карта для выбора точки заявки'/> : null}
+        </div>
         <TimePicker label="Начало окна" value={form.start} onChange={value => update('start', value)}/><TimePicker label="Конец окна" value={form.end} onChange={value => update('end', value)}/>
         <DurationFields form={form} onChange={update} date={date}/>
         <label>Оборудование<input value={form.equipment} onChange={event => update('equipment', event.target.value)} placeholder="Роутер, ТВ-приставка"/></label>
@@ -140,6 +169,6 @@ export function ManualEntryModal({ type, zones = [], region, date, existingIds =
         <label>В составе с<input type="date" value={form.activeFrom} onChange={event => update('activeFrom', event.target.value)} required/></label>
         <TimePicker label="Начало смены" value={form.shiftStart} onChange={value => update('shiftStart', value)}/><TimePicker label="Конец смены" value={form.shiftEnd} onChange={value => update('shiftEnd', value)}/>
       </>}
-    </div><p className="manual-entry-hint">{isOrder ? 'Укажите адрес с домом, выберите подсказку или точку на карте. Заявка станет черновиком для точного перепланирования.' : replanning ? 'Адрес старта будет проверен. После сохранения инженер войдёт в состав, а изменение плана появится как черновик. Маршрут появится только после расчёта и публикации.' : 'Точный адрес старта будет проверен автоматически. Если дом не найдётся, инженер не будет добавлен. Добавление в состав не меняет опубликованный план смены.'}</p>{error ? <p className="manual-entry-error" role="alert">{error}</p> : null}<footer><button type="button" onClick={onClose}>Отмена</button><button type="submit" className="primary" disabled={saving}><Plus/>{saving ? 'Проверяем адрес…' : isOrder ? 'Добавить заявку' : replanning ? 'Подготовить инженера для плана' : 'Добавить инженера в состав'}</button></footer></form>
+    </div><p className="manual-entry-hint">{isOrder ? 'Укажите адрес с домом, выберите подсказку или точку на карте. Заявка станет черновиком для точного перепланирования.' : replanning ? 'Адрес старта будет проверен. После сохранения инженер войдёт в состав, а изменение плана появится как черновик. Маршрут появится только после расчёта и публикации.' : 'Точный адрес старта будет проверен автоматически. Если дом не найдётся, инженер не будет добавлен. Добавление в состав не меняет опубликованный план смены.'}</p>{error ? <p className="manual-entry-error" role="alert">{error}</p> : null}<footer><button type="button" onClick={onClose}>Отмена</button><button type="submit" className="primary" disabled={saving || (isOrder && (!durationReady || zoneConflict))}><Plus/>{saving ? 'Проверяем адрес…' : isOrder ? 'Добавить заявку' : replanning ? 'Подготовить инженера для плана' : 'Добавить инженера в состав'}</button></footer></form>
   </section></div>;
 }
