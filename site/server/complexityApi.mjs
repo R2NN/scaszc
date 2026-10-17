@@ -33,7 +33,9 @@ export async function handleComplexity(request, registry) {
       const input = await request.json();
       if (!input.order || typeof input.order !== 'object') throw new Error('Передайте заявку для расчёта.');
       const order = input.persist === false ? { ...input.order, durationSnapshot: registry.estimate(input.order, input.asOf || at) } : registry.prepareOrders([input.order], input.asOf || at)[0];
-      return json({ snapshot: order.durationSnapshot, order });
+      const applied = new Set(order.durationSnapshot.histories.map(item => item.conditionId));
+      const conditions = registry.conditions(order.durationSnapshot.entities.object).filter(item => applied.has(item.id)).map(({ id, finding, preparation }) => ({ id, finding, preparation }));
+      return json({ snapshot: order.durationSnapshot, order, conditions });
     }
     if (url.pathname === '/api/complexity/accuracy' && request.method === 'GET') return json(registry.accuracy(at, url.searchParams.get('zone'), url.searchParams.get('regionId') || 'moscow', url.searchParams.get('review') === 'current' ? new Date().toISOString() : at));
     if (url.pathname === '/api/complexity/decisions' && request.method === 'POST') return json(registry.decide(await request.json()));

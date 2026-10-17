@@ -10,6 +10,8 @@ import { BusinessSelect } from './BusinessSelect.jsx';
 import { cachedObjectPassport, clearObjectPassports, loadObjectPassport } from './objectPassport.js';
 import { OBJECT_TIME_LEGEND, objectTimeExplanation, conditionVisitChoices, filterObjectGroup, objectTimeCategory, standardVolumeLabel, summarizeObjectGroup, visibleVisitLimit, visitTimeRows } from './objectPresentation.js';
 import { mountObjectTimeClusters } from './objectTimeClusters.js';
+import { durationFormula } from './durationPresentation.js';
+import { objectTimeGeoJSON, syncObjectTimeLayers } from './objectTimeLayers.js';
 import './complexity.css';
 
 const KINDS = { connection: 'Подключение', local: 'Ремонт и диагностика', equipment: 'Работы с оборудованием', emergency: 'Аварийные работы', information: 'Информационная заявка' };
@@ -38,19 +40,19 @@ export function openObjectPassport(orderOrObject, tab = 'overview') {
 }
 
 /** Render the immutable forecast attached to the published order. */
-export function DurationBreakdown({ snapshot, compact = false, expanded = false }) {
+export function DurationBreakdown({ snapshot, conditions = [], compact = false, expanded = false }) {
   if (!snapshot) return <p className='cx-muted'>Расчёт времени недоступен.</p>;
+  const formula = durationFormula(snapshot, conditions);
   return <section className={`cx-breakdown ${compact ? 'compact' : ''}`} aria-label='Расчёт длительности'>
     <div className='cx-duration-hero'><Clock3 size={20}/><strong>{snapshot.total} <small>мин</small></strong><span>Время визита</span></div>
-    <dl><div><dt>Работа на объекте</dt><dd>{snapshot.technical} мин</dd></div>{snapshot.access > 0 ? <div><dt>Дополнительное время на доступ</dt><dd>{snapshot.access} мин</dd></div> : null}{snapshot.documents > 0 ? <div><dt>Оформление</dt><dd>{snapshot.documents} мин</dd></div> : null}</dl>
-    {snapshot.override ? <p className='cx-note'>Ручная корректировка: {snapshot.override.minutes} мин. {snapshot.override.reason}. Автоматический расчёт: {snapshot.calculatedTotal} мин.</p> : null}
-    <details open={expanded || undefined}><summary>Из чего складывается время работы</summary><dl>{snapshot.components.map((component, index) => <div key={`${component.key}-${index}`}><dt>{component.key === 'base' ? 'Норматив работы' : component.label}</dt><dd>{component.minutes > 0 && index ? '+' : ''}{component.minutes} мин</dd></div>)}{snapshot.historyMinutes ? <div><dt>Поправка по прошлым визитам</dt><dd>{snapshot.historyMinutes > 0 ? '+' : ''}{snapshot.historyMinutes} мин</dd></div> : null}</dl>{snapshot.histories.map(item => <p key={item.conditionId}>{REASONS[item.reason]} · {SCOPES[item.scope]} · {item.count} визитов · {item.minutes > 0 ? '+' : ''}{item.minutes} мин</p>)}</details>
+    <details className='cx-formula' open={expanded || undefined}><summary><span>Формула расчёта<small>{formula.expression}</small></span><ChevronRight size={18}/></summary><dl>{formula.rows.map((row, index) => <div key={row.key}><dt>{row.label}{row.detail ? <small>{row.detail}</small> : null}</dt><dd>{index ? formula.signed(row.minutes) : row.minutes} мин</dd></div>)}</dl><div className='cx-formula-total'><span>Итого к планированию</span><strong>{formula.total} мин</strong></div></details>
   </section>;
 }
 
 /** Conditional questions and a server-calculated preview shared by creation paths. */
 export function DurationFields({ form, onChange, date }) {
   const [preview, setPreview] = useState(null);
+  const [previewConditions, setPreviewConditions] = useState([]);
   const [error, setError] = useState('');
   const [infrastructureData, setInfrastructure] = useState(null);
   const infrastructure = form.objectId && infrastructureData?.objectId === form.objectId ? infrastructureData.entities : [];
@@ -66,7 +68,7 @@ export function DurationFields({ form, onChange, date }) {
     const timer = setTimeout(async () => {
       try {
         const result = await send('/api/complexity/estimate', { persist: false, order: { id: form.sourceId || 'preview', ...input }, asOf: `${day(date)}T07:00:00+03:00` });
-        if (live) { setPreview(result.snapshot); onChange('duration', String(result.snapshot.total)); onChange('durationPreviewKey', JSON.stringify(input)); setError(''); }
+        if (live) { setPreview(result.snapshot); setPreviewConditions(result.conditions || []); onChange('duration', String(result.snapshot.total)); onChange('durationPreviewKey', JSON.stringify(input)); setError(''); }
       } catch (issue) { if (live) { setError(issue.message); setPreview(null); } }
     }, 180);
     return () => { live = false; clearTimeout(timer); };
@@ -88,7 +90,7 @@ export function DurationFields({ form, onChange, date }) {
     {kind === 'emergency' ? <>{select('damage', 'Подтверждённое повреждение', [['unknown', 'Состав ещё не установлен'], ['cable', 'Кабельная линия'], ['equipment', 'Замена оборудования'], ['multiple', 'Несколько элементов']], 'unknown')}{flag('nodeSearch', 'Узел аварии нужно локализовать')}{flag('readyConfig', 'Есть готовая пригодная конфигурация')}</> : null}
     {!(kind === 'connection' && factors.line === 'existing') ? select('cable', 'Объём прокладки или замены', [['none', 'Без кабельных работ'], ['short', 'Малый'], ['standard', 'Стандартный'], ['large', 'Значительный']], 'none') : null}
     {count('sites', 'Технические площадки', 50)}{flag('requiresNode', 'Требуется посещение узла')}
-  </div>{error ? <p role='alert' className='cx-error'>{error}</p> : preview && form.durationPreviewKey === JSON.stringify(input) ? <DurationBreakdown snapshot={preview} compact/> : <p>Считаем длительность…</p>}<details><summary>Изменить время вручную</summary><label>Длительность визита, мин<input type='number' min='1' max='10080' value={form.durationOverride?.minutes ?? ''} onChange={event => onChange('durationOverride', event.target.value ? { minutes: Number(event.target.value), reason: form.durationOverride?.reason || '' } : undefined)}/></label><label>Причина изменения<input value={form.durationOverride?.reason || ''} onChange={event => onChange('durationOverride', { minutes: form.durationOverride?.minutes || Number(form.duration), reason: event.target.value })}/></label></details></section>;
+  </div>{error ? <p role='alert' className='cx-error'>{error}</p> : preview && form.durationPreviewKey === JSON.stringify(input) ? <DurationBreakdown snapshot={preview} conditions={previewConditions} compact/> : <p>Считаем длительность…</p>}<details><summary>Изменить время вручную</summary><label>Длительность визита, мин<input type='number' min='1' max='10080' value={form.durationOverride?.minutes ?? ''} onChange={event => onChange('durationOverride', event.target.value ? { minutes: Number(event.target.value), reason: form.durationOverride?.reason || '' } : undefined)}/></label><label>Причина изменения<input value={form.durationOverride?.reason || ''} onChange={event => onChange('durationOverride', { minutes: form.durationOverride?.minutes || Number(form.duration), reason: event.target.value })}/></label></details></section>;
 }
 
 /** Group objects only in the visit-time mode; opening a passport preserves the camera. */
@@ -97,6 +99,7 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
   const [volume, setVolume] = useState('order');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
+  const [view, setView] = useState('markers');
   const [objects, setObjects] = useState([]);
   const [visibleIds, setVisibleIds] = useState(null);
   const [groupIds, setGroupIds] = useState(null);
@@ -136,8 +139,10 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
   const groupSummary = groupIds ? summarizeObjectGroup(grouped) : [];
   const selectedComposition = groupSummary.find(group => `${group.kind}/${group.operation || 'unspecified'}` === groupComposition);
   const selectedGroup = filterObjectGroup(grouped, groupCategory, groupComposition);
-  const mapObjects = groupIds ? selectedGroup : filtered;
-  const visible = groupIds ? selectedGroup : query.trim() ? filtered : filtered.filter(object => !visibleIds || visibleIds.has(object.id));
+  const scopedObjects = groupIds ? selectedGroup : filtered;
+  const accessObjects = scopedObjects.filter(object => object.estimate?.access > 0);
+  const mapObjects = view === 'access' ? accessObjects : scopedObjects;
+  const visible = groupIds || query.trim() ? mapObjects : mapObjects.filter(object => !visibleIds || visibleIds.has(object.id));
   useEffect(() => {
     if (!enabled) return;
     let live = true;
@@ -149,28 +154,21 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
     }, 250);
     return () => { live = false; clearTimeout(timer); };
   }, [enabled, visible.slice(0, 6).map(object => object.id).join(','), kind, volume, day(date), version]);
-  const data = useMemo(() => ({ type: 'FeatureCollection', features: mapObjects.filter(object => Array.isArray(object.coords)).map(object => ({ type: 'Feature', id: object.id, properties: { id: object.id, color: OBJECT_TIME_LEGEND.find(item => item.key === objectTimeCategory(object)).color, label: `${object.total} мин`, slower: objectTimeCategory(object) === 'slower' ? 1 : 0, unknown: objectTimeCategory(object) === 'unknown' ? 1 : 0 }, geometry: { type: 'Point', coordinates: [object.coords[1], object.coords[0]] } })) }), [JSON.stringify(mapObjects)]);
+  const data = useMemo(() => objectTimeGeoJSON(mapObjects), [JSON.stringify(mapObjects)]);
   useEffect(() => {
     if (!map) return;
     const container = map.getContainer();
     container.classList.toggle('cx-map-active', enabled);
     const render = () => {
-      if (!map.isStyleLoaded()) return;
-      if (!map.getSource('cx-objects')) {
-        map.addSource('cx-objects', { type: 'geojson', data, cluster: true, clusterMaxZoom: 13, clusterRadius: 88, clusterProperties: { slower: ['+', ['get', 'slower']], unknown: ['+', ['get', 'unknown']] } });
-        map.addLayer({ id: 'cx-points', type: 'circle', source: 'cx-objects', filter: ['!', ['has', 'point_count']], paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 5, 16, 9], 'circle-color': ['get', 'color'], 'circle-stroke-color': '#343a40', 'circle-stroke-width': 1.5 } });
-        map.addLayer({ id: 'cx-point-label', type: 'symbol', source: 'cx-objects', filter: ['!', ['has', 'point_count']], minzoom: 10, layout: { 'text-field': ['get', 'label'], 'text-size': 12, 'text-offset': [0, 1.6], 'text-font': ['Noto Sans Regular'], 'text-allow-overlap': false }, paint: { 'text-color': '#18242b', 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
-      }
-      map.getSource('cx-objects')?.setData(data);
-      for (const id of ['cx-points', 'cx-point-label']) map.setLayoutProperty(id, 'visibility', enabled ? 'visible' : 'none');
+      syncObjectTimeLayers(map, data, { enabled, view, dark: document.documentElement.dataset.theme === 'dark' });
     };
     render(); map.on('style.load', render);
     return () => { map.off('style.load', render); container.classList.remove('cx-map-active'); };
-  }, [map, enabled, data]);
+  }, [map, enabled, data, view]);
   useEffect(() => {
-    if (!map || !enabled) return;
+    if (!map || !enabled || view !== 'markers') return;
     return mountObjectTimeClusters(map, Marker, setGroupIds, () => setError('Не удалось раскрыть группу объектов. Попробуйте ещё раз.'));
-  }, [map, enabled, data]);
+  }, [map, enabled, data, view]);
   useEffect(() => {
     if (!map || !enabled) return;
     const bounds = () => { const box = map.getBounds(); setVisibleIds(new Set(objects.filter(object => object.coords && box.contains([object.coords[1], object.coords[0]])).map(object => object.id))); };
@@ -181,22 +179,24 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
     };
     const leave = () => { map.getCanvas().style.cursor = ''; };
     const click = async event => {
-      if (!map.getLayer('cx-points')) return;
-      const features = map.queryRenderedFeatures(event.point, { layers: ['cx-points', 'cx-point-label'] });
+      const layers = (view === 'access' ? ['cx-access-points', 'cx-access-label'] : ['cx-points', 'cx-point-label']).filter(id => map.getLayer(id));
+      if (!layers.length) return;
+      const features = map.queryRenderedFeatures(event.point, { layers });
       const feature = features[0];
       if (!feature) return;
       const object = objects.find(item => item.id === feature.properties.id);
       if (object) openObjectPassport(passportTarget(object, kind, volume));
     };
     bounds(); map.on('moveend', bounds); map.on('click', click);
-    for (const layer of ['cx-points']) { map.on('mousemove', layer, hover); map.on('mouseleave', layer, leave); }
-    return () => { map.off('moveend', bounds); map.off('click', click); for (const layer of ['cx-points']) { map.off('mousemove', layer, hover); map.off('mouseleave', layer, leave); } leave(); };
-  }, [map, enabled, objects, kind, volume]);
+    for (const layer of ['cx-points', 'cx-access-points']) { map.on('mousemove', layer, hover); map.on('mouseleave', layer, leave); }
+    return () => { map.off('moveend', bounds); map.off('click', click); for (const layer of ['cx-points', 'cx-access-points']) { map.off('mousemove', layer, hover); map.off('mouseleave', layer, leave); } leave(); };
+  }, [map, enabled, objects, kind, volume, view]);
   if (!panelPresence.present || !panelHost) return null;
   return createPortal(<section className={`orders-panel route-list-panel cx-time-panel workspace-panel-enter ${panelMotionClass}`} aria-label='Время на объектах'>
     <div className='panel-heading'><div><h3>Время на объектах</h3><b className='engineer-count' aria-label='Объектов на карте'>{visible.length}</b></div><div className='panel-heading-actions'><button type='button' className='panel-close' aria-label='Скрыть панель времени на объектах' data-tooltip='Скрыть панель' onClick={onClosePanel}><X/></button></div></div>
     {territoryControl}
     <div className='cx-panel-controls'>
+    <div className='cx-view-switch' role='group' aria-label='Вид слоя времени'><button type='button' aria-pressed={view === 'markers'} onClick={() => setView('markers')}>Метки времени</button><button type='button' aria-pressed={view === 'access'} onClick={() => setView('access')}>Тепловая карта доступа</button></div>
     <label className='cx-filter-label'>Вид работ<BusinessSelect ariaLabel='Вид работ на карте' value={kind} onChange={setKind} options={[{ value: 'all', label: 'Все виды работ' }, ...options(KINDS)]}/></label>
     <div className='panel-search-row'><label className='panel-search'><Search aria-hidden='true'/><input type='search' aria-label='Поиск обслуживаемого объекта' placeholder='Адрес объекта…' value={query} onChange={event => setQuery(event.target.value)}/>{query ? <button type='button' aria-label='Очистить поиск объектов' onClick={() => setQuery('')}><X/></button> : null}</label></div>
     <details className='cx-map-options'><summary>Дополнительные фильтры{filter !== 'all' || volume !== 'order' ? ' · включены' : ''}</summary>
@@ -204,7 +204,7 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
     <label className='cx-filter-label'>Показать<BusinessSelect ariaLabel='Показать объекты' value={filter} onChange={setFilter} options={[{ value: 'all', label: 'Все объекты на карте' }, { value: 'repeat', label: 'Отклонение от норматива от 10 мин' }, { value: 'review', label: 'Нужно проверить время' }, { value: 'route', label: 'Объекты выбранного маршрута' }]}/></label>
     </details>
     </div>
-    <div className='cx-legend' aria-label='Цвета времени визита'>{OBJECT_TIME_LEGEND.map(item => <span key={item.key}><i style={{ background: item.color }}/>{item.label}</span>)}<span className='cx-cluster-key'><b>↑</b>В группе: с увеличенным временем</span></div>
+    {view === 'access' ? <div className='cx-heat-legend' aria-label='Тепловая карта проблемности доступа'><strong>Адресов с задержкой доступа: {accessObjects.length}</strong><div className='cx-heat-ramp'/><span><small>Меньше</small><small>Больше</small></span><p>Плотность подтверждённых задержек с учётом минут на доступ.</p></div> : <div className='cx-legend' aria-label='Цвета времени визита'>{OBJECT_TIME_LEGEND.map(item => <span key={item.key}><i style={{ background: item.color }}/>{item.label}</span>)}<span className='cx-cluster-key'><b>↑</b>В группе: с увеличенным временем · (+мин) к нормативу</span></div>}
     <div className='cx-time-content'>
     {groupIds ? <section className='cx-group-summary' aria-label='Состав группы объектов'>
       <header><strong>Группа · {grouped.length}</strong><button type='button' aria-label='Сбросить выбранную группу' onClick={clearGroup}><X size={16}/></button></header>
@@ -217,7 +217,7 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
       })}</div></details>
     </section> : null}
     {error ? <p role='alert' className='cx-error'>{error}</p> : null}
-    <div className='cx-object-list' aria-busy={loading}>{loading ? <p role='status'>Загружаем объекты…</p> : visible.length ? visible.map(object => <button type='button' key={object.id} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => openObjectPassport(passportTarget(object, kind, volume))}><Building2 size={17}/><span><strong>{object.address}</strong><small>{KINDS[object.kind]}</small>{object.insufficient || object.delta !== 0 ? <small>{object.insufficient ? 'Предварительное время' : deltaLabel(object.delta)}</small> : null}{objectTimeExplanation(object.estimate) ? <small className='cx-time-explanation'>{objectTimeExplanation(object.estimate)}</small> : null}</span><b>{object.total} мин</b></button>) : <p className='cx-empty'>Объектов не найдено. Измените фильтры или найдите адрес.</p>}</div>
+    <div className='cx-object-list' aria-busy={loading}>{loading ? <p role='status'>Загружаем объекты…</p> : visible.length ? visible.map(object => <button type='button' key={object.id} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => openObjectPassport(passportTarget(object, kind, volume))}><Building2 size={17}/><span><strong>{object.address}</strong><small>{KINDS[object.kind]}</small>{object.insufficient || object.delta !== 0 ? <small>{object.insufficient ? 'Предварительное время' : deltaLabel(object.delta)}</small> : null}{objectTimeExplanation(object.estimate) ? <small className='cx-time-explanation'>{objectTimeExplanation(object.estimate)}</small> : null}</span><b>{object.total} мин</b></button>) : <p className='cx-empty'>{view === 'access' ? 'Подтверждённых задержек доступа по выбранным фильтрам нет.' : 'Объектов не найдено. Измените фильтры или найдите адрес.'}</p>}</div>
     </div>
   </section>, panelHost);
 }
@@ -316,7 +316,7 @@ export function ComplexityPassport({ date, onOpen, actor = 'Диспетчер' 
   return <aside className='cx-passport' role='dialog' aria-label='Паспорт объекта'><header><Building2 size={23}/><div><small>ОБЪЕКТ</small><h2>{data?.object.address || target.address || 'Объект'}</h2></div><button type='button' onClick={() => setTarget(null)} aria-label='Закрыть паспорт объекта'><X size={20}/></button></header><nav aria-label='Разделы паспорта'>{[['overview', 'Обзор'], ['visits', 'Визиты'], ['conditions', 'Особенности']].map(([key, label]) => <button type='button' key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>)}</nav><div className='cx-passport-body' ref={bodyRef}><label className='cx-filter-label'>Вид работ<BusinessSelect ariaLabel='Вид работ в паспорте' value={kind} onChange={value => { setKind(value); setData(null); setDetailsLoaded(false); }} options={options(KINDS)}/></label>{error ? <div className='cx-error' role='alert'>{error}<button type='button' className='cx-action' onClick={() => setVersion(value => value + 1)}>Повторить загрузку</button></div> : null}{notice ? <p role='status' className='cx-saved'>{notice}</p> : null}{data ? <>
     {tab === 'overview' ? <>
       <p className='cx-context-label'>{data.fromOrder ? 'Время в сохранённой заявке' : target.passportVolume === 'standard' ? `Стандартный объём · ${standardVolumeLabel(kind)}` : (detailsLoaded && !data.object.examples?.some(example => example.id === data.example?.id) ? 'Стандартный визит' : 'Объём работ по заявке')}{!data.fromOrder && provisional ? ' · предварительная оценка' : ''}</p>
-      <DurationBreakdown snapshot={data.estimate} compact expanded={calculationOpen}/>
+      <DurationBreakdown snapshot={data.estimate} conditions={data.conditions} compact expanded={calculationOpen}/>
       {Array.isArray(data.object.coords) ? <button type='button' className='cx-action cx-locate' onClick={() => window.dispatchEvent(new CustomEvent('beego:focus-object', { detail: { coords: data.object.coords } }))}><MapPin size={16}/>Показать на карте<ChevronRight size={16}/></button> : null}
       <div className='cx-overview-stats'><button type='button' onClick={() => setTab('visits')}><strong>{detailsLoaded ? kindVisits.length : data.object.visitCount ?? '—'}</strong><span>Визитов этого типа</span><ChevronRight size={15}/></button><button type='button' onClick={() => setTab('conditions')}><strong>{detailsLoaded ? activeConditions.length : '—'}</strong><span>Действующих особенностей</span><ChevronRight size={15}/></button></div>
       {detailsLoaded ? <><h3>Что учесть при визите</h3>{activeConditions.length ? <ul className='cx-condition-summary'>{activeConditions.map(condition => <li key={condition.id}><b>{condition.finding || REASONS[condition.reason]}{data.estimate.histories.find(item => item.conditionId === condition.id)?.minutes ? ` · ${data.estimate.histories.find(item => item.conditionId === condition.id).minutes > 0 ? '+' : ''}${data.estimate.histories.find(item => item.conditionId === condition.id).minutes} мин` : ''}</b><span>{location(condition)}{condition.validUntil ? ` · до ${dateLabel(condition.validUntil)}` : ''}</span>{condition.preparation ? <strong className='cx-preparation'>{condition.preparation}</strong> : null}<small>{condition.actor || 'Оператор'} · {dateLabel(condition.knownAt)}</small></li>)}</ul> : <p className='cx-muted'>Особенности обслуживания не отмечены.</p>}{kindVisits[0] ? <button type='button' className='cx-action' onClick={() => setTab('visits')}><span>Последний визит · {dateLabel(kindVisits[0].endedAt)}<strong>План {kindVisits[0].forecast?.total ?? '—'} мин · {Number.isFinite(kindVisits[0].total) ? `факт ${kindVisits[0].total} мин` : 'время не измерено'}</strong></span><ChevronRight size={16}/></button> : null}{typeof target === 'object' && target.durationSnapshot ? <details><summary>Время в сохранённой заявке</summary><DurationBreakdown snapshot={target.durationSnapshot}/></details> : null}<details><summary>Оборудование и точки обслуживания · {data.entities.length}</summary><ul className='cx-entities'>{data.entities.map(entity => <li key={entity.id}><b>{entity.label}</b>{entity.location ? <small>{entity.location}</small> : null}</li>)}</ul></details></> : !error ? <p role='status' className='cx-muted'>Загружаем историю визитов…</p> : null}
@@ -364,6 +364,7 @@ export function DurationAccuracy({ date, zone = '', regionId = 'moscow' }) {
   return <section className='analytics-panel cx-accuracy'>
     <div className='cx-section-heading'><Clock3 size={20}/><h3>Точность времени работы</h3></div>
     {error ? <p role='alert'>{error}</p> : data ? <>
+      {data.impactWeek ? <article className='cx-sla-impact' aria-label='Предотвращено опозданий'><div className='cx-impact-heading'><span className='cx-impact-icon'><Clock3 size={21}/></span><div><h4>Предотвращено опозданий</h4><span>{data.impactWeek.startDate.split('-').reverse().join('.')} — {data.impactWeek.endDate.split('-').reverse().join('.')}{data.impactWeek.synthetic ? ' · Учебная история' : ''}</span></div><span className='cx-impact-state'>Нужно сравнение планов</span></div><div className='cx-impact-body'><strong>—</strong><p>{data.impactWeek.comparedVisits ? <>Визитов с увеличенным временем: <b>{data.impactWeek.extendedVisits}</b>. В прогнозах учтено <b>{data.impactWeek.additionalMinutes} мин сверх норматива</b>.</> : 'За неделю нет завершённых визитов с полным измерением и сохранённым прогнозом.'}</p></div><details><summary>Как считаются предотвращённые опоздания</summary><p>Нужны два независимо проверенных расписания на одних заявках и дорогах: с обычным нормативом и с адаптивным временем. Сравниваются приезды позже конца клиентского окна. Дополнительные минуты сами по себе не доказывают предотвращённое опоздание.</p>{data.impactWeek.synthetic ? <p>Текущая история — учебная симуляция.</p> : null}</details></article> : null}
       <div className='cx-metrics'><article><small>Средняя ошибка прогноза</small><b>{number(data.mae)} мин</b><span>По одному нормативу: {number(data.fixedMae)} мин</span></article><article><small>Проверено по истории</small><b>{data.count} визитов</b><span>Завершено всего: {data.total}</span></article><article><small>Отклонения по истории</small><div className='cx-direction-stat'><b>{data.underestimated} визитов дольше</b><span>{data.underestimated ? `В среднем +${number(data.underMinutes)} мин` : 'Превышений нет'}</span></div><div className='cx-direction-stat'><b>{data.overestimated} визитов быстрее</b><span>{data.overestimated ? `В среднем −${number(data.overMinutes)} мин` : 'Сокращений нет'}</span></div></article></div>
       <div className='cx-table-wrap'><table><caption>Средняя ошибка прогноза, мин</caption><thead><tr><th>Вид работ</th><th>Визитов</th><th>С учётом объекта</th><th>По нормативу</th></tr></thead><tbody>{data.byKind.map(item => <tr key={item.kind}><td>{KINDS[item.kind]}</td><td>{item.count}</td><td>{number(item.mae)}</td><td>{number(item.fixedMae)}</td></tr>)}</tbody></table></div>
       <details><summary>Данные проверки</summary><p>Период: {data.temporalSplit ? `с ${data.temporalSplit.split('-').reverse().join('.')}` : 'вся доступная история'}. Визитов с измеренным временем работы: {data.eligible}.</p><p className='cx-muted'>{data.limitations}</p></details>

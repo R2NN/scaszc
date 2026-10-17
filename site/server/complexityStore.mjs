@@ -1,3 +1,4 @@
+import { durationImpactWeek } from '../src/durationPresentation.js';
 import { addressIdentity, assertServiceLocation } from '../src/serviceLocation.js';
 import { randomUUID } from 'node:crypto';
 import { calculateDuration, conditionEvidence, matchesConditionWork, DEFAULT_MODEL, digest, normalizeFactors, REASONS, validateModel, workKind } from './durationModel.mjs';
@@ -288,6 +289,6 @@ export class ComplexityStore {
         overMinutes: mean(shorter, visit => visit.forecast.technical - visit.actualTechnical),
       };
     };
-    return { ...stats(holdout), eligible: eligible.length, total: all.length, coverage: all.length ? eligible.length / all.length : null, trainingCount: eligible.length - holdout.length, byKind: Object.keys(DEFAULT_MODEL.norms).map(kind => ({ kind, ...stats(holdout.filter(v => v.kind === kind)) })), temporalSplit: holdout.filter(visit => visit.partition === 'holdout').map(visit => visit.endedAt.slice(0, 10)).sort()[0] || null, measure: 'Технические минуты; одинаковые пригодные факты, прогноз до визита', limitations: 'Синтетическая независимая симуляция, а не доказательство качества на производственных данных.' };
+    return { ...stats(holdout), impactWeek: durationImpactWeek(all, at), eligible: eligible.length, total: all.length, coverage: all.length ? eligible.length / all.length : null, trainingCount: eligible.length - holdout.length, byKind: Object.keys(DEFAULT_MODEL.norms).map(kind => ({ kind, ...stats(holdout.filter(v => v.kind === kind)) })), temporalSplit: holdout.filter(visit => visit.partition === 'holdout').map(visit => visit.endedAt.slice(0, 10)).sort()[0] || null, measure: 'Технические минуты; одинаковые пригодные факты, прогноз до визита', limitations: 'Синтетическая независимая симуляция, а не доказательство качества на производственных данных.' };
   }
 }
