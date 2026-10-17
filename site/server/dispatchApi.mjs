@@ -15,7 +15,7 @@ export function createDispatchApi(store, options) {
         const session = JSON.parse(row.payload);
         if (!session.clock.playing) continue;
         const minute = Math.min(1439, session.clock.minute + (Date.now()-session.clock.anchorAt)/60000*session.clock.speed);
-        await handle(new Request(`http://localhost/api/dispatch/shifts/${row.shift_id}/clock`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...session.clock,minute})}));
+        await handle(new Request(`http://localhost/api/dispatch/shifts/${row.shift_id}/clock`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...session.clock,minute,serverTick:true})}));
       }
       await dispatch.tick();
     } catch (error) {
@@ -69,7 +69,10 @@ export function createDispatchApi(store, options) {
         if (action === 'clock') {
           const row = store.db.prepare('SELECT id,payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(shiftId);
           if (!row) return json({ incident: null });
-          const session = JSON.parse(row.payload), minute = Number(input.minute);
+          const session = JSON.parse(row.payload), serverTick = input.serverTick === true;
+          const minute = serverTick
+            ? Math.min(1439, session.clock.minute + (Date.now() - session.clock.anchorAt) / 60000 * (Number(session.clock.speed) || 60))
+            : Number(input.minute);
           if (!Number.isFinite(minute) || minute < 0 || minute > 1439) throw new Error('Некорректное время смены');
           if (!session.fired && session.lastMinute < 677 && minute >= 677) {
             session.preIncidentSpeed = Number(session.clock.speed) || 60;
@@ -84,9 +87,10 @@ export function createDispatchApi(store, options) {
           session.lastMinute = Math.max(session.lastMinute, minute);
           const pending = session.fired && dispatch.all(shiftId).some(item => !['ACCEPTED', 'CANCELLED'].includes(item.status));
           const resumeSpeed = session.preIncidentSpeed;
-          const speed = pending ? 1 : resumeSpeed || Number(input.speed) || 60;
+          const speed = pending ? 1 : resumeSpeed || (serverTick ? Number(session.clock.speed) : Number(input.speed)) || 60;
           if (!pending && resumeSpeed) session.preIncidentSpeed = null;
-          session.clock = { minute, playing: Boolean(input.playing) && minute < 1439, speed, anchorAt: Date.now() };
+          const playing = serverTick ? Boolean(session.clock.playing) : Boolean(input.playing);
+          session.clock = { minute, playing: playing && minute < 1439, speed, anchorAt: Date.now() };
           store.db.prepare('UPDATE dispatch_sessions SET payload=? WHERE id=?').run(JSON.stringify(session), row.id);
           return json({ ...session, incidents: dispatch.all(shiftId) });
         }
