@@ -13,6 +13,8 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## Durable product direction
 
+- Selecting an address in the object-time list smoothly zooms to that real building, highlights it and opens its passport. Place the house in the visible map corridor between drawers; when drawers overlap on a narrow screen, close only the list while preserving its filters and reopen action. Passive passport drill-downs from analytics/history still preserve the camera.
+
 - The object-time panel and selected-group summary include a faster-than-norm filter with an exact count, alongside longer-time and insufficient-history filters. Apply the same ten-minute category threshold and selected filters to both map and address list.
 
 - Passport drill-down preserves the originating workspace and its unsaved visit input. History links carry the actual order work kind. Visit selection shows searchable number, address, work, engineer and saved status; saving start keeps the visit selected. Distinguish explicit zero stages from unknown measurements and show missing measurements after completion. Order entry uses one address/object search, inherits the registered territory, fills only unique compatible infrastructure links, and warns on territory conflicts. Preview and save share duration inputs and work classification including priority; stale previews cannot be submitted. Map address rows distinguish additional scope, history and access minutes.

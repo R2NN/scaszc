@@ -12,6 +12,7 @@ import { objectTimeExplanation, conditionVisitChoices, filterObjectGroup, object
 import { mountObjectTimeClusters } from './objectTimeClusters.js';
 import { durationFormula } from './durationPresentation.js';
 import { fitObjectTimeLayer, hideObjectTimeLayers, objectTimeGeoJSON, syncObjectTimeLayers } from './objectTimeLayers.js';
+import { focusObjectTimeMap } from './objectTimeFocus.js';
 import { WorkspaceFilters } from './WorkspaceFilters.jsx';
 import { DurationErrorChart, DurationImpact } from './DurationCharts.jsx';
 import { EngineerFeedback } from './EngineerFeedback.jsx';
@@ -97,7 +98,7 @@ export function DurationFields({ form, onChange, date }) {
   </div>{error ? <p role='alert' className='cx-error'>{error}</p> : preview && form.durationPreviewKey === JSON.stringify(input) ? <DurationBreakdown snapshot={preview} conditions={previewConditions} compact/> : <p>Считаем длительность…</p>}<details><summary>Изменить время вручную</summary><label>Длительность визита, мин<input type='number' min='1' max='10080' value={form.durationOverride?.minutes ?? ''} onChange={event => onChange('durationOverride', event.target.value ? { minutes: Number(event.target.value), reason: form.durationOverride?.reason || '' } : undefined)}/></label><label>Причина изменения<input value={form.durationOverride?.reason || ''} onChange={event => onChange('durationOverride', { minutes: form.durationOverride?.minutes || Number(form.duration), reason: event.target.value })}/></label></details></section>;
 }
 
-/** Group objects only in the visit-time mode; opening a passport preserves the camera. */
+/** Group objects in visit-time mode and locate a building when its address is selected. */
 export function ComplexityMapLayer({ map, enabled, view = 'markers', onLayerReady, date, territory = '', territoryControl, regionId = 'moscow', routeOrderIds = [], panelOpen = true, onClosePanel }) {
   const [kind, setKind] = useState('all');
   const [volume, setVolume] = useState('order');
@@ -113,18 +114,39 @@ export function ComplexityMapLayer({ map, enabled, view = 'markers', onLayerRead
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [selectedObject, setSelectedObject] = useState(null);
+  const selectedMarker = useRef(null);
+  const closePanelRef = useRef(onClosePanel); closePanelRef.current = onClosePanel;
   const panelPresence = useDropdownPresence(enabled && panelOpen, 280);
   const panelMotionClass = panelPresence.visible ? 'is-open' : enabled && panelOpen ? 'is-opening' : 'is-closing';
   const panelHost = map?.getContainer().closest('.workspace-grid');
   useEffect(() => {
     if (!map) return;
+    let frame;
     const focus = event => {
-      const coords = event.detail?.coords;
-      if (Array.isArray(coords) && coords.length === 2 && coords.every(Number.isFinite)) map.easeTo({ center: [coords[1], coords[0]], zoom: Math.max(map.getZoom(), 14), duration: 500 });
+      const object = event.detail;
+      cancelAnimationFrame(frame);
+      // Wait for the passport to mount so the house is placed beside it.
+      frame = requestAnimationFrame(() => {
+        if (focusObjectTimeMap(map, object?.coords, { onClosePanel: enabled ? closePanelRef.current : undefined }) && enabled) setSelectedObject(object);
+      });
     };
     window.addEventListener('beego:focus-object', focus);
-    return () => window.removeEventListener('beego:focus-object', focus);
-  }, [map]);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('beego:focus-object', focus); };
+  }, [map, enabled]);
+  useEffect(() => {
+    if (!map || !enabled || !selectedObject) { selectedMarker.current?.remove(); selectedMarker.current = null; return; }
+    if (!selectedMarker.current) {
+      const element = document.createElement('div');
+      element.className = 'cx-selected-object-marker';
+      element.setAttribute('role', 'img');
+      selectedMarker.current = new Marker({ element, anchor: 'center' });
+    }
+    const element = selectedMarker.current.getElement();
+    element.setAttribute('aria-label', `Выбранный дом${selectedObject.address ? `: ${selectedObject.address}` : ''}`);
+    selectedMarker.current.setLngLat([selectedObject.coords[1], selectedObject.coords[0]]).addTo(map);
+  }, [map, enabled, selectedObject]);
+  useEffect(() => () => { selectedMarker.current?.remove(); selectedMarker.current = null; }, [map]);
   useEffect(() => { const refresh = () => setVersion(value => value + 1); window.addEventListener('beego:complexity-changed', refresh); return () => window.removeEventListener('beego:complexity-changed', refresh); }, []);
   const zone = territory.split(':').slice(1).join(':') || territory;
   useEffect(() => {
@@ -230,7 +252,7 @@ export function ComplexityMapLayer({ map, enabled, view = 'markers', onLayerRead
       })}</div></details>
     </section> : null}
     {error ? <p role='alert' className='cx-error'>{error}</p> : null}
-    <div className='cx-object-list' aria-busy={loading}>{loading ? <p role='status'>Загружаем объекты…</p> : visible.length ? visible.map(object => <button type='button' className='cx-object-row' key={object.id} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => openObjectPassport(passportTarget(object, kind, volume))}>
+    <div className='cx-object-list' aria-busy={loading}>{loading ? <p role='status'>Загружаем объекты…</p> : visible.length ? visible.map(object => <button type='button' className='cx-object-row' key={object.id} aria-current={selectedObject?.id === object.id ? 'true' : undefined} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => { openObjectPassport(passportTarget(object, kind, volume)); window.dispatchEvent(new CustomEvent('beego:focus-object', { detail: object })); }}>
       <span className='person-avatar cx-object-avatar'><Building2 size={21}/></span>
       <span className='cx-object-copy'><strong>{object.address}</strong><span className='engineer-list-skills'><small>{KINDS[object.kind]}</small></span>{objectTimeExplanation(object.estimate) ? <span className='cx-time-explanation'>{objectTimeExplanation(object.estimate)}</span> : null}{object.insufficient ? <span className='cx-row-status'>Мало истории</span> : null}</span>
       <span className='cx-object-duration'><b>{object.total} <small>мин</small></b>{object.delta !== 0 && Number.isFinite(object.delta) ? <span className={`cx-row-delta ${object.delta > 0 ? 'is-increased' : 'is-reduced'}`} title={deltaLabel(object.delta)}>{object.delta > 0 ? '+' : '−'}{Math.abs(object.delta)} мин</span> : null}<ChevronRight size={17}/></span>
@@ -335,7 +357,7 @@ export function ComplexityPassport({ date, onOpen, actor = 'Диспетчер' 
       <p className='cx-context-label'>{data.fromOrder ? 'Время в сохранённой заявке' : target.passportVolume === 'standard' ? `Стандартный объём · ${standardVolumeLabel(kind)}` : (detailsLoaded && !data.object.examples?.some(example => example.id === data.example?.id) ? 'Стандартный визит' : 'Объём работ по заявке')}{!data.fromOrder && provisional ? ' · предварительная оценка' : ''}</p>
       <DurationBreakdown snapshot={data.estimate} conditions={data.conditions} compact expanded={calculationOpen}/>
       {detailsLoaded ? <EngineerFeedback data={data} kind={kind} onChanged={() => { setVersion(value => value + 1); changed(); }}/> : null}
-      {Array.isArray(data.object.coords) ? <button type='button' className='cx-action cx-locate' onClick={() => window.dispatchEvent(new CustomEvent('beego:focus-object', { detail: { coords: data.object.coords } }))}><MapPin size={16}/>Показать на карте<ChevronRight size={16}/></button> : null}
+      {Array.isArray(data.object.coords) ? <button type='button' className='cx-action cx-locate' onClick={() => window.dispatchEvent(new CustomEvent('beego:focus-object', { detail: data.object }))}><MapPin size={16}/>Показать на карте<ChevronRight size={16}/></button> : null}
       <div className='cx-overview-stats'><button type='button' onClick={() => setTab('visits')}><strong>{detailsLoaded ? kindVisits.length : data.object.visitCount ?? '—'}</strong><span>Визитов этого типа</span><ChevronRight size={15}/></button><button type='button' onClick={() => setTab('conditions')}><strong>{detailsLoaded ? activeConditions.length : '—'}</strong><span>Действующих особенностей</span><ChevronRight size={15}/></button></div>
       {detailsLoaded ? <><h3>Что учесть при визите</h3>{activeConditions.length ? <ul className='cx-condition-summary'>{activeConditions.map(condition => <li key={condition.id}><b>{condition.finding || REASONS[condition.reason]}{data.estimate.histories.find(item => item.conditionId === condition.id)?.minutes ? ` · ${data.estimate.histories.find(item => item.conditionId === condition.id).minutes > 0 ? '+' : ''}${data.estimate.histories.find(item => item.conditionId === condition.id).minutes} мин` : ''}</b><span>{location(condition)}{condition.validUntil ? ` · до ${dateLabel(condition.validUntil)}` : ''}</span>{condition.preparation ? <strong className='cx-preparation'>{condition.preparation}</strong> : null}<small>{condition.actor || 'Оператор'} · {dateLabel(condition.knownAt)}</small></li>)}</ul> : <p className='cx-muted'>Особенности обслуживания не отмечены.</p>}{kindVisits[0] ? <button type='button' className='cx-action' onClick={() => setTab('visits')}><span>Последний визит · {dateLabel(kindVisits[0].endedAt)}<strong>План {kindVisits[0].forecast?.total ?? '—'} мин · {Number.isFinite(kindVisits[0].total) ? `факт ${kindVisits[0].total} мин` : 'время не измерено'}</strong></span><ChevronRight size={16}/></button> : null}{typeof target === 'object' && target.durationSnapshot ? <details><summary>Время в сохранённой заявке</summary><DurationBreakdown snapshot={target.durationSnapshot}/></details> : null}<details><summary>Оборудование и точки обслуживания · {data.entities.length}</summary><ul className='cx-entities'>{data.entities.map(entity => <li key={entity.id}><b>{entity.label}</b>{entity.location ? <small>{entity.location}</small> : null}</li>)}</ul></details></> : !error ? <p role='status' className='cx-muted'>Загружаем историю визитов…</p> : null}
     </> : null}
