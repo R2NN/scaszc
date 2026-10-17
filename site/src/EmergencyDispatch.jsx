@@ -102,7 +102,10 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
       const value = await api(`shifts/${current.id}/clock`, shiftClock.getSnapshot());
       setIncidents(value.incidents || []);
       const snapshot = shiftClock.getSnapshot();
-      const reanchor = !snapshot.playing || !value.clock.playing || Math.abs(Number(value.clock.minute) - Number(snapshot.minute)) > 2;
+      // While playing, the animation clock is the smooth visual source. The
+      // server response can describe the request's older minute, so snapping
+      // to it would make the timeline jump backwards on every slow response.
+      const reanchor = !snapshot.playing || !value.clock.playing;
       shiftClock.set(reanchor
         ? { minute: value.clock.minute, playing: value.clock.playing, speed: value.clock.speed }
         : { speed: value.clock.speed });
