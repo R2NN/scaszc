@@ -11,6 +11,10 @@ const decode = row => row ? JSON.parse(row.payload) : null;
 export const DEFAULT_DISPATCH_POLICY = Object.freeze({ enabled: true, waitSeconds: 300, choice: 'COVERAGE_STAFF_ETA_DISTANCE_V1' });
 const terminal = item => ['ACCEPTED', 'CANCELLED'].includes(item.status);
 const index = plan => new Map(plan.routes.flatMap(route => route.assignments.map(visit => [String(visit.orderId), { ...visit, engineerId: route.engineerId }])));
+const orderCandidates = candidates => {
+  const intercepts = candidates.filter(item => item.kind === 'Перехват в пути').sort((a, b) => a.responseMinutes - b.responseMinutes);
+  return [...intercepts, ...candidates.filter(item => item.kind !== 'Перехват в пути')];
+};
 
 /** Durable incident queue. Server wall time controls deadlines, scenario time controls travel. */
 export class EmergencyDispatch {
@@ -120,7 +124,7 @@ export class EmergencyDispatch {
         const {dispatchCandidates:partial,...summary}=progress;
         fresh.progress=summary;
         if (partial?.length && this.fingerprint(this.store.get(item.shiftId))===fingerprint && this.currentMinute(item)===minute) {
-          fresh.candidates=partial.map(candidate=>this.describe(shift,item,candidate,states,fingerprint,time));
+          fresh.candidates=orderCandidates(partial.map(candidate=>this.describe(shift,item,candidate,states,fingerprint,time)));
           fresh.recommendedId=fresh.candidates[0].id;
           if(fresh.status==='SEARCHING')this.notification(fresh,'Решения аварии готовы',`${fresh.candidates.length} проверенных вариантов. Поиск продолжается.`);
           fresh.status='WAITING';
@@ -135,7 +139,7 @@ export class EmergencyDispatch {
       }
       // Preserve reads and notices recorded while the search was running.
       item.notifications = fresh.notifications;
-      const candidates = (result.dispatchCandidates || []).map(candidate => this.describe(shift, item, candidate, states, fingerprint, time));
+      const candidates = orderCandidates((result.dispatchCandidates || []).map(candidate => this.describe(shift, item, candidate, states, fingerprint, time)));
       if (!candidates.length) throw new Error('Независимо проверенный вариант не найден');
       item.candidates = candidates; item.search = result.dispatchSearch ? { ...result.dispatchSearch, rejected:result.dispatchSearch.rejected.map(entry => ({ ...entry, engineerName:shift.team.find(e => String(e.sourceId || e.id).split(':').at(-1) === entry.engineerId)?.name || entry.engineerId, reason:/unverified|ROUTING|маршрут/i.test(entry.reason) ? 'Не удалось подтвердить дорогу. Точный вариант не предлагается.' : /FROZEN|invalid/i.test(entry.reason) ? 'Не найден план, сохраняющий начатые работы и прямой выезд на аварию.' : /STATIC|NO_EXACT|TIME_WINDOW|SEARCH_BUDGET/i.test(entry.reason) ? 'В пределах поиска не найдено назначение с текущими окнами и составом.' : entry.reason })) } : null; item.status = 'WAITING'; item.version += 1;
       item.searchFinishedAt = this.now(); item.recommendedId = candidates[0].id;
