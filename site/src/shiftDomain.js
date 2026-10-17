@@ -11,6 +11,7 @@ export const EVENT_TYPES = Object.freeze({
   SHIFT_BOUNDARY_CHANGED: 'SHIFT_BOUNDARY_CHANGED',
   SHIFT_EXTENDED: 'SHIFT_EXTENDED',
   CLIENT_WINDOW_SHIFT: 'CLIENT_WINDOW_SHIFT',
+  EMERGENCY_DIVERSION: 'EMERGENCY_DIVERSION',
 });
 
 export const minuteOf = value => {
@@ -24,7 +25,7 @@ export const minuteOf = value => {
 export const timeOf = minutes => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(Math.floor(minutes % 60)).padStart(2, '0')}`;
 
 export function normalizeDataAdditionEvent(shift, event) {
-  const newOrder = event?.type === EVENT_TYPES.NEW_ORDER && event.order?.id;
+  const newOrder = [EVENT_TYPES.NEW_ORDER, EVENT_TYPES.EMERGENCY_DIVERSION].includes(event?.type) && event.order?.id;
   const newCrew = event?.type === EVENT_TYPES.CAPACITY_ADDED && event.engineer?.id;
   if (!newOrder && !newCrew) return event;
   const manualOrder = newOrder && event.order.status === 'Черновик';
@@ -56,11 +57,20 @@ export function eventModel(shift, event) {
     if (completed.has(String(order.id))) throw new Error('Выполненную заявку нельзя отменить.');
     if ((shift.facts || []).some(item => String(item.orderId) === String(order.id) && item.status === 'started')) throw new Error('Начатый визит нельзя отменить без фактической отметки о невыполнении.');
     if (event.type === EVENT_TYPES.ORDER_CANCELLED) nextOrders = orders.filter(item => String(item.id) !== String(order.id));
-  } else if (event.type === EVENT_TYPES.NEW_ORDER) {
+  } else if (event.type === EVENT_TYPES.NEW_ORDER || event.type === EVENT_TYPES.EMERGENCY_DIVERSION) {
     if (!event.order?.id || orders.some(item => String(item.id) === String(event.order.id))) throw new Error('Новой заявке нужен уникальный ID.');
     if (!Array.isArray(event.order.coords) || event.order.coords.length !== 2 || !event.order.coords.every(Number.isFinite)) throw new Error('Для новой заявки нужна подтверждённая точка.');
+    if (event.type === EVENT_TYPES.EMERGENCY_DIVERSION) {
+      const diversionEngineer = team.find(item => String(item.id) === String(event.engineerId));
+      if (!diversionEngineer) throw new Error('Для аварийного отклонения выберите инженера.');
+      if (!['travelling', 'working'].includes(event.diversionPhase)) throw new Error('Укажите фазу текущего визита: в пути или на объекте.');
+      if (!Array.isArray(event.currentCoords) || event.currentCoords.length !== 2 || !event.currentCoords.every(Number.isFinite)) throw new Error('Для аварийного отклонения нужна текущая точка инженера.');
+      if (event.diversionPhase === 'travelling' && !event.currentOrderId) throw new Error('Для инженера в пути нужна текущая заявка.');
+    }
     nextOrders = [...orders, event.order.status === 'Черновик' ? { ...event.order, status: 'Ожидается' } : event.order];
-    planningEvent = { ...event, orderId: event.order.id };
+    planningEvent = event.type === EVENT_TYPES.EMERGENCY_DIVERSION
+      ? { ...event, type: EVENT_TYPES.NEW_ORDER, orderId: event.order.id, diversion: { engineerId: event.engineerId, phase: event.diversionPhase, currentOrderId: event.currentOrderId || null, currentCoords: event.currentCoords } }
+      : { ...event, orderId: event.order.id };
   } else if (event.type === EVENT_TYPES.ENGINEER_UNAVAILABLE) {
     if (!engineer) throw new Error('Бригада не найдена.');
     nextTeam = team.map(item => String(item.id) === String(engineer.id) ? { ...item, status: 'Недоступен', unavailableFrom: event.time } : item);

@@ -152,6 +152,34 @@ class ReplanningTests(unittest.TestCase):
             sum(option.selected for option in result.candidate_evaluations['U']), 1
         )
 
+    def test_emergency_diversion_restarts_from_current_point_when_engineer_is_travelling(self) -> None:
+        self.engineers['E1'] = replace(self.engineers['E1'], skills=frozenset({'INSTALL', 'EMERGENCY'}))
+        self.jobs['U'] = replace(
+            self.job('U', 'Z1', self.at(9, 30), priority=Priority.URGENT, location='L2'),
+            required_skill='EMERGENCY', window_start=self.at(9, 30), window_end=self.at(17),
+        )
+        source = ProposedPlan(self.t0, (
+            EngineerPlan('E1', (
+                self.visit('A', self.at(9), service_start=self.at(10)),
+                self.visit('B', self.at(11)),
+            )),
+        ), ())
+        event = Event(
+            1, 'EVT-DIVERSION', self.at(9, 30), EventType.NEW_URGENT_JOB, 'U', 'Z1', None,
+            {'diversion': {
+                'engineer_id': 'E1', 'phase': 'travelling', 'current_order_id': 'A',
+                'current_location_id': 'L2',
+            }},
+        )
+        dataset = self.make_dataset((event,))
+        oracle = _Oracle()
+        result = replan_after_event(dataset, ReplanningState(source), event, oracle, forced_engineer_by_job={'U': 'E1'})
+        self.assertEqual(result.status, ReplanningStatus.EXACT_VALID)
+        route = next(route for route in result.state.plan.engineer_plans if route.engineer_id == 'E1')
+        self.assertEqual([visit.job_id for visit in route.visits], ['U', 'A', 'B'])
+        self.assertEqual(route.visits[0].job_id, 'U')
+        self.assertTrue(any(query.origin.location_id == 'L2' for query in oracle.calls))
+
     def test_new_normal_job_rebuilds_two_routes_without_losing_existing_jobs(self) -> None:
         self.engineers['E1'] = replace(
             self.engineers['E1'], max_jobs=2, skills=frozenset({'INSTALL', 'SPECIAL'})

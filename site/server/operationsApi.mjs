@@ -7,6 +7,7 @@ import { askShiftAi } from './aiStudio.mjs';
 import { seedBaseShift } from './seedBaseShift.mjs';
 import { analyticsHistoryDates, baseHistoryDates, ensureBaseHistoricalShift } from './baseHistoryStore.mjs';
 import { acquirePlanningSlot, planningBusyResponse } from './planningSlot.mjs';
+import { createRatingApi } from './ratingApi.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const bodyOf = async request => request.json().catch(() => ({}));
@@ -14,6 +15,7 @@ const errorStatus = error => /устарел|уже изменился/.test(err
 
 export function createOperationsApi({ store = new ShiftStore(), routing = exactShiftReplan, routingOptions = {}, ai = askShiftAi, aiOptions = {}, seedFromBase = false } = {}) {
   const seedPromise = seedFromBase ? seedBaseShift(store) : Promise.resolve();
+  const ratingApi = createRatingApi(store);
   const aiCalls = new Map();
   const aiLimit = Math.max(1, Math.min(100, Number(process.env.BEEGO_AI_MAX_PER_HOUR || 10)));
   const monthlyTokenLimit = Math.max(6000, Number(process.env.BEEGO_AI_MONTHLY_TOKEN_BUDGET || 240000));
@@ -40,6 +42,7 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
   };
   async function handle(request) {
     await seedPromise;
+    if (new URL(request.url).pathname.startsWith('/api/ratings/')) return ratingApi(request);
     const url = new URL(request.url);
     if (url.pathname === '/api/base-data/status' && request.method === 'GET') {
       const [dates, operationalDates] = await Promise.all([analyticsHistoryDates(), baseHistoryDates()]);
@@ -89,7 +92,7 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
       }
       if (action === 'preview' && request.method === 'GET') {
         const preview = store.latestPreview(shiftId);
-        return preview ? json(preview) : json({ error: 'Черновик не найден.' }, 404);
+        return preview ? json(preview) : url.searchParams.get('optional') === '1' ? json(null) : json({ error: 'Черновик не найден.' }, 404);
       }
       if (action === 'preview' && request.method === 'DELETE') {
         const input = await bodyOf(request);

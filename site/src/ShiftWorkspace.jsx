@@ -31,7 +31,15 @@ import { TimePicker } from "./TimePicker.jsx";
 import { WorkspaceFilters } from "./WorkspaceFilters.jsx";
 import { filterLabel, matchesAnySelection, matchesSearch, orderSearchValues, orderWorkValues } from './filterPresentation.js';
 import { profileAvatarColor } from "./profileAvatar.js";
+import { ratingName } from './RatingWorkspace.jsx';
+import { portraitForEngineer } from './engineerPortraits.js';
 import "./shift-workspace.css";
+
+const shiftEngineerName = engineer => ratingName(engineer || {});
+function ShiftEngineerAvatar({ engineer, name }) {
+  const portrait = portraitForEngineer(engineer?.id);
+  return <span className={`person-avatar ${portrait ? 'has-portrait' : ''}`}>{portrait ? <img src={portrait} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} /> : null}<span>{String(name || shiftEngineerName(engineer)).split(/\s+/).map(part => part[0]).join('').slice(0, 2)}</span></span>;
+}
 
 const filterTokens = value => (Array.isArray(value) ? value : String(value || '').split(/\s*[|,;]\s*/)).map(item => String(item).trim()).filter(Boolean);
 const ShiftTransportIcon=({type})=>{const normalized=String(type||'').toLocaleLowerCase('ru-RU');if(/велосип|bike|bicycle/.test(normalized))return <Bike aria-hidden="true"/>;if(/обществен|автобус|public|bus|transit/.test(normalized))return <Bus aria-hidden="true"/>;if(/пеш|walk|foot/.test(normalized))return <Footprints aria-hidden="true"/>;return <Car aria-hidden="true"/>};
@@ -55,6 +63,7 @@ const EVENT_LABELS = {
   [EVENT_TYPES.SHIFT_BOUNDARY_CHANGED]: "Границы смены",
   [EVENT_TYPES.SHIFT_EXTENDED]: "Продлить смену",
   [EVENT_TYPES.CLIENT_WINDOW_SHIFT]: "Новое окно клиента",
+  [EVENT_TYPES.EMERGENCY_DIVERSION]: "Аварийный выезд",
   PLAN_REBUILT: "Исходный план пересчитан",
   PLAN_ROLLBACK: "Восстановлен план",
 };
@@ -207,7 +216,7 @@ export function ShiftPlaybackBar({ compact = false, shift = null, onSelectOrder,
   const frame = point?.plan ? playbackFrame(point, clock.minute, clock.mode) : null;
   const selectedEngineer = clock.selectedEngineerId ? point?.team?.find(item => String(item.id) === String(clock.selectedEngineerId)) : null;
   const selected = clock.selectedEngineerId ? crewOperationalSummary(point, frame, clock.selectedEngineerId, clock.minute, clock.mode)
-    || (selectedEngineer ? { route: { engineerId: selectedEngineer.id, engineerName: selectedEngineer.name, shiftStart: selectedEngineer.shiftStart, shiftEnd: selectedEngineer.shiftEnd, assignments: [] }, crew: null, upcomingOrder: null, phaseMinutes: null } : null) : null;
+    || (selectedEngineer ? { route: { engineerId: selectedEngineer.id, engineerName: shiftEngineerName(selectedEngineer), shiftStart: selectedEngineer.shiftStart, shiftEnd: selectedEngineer.shiftEnd, assignments: [] }, crew: null, upcomingOrder: null, phaseMinutes: null } : null) : null;
   const visits = new Map((frame?.visits || []).map(item => [String(item.orderId), item]));
   const selectedTask = selected?.route?.assignments?.find(item => String(item.orderId) === String(selectedOrderId));
   const selectedTaskOrder = selectedTask ? point?.orders?.find(item => String(item.id) === String(selectedTask.orderId)) : null;
@@ -222,7 +231,7 @@ export function ShiftPlaybackBar({ compact = false, shift = null, onSelectOrder,
       <PlaybackDropdown label="Скорость воспроизведения" value={clock.speed} options={[30,60,120,300].map(speed => ({value:speed,label:`×${speed}`}))} onChange={speed => shiftClock.set({ speed:Number(speed) })}/>
       <label className="shift-follow-toggle"><input type="checkbox" checked={clock.follow} onChange={event => shiftClock.set({ follow:event.target.checked })}/><span className="shift-follow-check" aria-hidden="true"><Check size={13}/></span><span>Следить за бригадой</span></label>
     </div>
-    {!compact && selected ? <div className="shift-timeline-crew"><strong>{selected.route.engineerName}</strong><span>{!selected.route.assignments?.length ? 'Без маршрута' : clock.mode === 'fact' ? 'По подтверждённым отметкам' : selected.crew?.status === 'travelling' ? `В пути ${selected.phaseMinutes} мин` : selected.crew?.status === 'working' ? `На объекте ${selected.phaseMinutes} мин` : 'По плану'}</span><span>Следующая: {selected.upcomingOrder ? orderNumber(selected.upcomingOrder) : 'нет'}</span><button type="button" onClick={() => shiftClock.set({ selectedEngineerId: '', follow: false })} aria-label="Снять выбор бригады">×</button></div> : null}
+    {!compact && selected ? <div className="shift-timeline-crew"><strong>{shiftEngineerName({id:selected.route.engineerId,name:selected.route.engineerName})}</strong><span>{!selected.route.assignments?.length ? 'Без маршрута' : clock.mode === 'fact' ? 'По подтверждённым отметкам' : selected.crew?.status === 'travelling' ? `В пути ${selected.phaseMinutes} мин` : selected.crew?.status === 'working' ? `На объекте ${selected.phaseMinutes} мин` : 'По плану'}</span><span>Следующая: {selected.upcomingOrder ? orderNumber(selected.upcomingOrder) : 'нет'}</span><button type="button" onClick={() => shiftClock.set({ selectedEngineerId: '', follow: false })} aria-label="Снять выбор бригады">×</button></div> : null}
     {!compact && selected ? <div className="shift-task-rail" aria-label="Задачи выбранной бригады">
       <button type="button" className="shift-task-boundary" style={{ left: `${Math.max(0, Math.min(100, ((minuteOf(selected.route.shiftStart) ?? axisStart) - axisStart) / axisSpan * 100))}%` }} onClick={() => seek(minuteOf(selected.route.shiftStart) ?? axisStart)} title={`Выход бригады ${selected.route.shiftStart}`} aria-label={`Выход бригады ${selected.route.shiftStart}`}><LogOut size={14}/></button>
       {(selected.route.assignments || []).length ? selected.route.assignments.map(assignment => { const order = point?.orders?.find(item => String(item.id) === String(assignment.orderId)); const visit = visits.get(String(assignment.orderId)); const start = minuteOf(assignment.plannedStart) ?? axisStart; const finish = minuteOf(assignment.plannedFinish) ?? start + 15; const left = Math.max(0, Math.min(99, (start - axisStart) / axisSpan * 100)); const width = Math.max(2.2, Math.min(100 - left, (finish - start) / axisSpan * 100)); return <button type="button" key={assignment.orderId} className={`shift-task-segment status-${visit?.status || 'planned'}${String(selectedOrderId || '') === String(assignment.orderId) ? ' active' : ''}`} style={{ left: `${left}%`, width: `${width}%` }} title={`${orderNumber(order)} · ${assignment.plannedStart}–${assignment.plannedFinish} · ${visitStatusLabel(visit?.status, clock.mode)}`} aria-label={`Заявка ${orderNumber(order)}, ${assignment.plannedStart}–${assignment.plannedFinish}, ${visitStatusLabel(visit?.status, clock.mode)}`} onClick={() => { seek(start); shiftClock.set({ follow: false }); onSelectOrder?.(order); }}><span>{orderNumber(order)}</span></button>; }) : <span className="shift-task-empty">Заявки не назначены</span>}
@@ -444,7 +453,7 @@ export function ShiftWorkspace({
     if (!shift?.id || pendingEvent) return;
     let live = true;
     const restorePreview = async () => {
-      const saved = await json(`/api/shifts/${shift.id}/preview`).catch(() => null);
+      const saved = await json(`/api/shifts/${shift.id}/preview?optional=1`).catch(() => null);
       if (!live || !saved || saved.baseRevision !== shift.revision || saved.status === 'FAILED') return;
       setEventType(saved.event?.type || EVENT_TYPES.ENGINEER_UNAVAILABLE);
       setTargetId(saved.event?.engineerId || saved.event?.orderId || '');
@@ -967,7 +976,7 @@ export function ShiftWorkspace({
             <div className="shift-replacement-picker">
               <label>
                 Кого заменить
-                <BusinessSelect ariaLabel="Кого заменить" value={targetId} onChange={setTargetId} searchable options={[{value:'',label:'Выберите бригаду…'},...shift.team.map(item=>({value:String(item.id),label:item.name||String(item.id)}))]}/>
+                <BusinessSelect ariaLabel="Кого заменить" value={targetId} onChange={setTargetId} searchable options={[{value:'',label:'Выберите бригаду…'},...shift.team.map(item=>({value:String(item.id),label:shiftEngineerName(item)||String(item.id)}))]}/>
               </label>
               <button
                 type="button"
@@ -1000,7 +1009,7 @@ export function ShiftWorkspace({
               {(pendingEvent?.engineer || pendingEvent?.replacement) ? <div className="shift-manual-draft"><b>{pendingEvent.engineer?.name || pendingEvent.replacement?.name}</b><span>В составе · ещё не в опубликованном плане смены</span><button type="button" onClick={()=>setTab('event')}>Рассчитать и опубликовать</button></div> : null}
               <div className="engineer-list shift-engineer-list">
               {visibleCrews.map((engineer) => {
-                  const route = point?.plan?.routes?.find(item => String(item.engineerId) === String(engineer.id)) || { engineerId: engineer.id, engineerName: engineer.name, assignments: [], shiftStart: engineer.shiftStart, shiftEnd: engineer.shiftEnd, distanceKm: 0 };
+                      const route = point?.plan?.routes?.find(item => String(item.engineerId) === String(engineer.id)) || { engineerId: engineer.id, engineerName: shiftEngineerName(engineer), assignments: [], shiftStart: engineer.shiftStart, shiftEnd: engineer.shiftEnd, distanceKm: 0 };
                   const crew = frame.crews.find(
                     (item) =>
                       String(item.engineerId) === String(route.engineerId),
@@ -1025,8 +1034,8 @@ export function ShiftWorkspace({
                         });
                       }}
                     >
-                      <span className="person-avatar">{(route.engineerName||engineer.name||'Бригада').split(' ').map(part=>part[0]).join('').slice(0,2)}</span>
-                      <span className="engineer-list-main"><b>{route.engineerName||engineer.name}</b><span className="engineer-list-skills">{engineer.skills?.length?engineer.skills.map(skill=><small key={skill}>{filterLabel(skill)}</small>):<small>Навыки не указаны</small>}</span><span className="engineer-list-transport"><ShiftTransportIcon type={engineer.transport}/>{engineer.transport?filterLabel(engineer.transport):'Транспорт не указан'}</span><span className="engineer-list-load">{route.assignments.length ? `${route.assignments.length} заявок · ${Number(route.distanceKm||0).toFixed(1)} км` : 'Без маршрута'}</span></span>
+                      <ShiftEngineerAvatar engineer={engineer} name={shiftEngineerName({id:engineer.id,name:route.engineerName||engineer.name||'Бригада'})}/>
+                      <span className="engineer-list-main"><b>{shiftEngineerName({id:engineer.id,name:route.engineerName||engineer.name})}</b><span className="engineer-list-skills">{engineer.skills?.length?engineer.skills.map(skill=><small key={skill}>{filterLabel(skill)}</small>):<small>Навыки не указаны</small>}</span><span className="engineer-list-transport"><ShiftTransportIcon type={engineer.transport}/>{engineer.transport?filterLabel(engineer.transport):'Транспорт не указан'}</span><span className="engineer-list-load">{route.assignments.length ? `${route.assignments.length} заявок · ${Number(route.distanceKm||0).toFixed(1)} км` : 'Без маршрута'}</span></span>
                       <span className="engineer-list-shift"><b>{route.shiftStart||'—'}–{route.shiftEnd||'—'}</b><small className={`shift-crew-stage stage-${phase}`}>{statusLabel}</small></span>
                       <ChevronRight className="engineer-list-open"/>
                     </button>
@@ -1055,7 +1064,7 @@ export function ShiftWorkspace({
                   <span className="order-main"><b>{order.name || order.sourceId || order.id}</b><small>{order.address || 'Адрес не указан'}</small><em className={`shift-status status-${status}`}>{visitStatusLabel(status, clock.mode)}</em></span>
                   <span className="order-window">{order.start ? `${order.start}–${order.end}` : 'Гибкое'}</span><ChevronRight size={17} aria-hidden="true"/>
                 </button>
-                {active ? <div className="shift-order-actions"><div className="shift-order-meta"><span>{order.workType || order.skill || 'Вид работ не указан'}</span><span>{route ? `${route.engineerName || 'Бригада'} · ${assignment?.plannedStart || 'в плане'}` : 'Не назначена · требуется решение диспетчера'}</span></div><div className="shift-order-action-buttons"><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.CLIENT_WINDOW_SHIFT)}>Перенести время</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.MANUAL_ASSIGN)}>{route ? 'Сменить бригаду' : 'Назначить бригаду'}</button>{route ? <button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.VISIT_CANCELLED)}>Отменить визит</button> : null}<button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.ORDER_CANCELLED)}>Отменить заявку</button>{route ? <button type="button" onClick={() => { setFactOrderId(String(order.id)); setFactTime(timeOf(Math.floor(clock.minute))); setTab('fact'); }}>Факт визита</button> : null}</div></div> : null}
+                {active ? <div className="shift-order-actions"><div className="shift-order-meta"><span>{order.workType || order.skill || 'Вид работ не указан'}</span><span>{route ? `${shiftEngineerName({id:route.engineerId,name:route.engineerName || 'Бригада'})} · ${assignment?.plannedStart || 'в плане'}` : 'Не назначена · требуется решение диспетчера'}</span></div><div className="shift-order-action-buttons"><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.CLIENT_WINDOW_SHIFT)}>Перенести время</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.MANUAL_ASSIGN)}>{route ? 'Сменить бригаду' : 'Назначить бригаду'}</button>{route ? <button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.VISIT_CANCELLED)}>Отменить визит</button> : null}<button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.ORDER_CANCELLED)}>Отменить заявку</button>{route ? <button type="button" onClick={() => { setFactOrderId(String(order.id)); setFactTime(timeOf(Math.floor(clock.minute))); setTab('fact'); }}>Факт визита</button> : null}</div></div> : null}
               </article>;
             }) : <p className="shift-muted">Заявок в этой группе нет.</p>}
             </div>
@@ -1170,6 +1179,7 @@ export function ShiftWorkspace({
                   </span>
                   {(pendingEvent || restoredManualAddition).type === EVENT_TYPES.CAPACITY_ADDED ? <span>Бригада уже есть в постоянном составе. Новая версия плана будет рассчитана с её участием.</span> : null}
                   {(pendingEvent || restoredManualAddition).type === EVENT_TYPES.NEW_ORDER ? <span>Адрес или точка подтверждены. Расчёт отдельно проверит, успевает ли бригада в окно клиента.</span> : null}
+                  {(pendingEvent || restoredManualAddition).type === EVENT_TYPES.EMERGENCY_DIVERSION ? <div className="shift-emergency-routing"><AlertTriangle size={18}/><span><b>Аварийный выезд для {shift.team.find(member=>String(member.id)===String((pendingEvent || restoredManualAddition).engineerId))?.name || (pendingEvent || restoredManualAddition).engineerId || 'выбранной бригады'}</b><small>{(pendingEvent || restoredManualAddition).diversionPhase === 'travelling' ? 'Инженер в пути: новый маршрут начнётся от текущей координаты.' : 'Инженер на объекте: текущая заявка останется до завершения, затем начнётся аварийный выезд.'}</small></span></div> : null}
                   {(pendingEvent || restoredManualAddition).type === EVENT_TYPES.NEW_ORDER && (minuteOf((pendingEvent || restoredManualAddition).order?.end) ?? 1440) <= (minuteOf(shift.versions?.at(-1)?.effectiveAt) ?? 0) ? <span>Окно этой заявки завершилось до последней версии плана. Заявка сохранится в смене, но не сможет получить маршрут в прошлом времени.</span> : null}
                   {!preview ? <button type="button" onClick={discardDraft} disabled={busy}><X size={15}/>Отменить черновик</button> : null}
                 </div>
@@ -1186,10 +1196,10 @@ export function ShiftWorkspace({
                   {eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE
                     ? "Бригада"
                     : "Заявка"}
-                  <BusinessSelect ariaLabel={eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?'Бригада':'Заявка'} value={targetId} disabled={Boolean(preview)} onChange={value=>{setTargetId(value);setPreview(null);setError('')}} searchable options={[{value:'',label:'Выберите…'},...(eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?shift.team:eventOrders).map(item=>({value:String(item.id),label:item.name||item.sourceId||String(item.id)}))]}/>
+                  <BusinessSelect ariaLabel={eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?'Бригада':'Заявка'} value={targetId} disabled={Boolean(preview)} onChange={value=>{setTargetId(value);setPreview(null);setError('')}} searchable options={[{value:'',label:'Выберите…'},...(eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?shift.team:eventOrders).map(item=>({value:String(item.id),label:eventType===EVENT_TYPES.ENGINEER_UNAVAILABLE?shiftEngineerName(item):item.name||item.sourceId||String(item.id)}))]}/>
                 </label>
               ) : null}
-              {!pendingEvent && eventType === EVENT_TYPES.MANUAL_ASSIGN ? <label>Бригада для заявки<BusinessSelect ariaLabel="Бригада для заявки" value={eventEngineerId} disabled={Boolean(preview)} onChange={value=>{setEventEngineerId(value);setPreview(null)}} searchable options={[{value:'',label:'Выберите бригаду…'},...shift.team.map(item=>({value:String(item.id),label:item.name||String(item.id)}))]}/></label> : null}
+              {!pendingEvent && eventType === EVENT_TYPES.MANUAL_ASSIGN ? <label>Бригада для заявки<BusinessSelect ariaLabel="Бригада для заявки" value={eventEngineerId} disabled={Boolean(preview)} onChange={value=>{setEventEngineerId(value);setPreview(null)}} searchable options={[{value:'',label:'Выберите бригаду…'},...shift.team.map(item=>({value:String(item.id),label:shiftEngineerName(item)||String(item.id)}))]}/></label> : null}
               {!pendingEvent && eventType === EVENT_TYPES.CLIENT_WINDOW_SHIFT ? <div className="shift-window-edit"><TimePicker label="Начало нового окна" value={eventStart} disabled={Boolean(preview)} onChange={value=>{setEventStart(value);setPreview(null)}}/><TimePicker label="Конец нового окна" value={eventEnd} disabled={Boolean(preview)} onChange={value=>{setEventEnd(value);setPreview(null)}}/><small>После проверки время визита может отличаться от начала окна: учитываются дорога, занятость и ограничения.</small></div> : null}
               {!pendingEvent && eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE && !preview ? <div className="shift-absence-presets" role="group" aria-label="Причина отсутствия">{['Больничный', 'Отпуск', 'Не вышел на смену'].map(label=><button key={label} type="button" onClick={()=>setReason(label)}>{label}</button>)}</div> : null}
               {![EVENT_TYPES.CAPACITY_ADDED, EVENT_TYPES.NEW_ORDER].includes((pendingEvent || restoredManualAddition)?.type || eventType) && (eventType !== EVENT_TYPES.RECALCULATE || recalculateScope === 'during') ? <div className="replanning-effective-time"><TimePicker label={eventType === EVENT_TYPES.RECALCULATE ? 'Перестроить с' : [EVENT_TYPES.ORDER_CANCELLED, EVENT_TYPES.VISIT_CANCELLED].includes(eventType) ? 'Отменить с' : eventType === EVENT_TYPES.ENGINEER_UNAVAILABLE ? 'Недоступна с' : 'Применить изменение с'} value={time} disabled={Boolean(preview)} onChange={value=>{setTime(value);setPreview(null);setError('')}}/>{standaloneReplanning ? <small>План до этого момента сохранится. Алгоритм изменит только оставшуюся часть дня.</small> : null}</div> : null}
@@ -1218,7 +1228,7 @@ export function ShiftWorkspace({
               >
                 {busy
                   ? "Проверяем дороги и ограничения…"
-                  : pendingEvent?.type === EVENT_TYPES.CAPACITY_ADDED ? 'Рассчитать план с бригадой' : eventType === EVENT_TYPES.RECALCULATE ? 'Пересчитать и сохранить черновик' : "Рассчитать черновик"}
+                  : pendingEvent?.type === EVENT_TYPES.CAPACITY_ADDED ? 'Рассчитать план с бригадой' : pendingEvent?.type === EVENT_TYPES.EMERGENCY_DIVERSION ? 'Проверить аварийный выезд' : eventType === EVENT_TYPES.RECALCULATE ? 'Пересчитать и сохранить черновик' : "Рассчитать черновик"}
               </button>
               {!preview && !pendingEvent && (eventType !== EVENT_TYPES.ENGINEER_UNAVAILABLE || targetId || reason.trim() || eventStart || eventEnd) ? <button type="button" className="shift-draft-reset" onClick={discardDraft} disabled={busy}><X size={15}/>Сбросить несохранённые изменения</button> : null}
               {preview?.status === "RUNNING" ? (

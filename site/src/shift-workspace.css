@@ -174,6 +174,9 @@
 @media(max-width:760px){.shift-layer.report-layer{left:0}.report-layer .shift-panel{top:8px;bottom:8px;left:8px;width:calc(100% - 16px);min-height:0}.report-layer .shift-panel>header{padding:18px 19px}.report-layer .shift-panel-body{padding:15px;min-height:0}.shift-report-onboarding{margin:4px 0;padding:22px}.shift-empty img{height:110px;width:135px}.shift-empty p{margin-bottom:11px}.shift-empty-actions{margin-top:13px}.shift-playback-controls .shift-playback-select>button{max-width:175px}.shift-playback-menu{z-index:5}}
 @media(prefers-reduced-motion:reduce){.shift-layer.report-layer,.report-layer.is-open .shift-panel,.report-layer.is-closing .shift-panel,.shift-playback-menu{transition:none!important;animation:none!important;transform:none!important;opacity:1!important}}
 
+/* Keep the shift workspace header aligned with the dark operational shell. */
+.app-shell.dark .shift-layer:not(.report-layer) .shift-panel>header{background:linear-gradient(135deg,#24282e 0%,#2d2a1f 100%);border-color:#414750;color:#f1f3f5}.app-shell.dark .shift-layer:not(.report-layer) .shift-panel>header small{color:#f0cf59}.app-shell.dark .shift-layer:not(.report-layer) .shift-panel>header span{color:#c4cdd6}.app-shell.dark .shift-layer:not(.report-layer) .shift-panel nav{background:#202329;border-color:#414750}.app-shell.dark .shift-layer:not(.report-layer) .shift-panel nav button{color:#d2d8de}.app-shell.dark .shift-layer:not(.report-layer) .shift-panel nav button.active{background:#ffd21f;color:#2a2208}.app-shell.dark .shift-layer:not(.report-layer) .shift-section-title button,.app-shell.dark .shift-layer:not(.report-layer) .shift-pending button,.app-shell.dark .shift-layer:not(.report-layer) .shift-fact-actions button{background:#2a2e35;color:#edf1f4;border-color:#47505b}
+
 /* Anchor operational windows to the same animated rail coordinate as Orders. */
 @media(min-width:761px){
   .shift-layer:not(.report-layer),.shift-layer.report-layer{left:0;transition:none}
@@ -691,6 +694,13 @@
 @media(prefers-reduced-motion:reduce){.report-selected-document .report-generated a{transition:none}}
 @media(prefers-reduced-motion:reduce){.report-layer .report-generate-button,.report-layer .report-generate-button svg:last-child{transition:none}}
 
+/* Keep operational panels readable when the map is viewed on a phone-sized viewport. */
+@media(max-width:760px){
+  .shift-layer:not(.report-layer) .shift-panel{left:58px!important;width:calc(100vw - 66px)!important}
+  .shift-layer:not(.report-layer) .shift-panel.shift-list-panel,
+  .shift-layer.replanning-layer:not(.report-layer) .shift-panel.replanning-panel{left:58px!important;width:calc(100vw - 66px)!important}
+}
+
 /* Dispatcher playback: an aligned job rail, searchable lists and a map card. */
 .shift-layer:not(.report-layer):has(.shift-task-rail) .shift-panel{bottom:199px}
 .shift-timeline:has(.shift-task-rail){min-height:187px}
@@ -1009,3 +1019,4 @@
 @media(max-width:900px){.shift-layer.replanning-layer:not(.report-layer) .shift-panel.replanning-panel{width:calc(100vw - var(--operational-panel-left) - 12px)}.replanning-intake-actions{grid-template-columns:1fr 1fr}.replanning-overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.shift-layer.replanning-layer:not(.report-layer) .shift-panel.replanning-panel{top:6px;bottom:6px;left:var(--operational-panel-left);width:calc(100vw - var(--operational-panel-left) - 6px)}.shift-layer.replanning-layer:not(.report-layer) .shift-panel.replanning-panel>header{padding:18px}.shift-layer.replanning-layer .replanning-panel>header h2{font-size:25px}.shift-layer.replanning-layer .replanning-panel .shift-panel-body{padding:16px}.replanning-intake-actions{grid-template-columns:1fr}.replanning-intake-actions button{min-height:70px}.replanning-overview{gap:6px}.replanning-overview>div{min-height:65px;padding:9px}}
 .shift-filter-summary{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 14px 9px;color:#66717e;font-size:11px}.shift-filter-summary button{border:0;background:transparent;color:#715400;font-weight:750;cursor:pointer}
+.shift-emergency-routing{display:flex;align-items:flex-start;gap:10px;padding:12px 13px;margin:10px 0;border:1px solid #f1c6bd;border-radius:11px;background:#fff3ef;color:#71342c}.shift-emergency-routing>svg{flex:0 0 auto;color:#d94736;margin-top:1px}.shift-emergency-routing span{display:flex;flex-direction:column;gap:4px}.shift-emergency-routing b{font-size:12px}.shift-emergency-routing small{font-size:11px;line-height:1.45;color:#8b5b54}

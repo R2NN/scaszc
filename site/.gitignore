@@ -5,3 +5,5 @@ dist/
 *.log
 .dev.vars
 .codex-work/
+
+.beego-backups/

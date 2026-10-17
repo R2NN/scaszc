@@ -106,10 +106,20 @@ class _RoutingIncomplete(Exception):
     pass
 
 
-def _started_prefix(route: EngineerPlan | None, at: datetime) -> tuple[PlannedVisit, ...]:
+def _started_prefix(route: EngineerPlan | None, at: datetime, engineer_id: str | None = None, diversion: Mapping[str, object] | None = None) -> tuple[PlannedVisit, ...]:
     if route is None:
         return ()
-    return tuple(visit for visit in route.visits if visit.departure_at <= at)
+    diversion_active = bool(
+        diversion
+        and engineer_id == str(diversion.get('engineer_id') or '')
+        and diversion.get('phase') == 'travelling'
+    )
+    current_order_id = str(diversion.get('current_order_id') or '') if diversion_active else ''
+    return tuple(
+        visit for visit in route.visits
+        if visit.departure_at <= at
+        and not (current_order_id and visit.job_id == current_order_id and visit.service_start_at > at)
+    )
 
 
 def _check_next_event(dataset: PlanningDataset, state: ReplanningState, event: Event) -> None:
@@ -229,13 +239,15 @@ def replan_after_event(
             applied_event_ids=frozenset(state.applied_event_ids),
             canceled_job_ids=state.canceled_job_ids,
             unavailable_until_by_engineer=state.unavailable_until_by_engineer,
+            diversion=previous_event.payload.get('diversion') if isinstance(previous_event.payload.get('diversion'), Mapping) else None,
         )
     if source_validation.status != ValidationStatus.VALID:
         raise InvalidPlanningData('Source plan must pass independent validation')
 
     old_routes = {route.engineer_id: route for route in state.plan.engineer_plans}
+    diversion = event.payload.get('diversion') if isinstance(event.payload.get('diversion'), Mapping) else None
     frozen = {
-        engineer_id: _started_prefix(old_routes.get(engineer_id), event.event_time)
+        engineer_id: _started_prefix(old_routes.get(engineer_id), event.event_time, engineer_id, diversion)
         for engineer_id in dataset.engineers
     }
     frozen_job_ids = {visit.job_id for route in frozen.values() for visit in route}
@@ -259,6 +271,7 @@ def replan_after_event(
                 applied_event_ids=frozenset(new_applied),
                 canceled_job_ids=state.canceled_job_ids,
                 unavailable_until_by_engineer=unavailable,
+                diversion=diversion,
             )
             return ReplanningResult(
                 ReplanningStatus.REJECTED_ALREADY_STARTED, next_state, validation,
@@ -319,16 +332,25 @@ def replan_after_event(
         visit.job_id: visit
         for route in state.plan.engineer_plans for visit in route.visits
     }
-    orders: dict[str, tuple[str, ...]] = {
-        engineer_id: tuple(
-            visit.job_id for visit in old_routes.get(
-                engineer_id, EngineerPlan(engineer_id, ())
-            ).visits if visit.departure_at > event.event_time
-            and visit.job_id in active_job_ids
-            and forced_assignments.get(visit.job_id, engineer_id) == engineer_id
-        ) if not rebuild_future else ()
-        for engineer_id in dataset.engineers
-    }
+    diversion_engineer_id = str(diversion.get('engineer_id') or '') if diversion else ''
+    diversion_current_order = str(diversion.get('current_order_id') or '') if diversion else ''
+    orders: dict[str, tuple[str, ...]] = {}
+    for engineer_id in dataset.engineers:
+        if rebuild_future:
+            orders[engineer_id] = ()
+            continue
+        route = old_routes.get(engineer_id, EngineerPlan(engineer_id, ()))
+        suffix = []
+        for visit in route.visits:
+            is_current_diversion = (
+                engineer_id == diversion_engineer_id
+                and diversion.get('phase') == 'travelling'
+                and visit.job_id == diversion_current_order
+                and visit.service_start_at > event.event_time
+            )
+            if (visit.departure_at > event.event_time or is_current_diversion) and visit.job_id in active_job_ids and forced_assignments.get(visit.job_id, engineer_id) == engineer_id:
+                suffix.append(visit.job_id)
+        orders[engineer_id] = tuple(suffix)
     exact_checks = 0
     budget_exhausted = False
     unknown_by_job: set[str] = set()
@@ -364,7 +386,7 @@ def replan_after_event(
         )
         # The source plan is independently validated above. An untouched route
         # has the same job order and exact route evidence after this event.
-        if order == original_suffix and not newly_unavailable and not shifted_window:
+        if order == original_suffix and not newly_unavailable and not shifted_window and engineer_id != diversion_engineer_id:
             result = _RouteTrial(original_route.visits if original_route else ())
             trial_cache[key] = result
             return result
@@ -389,6 +411,11 @@ def replan_after_event(
                 minutes=dataset.jobs[visits[-1].job_id].service_duration_min
             ) if visits else None
         )
+        if diversion and engineer_id == diversion_engineer_id and diversion.get('phase') == 'travelling':
+            current_location_id = str(diversion.get('current_location_id') or '')
+            if current_location_id in dataset.locations:
+                previous_location = current_location_id
+                previous_completion = event.event_time
         first_departure = visits[0].departure_at if visits else None
         for job_id in order:
             job = dataset.jobs[job_id]
@@ -674,6 +701,8 @@ def replan_after_event(
                 continue
             old_order = orders[engineer_id]
             for position in range(len(old_order) + 1):
+                if diversion and job_id == event.target_id and position != 0:
+                    continue
                 if not can_fit_time_lower_bound(engineer_id, old_order, position, job_id):
                     continue
                 candidate_order = old_order[:position] + (job_id,) + old_order[position:]
@@ -730,6 +759,8 @@ def replan_after_event(
                         continue
                     reduced = tuple(item for item in old_order if item != displaced)
                     for position in range(len(reduced) + 1):
+                        if diversion and job_id == event.target_id and position != 0:
+                            continue
                         candidate_order = reduced[:position] + (job_id,) + reduced[position:]
                         try:
                             trial = schedule(engineer_id, candidate_order)
@@ -896,26 +927,31 @@ def replan_after_event(
         applied_event_ids=frozenset(new_applied),
         canceled_job_ids=frozenset(canceled),
         unavailable_until_by_engineer=unavailable,
+        diversion=diversion,
     )
     if validation.status != ValidationStatus.VALID:
         raise InvalidPlanningData(
             'Replanning produced an invalid plan: '
             + ', '.join(f'{item.code.value}:{item.subject_id}' for item in validation.violations)
         )
-    timing = retime_replanned_departures(
+    # A diversion already has a measured live position. Delaying the first
+    # future leg toward its original service start would lose that position,
+    # so keep the exact event schedule intact for this scenario.
+    timing = None if diversion else retime_replanned_departures(
         dataset, plan, state.plan, oracle,
         event_time=event.event_time,
         applied_event_ids=frozenset(new_applied),
         canceled_job_ids=frozenset(canceled),
         unavailable_until_by_engineer=unavailable,
     )
-    plan = timing.plan
+    plan = timing.plan if timing else plan
     validation = validate_replanned_plan(
         dataset, plan, state.plan,
         event_time=event.event_time,
         applied_event_ids=frozenset(new_applied),
         canceled_job_ids=frozenset(canceled),
         unavailable_until_by_engineer=unavailable,
+        diversion=diversion,
     )
     next_state = ReplanningState(
         plan=plan,
@@ -928,6 +964,6 @@ def replan_after_event(
         ReplanningStatus.EXACT_VALID, next_state, validation,
         event.event_id, exact_checks, budget_exhausted, reasons,
         candidate_evaluations=candidate_evaluations,
-        departure_timing_queries=timing.exact_queries,
-        departure_timing_changes=timing.changed_legs,
+        departure_timing_queries=timing.exact_queries if timing else 0,
+        departure_timing_changes=timing.changed_legs if timing else 0,
     )

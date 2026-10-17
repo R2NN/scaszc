@@ -182,7 +182,7 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
         if order is None:
             raise ValueError('Новая заявка отсутствует в переданной модели')
         source_job_id = _source_id(order.get('sourceId') or order.get('id'))
-        if source_job_id == 'EAST-EVENT-001':
+        if source_job_id == 'EAST-EVENT-001' and not event_payload.get('diversion'):
             canonical_event = next(
                 item for item in dataset.events if item.target_id == source_job_id
             )
@@ -217,10 +217,32 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
         if job.service_duration_min < 1 or job.window_end <= job.window_start:
             raise ValueError('Проверьте длительность и клиентское окно новой заявки')
         regular_jobs[source_job_id] = job
+        diversion = event_payload.get('diversion') if isinstance(event_payload.get('diversion'), dict) else None
+        event_metadata = {'source': 'UI'}
+        if diversion:
+            diversion_engineer_id = _source_id(diversion.get('engineerId'))
+            diversion_engineer = engineers.get(diversion_engineer_id)
+            current_coords = diversion.get('currentCoords')
+            if diversion_engineer is None:
+                raise ValueError(f'Инженер для аварийного отклонения не найден: {diversion_engineer_id}')
+            if diversion.get('phase') not in {'travelling', 'working'}:
+                raise ValueError('Аварийное отклонение поддерживает только фазы в пути и на объекте')
+            if not isinstance(current_coords, list) or len(current_coords) != 2:
+                raise ValueError('Для аварийного отклонения нужна текущая точка инженера')
+            current_location_id = f'UI-DIVERSION-LOC-{digest}'
+            current_office_id = f'UI-DIVERSION-OFFICE-{digest}'
+            locations[current_location_id] = Coordinate(current_location_id, float(current_coords[0]), float(current_coords[1]))
+            offices[current_office_id] = Office(current_office_id, diversion_engineer.zone_id, current_location_id)
+            event_metadata['diversion'] = {
+                'engineer_id': diversion_engineer_id,
+                'phase': diversion.get('phase'),
+                'current_order_id': _source_id(diversion.get('currentOrderId')) if diversion.get('currentOrderId') else None,
+                'current_location_id': current_location_id,
+            }
         event = Event(
             1, event_id, event_time,
             EventType.NEW_URGENT_JOB if priority == Priority.URGENT else EventType.NEW_JOB,
-            source_job_id, zone_id, None, {'source': 'UI'},
+            source_job_id, zone_id, None, event_metadata,
         )
     elif event_type == 'ORDER_CANCELLED':
         source_job_id = _source_id(event_payload.get('sourceOrderId') or event_payload.get('orderId'))
@@ -428,7 +450,10 @@ def main() -> int:
         max_route_checks=args.max_route_checks,
         forced_engineer_by_job=(
             {event.target_id: str(event.payload['engineer_id'])}
-            if event.event_type == EventType.MANUAL_ASSIGNMENT else None
+            if event.event_type == EventType.MANUAL_ASSIGNMENT
+            else {event.target_id: str(event.payload['diversion']['engineer_id'])}
+            if event.event_type == EventType.NEW_URGENT_JOB and isinstance(event.payload.get('diversion'), dict)
+            else None
         ),
         source_dataset=canonical,
     )
@@ -444,6 +469,11 @@ def main() -> int:
             event,
             oracle,
             max_route_checks=args.rebuild_route_checks,
+            forced_engineer_by_job=(
+                {event.target_id: str(event.payload['diversion']['engineer_id'])}
+                if event.event_type == EventType.NEW_URGENT_JOB and isinstance(event.payload.get('diversion'), dict)
+                else None
+            ),
             source_dataset=canonical,
             rebuild_future=True,
         )
@@ -473,6 +503,13 @@ def main() -> int:
             'exactRouteChecks': result.exact_route_checks,
         }, ensure_ascii=False))
         return 2
+    if event.payload.get('diversion') and not any(
+        visit.job_id == event.target_id
+        for route in result.state.plan.engineer_plans
+        if route.engineer_id == event.payload['diversion']['engineer_id']
+        for visit in route.visits
+    ):
+        raise ValueError('Выбранный инженер не успевает на аварию с учётом смены, окон и текущей работы. Выберите другого специалиста.')
 
     artifact = materialization_result_dict(MaterializationResult(
         status=MaterializationStatus.EXACT_VALID,

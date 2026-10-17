@@ -109,6 +109,7 @@ def _validate_plan(
     previous_plan: ProposedPlan | None = None,
     event_time: datetime | None = None,
     unavailable_until_by_engineer: Mapping[str, datetime] | None = None,
+    diversion: Mapping[str, object] | None = None,
 ) -> ValidationReport:
     violations: list[Violation] = []
     assigned_to: dict[str, str] = {}
@@ -122,6 +123,17 @@ def _validate_plan(
         if previous_plan is not None else {}
     )
     unavailable = unavailable_until_by_engineer or {}
+    # Live-position discontinuities are explicit, persisted operational events.
+    # Keep their anchors when validating later versions of the same day's plan.
+    anchors = [
+        (item.event_time, item.payload['diversion'], item.target_id)
+        for item in dataset.events
+        if isinstance(item.payload.get('diversion'), Mapping)
+        and item.payload['diversion'].get('phase') == 'travelling'
+        and event_time is not None and item.event_time <= event_time
+    ]
+    if diversion and diversion.get('phase') == 'travelling' and not any(data == diversion for _, data, _ in anchors):
+        anchors.append((event_time, diversion, None))
 
     if plan.planning_at.tzinfo is None or plan.planning_at.utcoffset() is None:
         violations.append(
@@ -155,6 +167,13 @@ def _validate_plan(
             frozen = tuple(
                 visit for visit in old_routes.get(engineer_id, ())
                 if visit.departure_at <= event_time
+                and not (
+                    diversion
+                    and engineer_id == str(diversion.get('engineer_id') or '')
+                    and diversion.get('phase') == 'travelling'
+                    and visit.job_id == str(diversion.get('current_order_id') or '')
+                    and visit.service_start_at > event_time
+                )
             )
             frozen_count = len(frozen)
             if engineer_plan.visits[:frozen_count] != frozen:
@@ -181,6 +200,17 @@ def _validate_plan(
         total_travel = 0
         total_waiting = 0
         for sequence, visit in enumerate(engineer_plan.visits, start=1):
+            for anchor_at, anchor, emergency_id in anchors:
+                if (
+                    engineer_id == str(anchor.get('engineer_id') or '')
+                    and visit.travel.origin_id == str(anchor.get('current_location_id') or '')
+                    and visit.departure_at >= anchor_at
+                    and str(anchor.get('current_location_id') or '') in dataset.locations
+                    and (previous_completion is None or previous_completion <= anchor_at)
+                    and (emergency_id is None or visit.job_id == emergency_id)
+                ):
+                    previous_location = str(anchor.get('current_location_id'))
+                    previous_completion = anchor_at
             subject = f'{engineer_id}:{sequence}:{visit.job_id}'
             job = active_jobs.get(visit.job_id)
             if job is None:
@@ -432,7 +462,17 @@ def _validate_plan(
 
     if event_time is not None and previous_plan is not None:
         for engineer_id in sorted(set(old_routes) - seen_engineers):
-            if any(visit.departure_at <= event_time for visit in old_routes[engineer_id]):
+            if any(
+                visit.departure_at <= event_time
+                and not (
+                    diversion
+                    and engineer_id == str(diversion.get('engineer_id') or '')
+                    and diversion.get('phase') == 'travelling'
+                    and visit.job_id == str(diversion.get('current_order_id') or '')
+                    and visit.service_start_at > event_time
+                )
+                for visit in old_routes[engineer_id]
+            ):
                 violations.append(
                     Violation(
                         ViolationCode.FROZEN_ACTIVITY_CHANGED,
@@ -520,6 +560,7 @@ def validate_replanned_plan(
     applied_event_ids: frozenset[str],
     canceled_job_ids: frozenset[str],
     unavailable_until_by_engineer: Mapping[str, datetime],
+    diversion: Mapping[str, object] | None = None,
 ) -> ValidationReport:
     """Validate a full-day plan after an event, including its immutable started prefix."""
     active_jobs = {
@@ -539,4 +580,5 @@ def validate_replanned_plan(
         previous_plan=previous_plan,
         event_time=event_time,
         unavailable_until_by_engineer=unavailable_until_by_engineer,
+        diversion=diversion,
     )

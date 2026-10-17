@@ -843,6 +843,15 @@
 .resource-recent-change>span{display:grid;grid-template-columns:22px minmax(0,1fr);gap:3px 10px}.resource-recent-change>span svg{grid-row:1/3;width:21px;height:21px;color:#807000}.resource-recent-change b{font-size:15px}.resource-recent-change small{font-size:13px;line-height:1.45}.resource-recent-change button{display:flex;align-items:center;gap:6px;min-height:36px;padding:7px 10px;border:1px solid #d8bd4b;border-radius:8px;background:#fff;color:#5c4d00;font:inherit;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap}.resource-recent-change button svg{width:15px;height:15px}
 @media(max-width:760px){.resource-recent-change{align-items:flex-start;flex-direction:column}.resources-workspace .resource-timeline-legend>b{margin-left:0}}
 
+/* Keep the compact analytics shell inside the available mobile column. */
+@media(max-width:760px){
+  .analytics-workspace,.analytics-page{min-width:0;max-width:100%;overflow-x:hidden}
+  .analytics-toolbar{min-width:0;max-width:100%;align-items:stretch;flex-direction:column;gap:10px;overflow:hidden}
+  .analytics-toolbar nav{max-width:100%;overflow-x:auto;justify-content:flex-start;scrollbar-width:none}
+  .analytics-toolbar nav::-webkit-scrollbar{display:none}
+  .analytics-toolbar .date-control{margin-left:0;align-self:stretch}
+}
+
 /* Keep date labels beside their controls and anchor calendars below the button. */
 .history-overview .history-period-fields{align-items:center}
 .history-overview .history-period-picker{display:flex;flex-direction:row;align-items:center;gap:9px;min-width:0}
@@ -906,3 +915,4 @@
 .app-shell.dark .history-overview .advanced-week-values>span.comparison{background:#292d30}
 .app-shell.dark .resource-recent-change{border-color:#776827;background:#36311d;color:#f5e6a4}
 .app-shell.dark .resource-recent-change button{border-color:#776827;background:#272a2c;color:#f5e6a4}
+.analytics-engineer-avatar{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;flex:0 0 32px;width:32px;height:32px;border-radius:50%;background:#ffdf58;color:#715900;font-size:11px;font-style:normal;font-weight:800}.analytics-engineer-avatar img{position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;object-fit:cover}.analytics-engineer-avatar img+span{display:none}.app-shell.dark .analytics-engineer-avatar{background:#5a4a10;color:#ffe878}
