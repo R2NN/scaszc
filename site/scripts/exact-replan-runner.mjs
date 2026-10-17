@@ -330,19 +330,34 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd(), { 
   try {
     await configureRouting({ python, repositoryRoot, env, deadlineAt });
     const progressFile = output.replace(/\.json$/, '.progress.json');
+    const compactCandidates = new Map();
+    let polling = false;
+    let previousProgress = '';
     const poll = setInterval(async () => {
-      const progress = JSON.parse(await readFile(progressFile, 'utf8').catch(() => 'null'));
-      if (progress) {
+      if (polling) return;
+      polling = true;
+      try {
+        const serialized = await readFile(progressFile, 'utf8').catch(() => '');
+        if (!serialized || serialized === previousProgress) return;
+        const progress = JSON.parse(serialized);
         const dispatchCandidates = [];
         for (const sha of progress.candidateArtifacts || []) {
+          if (compactCandidates.has(sha)) {
+            dispatchCandidates.push(compactCandidates.get(sha));
+            continue;
+          }
           const file = path.join(repositoryRoot,'runtime','exact-replans',`${sha}.json`);
           const candidate = JSON.parse(await readFile(file,'utf8').catch(() => 'null'));
           if (!candidate) continue;
           await writeFile(`${file}.meta.json`,JSON.stringify({dataset:inProject(repositoryRoot,dataset),cache:inProject(repositoryRoot,cache),transitIndex:inProject(repositoryRoot,transitIndex)}));
-          dispatchCandidates.push({engineerSourceId:candidate.dispatch_engineer_id,plan:compactExactReplan(candidate,payload),artifact:inProject(repositoryRoot,file)});
+          const compact = {engineerSourceId:candidate.dispatch_engineer_id,plan:compactExactReplan(candidate,payload),artifact:inProject(repositoryRoot,file)};
+          compactCandidates.set(sha, compact);
+          dispatchCandidates.push(compact);
         }
         onProgress({...progress,dispatchCandidates});
-      }
+        previousProgress = serialized;
+      } catch { /* Atomic progress can disappear as the worker finishes. */ }
+      finally { polling = false; }
     }, 1500);
     poll.unref();
     try {

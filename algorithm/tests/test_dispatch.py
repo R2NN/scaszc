@@ -4,7 +4,7 @@ from datetime import timedelta
 from algorithm.tests import test_replanning as fixtures
 from beeline_planning import EngineerPlan, ProposedPlan, ReplanningState, replan_after_event, validate_replanned_plan
 from beeline_planning.domain import Priority, EventType
-from beeline_planning.dispatch import checkpoint, checkpoint_location, verify_checkpoint
+from beeline_planning.dispatch import checkpoint, checkpoint_location, verify_checkpoint, rank_interceptions
 from beeline_routing.models import TransportMode
 from beeline_routing.oracle import OracleQuery
 
@@ -49,6 +49,46 @@ def test_mid_car_leg_restarts_from_road_point_and_preserves_elapsed_cost():
     assert route.movements[0]['distance_m']==500
     assert result.validation.is_valid
     assert result.validation.metrics.total_distance_m >= 3500
+
+
+def test_interception_hands_destination_to_another_engineer_without_losing_jobs():
+    f, source, data, old, event, oracle, point = scenario()
+    result = replan_after_event(data, ReplanningState(old), event, oracle, source_dataset=source,
+        forced_engineer_by_job={'U': 'E1'}, dispatch_engineer_id='E1',
+        handoff_interrupted_job=True, departure_timing_queries=0)
+    assert result.validation.is_valid
+    routes = {route.engineer_id: route for route in result.state.plan.engineer_plans}
+    assert routes['E1'].visits[0].job_id == 'U'
+    assert routes['E1'].visits[0].travel.origin_id == point['location_id']
+    assert 'A' not in [visit.job_id for visit in routes['E1'].visits]
+    assert 'A' in [visit.job_id for visit in routes['E2'].visits]
+    assert not result.state.plan.unserved_job_ids
+
+
+def test_interception_is_not_published_when_no_other_engineer_can_take_destination():
+    f, source, data, old, event, oracle, _ = scenario()
+    engineers = {key: replace(value, is_available=False) if key == 'E2' else value
+                 for key, value in data.engineers.items()}
+    data = replace(data, engineers=engineers)
+    result = replan_after_event(data, ReplanningState(old), event, oracle, source_dataset=source,
+        forced_engineer_by_job={'U': 'E1'}, dispatch_engineer_id='E1',
+        handoff_interrupted_job=True, departure_timing_queries=0)
+    assert result.state is None
+    assert 'another engineer' in result.detail
+
+
+def test_interception_priority_uses_road_eta_and_includes_transit_exit_time():
+    f, source, data, old, event, oracle, point = scenario()
+    second = replace(old.engineer_plans[0], engineer_id='E2')
+    engineers = {**data.engineers, 'E2': replace(data.engineers['E2'], transport_mode=TransportMode.PUBLIC_TRANSIT)}
+    data = replace(data, engineers=engineers)
+    exit_point = checkpoint(second, event.event_time, TransportMode.PUBLIC_TRANSIT)
+    plan = replace(old, engineer_plans=(*old.engineer_plans, second))
+    assert rank_interceptions(data, plan, event, ('E2', 'E1'),
+        {'E1': point, 'E2': exit_point}, oracle) == ('E1', 'E2')
+    waiting = scenario(event_minute=20, waiting=True)
+    assert rank_interceptions(waiting[2], waiting[3], waiting[4], ('E1',),
+        {'E1': waiting[-1]}, waiting[5]) == ()
 
 
 def test_started_service_finishes_before_emergency_departure():

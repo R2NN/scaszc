@@ -28,14 +28,23 @@ export class EmergencyDispatch {
       CREATE TABLE IF NOT EXISTS dispatch_incidents(id TEXT PRIMARY KEY, shift_id TEXT NOT NULL REFERENCES shifts(id), event_key TEXT NOT NULL, payload TEXT NOT NULL, UNIQUE(shift_id,event_key));
       CREATE TABLE IF NOT EXISTS dispatch_sessions(id TEXT PRIMARY KEY, base_shift_id TEXT NOT NULL, shift_id TEXT NOT NULL, payload TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS dispatch_preferences(shift_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS dispatch_incidents_status ON dispatch_incidents(json_extract(payload,'$.status'));
     `);
     store.db.prepare('INSERT OR IGNORE INTO migrations(version) VALUES (3)').run();
     // Interrupted work is requeued on restart; its durable deadline is retained.
-    for (const item of this.all()) if (['SEARCHING', 'CHECKING'].includes(item.status)) this.save({ ...item, status: 'QUEUED', error: 'Расчёт продолжится после перезапуска сервера' });
+    for (const item of this.active()) if (['SEARCHING', 'CHECKING'].includes(item.status)) this.save({ ...item, status: 'QUEUED', error: 'Расчёт продолжится после перезапуска сервера' });
   }
 
   all(shiftId) {
     return (shiftId ? this.store.db.prepare('SELECT payload FROM dispatch_incidents WHERE shift_id=? ORDER BY rowid').all(shiftId) : this.store.db.prepare('SELECT payload FROM dispatch_incidents ORDER BY rowid').all()).map(decode);
+  }
+  active(shiftId) {
+    const clause = "json_extract(payload,'$.status') IN ('QUEUED','SEARCHING','CHECKING','WAITING','ERROR')";
+    return (shiftId ? this.store.db.prepare(`SELECT payload FROM dispatch_incidents WHERE ${clause} AND shift_id=? ORDER BY rowid`).all(shiftId)
+      : this.store.db.prepare(`SELECT payload FROM dispatch_incidents WHERE ${clause} ORDER BY rowid`).all()).map(decode);
+  }
+  hasPending(shiftId) {
+    return Boolean(this.store.db.prepare("SELECT 1 FROM dispatch_incidents WHERE shift_id=? AND json_extract(payload,'$.status') IN ('QUEUED','SEARCHING','CHECKING','WAITING','ERROR') LIMIT 1").get(shiftId));
   }
   get(id) { return decode(this.store.db.prepare('SELECT payload FROM dispatch_incidents WHERE id=?').get(id)); }
   save(item) {
@@ -58,7 +67,7 @@ export class EmergencyDispatch {
     return hash({ revision: shift.revision, plan: shift.plan.contentSha256, facts: shift.factLog, team: shift.team,
       model: this.store.db.prepare('SELECT * FROM duration_models').all(), conditions: this.store.db.prepare('SELECT * FROM object_conditions').all(),
       history: this.store.db.prepare('SELECT count(*) AS count, max(known_at) AS latest, max(revision) AS revision FROM duration_visits').get(),
-      snapshots: shift.orders.map(item => item.durationSnapshot?.id), pending: this.all(shift.id).filter(item => !terminal(item)).map(item => item.id).sort() });
+      snapshots: shift.orders.map(item => item.durationSnapshot?.id), pending: this.active(shift.id).map(item => item.id).sort() });
   }
 
   create(shiftId, { order, time, eventKey = order?.id, mode = 'scenario' }) {
@@ -122,10 +131,11 @@ export class EmergencyDispatch {
         const fresh=this.get(id);
         if (!fresh || terminal(fresh)) return;
         const {dispatchCandidates:partial,...summary}=progress;
-        fresh.progress=summary;
+        fresh.progress={...summary, engineerName:shift.team.find(e => String(e.sourceId || e.id).split(':').at(-1) === summary.engineerId)?.name};
         if (partial?.length && this.fingerprint(this.store.get(item.shiftId))===fingerprint && this.currentMinute(item)===minute) {
-          fresh.candidates=orderCandidates(partial.map(candidate=>this.describe(shift,item,candidate,states,fingerprint,time)));
-          fresh.recommendedId=fresh.candidates[0].id;
+          const described = partial.map(candidate=>this.describe(shift,item,candidate,states,fingerprint,time));
+          fresh.recommendedId=described[0].id;
+          fresh.candidates=orderCandidates(described);
           if(fresh.status==='SEARCHING')this.notification(fresh,'Решения аварии готовы',`${fresh.candidates.length} проверенных вариантов. Поиск продолжается.`);
           fresh.status='WAITING';
           fresh.search={complete:false};
@@ -139,11 +149,13 @@ export class EmergencyDispatch {
       }
       // Preserve reads and notices recorded while the search was running.
       item.notifications = fresh.notifications;
-      const candidates = orderCandidates((result.dispatchCandidates || []).map(candidate => this.describe(shift, item, candidate, states, fingerprint, time)));
+      item.progress = fresh.progress;
+      const described = (result.dispatchCandidates || []).map(candidate => this.describe(shift, item, candidate, states, fingerprint, time));
+      const candidates = orderCandidates(described);
       if (!candidates.length) throw new Error('Независимо проверенный вариант не найден');
       item.candidates = candidates; item.search = result.dispatchSearch ? { ...result.dispatchSearch, rejected:result.dispatchSearch.rejected.map(entry => ({ ...entry, engineerName:shift.team.find(e => String(e.sourceId || e.id).split(':').at(-1) === entry.engineerId)?.name || entry.engineerId, reason:/unverified|ROUTING|маршрут/i.test(entry.reason) ? 'Не удалось подтвердить дорогу. Точный вариант не предлагается.' : /FROZEN|invalid/i.test(entry.reason) ? 'Не найден план, сохраняющий начатые работы и прямой выезд на аварию.' : /STATIC|NO_EXACT|TIME_WINDOW|SEARCH_BUDGET/i.test(entry.reason) ? 'В пределах поиска не найдено назначение с текущими окнами и составом.' : entry.reason })) } : null; item.status = 'WAITING'; item.version += 1;
-      item.searchFinishedAt = this.now(); item.recommendedId = candidates[0].id;
-      this.notification(item, 'Решения аварии готовы', `${candidates.length} проверенных вариантов. Рекомендован ${candidates[0].engineer.name}.`);
+      item.searchFinishedAt = this.now(); item.recommendedId = described[0].id;
+      this.notification(item, 'Решения аварии готовы', `${candidates.length} проверенных вариантов. Рекомендован ${described[0].engineer.name}.`);
       return this.save(item);
     } catch (error) {
       const fresh = this.get(id);
@@ -172,6 +184,12 @@ export class EmergencyDispatch {
       return [{ orderId: id, address: orders.find(item => item.id === id)?.address, before: old || null, after: next || null }];
     });
     const changedEngineerIds = [...new Set(changes.flatMap(item => [item.before?.engineerId, item.after?.engineerId]).filter(Boolean))];
+    const handedOff = movement && changes.find(change =>
+      String(orders.find(order => String(order.id) === change.orderId)?.sourceId || change.orderId).split(':').at(-1) === movement.source_job_id
+      && change.before?.engineerId === engineer.id && change.after?.engineerId !== engineer.id && change.after);
+    const interception = handedOff ? { orderId: handedOff.orderId, address: handedOff.address,
+      receiverId: handedOff.after.engineerId, receiverName: shift.team.find(e => e.id === handedOff.after.engineerId)?.name,
+      plannedStart: handedOff.after.plannedStart } : null;
     const loads = changedEngineerIds.map(id => ({ engineerId: id, name: shift.team.find(item => item.id === id)?.name,
       before: shift.plan.routes.find(item => item.engineerId === id)?.workloadMinutes || 0, after: plan.routes.find(item => item.engineerId === id)?.workloadMinutes || 0 }));
     const reserve = shift.team.filter(e => !plan.routes.find(r => r.engineerId === e.id)?.assignments.some(v => (minuteOf(v.plannedFinish) ?? 0) > minuteOf(time)))
@@ -184,7 +202,7 @@ export class EmergencyDispatch {
       departureOrigin: movement?.coords || state.coords, responseMinutes: minuteOf(visit.arrival)-minuteOf(time),
       kind: state.status === 'travelling' ? 'Перехват в пути' : state.status === 'working' ? 'После текущей работы' : 'Свободный инженер',
       experience: { count: experience, source: 'duration_visits', rating: null, ratingCount: 0 },
-      changes, changedEngineerIds, loads, reserve, coverage: { before: shift.plan.metrics, after: plan.metrics },
+      interception, changes, changedEngineerIds, loads, reserve, coverage: { before: shift.plan.metrics, after: plan.metrics },
       plan, orders, team: shift.team, validation: plan.validation, contentSha256: plan.contentSha256 };
   }
 
@@ -231,9 +249,9 @@ export class EmergencyDispatch {
   }
   async tick() {
     if (!this.store.db.open) return;
-    for (const item of this.all()) if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { this.accept(item.id,item.recommendedId,'system');return; }
+    for (const item of this.active()) if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { this.accept(item.id,item.recommendedId,'system');return; }
     if (this.busy) return;
-    for (const item of this.all().sort((left, right) => Date.parse(right.createdAt || '') - Date.parse(left.createdAt || ''))) {
+    for (const item of this.active().sort((left, right) => Number(right.createdAt || 0) - Number(left.createdAt || 0))) {
       if (terminal(item)) continue;
       if (item.status === 'QUEUED' || (item.status === 'ERROR' && item.retryAt <= this.now())) { await this.search(item.id); return; }
       if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { this.accept(item.id, item.recommendedId, 'system'); return; }

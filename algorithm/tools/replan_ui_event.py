@@ -374,6 +374,8 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
     index = build_candidate_index(dataset, event.event_time, applied_event_ids=frozenset((*state.applied_event_ids, event.event_id)))
     eligible = index.eligible_engineers_by_job.get(event.target_id, ())
     checked, artifacts, rejected = 0, [], []
+    attempted = set()
+    current = {}
     def score(a):
         metrics = a['validation']['metrics']
         visit = next(v for r in a['plan']['engineer_plans'] for v in r['visits'] if v['job_id'] == event.target_id)
@@ -389,20 +391,35 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
             output['dispatch_candidates'] = artifacts
             output['dispatch_search'] = {'eligible': list(eligible), 'rejected': rejected, 'route_checks': checked, 'route_check_budget': args.rebuild_route_checks, 'global_optimality_proven': False, 'complete': complete}
             write_json_atomic(args.output, output)
-        write_json_atomic(args.output.with_suffix('.progress.json'), {'phase':'DISPATCH', 'completed':len(artifacts)+len(rejected), 'total':len(eligible), 'candidates':len(artifacts), 'routeChecks':checked, 'candidateArtifacts':[a['content_sha256'] for a in artifacts]})
+        write_json_atomic(args.output.with_suffix('.progress.json'), {'phase':'DISPATCH', 'completed':len(attempted), 'total':len(eligible), 'candidates':len(artifacts), 'routeChecks':checked, 'candidateArtifacts':[a['content_sha256'] for a in artifacts], **current})
     blocked = {str(f.get('engineerId', '')).split(':')[-1] for f in payload.get('facts', []) if f.get('status') == 'started' and _at(dataset,f.get('time')) <= event.event_time}
     blocked.update(payload['event'].get('unknownPositions', []))
-    for engineer_id, rebuild in [(key, False) for key in eligible] + [(key, True) for key in eligible]:
-        if rebuild and any(item['dispatch_engineer_id'] == engineer_id for item in artifacts):
+    from beeline_planning.dispatch import rank_interceptions
+    def checking_road(key):
+        current.update(engineerId=key, stage='INTERCEPT_ROAD_CHECK')
+        save_progress()
+    available = tuple(key for key in eligible if key not in blocked and dataset.engineers[key].shift_start <= event.event_time < dataset.engineers[key].shift_end)
+    intercepts = rank_interceptions(dataset, state.plan, event, available,
+        payload['event'].get('dispatchAnchors', {}), oracle, checking_road)
+    # A local handoff is tried before ordinary insertions and regional rebuilding.
+    attempts = [(key, False, True) for key in intercepts]
+    attempts += [(key, True, True) for key in intercepts]
+    attempts += [(key, False, False) for key in eligible]
+    attempts += [(key, True, False) for key in eligible if key not in intercepts]
+    for engineer_id, rebuild, handoff in attempts:
+        if any(item['dispatch_engineer_id'] == engineer_id for item in artifacts):
             continue
+        current.update(engineerId=engineer_id, stage='INTERCEPT_HANDOFF' if handoff else 'FULL_DAY_CHECK')
         rejected[:] = [item for item in rejected if item['engineerId'] != engineer_id]
         save_progress()
         engineer = dataset.engineers[engineer_id]
         if not engineer.shift_start <= event.event_time < engineer.shift_end:
             rejected.append({'engineerId': engineer_id, 'reason': 'Инженер ещё не вышел на смену или смена закончилась'})
+            attempted.add(engineer_id)
             continue
         if engineer_id in blocked:
             rejected.append({'engineerId': engineer_id, 'reason': 'Начатая фактическая работа не завершена: уточните окончание'})
+            attempted.add(engineer_id)
             continue
         remaining = args.rebuild_route_checks - checked
         if remaining <= 0:
@@ -412,7 +429,8 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
             result = replan_after_event(dataset, state, event, oracle,
                 max_route_checks=min(1000 if rebuild else args.max_route_checks, remaining), departure_timing_queries=0,
                 forced_engineer_by_job={event.target_id: engineer_id}, source_dataset=canonical,
-                dispatch_engineer_id=engineer_id, rebuild_future=rebuild)
+                dispatch_engineer_id=engineer_id, rebuild_future=rebuild,
+                handoff_interrupted_job=handoff)
             checked += result.exact_route_checks
             if result.state is None or event.target_id in result.state.plan.unserved_job_ids:
                 rejected.append({'engineerId': engineer_id, 'reason': result.detail or result.unserved_reasons.get(event.target_id, 'Допустимая вставка не найдена в пределах поиска')})
@@ -426,6 +444,7 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
                 'event_time': event.event_time.isoformat(), 'event_id': event.event_id,
                 'exact_route_checks': result.exact_route_checks, 'budget_exhausted': result.budget_exhausted,
                 'search_phase': 'DISPATCH_FORCED_FULL_SHIFT', 'dispatch_engineer_id': engineer_id,
+                'dispatch_handoff': handoff,
                 'changes': _changes(state.plan, result.state.plan), 'global_optimality_proven': False,
                 'routing_configuration': {'provider': 'valhalla-local-transit', 'transit_index': str(args.transit_index)},
                 'ui_history': [*history, {'event': payload['event'], 'orders': payload['orders'], 'team': payload['team']}],
@@ -433,9 +452,12 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
             })
             artifact['content_sha256'] = payload_sha256(artifact)
             artifacts.append(artifact)
+            attempted.add(engineer_id)
             save_progress()
         except Exception as error:
             rejected.append({'engineerId': engineer_id, 'reason': str(error)})
+        finally:
+            attempted.add(engineer_id)
     if not artifacts:
         raise ValueError('Проверенный вариант не найден: ' + json.dumps(rejected, ensure_ascii=False))
     save_progress(True)

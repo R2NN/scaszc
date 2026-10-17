@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ShiftStore } from '../server/shiftStore.mjs';
 import { EmergencyDispatch } from '../server/emergencyDispatch.mjs';
+import { createDispatchApi } from '../server/dispatchApi.mjs';
 import { operationalStates } from '../src/operationalState.js';
 import { eventModel, playbackRouteSegments } from '../src/shiftDomain.js';
 import { notificationPresentation } from '../src/notificationPresentation.js';
@@ -27,6 +28,68 @@ const fixture = (file=':memory:') => {
 
 test('incident creation is idempotent and reading a notice never solves it',()=>{
   const f=fixture();try{const first=f.create();assert.equal(f.create().id,first.id);f.dispatch.read(first.id,first.notifications[0].id);assert.equal(f.dispatch.get(first.id).status,'QUEUED');assert.equal(f.store.get(f.shift.id).revision,1);}finally{f.store.close();}
+});
+
+test('clock ticks retain the selected speed without loading full shift archives', async () => {
+  const f = fixture();
+  const api = createDispatchApi(f.store, {routing:f.dispatch.routing});
+  const post = (path, body) => api.handle(new Request(`http://localhost${path}`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}));
+  try {
+    const created = await (await post('/api/dispatch/sessions',{baseShiftId:f.shift.id,speed:300})).json();
+    const clock = `/api/dispatch/shifts/${created.shiftId}/clock`;
+    const started = await (await post(clock,{minute:500,playing:true,speed:300})).json();
+    assert.equal(started.clock.speed, 300);
+    let archiveReads = 0;
+    const get = f.store.get.bind(f.store);
+    f.store.get = (...args) => { archiveReads += 1; return get(...args); };
+    const tick = await (await post(clock,{serverTick:true})).json();
+    assert.equal(tick.clock.speed, 300);
+    assert.equal(tick.clock.playing, true);
+    assert.ok(tick.clock.minute >= 500);
+    assert.equal(archiveReads, 0);
+    assert.equal(tick.incidents, undefined);
+  } finally { api.close(); f.store.close(); }
+});
+
+test('newest queued incident gets the planner before old abandoned scenarios', async () => {
+  const f = fixture();
+  try {
+    const old = f.create('old');
+    f.advance(1);
+    const current = f.create('current');
+    await f.dispatch.tick();
+    assert.equal(f.dispatch.get(current.id).status, 'WAITING');
+    assert.equal(f.dispatch.get(old.id).status, 'QUEUED');
+    f.dispatch.cancel(old.id);
+    assert.equal(f.dispatch.hasPending(f.shift.id), true);
+    assert.deepEqual(f.dispatch.active(f.shift.id).map(item => item.id), [current.id]);
+  } finally { f.store.close(); }
+});
+
+test('interception cards expose the destination recipient while preserving the quality recommendation', async () => {
+  const store = new ShiftStore(':memory:');
+  try {
+    const receiver = { ...engineer, id: 'E2', name: 'Инженер 2' };
+    const original = { ...initial.routes[0], assignments: [{ ...initial.routes[0].assignments[0], departureAt: '09:50', travelMinutes: 130 }] };
+    const shift = store.ensure({regionId:'intercept', date:'2026-08-17',orders:[order],team:[engineer,receiver],plan:{...initial,routes:[original]}});
+    const routing = async payload => {
+      const emergency = {orderId:payload.event.orderId,departureAt:'10:00',arrival:'10:10',plannedStart:'10:10',plannedFinish:'11:30',travelMinutes:10,geometry:[engineer.startCoords,payload.event.order.coords]};
+      const best = {...initial,contentSha256:'c'.repeat(64),routes:[original,{engineerId:'E2',assignments:[emergency]}],metrics:{total:2,assigned:2}};
+      const intercept = {...initial,contentSha256:'d'.repeat(64),routes:[
+        {engineerId:'E1',assignments:[emergency],movements:[{measured_at:'2026-08-17T10:00:00+03:00',at:'2026-08-17T10:00:00+03:00',source_job_id:'J1',coords:[55.701,37.601]}]},
+        {engineerId:'E2',assignments:initial.routes[0].assignments},
+      ],metrics:{total:2,assigned:2}};
+      return {dispatchCandidates:[{engineerSourceId:'E2',plan:best},{engineerSourceId:'E1',plan:intercept}],dispatchSearch:{complete:true,rejected:[]}};
+    };
+    const dispatch = new EmergencyDispatch(store,{routing});
+    const incident = dispatch.create(shift.id,{order:{...order,id:'U',start:'10:00'},time:'10:00'});
+    const result = await dispatch.search(incident.id);
+    assert.equal(result.status, 'WAITING', result.error);
+    assert.equal(result.candidates[0].kind, 'Перехват в пути');
+    assert.equal(result.candidates[0].interception.receiverName, receiver.name);
+    assert.equal(result.candidates[0].interception.orderId, 'J1');
+    assert.equal(result.recommendedId, result.candidates[1].id);
+  } finally { store.close(); }
 });
 test('manual decision wins once; duplicate callbacks return that same decision',async()=>{
   const f=fixture();try{const item=await f.dispatch.search(f.create().id);assert.equal(item.status,'WAITING');const selected=item.candidates[0];const accepted=f.dispatch.accept(item.id,selected.id,'Диспетчер');f.advance(301);await f.dispatch.tick();assert.deepEqual(f.dispatch.accept(item.id,selected.id,'system').decision,accepted.decision);assert.equal(f.store.get(f.shift.id).revision,2);assert.equal(f.store.get(f.shift.id).events.length,1);}finally{f.store.close();}

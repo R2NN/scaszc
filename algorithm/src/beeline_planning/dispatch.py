@@ -6,7 +6,8 @@ import math
 from datetime import datetime, timedelta
 
 from beeline_routing.export import detailed_route_dict
-from beeline_routing.models import Coordinate, TransportMode
+from beeline_routing.models import Coordinate, TransportMode, RouteStatus
+from beeline_routing.oracle import OracleQuery
 
 
 def split_geometry(points, fraction):
@@ -66,6 +67,37 @@ def checkpoint(route, at, mode):
 def checkpoint_location(item):
     """Create the exact origin identity used by the router and validator."""
     return Coordinate(item['location_id'], *item['coords'], heading=item.get('heading'))
+
+
+def rank_interceptions(dataset, plan, event, eligible, anchors, oracle, on_check=None):
+    """Rank engineers actually travelling by exact arrival from their legal exit.
+
+    These legs only determine search order. A candidate still requires independent
+    full-day validation, including handoff of its interrupted destination.
+    """
+    ranked = []
+    destination = dataset.locations[dataset.jobs[event.target_id].location_id]
+    routes = {route.engineer_id: route for route in plan.engineer_plans}
+    for key in eligible:
+        anchor = anchors.get(key)
+        route = routes.get(key)
+        if not anchor or not route:
+            continue
+        visit = next((v for v in route.visits if v.job_id == anchor['source_job_id']), None)
+        if not visit or not visit.departure_at <= event.event_time < visit.departure_at + timedelta(minutes=visit.travel.duration_minutes):
+            continue
+        if on_check:
+            on_check(key)
+        departure = datetime.fromisoformat(anchor['at'])
+        try:
+            leg = oracle.query(OracleQuery(dataset.engineers[key].transport_mode,
+                checkpoint_location(anchor), destination, departure))
+            if leg.status == RouteStatus.OK:
+                ranked.append((departure + timedelta(minutes=leg.duration_minutes), key))
+        except Exception:
+            # Unknown routing cannot produce an ETA or a published candidate.
+            continue
+    return tuple(key for _, key in sorted(ranked))
 
 
 def verify_checkpoint(item, locations):

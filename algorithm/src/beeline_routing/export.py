@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -66,7 +67,15 @@ def write_json_atomic(path: Path, payload: Any) -> None:
     encoded = json.dumps(payload, ensure_ascii=False, indent=2) + '\n'
     temporary = path.with_suffix(path.suffix + '.tmp')
     temporary.write_text(encoded, encoding='utf-8')
-    temporary.replace(path)
+    for attempt in range(6):
+        try:
+            temporary.replace(path)
+            break
+        except PermissionError:
+            # Windows readers can briefly hold a handle without delete sharing.
+            if attempt == 5:
+                raise
+            time.sleep(0.01 * (attempt + 1))
 
 
 def write_matrix_csv(path: Path, cells: list[MatrixCell]) -> None:
