@@ -13,7 +13,7 @@ export function createDispatchApi(store, options) {
     try {
       for (const row of store.db.prepare('SELECT shift_id,payload FROM dispatch_sessions').all()) {
         const session = JSON.parse(row.payload);
-        if (!session.clock.playing || dispatch.all(row.shift_id).some(item => !['ACCEPTED','CANCELLED'].includes(item.status))) continue;
+        if (!session.clock.playing) continue;
         const minute = Math.min(1439, session.clock.minute + (Date.now()-session.clock.anchorAt)/60000*session.clock.speed);
         await handle(new Request(`http://localhost/api/dispatch/shifts/${row.shift_id}/clock`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...session.clock,minute})}));
       }
@@ -68,6 +68,7 @@ export function createDispatchApi(store, options) {
           const session = JSON.parse(row.payload), minute = Number(input.minute);
           if (!Number.isFinite(minute) || minute < 0 || minute > 1439) throw new Error('Некорректное время смены');
           if (!session.fired && session.lastMinute < 677 && minute >= 677) {
+            session.preIncidentSpeed = Number(session.clock.speed) || 60;
             const address = shift.orders.find(order => order.id === 'SOUTHCENTER-32840') || shift.orders.find(order => order.zoneId === 'SOUTHCENTER');
             const order = { id: `TZ3-${session.id}`, sourceId: `TZ3-${session.id}`, name: 'Аварийный вызов', address: address.address, coords: address.coords,
               regionId: 'moscow', zone: address.zone, zoneId: address.zoneId, objectId: address.objectId, serviceEntities: { object: address.objectId },
@@ -77,8 +78,11 @@ export function createDispatchApi(store, options) {
             session.fired = true;
           }
           session.lastMinute = Math.max(session.lastMinute, minute);
-          const stopped = session.fired && dispatch.all(shiftId).some(item => !['ACCEPTED', 'CANCELLED'].includes(item.status));
-          session.clock = { minute: stopped ? 677 : minute, playing: !stopped && Boolean(input.playing), speed: Number(input.speed) || 60, anchorAt: Date.now() };
+          const pending = session.fired && dispatch.all(shiftId).some(item => !['ACCEPTED', 'CANCELLED'].includes(item.status));
+          const resumeSpeed = session.preIncidentSpeed;
+          const speed = pending ? 1 : resumeSpeed || Number(input.speed) || 60;
+          if (!pending && resumeSpeed) session.preIncidentSpeed = null;
+          session.clock = { minute, playing: Boolean(input.playing) && minute < 1439, speed, anchorAt: Date.now() };
           store.db.prepare('UPDATE dispatch_sessions SET payload=? WHERE id=?').run(JSON.stringify(session), row.id);
           return json({ ...session, incidents: dispatch.all(shiftId) });
         }
@@ -86,7 +90,21 @@ export function createDispatchApi(store, options) {
       const incidentRoute = /^\/api\/dispatch\/incidents\/([^/]+)\/(accept|retry|cancel|read)$/.exec(url.pathname);
       if (incidentRoute && request.method === 'POST') {
         const [, id, action] = incidentRoute;
-        if (action === 'accept') return json(dispatch.accept(id, input.candidateId, input.actor));
+        if (action === 'accept') {
+          const result = dispatch.accept(id, input.candidateId, input.actor);
+          if (result?.status === 'ACCEPTED') {
+            const row = store.db.prepare('SELECT id,payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(result.shiftId);
+            if (row) {
+              const session = JSON.parse(row.payload);
+              if (session.preIncidentSpeed) {
+                session.clock = { ...session.clock, speed: session.preIncidentSpeed, anchorAt: Date.now() };
+                session.preIncidentSpeed = null;
+                store.db.prepare('UPDATE dispatch_sessions SET payload=? WHERE id=?').run(JSON.stringify(session), row.id);
+              }
+            }
+          }
+          return json(result);
+        }
         if (action === 'cancel') return json(dispatch.cancel(id));
         if (action === 'read') return json(dispatch.read(id, input.notificationId));
         const item = dispatch.get(id);

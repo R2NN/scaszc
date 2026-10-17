@@ -19,7 +19,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   const [candidateId, setCandidateId] = useState(''), [error, setError] = useState(''), [policy, setPolicy] = useState(null);
   const refs = useRef({});
   refs.current = { shift, onApply, notify, onOpen };
-  const notified = useRef(new Set()), initialized = useRef(''), clockPending = useRef(false);
+  const notified = useRef(new Set()), autoOpened = useRef(new Set()), initialized = useRef(''), clockPending = useRef(false);
   const [serverOffset, setServerOffset] = useState(0);
   useEffect(() => {
     if (!shift?.id || shift.regionId.includes(':scenario:') || initialized.current === shift.id) return;
@@ -68,7 +68,17 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
             notified.current.add(notice.id);
             refs.current.notify(notice.message, { ...notice, id: notice.id, type: 'EMERGENCY_INCIDENT', incidentId: incident.id, shiftId: shift.id, title: notice.title, showToast: !notice.read, read: notice.read });
           }
-          if (!terminal(incident)) shiftClock.set({ minute: Number(incident.time.slice(0,2))*60+Number(incident.time.slice(3)), playing: false });
+          if (!terminal(incident) && !autoOpened.current.has(incident.id)) {
+            autoOpened.current.add(incident.id);
+            setSelectedId(incident.id);
+            refs.current.onOpen(incident, refs.current.shift);
+            requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('beego:incident-focus', { detail: { coords: incident.order.coords } })));
+          }
+          if (!terminal(incident)) {
+            const incidentMinute = Number(incident.time.slice(0,2))*60+Number(incident.time.slice(3));
+            const current = shiftClock.getSnapshot();
+            shiftClock.set({ minute: Math.max(current.minute, incidentMinute), playing: current.playing, speed: 1 });
+          }
           if (incident.decision && incident.decision.revision > refs.current.shift.revision) {
             const response = await fetch(`/api/shifts/${shift.id}`);
             if (alive && response.ok) refs.current.onApply(await response.json());
@@ -93,10 +103,8 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     clockPending.current = true;
     try {
       const value = await api(`shifts/${current.id}/clock`, shiftClock.getSnapshot());
-      if (value.incidents?.some(item => !terminal(item))) {
-        setIncidents(value.incidents);
-        shiftClock.set({minute:value.clock.minute, playing:false});
-      }
+      setIncidents(value.incidents || []);
+      shiftClock.set({ minute: value.clock.minute, playing: value.clock.playing, speed: value.clock.speed });
     } catch (e) { setError(e.message); }
     finally { clockPending.current = false; }
   }), []);
@@ -167,10 +175,11 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const seconds = item ? Math.max(0, Math.ceil((item.deadlineAt-now-controller.serverOffset)/1000)) : 0;
   return <section className='emergency-dispatch' aria-label='Решение аварии'>
     <div className='dispatch-heading'><div><small>ОПЕРАТИВНОЕ РЕШЕНИЕ</small><h3>Аварийный выезд</h3></div><AlertTriangle size={24}/></div>
+    {item ? <div className='dispatch-flow' role='note'><b>Как принять решение</b><ol><li>Выберите карточку инженера.</li><li>Сравните последствия «до / после» на карте и в изменениях визитов.</li><li>Нажмите «Подтвердить этот вариант».</li></ol></div> : null}
     {!item ? <div className='dispatch-empty'><p>{controller.session ? 'Сценарная смена готова с начала дня. Нажмите «Воспроизвести» на шкале времени. Авария поступит в 11:17.' : 'При поступлении аварии здесь появятся проверенные варианты всей смены.'}</p><button type='button' className='primary' onClick={controller.startSession}>{controller.session ? 'Новая изолированная сессия' : 'Запустить сценарий с 06:00'}</button><small>17 августа · отдельная смена · событие в 11:17</small></div> : <>
       <div className='dispatch-incident'><b>{item.order.address}</b><span>{item.time} · {item.status === 'ACCEPTED' ? 'Решение принято' : item.status === 'CANCELLED' ? 'Отменена' : 'Требуется решение'}</span></div>
       {item.status === 'ACCEPTED' ? <div className='dispatch-saved-note'><span>Это сохранённый результат предыдущего прогона.</span><button type='button' onClick={controller.startSession}>Начать новую демонстрацию</button></div> : null}
-      {!terminal(item) ? <div className='dispatch-countdown' role='status'><Clock3 size={19}/><div><b>{item.policy.enabled ? seconds ? `Автовыбор через ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}` : 'Срок выбора истёк' : 'Решение принимает диспетчер'}</b><span>{item.status === 'SEARCHING' || item.status === 'QUEUED' ? 'Рассчитываем маршруты и проверяем ограничения всей смены…' : item.status === 'ERROR' ? 'Проверенного решения пока нет' : 'Сценарное время приостановлено до решения'}</span></div></div> : null}
+      {!terminal(item) ? <div className='dispatch-countdown' role='status'><Clock3 size={19}/><div><b>{item.policy.enabled ? seconds ? `Автовыбор через ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}` : 'Срок выбора истёк' : 'Решение принимает диспетчер'}</b><span>{item.status === 'SEARCHING' || item.status === 'QUEUED' ? 'Рассчитываем маршруты и проверяем ограничения всей смены…' : item.status === 'ERROR' ? 'Проверенного решения пока нет' : 'Сценарий идёт в реальном времени · ×1 до решения'}</span></div></div> : null}
       {item.progress && !terminal(item) ? <small role='status'>Проверено инженеров: {Math.min(item.progress.completed,item.progress.total)} из {item.progress.total} · вариантов: {item.progress.candidates} · точных проверок маршрутов: {item.progress.routeChecks}</small> : null}
       {item.error ? <p className='dispatch-error' role='alert'>{item.error}</p> : null}
       {item.status === 'ACCEPTED' ? <div className='dispatch-result'><Check/><b>{item.decision.actor === 'system' ? 'Система применила рекомендованный вариант' : 'Диспетчер подтвердил вариант'}</b><span>Версия {item.decision.revision} · {new Date(item.decision.at).toLocaleTimeString('ru-RU')}</span></div> : null}

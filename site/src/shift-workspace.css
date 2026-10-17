@@ -775,6 +775,7 @@
 .shift-operational-heading h3 b{display:grid;place-items:center;min-width:25px;height:22px;padding:0 6px;border-radius:12px;background:#fff0aa;color:#655000;font-size:11px}
 .shift-operational-heading>small{color:#7d8791;font-size:10px;text-align:right}
 .shift-operational-toolbar{flex:none;padding:10px 13px;border-bottom:1px solid #e7ebef}
+.shift-map-explainer{display:grid;gap:5px;padding:9px 13px;border-bottom:1px solid #e7ebef;background:#fbfcfd;color:#59636f;font-size:11px;line-height:1.35}.shift-map-explainer b{font-size:12px;color:#303943}.shift-map-explainer span{display:flex;align-items:center;gap:7px}.shift-map-line{display:inline-block;width:24px;height:3px;border-radius:3px;background:#667085}.shift-map-line.selected{background:#ffc800;border:1px solid #7c3aed;height:5px}.shift-map-line.emergency{height:0;border-top:3px dashed #7c3aed}.app-shell.dark .shift-map-explainer{border-color:#3d444c;background:#24282e;color:#c4c9d0}.app-shell.dark .shift-map-explainer b{color:#f3efe2}
 .shift-list-actions{display:flex;align-items:center;justify-content:space-between;gap:7px;min-width:0}
 .shift-list-actions .shift-load-filters,.shift-list-actions .status-tabs{flex:1;min-width:0}
 .shift-list-actions .shift-manual-add{display:grid;place-items:center;flex:0 0 39px;width:39px;height:39px;min-height:39px;padding:0;border:1px solid #d6dde6;border-radius:12px;background:#fff;color:#544000;cursor:pointer}
