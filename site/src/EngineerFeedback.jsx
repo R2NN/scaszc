@@ -67,7 +67,7 @@ export function EngineerFeedback({ data, kind, onChanged }) {
         <span className={`cx-feedback-state ${visit?.learningDecision === 'confirmed' ? 'is-confirmed' : ''}`}>{state(reply, visit, data.estimate)}</span>
         <div className='cx-feedback-timing'><span>План <b>{visit?.forecast?.total ?? '—'} мин</b></span><ArrowRight size={18}/><span>Факт <b>{visit?.total ?? '—'} мин</b></span><strong className={visit?.total < visit?.forecast?.total ? 'is-faster' : ''}>{Number.isFinite(visit?.total) ? `${signed(visit.total - visit.forecast.total)} мин` : 'Не измерено'}</strong></div>
         <p>{reply.status === 'awaiting' ? 'Ожидается пояснение инженера о причине отклонения.' : reply.comment}</p>
-        {reply.finding ? <div className='cx-feedback-finding'><strong>Что учитывать</strong><span>{reply.finding}</span></div> : null}
+        {reply.finding && reply.repeatability === 'repeat' && !['unknown', 'other'].includes(reply.reason) ? <div className='cx-feedback-finding'><strong>Что учитывать</strong><span>{reply.finding}</span></div> : null}
         {reply.preparation ? <p className='cx-feedback-preparation'>{reply.preparation}</p> : null}
         <small>{visit?.orderLabel || `№${visit?.orderId}`} · {KINDS[visit?.kind]}{reply.source === 'dispatcher' ? ' · записано диспетчером со слов инженера' : ''}</small>
         <button type='button' className='cx-feedback-secondary' onClick={() => setEditing(value => !value)}>{reply.status === 'awaiting' ? 'Записать ответ инженера' : 'Дополнить ответ'}</button>

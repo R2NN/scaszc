@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { ShiftStore } from '../server/shiftStore.mjs';
 import { decideEngineerFeedback, engineerFeedback, engineerFeedbackImpact, saveEngineerFeedback } from '../server/engineerFeedback.mjs';
 import { seedEngineerFeedback } from '../server/engineerFeedbackSeed.mjs';
+import { ENGINEER_COMMENT_VERSION, engineerVisitComment } from '../server/engineerFeedbackLanguage.mjs';
 import { durationFormula } from '../src/durationPresentation.js';
 import { handleComplexity } from '../server/complexityApi.mjs';
 
@@ -139,6 +140,60 @@ test('synthetic enrichment is idempotent and changes neither original facts nor 
   assert.deepEqual(registry.db.prepare('SELECT payload_json FROM duration_visits ORDER BY id,revision').all(), before);
   assert.deepEqual(registry.db.prepare('SELECT * FROM duration_snapshots').all(), snapshots);
   assert.equal(new Set(engineerFeedback(registry, 'A').map(item => item.comment)).size, 4);
+});
+
+test('engineer prose follows visit context and keeps machine timing and transfer decisions out of the message', () => {
+  const base = { id: 'HIST-V2-27082026-5-1', engineerId: 'e', total: 71, forecast: { total: 78 }, kind: 'connection', reason: 'unknown', factors: { line: 'new', devices: 2 }, customerMinutes: 0 };
+  assert.match(engineerVisitComment(base), /кабел|лини|проклад/i);
+  assert.match(engineerVisitComment({ ...base, kind: 'emergency', factors: { readyConfig: true } }), /конфигурац|настройк/i);
+  assert.match(engineerVisitComment({ ...base, factors: { line: 'existing' } }), /готов|существующ|новая линия/i);
+  assert.match(engineerVisitComment({ ...base, total: 100, customerMinutes: 15 }), /клиент/i);
+  assert.match(engineerVisitComment({ ...base, total: 220 }), /не записал|не вспомню|не указал/i);
+  const previousMessage = engineerVisitComment(base);
+  assert.notEqual(engineerVisitComment(base, [previousMessage]), previousMessage);
+  const messages = new Set();
+  for (const kind of ['connection', 'local', 'equipment', 'emergency', 'information']) for (const reason of ['unknown', 'access', 'diagnosis', 'simpler', 'customer']) for (let index = 0; index < 30; index++) {
+    const visit = { ...base, id: `${kind}-${reason}-${index}`, kind, reason, total: index % 2 ? 71 : 90 };
+    const message = engineerVisitComment(visit);
+    assert.equal(message, engineerVisitComment(visit));
+    assert.ok(message.length > 25 && message.length < 230);
+    assert.doesNotMatch(message, /ARCHIVE|наряд|\d+\s*мин|фактическ|норматив|повторных наблюдений|будущих заказ|этап|перенос|подтверждаю/i);
+    messages.add(message);
+  }
+  assert.ok(messages.size >= 65, `Only ${messages.size} distinct accounts`);
+});
+
+test('fixture copy refresh is idempotent and preserves human replies, decisions and measured data', context => {
+  const registry = setup(context);
+  for (let i = 0; i < 3; i++) add(registry, i, { source: 'synthetic-independent-stage-simulator-v2' });
+  registry.db.prepare('DELETE FROM engineer_feedback').run();
+  seedEngineerFeedback(registry);
+  const fixture = engineerFeedback(registry, 'A').find(item => item.visitId === 'visit-0');
+  const legacy = { ...fixture, comment: 'Фактическую длительность записал. Работа 40 мин, оформление 10 мин.' };
+  delete legacy.commentVersion;
+  registry.db.prepare('UPDATE engineer_feedback SET payload_json=? WHERE visit_id=?').run(JSON.stringify(legacy), 'visit-0');
+  saveEngineerFeedback(registry, 'visit-1', { expectedRevision: 1, at, comment: 'Контакт снова пропал, пришлось перепроверить.', reason: 'diagnosis' });
+  const human = engineerFeedback(registry, 'A').find(item => item.visitId === 'visit-1');
+  const guard = { ...engineerFeedback(registry, 'A').find(item => item.visitId === 'visit-2'), comment: 'Уточнил по телефону: ждал клиента.', recordedBy: 'Оператор' };
+  delete guard.commentVersion;
+  registry.db.prepare('UPDATE engineer_feedback SET payload_json=? WHERE visit_id=?').run(JSON.stringify(guard), 'visit-2');
+  const before = registry.db.prepare('SELECT * FROM duration_visits ORDER BY id,revision').all();
+  const snapshots = registry.db.prepare('SELECT * FROM duration_snapshots ORDER BY id').all();
+  const conditions = registry.conditions();
+  assert.equal(seedEngineerFeedback(registry).updated, 1);
+  const rows = engineerFeedback(registry, 'A');
+  const refreshed = rows.find(item => item.visitId === 'visit-0');
+  assert.equal(refreshed.commentVersion, ENGINEER_COMMENT_VERSION);
+  assert.notEqual(refreshed.comment, legacy.comment);
+  const { comment: oldComment, ...oldMetadata } = legacy;
+  const { comment: newComment, commentVersion, ...newMetadata } = refreshed;
+  assert.deepEqual(newMetadata, oldMetadata);
+  assert.deepEqual(rows.find(item => item.visitId === 'visit-1'), human);
+  assert.deepEqual(rows.find(item => item.visitId === 'visit-2'), guard);
+  assert.equal(seedEngineerFeedback(registry).updated, 0);
+  assert.deepEqual(registry.db.prepare('SELECT * FROM duration_visits ORDER BY id,revision').all(), before);
+  assert.deepEqual(registry.db.prepare('SELECT * FROM duration_snapshots ORDER BY id').all(), snapshots);
+  assert.deepEqual(registry.conditions(), conditions);
 });
 
 test('HTTP confirmation enforces the same evidence checks as the store', async context => {
