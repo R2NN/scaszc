@@ -1,0 +1,68 @@
+{
+  "shiftId": "9792d1f8-a91c-4945-8f25-a8185c6d63d3",
+  "incidentId": "2b770626-e8f0-4e03-a7e7-5efd9170895c",
+  "firstCheckedSeconds": 7.985,
+  "candidates": [
+    {
+      "engineer": "Выговский Сергей",
+      "kind": "Перехват в пути",
+      "scenarioTime": "11:17",
+      "departure": "11:17",
+      "arrival": "11:38",
+      "validation": "VALID"
+    }
+  ],
+  "at2300": {
+    "status": "QUEUED",
+    "revision": 1,
+    "decision": null
+  },
+  "publication": [
+    {
+      "automatic": false,
+      "seconds": 8.351,
+      "actor": "Диспетчер",
+      "revision": 2,
+      "validation": "VALID",
+      "scenarioTime": "11:17",
+      "departure": "11:17",
+      "arrival": "11:38",
+      "playing": true,
+      "speed": 300,
+      "coverage": {
+        "total": 206,
+        "assigned": 204,
+        "unassigned": 2,
+        "activeEngineers": 33,
+        "urgentAssigned": 16,
+        "distanceKm": 1429.3,
+        "travelMinutes": 4695,
+        "waitingMinutes": 2355,
+        "additionalEngineers": 0
+      }
+    },
+    {
+      "automatic": true,
+      "seconds": 12.586,
+      "actor": "system",
+      "revision": 2,
+      "validation": "VALID",
+      "scenarioTime": "11:17",
+      "departure": "11:17",
+      "arrival": "11:47",
+      "playing": true,
+      "speed": 300,
+      "coverage": {
+        "total": 206,
+        "assigned": 205,
+        "unassigned": 1,
+        "activeEngineers": 35,
+        "urgentAssigned": 16,
+        "distanceKm": 1435.8,
+        "travelMinutes": 4794,
+        "waitingMinutes": 2207,
+        "additionalEngineers": 0
+      }
+    }
+  ]
+}

@@ -142,3 +142,55 @@ def test_second_emergency_uses_published_route_and_keeps_first_started_service()
     assert after.visits[1].departure_at >= before.visits[0].service_start_at + timedelta(minutes=data.jobs['U'].service_duration_min)
     assert after.movements == before.movements
     assert second.validation.is_valid
+
+
+def test_emergency_at_current_checkpoint_can_start_immediately_with_identity_travel():
+    parts = scenario(event_minute=0)
+    f, source, data, old, event, oracle, point = parts
+    data = replace(data, jobs={**data.jobs, 'U': replace(data.jobs['U'], location_id=point['location_id'])})
+    result = solve((f, source, data, old, event, oracle, point))
+    assert result.state is not None, result.detail
+    visit = next(v for r in result.state.plan.engineer_plans for v in r.visits if v.job_id == 'U')
+    assert visit.departure_at == event.event_time
+    assert visit.service_start_at == event.event_time
+    assert visit.travel.duration_minutes == 0
+    assert result.validation.is_valid
+
+
+def test_fact_started_work_remains_protected_and_has_an_estimated_release():
+    f, source, data, old, event, oracle, _ = scenario(event_minute=5)
+    result = replan_after_event(data, ReplanningState(old), event, oracle, source_dataset=source,
+        forced_engineer_by_job={'U': 'E1'}, dispatch_engineer_id='E1',
+        protected_job_ids=frozenset({'A'}), available_after_by_engineer={'E1': f.at(10)},
+        departure_timing_queries=0)
+    assert result.state is not None, result.detail
+    route = next(r for r in result.state.plan.engineer_plans if r.engineer_id == 'E1')
+    assert route.visits[0] == old.engineer_plans[0].visits[0]
+    assert route.visits[1].job_id == 'U'
+    assert route.visits[1].departure_at >= f.at(10)
+    assert not route.movements
+    assert result.validation.is_valid
+
+
+def test_overdue_engineer_keeps_route_while_another_engineer_can_take_emergency():
+    f, source, data, old, event, oracle, _ = scenario(event_minute=50)
+    result = replan_after_event(data, ReplanningState(old), event, oracle, source_dataset=source,
+        forced_engineer_by_job={'U': 'E2'}, dispatch_engineer_id='E2',
+        locked_engineer_ids=frozenset({'E1'}), protected_job_ids=frozenset({'A'}),
+        departure_timing_queries=0)
+    assert result.state is not None, result.detail
+    routes = {r.engineer_id: r for r in result.state.plan.engineer_plans}
+    assert routes['E1'].visits == old.engineer_plans[0].visits
+    assert any(v.job_id == 'U' for v in routes['E2'].visits)
+    assert result.validation.is_valid
+
+
+def test_dispatch_prefix_and_release_cannot_be_forged_to_skip_future_work():
+    parts = scenario()
+    result = solve(parts)
+    route = next(r for r in result.state.plan.engineer_plans if r.engineer_id == 'E1')
+    changed = replace(route, dispatches=({**route.dispatches[-1], 'prefix_job_ids': ['A']},))
+    plan = replace(result.state.plan, engineer_plans=tuple(changed if r.engineer_id == 'E1' else r for r in result.state.plan.engineer_plans))
+    report = validate_replanned_plan(parts[2], plan, parts[3], event_time=parts[4].event_time,
+        applied_event_ids=frozenset({parts[4].event_id}), canceled_job_ids=frozenset(), unavailable_until_by_engineer={})
+    assert not report.is_valid

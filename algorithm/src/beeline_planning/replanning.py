@@ -198,6 +198,9 @@ def replan_after_event(
     departure_timing_queries: int = 24,
     dispatch_engineer_id: str | None = None,
     handoff_interrupted_job: bool = False,
+    protected_job_ids: frozenset[str] = frozenset(),
+    locked_engineer_ids: frozenset[str] = frozenset(),
+    available_after_by_engineer: Mapping[str, datetime] | None = None,
 ) -> ReplanningResult:
     """Apply one ordered event and return an exactly validated full-day plan.
 
@@ -241,14 +244,23 @@ def replan_after_event(
         engineer_id: _started_prefix(old_routes.get(engineer_id), event.event_time)
         for engineer_id in dataset.engineers
     }
+    for engineer_id, route in old_routes.items():
+        if engineer_id in locked_engineer_ids:
+            frozen[engineer_id] = route.visits
+            continue
+        last_protected = max((i for i, visit in enumerate(route.visits) if visit.job_id in protected_job_ids), default=-1)
+        if last_protected >= 0:
+            frozen[engineer_id] = route.visits[:max(last_protected + 1, len(frozen[engineer_id]))]
     from .dispatch import checkpoint
     movements = {key: old_routes[key].movements if key in old_routes else () for key in dataset.engineers}
     interrupted = None
     if dispatch_engineer_id and dispatch_engineer_id in old_routes:
         interrupted = checkpoint(old_routes[dispatch_engineer_id], event.event_time, dataset.engineers[dispatch_engineer_id].transport_mode)
-        if interrupted:
+        if interrupted and interrupted['source_job_id'] not in protected_job_ids:
             frozen[dispatch_engineer_id] = tuple(v for v in old_routes[dispatch_engineer_id].visits if v.service_start_at <= event.event_time)
             movements[dispatch_engineer_id] += (interrupted,)
+        else:
+            interrupted = None
     handoff_job_id = interrupted['source_job_id'] if interrupted and handoff_interrupted_job else None
     if handoff_interrupted_job and handoff_job_id is None:
         raise InvalidPlanningData('Interception requires an unstarted destination visit')
@@ -316,6 +328,7 @@ def replan_after_event(
 
     def eligible_engineers(job_id: str) -> tuple[str, ...]:
         eligible = candidates.eligible_engineers_by_job.get(job_id, ())
+        eligible = tuple(key for key in eligible if key not in locked_engineer_ids or original_owner.get(job_id) == key)
         if job_id == handoff_job_id:
             eligible = tuple(key for key in eligible if key != dispatch_engineer_id)
         forced = forced_assignments.get(job_id)
@@ -366,6 +379,8 @@ def replan_after_event(
             visit.job_id for visit in original_route.visits
             if visit not in frozen[engineer_id]
         ) if original_route else ()
+        if engineer_id in locked_engineer_ids and order != original_suffix:
+            return _RouteTrial(None, order[0] if order else None, 'UNFINISHED_SERVICE_RELEASE_UNKNOWN')
         newly_unavailable = (
             event.event_type == EventType.ENGINEER_UNAVAILABLE
             and event.target_id == engineer_id
@@ -390,7 +405,9 @@ def replan_after_event(
             != source_dataset.jobs[visit.job_id].service_duration_min
             for visit in original_route.visits
         ) if original_route else False
-        if order == original_suffix and not newly_unavailable and not shifted_window and not duration_changed and not (interrupted and engineer_id == dispatch_engineer_id):
+        release = (available_after_by_engineer or {}).get(engineer_id, event.event_time)
+        release_conflict = any(visit.departure_at < release for visit in (original_route.visits if original_route else ()) if visit not in frozen[engineer_id])
+        if order == original_suffix and not newly_unavailable and not shifted_window and not duration_changed and not release_conflict and not (interrupted and engineer_id == dispatch_engineer_id):
             result = _RouteTrial(original_route.visits if original_route else ())
             trial_cache[key] = result
             return result
@@ -433,6 +450,7 @@ def replan_after_event(
                 return result
             departure = max(
                 event.event_time,
+                release,
                 engineer.shift_start,
                 job.created_at,
                 unavailable.get(engineer_id, event.event_time),
@@ -917,7 +935,10 @@ def replan_after_event(
         engineer_plans = tuple(
             EngineerPlan(engineer_id, schedule(engineer_id, orders[engineer_id]).visits or (), movements[engineer_id],
                 (old_routes[engineer_id].dispatches if engineer_id in old_routes else ()) +
-                (({'job_id': event.target_id, 'at': event.event_time.isoformat()},) if engineer_id == dispatch_engineer_id and event.target_id in assigned_jobs() else ()))
+                (({'job_id': event.target_id, 'at': event.event_time.isoformat(),
+                    'prefix_job_ids': [visit.job_id for visit in frozen[engineer_id]],
+                    'available_after': (available_after_by_engineer or {}).get(engineer_id, event.event_time).isoformat()},)
+                 if engineer_id == dispatch_engineer_id and event.target_id in assigned_jobs() else ()))
             for engineer_id in sorted(dataset.engineers)
         )
     except _RoutingIncomplete as error:
@@ -936,6 +957,8 @@ def replan_after_event(
         applied_event_ids=frozenset(new_applied),
         canceled_job_ids=frozenset(canceled),
         unavailable_until_by_engineer=unavailable,
+        protected_job_ids=protected_job_ids,
+        available_after_by_engineer=available_after_by_engineer,
     )
     if validation.status != ValidationStatus.VALID:
         raise InvalidPlanningData(

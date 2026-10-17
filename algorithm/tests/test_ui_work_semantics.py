@@ -7,6 +7,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from dataclasses import replace
 from tempfile import TemporaryDirectory
 
 from beeline_planning import build_candidate_index, load_planning_dataset
@@ -19,6 +20,20 @@ from replan_ui_event import _event_dataset
 
 
 class UiWorkSemanticsTests(unittest.TestCase):
+    def test_new_emergency_at_checkpoint_preserves_direction_evidence(self):
+        from beeline_routing.models import Coordinate
+        with TemporaryDirectory() as directory:
+            payload = self.prepared()
+            root = Path(directory) / 'dataset'
+            prepare(payload, root)
+            data = load_planning_dataset(root, 'core')
+            point = Coordinate('DISPATCH-CURRENT', 55.701234, 37.612345, heading=137)
+            data = replace(data, locations={**data.locations, point.location_id: point})
+            order = {**payload['orders'][0], 'id': 'current-emergency', 'coords': [point.latitude, point.longitude]}
+            changed, _ = _event_dataset(data, {'orders': [order], 'event': {'type': 'NEW_ORDER', 'orderId': order['id'], 'time': '09:00'}})
+            self.assertEqual(changed.jobs[order['id']].location_id, point.location_id)
+            self.assertEqual(changed.locations[point.location_id].heading, 137)
+
     def test_reviewed_original_day_preserves_all_205_required_qualifications(self):
         root = Path(__file__).parents[2]
         reviewed = json.loads((root / 'site/public/data/beego-complexity-plan.json').read_text(encoding='utf8'))

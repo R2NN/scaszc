@@ -7,7 +7,7 @@ import { ShiftStore } from '../server/shiftStore.mjs';
 import { EmergencyDispatch } from '../server/emergencyDispatch.mjs';
 import { createDispatchApi } from '../server/dispatchApi.mjs';
 import { operationalStates } from '../src/operationalState.js';
-import { eventModel, playbackRouteSegments } from '../src/shiftDomain.js';
+import { eventModel, playbackRouteSegments, minuteOf, timeOf, playbackFrame } from '../src/shiftDomain.js';
 import { notificationPresentation } from '../src/notificationPresentation.js';
 
 const engineer = { id:'E1',name:'Инженер 1',skills:['EMERGENCY'],equipment:['DIAG_SET'],transport:'CAR',zoneId:'EAST',zone:'Восток',startCoords:[55.7,37.6],shiftStart:'08:00',shiftEnd:'18:00',status:'Доступен' };
@@ -63,15 +63,15 @@ test('clock ticks retain the selected speed without loading full shift archives'
   } finally { api.close(); f.store.close(); }
 });
 
-test('newest queued incident gets the planner before old abandoned scenarios', async () => {
+test('incidents within one shift are searched in event order', async () => {
   const f = fixture();
   try {
     const old = f.create('old');
     f.advance(1);
     const current = f.create('current');
     await f.dispatch.tick();
-    assert.equal(f.dispatch.get(current.id).status, 'WAITING');
-    assert.equal(f.dispatch.get(old.id).status, 'QUEUED');
+    assert.equal(f.dispatch.get(current.id).status, 'QUEUED');
+    assert.equal(f.dispatch.get(old.id).status, 'WAITING');
     f.dispatch.cancel(old.id);
     assert.equal(f.dispatch.hasPending(f.shift.id), true);
     assert.deepEqual(f.dispatch.active(f.shift.id).map(item => item.id), [current.id]);
@@ -187,4 +187,124 @@ test('day start requires a confirmed dated point and cannot rewrite an executing
 });
 test('notification type is explicit and elapsed road geometry remains visible',()=>{
   assert.equal(notificationPresentation({type:'EMERGENCY_INCIDENT',title:'Новая авария'}).title,'Новая авария');const segments=playbackRouteSegments({assignments:[],movements:[{at:'2026-08-17T11:17:00+03:00',geometry:[[55.7,37.6],[55.71,37.61]]}]},678);assert.equal(segments.travelled.length,1);
+});
+
+const setScenarioMinute = (f, minute) => {
+  const session = {clock:{minute,playing:false,speed:1,anchorAt:100000}};
+  f.store.db.prepare('INSERT OR REPLACE INTO dispatch_sessions VALUES (?,?,?,?)').run('test-clock', f.shift.id, f.shift.id, JSON.stringify(session));
+};
+
+test('manual and automatic decisions cannot publish a route from before the scenario clock', async () => {
+  for (const automatic of [false, true]) {
+    const f = fixture();
+    try {
+      const ready = await f.dispatch.search(f.create().id);
+      setScenarioMinute(f, 1380);
+      if (automatic) { f.advance(301); await f.dispatch.tick(); }
+      else f.dispatch.accept(ready.id, ready.candidates[0].id);
+      assert.equal(f.dispatch.get(ready.id).status, 'QUEUED');
+      assert.equal(f.store.get(f.shift.id).revision, 1);
+      assert.equal(f.dispatch.get(ready.id).candidates.length, 0);
+    } finally { f.store.close(); }
+  }
+});
+
+test('a search uses the current clock, not the incident arrival time', async () => {
+  const f = fixture();
+  try {
+    let sent;
+    f.dispatch.routing = async payload => { sent = payload; throw new Error('captured'); };
+    setScenarioMinute(f, 1380);
+    await f.dispatch.search(f.create().id);
+    assert.equal(sent.event.time, '23:00');
+  } finally { f.store.close(); }
+});
+
+test('rejecting a stale partial result interrupts the old search and leaves it queued', async () => {
+  const f = fixture();
+  try {
+    const routing = f.dispatch.routing;
+    f.dispatch.routing = async (payload, root, {onProgress, signal}) => {
+      const result = await routing(payload);
+      onProgress({completed:1,total:2,dispatchCandidates:result.dispatchCandidates});
+      await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));
+      throw new Error('interrupted');
+    };
+    const item = f.create(), running = f.dispatch.search(item.id);
+    await new Promise(resolve=>setImmediate(resolve));
+    const partial = f.dispatch.get(item.id);
+    assert.equal(partial.status,'WAITING');
+    setScenarioMinute(f,1380);
+    assert.equal(f.dispatch.accept(item.id,partial.candidates[0].id).status,'QUEUED');
+    await running;
+    assert.equal(f.dispatch.get(item.id).status,'QUEUED');
+    assert.equal(f.dispatch.busy,false);
+    assert.equal(f.store.get(f.shift.id).revision,1);
+  } finally { f.store.close(); }
+});
+
+test('a later accepted incident rebases older pending incidents on the new publication', async () => {
+  const f = fixture();
+  try {
+    const older = f.create('early');
+    const later = f.dispatch.create(f.shift.id,{order:{...order,id:'late',start:'10:05'},time:'10:05'});
+    const checkpoints = [];
+    f.dispatch.routing = async payload => {
+      checkpoints.push(payload.event.time);
+      const departure = Math.max(minuteOf(payload.event.time), ...payload.plan.routes.flatMap(route=>route.assignments.map(visit=>minuteOf(visit.plannedFinish))));
+      const added = {orderId:payload.event.orderId,departureAt:timeOf(departure),arrival:timeOf(departure+10),plannedStart:timeOf(departure+10),plannedFinish:timeOf(departure+90),geometry:[engineer.startCoords,order.coords]};
+      return {dispatchCandidates:[{engineerSourceId:'E1',plan:{...payload.plan,contentSha256:payload.event.orderId.padEnd(64,'a'),routes:[{...payload.plan.routes[0],assignments:[...payload.plan.routes[0].assignments,added]}]}}]};
+    };
+    const ready = await f.dispatch.search(later.id);
+    assert.equal(ready.status,'WAITING',ready.error);
+    assert.equal(f.dispatch.accept(later.id,ready.candidates[0].id).status,'ACCEPTED');
+    const earlyReady = await f.dispatch.search(older.id);
+    assert.equal(earlyReady.status,'WAITING',earlyReady.error);
+    assert.deepEqual(checkpoints,['10:05','10:05']);
+    assert.equal(f.dispatch.accept(older.id,earlyReady.candidates[0].id).status,'ACCEPTED');
+    assert.equal(f.store.get(f.shift.id).revision,3);
+  } finally { f.store.close(); }
+});
+
+test('search refreshes future duration snapshots after a normative change and preserves departed work', async () => {
+  const f = fixture();
+  try {
+    const created = f.create();
+    assert.equal(created.order.duration,80);
+    const model = f.store.complexity.model();
+    f.store.complexity.saveModel({...model,expectedVersion:model.version,norms:{...model.norms,emergency:[90,0]},effectiveAt:'2026-08-17T09:00:00+03:00',reason:'Проверка изменения норматива'});
+    let sent;
+    f.dispatch.routing = async payload => { sent = payload; throw new Error('captured'); };
+    await f.dispatch.search(created.id);
+    assert.equal(sent.orders.find(order=>order.id===created.order.id).duration,90);
+    assert.equal(sent.event.order.durationSnapshot.total,90);
+    assert.equal(sent.orders.find(order=>order.id==='J1').duration,90);
+    setScenarioMinute(f, 750);
+    await f.dispatch.search(created.id);
+    assert.equal(sent.orders.find(order=>order.id==='J1').duration,80);
+    assert.deepEqual(sent.plan, initial);
+  } finally { f.store.close(); }
+});
+
+test('overdue unfinished work does not abort searches for the rest of the team', async () => {
+  const f = fixture();
+  try {
+    f.store.recordFact(f.shift.id,{orderId:'J1',engineerId:'E1',status:'started',time:'12:00'});
+    setScenarioMinute(f, 850);
+    let reached = false;
+    f.dispatch.routing = async () => { reached = true; throw new Error('captured'); };
+    await f.dispatch.search(f.create().id);
+    assert.equal(reached,true);
+  } finally { f.store.close(); }
+});
+
+test('started work has a forecast release until overdue and home availability applies to playback and reserve', () => {
+  const home = {...engineer,startPoint:{kind:'home',availableFrom:'15:00'}};
+  const shift = {date:'2026-08-17',revision:1,team:[home],orders:[order],plan:initial,facts:[]};
+  assert.equal(operationalStates(shift,600)[0].status,'before_shift');
+  assert.equal(operationalStates(shift,600)[0].availableAt,'15:00');
+  assert.equal(playbackFrame(shift,600).crews[0].status,'off_shift');
+  const working = {...shift,team:[engineer],facts:[{orderId:'J1',engineerId:'E1',status:'started',time:'12:00'}]};
+  assert.equal(operationalStates(working,730)[0].availableAt,'13:20');
+  assert.equal(operationalStates(working,810)[0].availableAt,null);
 });

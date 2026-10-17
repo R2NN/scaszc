@@ -103,7 +103,32 @@ export class EmergencyDispatch {
     }
   }
 
-  currentMinute(item) { return minuteOf(item.time) + (item.mode === 'live' ? Math.floor((this.now()-item.createdAt)/60000) : 0); }
+  currentMinute(item, shift = this.store.get(item.shiftId)) {
+    const session = decode(this.store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(item.shiftId));
+    const clock = session?.clock;
+    const clockMinute = clock ? clock.minute + (clock.playing ? Math.max(0, this.now()-clock.anchorAt)/60000*clock.speed : 0) : 0;
+    return Math.min(1439, Math.floor(Math.max(minuteOf(item.time) + (item.mode === 'live' ? Math.max(0, (this.now()-item.createdAt)/60000) : 0),
+      clockMinute, minuteOf(shift?.versions.at(-1)?.effectiveAt) || 0,
+      ...(shift?.facts || []).map(fact => minuteOf(fact.time) || 0))));
+  }
+
+  requeue(item) {
+    const saved = this.save({ ...item, status: 'QUEUED', candidates: [], recommendedId: null, search: null,
+      error: 'Вариант устарел. Выполняется новый расчёт от текущего времени смены.' });
+    this.controllers.get(item.id)?.abort();
+    return saved;
+  }
+
+  prepareSearch(shift, item, time) {
+    const minute = minuteOf(time);
+    const unknownRelease = new Set(operationalStates(shift, minute).filter(state => state.status === 'working' && state.availableAt == null).map(state => String(state.engineerId)));
+    const protectedIds = new Set((shift.facts || []).filter(fact => ['started', 'completed'].includes(fact.status)).map(fact => String(fact.orderId)));
+    for (const route of shift.plan.routes) for (const visit of route.assignments) {
+      if ((minuteOf(visit.departureAt) ?? Infinity) <= minute || unknownRelease.has(String(route.engineerId))) protectedIds.add(String(visit.orderId));
+    }
+    return [...shift.orders, item.order].map(order => protectedIds.has(String(order.id)) ? order
+      : this.store.complexity.prepareOrders([order], `${shift.date}T${time}:00+03:00`)[0]);
+  }
   notification(item, title, message) { item.notifications.push({ id: randomUUID(), type: 'EMERGENCY_INCIDENT', title, message, read: false, createdAt: this.now() }); }
 
   async search(id) {
@@ -116,24 +141,21 @@ export class EmergencyDispatch {
     const controller = new AbortController();
     this.controllers.set(id,controller);
     try {
-      const shift = this.store.get(item.shiftId), minute = this.currentMinute(item), time = timeOf(minute);
+      const shift = this.store.get(item.shiftId), minute = this.currentMinute(item, shift), time = timeOf(minute);
       const fingerprint = this.fingerprint(shift);
       item.status = 'SEARCHING'; item.error = null; item.searchStartedAt = this.now(); this.save(item);
       const states = operationalStates(shift, minute, item.mode === 'scenario' ? 'plan' : 'fact');
-      for (const fact of shift.facts || []) {
-        if (fact.status !== 'started' || (minuteOf(fact.time) ?? Infinity) > minute) continue;
-        const visit = shift.plan.routes.flatMap(route=>route.assignments).find(visit=>String(visit.orderId)===String(fact.orderId));
-        if (visit && minute >= minuteOf(visit.plannedFinish)) throw new Error(`Заявка ${fact.orderId} фактически ещё выполняется после ${visit.plannedFinish}. Уточните окончание работы перед проверкой всей смены.`);
-      }
       if (item.mode === 'live') throw new Error('Для точного live-выезда нужны свежие координаты и история движения. Источник телеметрии не подключён; расчётная позиция не выдаётся за фактическую.');
-      const event = { type: 'NEW_ORDER', time, orderId: item.order.id, order: item.order, reason: 'Аварийный выезд', incidentId: item.id };
-      const result = await this.routing({ orders: [...shift.orders, item.order], team: shift.team, plan: shift.plan, planningDate: shift.date, basePlanContentSha256: shift.plan.contentSha256, event, dispatch: true, facts: shift.facts }, undefined, {signal:controller.signal,onProgress:progress => {
+      const orders = this.prepareSearch(shift, item, time), prepared = orders.at(-1);
+      const searchShift = { ...shift, orders: orders.slice(0,-1) }, searchItem = { ...item, order: prepared };
+      const event = { type: 'NEW_ORDER', time, orderId: prepared.id, order: prepared, reason: 'Аварийный выезд', incidentId: item.id };
+      const result = await this.routing({ orders, team: shift.team, plan: shift.plan, planningDate: shift.date, basePlanContentSha256: shift.plan.contentSha256, event, dispatch: true, facts: shift.facts }, undefined, {signal:controller.signal,onProgress:progress => {
         const fresh=this.get(id);
-        if (!fresh || terminal(fresh)) return;
+        if (!fresh || terminal(fresh) || controller.signal.aborted) return;
         const {dispatchCandidates:partial,...summary}=progress;
         fresh.progress={...summary, engineerName:shift.team.find(e => String(e.sourceId || e.id).split(':').at(-1) === summary.engineerId)?.name};
         if (partial?.length && this.fingerprint(this.store.get(item.shiftId))===fingerprint && this.currentMinute(item)===minute) {
-          const described = partial.map(candidate=>this.describe(shift,item,candidate,states,fingerprint,time));
+          const described = partial.map(candidate=>this.describe(searchShift,searchItem,candidate,states,fingerprint,time));
           fresh.recommendedId=described[0].id;
           fresh.candidates=orderCandidates(described);
           if(fresh.status==='SEARCHING')this.notification(fresh,'Решения аварии готовы',`${fresh.candidates.length} проверенных вариантов. Поиск продолжается.`);
@@ -145,14 +167,15 @@ export class EmergencyDispatch {
       const fresh = this.get(id);
       if (terminal(fresh)) return fresh;
       if (this.fingerprint(this.store.get(item.shiftId)) !== fingerprint || this.currentMinute(item) !== minute) {
-        return this.save({ ...fresh, status: 'QUEUED', candidates: [], error: 'Состояние смены изменилось. Варианты пересчитываются.' });
+        return this.requeue(fresh);
       }
       // Preserve reads and notices recorded while the search was running.
       item.notifications = fresh.notifications;
       item.progress = fresh.progress;
-      const described = (result.dispatchCandidates || []).map(candidate => this.describe(shift, item, candidate, states, fingerprint, time));
+      const described = (result.dispatchCandidates || []).map(candidate => this.describe(searchShift, searchItem, candidate, states, fingerprint, time));
       const candidates = orderCandidates(described);
       if (!candidates.length) throw new Error('Независимо проверенный вариант не найден');
+      item.order = prepared;
       item.candidates = candidates; item.search = result.dispatchSearch ? { ...result.dispatchSearch, rejected:result.dispatchSearch.rejected.map(entry => ({ ...entry, engineerName:shift.team.find(e => String(e.sourceId || e.id).split(':').at(-1) === entry.engineerId)?.name || entry.engineerId, reason:/unverified|ROUTING|маршрут/i.test(entry.reason) ? 'Не удалось подтвердить дорогу. Точный вариант не предлагается.' : /FROZEN|invalid/i.test(entry.reason) ? 'Не найден план, сохраняющий начатые работы и прямой выезд на аварию.' : /STATIC|NO_EXACT|TIME_WINDOW|SEARCH_BUDGET/i.test(entry.reason) ? 'В пределах поиска не найдено назначение с текущими окнами и составом.' : entry.reason })) } : null; item.status = 'WAITING'; item.version += 1;
       item.searchFinishedAt = this.now(); item.recommendedId = described[0].id;
       this.notification(item, 'Решения аварии готовы', `${candidates.length} проверенных вариантов. Рекомендован ${described[0].engineer.name}.`);
@@ -160,6 +183,7 @@ export class EmergencyDispatch {
     } catch (error) {
       const fresh = this.get(id);
       if (terminal(fresh)) return fresh;
+      if (controller.signal.aborted) return this.requeue(fresh);
       fresh.status = 'ERROR'; fresh.error = error.message; fresh.retryAt = this.now()+30000;
       this.notification(fresh, 'Авария требует внимания', error.message);
       return this.save(fresh);
@@ -173,7 +197,7 @@ export class EmergencyDispatch {
     const route = plan.routes.find(item => item.engineerId === engineer?.id);
     const visit = route?.assignments.find(item => item.orderId === incident.order.id);
     if (!visit) throw new Error('В варианте отсутствует назначение аварии');
-    const state = states.find(item => item.engineerId === engineer.id);
+    const state = { ...states.find(item => item.engineerId === engineer.id) };
     const movement = route.movements?.findLast(item => item.measured_at === `${shift.date}T${time}:00+03:00`);
     if (movement) state.availableAt = movement.at.slice(11,16);
     if (['unknown', 'unavailable', 'before_shift', 'after_shift'].includes(state.status) || state.availableAt == null) throw new Error('Нет достоверного доступного оперативного состояния');
@@ -197,14 +221,21 @@ export class EmergencyDispatch {
     const reserve = shift.team.filter(e => !plan.routes.find(r => r.engineerId === e.id)?.assignments.some(v => (minuteOf(v.plannedFinish) ?? 0) > minuteOf(time)))
       .map(e => ({ ...states.find(s => s.engineerId === e.id), name: e.name, skills: e.skills, until: e.shiftEnd }))
       .filter(e => e.coords && e.availableAt && ['idle', 'waiting'].includes(e.status) && e.engineerId !== engineer.id);
-    const history = this.store.db.prepare('SELECT id,payload_json FROM duration_visits WHERE ended_at < ? AND known_at <= ? ORDER BY revision').all(`${shift.date}T${time}:00+03:00`, `${shift.date}T${time}:00+03:00`);
-    const experience = [...new Map(history.map(row => [row.id,JSON.parse(row.payload_json)])).values()].filter(visit => String(visit.engineerId) === String(engineer.sourceId || engineer.id) && visit.kind === 'emergency').length;
+    const at = `${shift.date}T${time}:00+03:00`;
+    const history = this.store.db.prepare('SELECT id,payload_json FROM duration_visits WHERE julianday(known_at) <= julianday(?) ORDER BY revision').all(at);
+    const visits = [...new Map(history.map(row => [row.id,JSON.parse(row.payload_json)])).values()].filter(visit =>
+      String(visit.engineerId).split(':').at(-1) === String(engineer.sourceId || engineer.id).split(':').at(-1)
+      && visit.kind === 'emergency' && visit.status === 'completed' && !visit.excluded && visit.endedAt && Date.parse(visit.endedAt) < Date.parse(at));
+    const ratings = visits.filter(visit => !visit.source?.startsWith('synthetic') && Number.isFinite(visit.rating) && visit.rating >= 1 && visit.rating <= 5).map(visit => visit.rating);
     return { id: `${incident.id}:${plan.contentSha256}`, fingerprint, baseRevision: shift.revision, scenarioTime: time, checkedAt: this.now(), artifact: candidate.artifact,
       engineer: { id: engineer.id, name: engineer.name, skills: engineer.skills, equipment: engineer.equipment, transport: engineer.transport }, state, visit,
       departureOrigin: movement?.coords || state.coords, responseMinutes: minuteOf(visit.arrival)-minuteOf(time),
       kind: state.status === 'travelling' ? 'Перехват в пути' : state.status === 'working' ? 'После текущей работы' : fromHome ? 'Выезд из дома' : 'Свободный инженер',
       startPoint: engineer.startPoint || null,
-      experience: { count: experience, source: 'duration_visits', rating: null, ratingCount: 0 },
+      warnings: states.filter(state => state.status === 'working' && state.availableAt == null).map(state =>
+        `${shift.team.find(engineer => engineer.id === state.engineerId)?.name || state.engineerId}: работа не завершена, время освобождения неизвестно. Его маршрут сохранён; уточните фактическое окончание.`),
+      experience: { count: visits.length, scenarioCount: visits.filter(visit => visit.source?.startsWith('synthetic')).length,
+        source: 'duration_visits', rating: ratings.length ? ratings.reduce((sum, value) => sum+value,0)/ratings.length : null, ratingCount: ratings.length },
       interception, changes, changedEngineerIds, loads, reserve, coverage: { before: shift.plan.metrics, after: plan.metrics },
       plan, orders, team: shift.team, validation: plan.validation, contentSha256: plan.contentSha256 };
   }
@@ -218,15 +249,16 @@ export class EmergencyDispatch {
       if (item.status !== 'WAITING' || !candidate) throw new Error('Выберите готовый проверенный вариант');
       const shift = this.store.get(item.shiftId);
       if (candidate.fingerprint !== this.fingerprint(shift) || candidate.scenarioTime !== timeOf(this.currentMinute(item))) {
-        this.save({ ...item, status: 'QUEUED', candidates: [], error: 'Вариант устарел. Выполняется новый расчёт.' });
-        return this.get(id);
+        return this.requeue(item);
       }
-      const event = { type: 'NEW_ORDER', time: candidate.scenarioTime, order: item.order, orderId: item.order.id, reason: actor === 'system' ? 'Авария: автоматическое решение после ожидания' : 'Авария: решение диспетчера', incidentId: id, candidateId, policy: item.policy.choice };
+      if ((minuteOf(candidate.visit.departureAt) ?? -1) < this.currentMinute(item, shift)) return this.requeue(item);
+      const event = { type: 'NEW_ORDER', time: candidate.scenarioTime, order: candidate.orders.find(order => order.id === item.order.id), orderId: item.order.id, reason: actor === 'system' ? 'Авария: автоматическое решение после ожидания' : 'Авария: решение диспетчера', incidentId: id, candidateId, policy: item.policy.choice };
       const previewId = this.store.startPreview(item.shiftId, shift.revision, event);
       this.store.completePreview(previewId, { orders: candidate.orders, team: candidate.team, plan: candidate.plan });
       const saved = this.store.publish(item.shiftId, previewId, shift.revision, actor);
       item.status = 'ACCEPTED'; item.decision = { candidateId, actor, at: this.now(), revision: saved.revision, planId: saved.currentPlanId, contentSha256: candidate.contentSha256 };
       this.notification(item, actor === 'system' ? 'Авария назначена автоматически' : 'Авария назначена', `${candidate.engineer.name} · прибытие ${candidate.visit.arrival}`);
+      for (const other of this.active(item.shiftId)) if (other.id !== id) this.requeue(other);
       return this.save(item);
     })();
     if (result && terminal(result)) this.controllers.get(id)?.abort();
@@ -254,7 +286,8 @@ export class EmergencyDispatch {
     if (!this.store.db.open) return;
     for (const item of this.active()) if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { this.accept(item.id,item.recommendedId,'system');return; }
     if (this.busy) return;
-    for (const item of this.active().sort((left, right) => Number(right.createdAt || 0) - Number(left.createdAt || 0))) {
+    for (const item of this.active().sort((left, right) => left.shiftId === right.shiftId
+      ? minuteOf(left.time)-minuteOf(right.time) || left.createdAt-right.createdAt : right.createdAt-left.createdAt)) {
       if (terminal(item)) continue;
       if (item.status === 'QUEUED' || (item.status === 'ERROR' && item.retryAt <= this.now())) { await this.search(item.id); return; }
       if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { this.accept(item.id, item.recommendedId, 'system'); return; }

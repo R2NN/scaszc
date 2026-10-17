@@ -5,7 +5,7 @@ import hashlib
 import json
 import sys
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -193,7 +193,8 @@ def _event_dataset(dataset, payload: dict[str, Any]) -> tuple[Any, Event]:
             raise ValueError('Для новой заявки нужны подтверждённые координаты')
         location_id = f'UI-LOC-{digest}'
         location_id = next((key for key, point in locations.items() if abs(point.latitude-float(coords[0])) < 1e-8 and abs(point.longitude-float(coords[1])) < 1e-8), location_id)
-        locations[location_id] = Coordinate(location_id, float(coords[0]), float(coords[1]))
+        if location_id not in locations:
+            locations[location_id] = Coordinate(location_id, float(coords[0]), float(coords[1]))
         zone_id = _zone_id(payload, order, dataset)
         priority = Priority(order_priority(order))
         job = Job(
@@ -392,7 +393,21 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
             output['dispatch_search'] = {'eligible': list(eligible), 'rejected': rejected, 'route_checks': checked, 'route_check_budget': args.rebuild_route_checks, 'global_optimality_proven': False, 'complete': complete}
             write_json_atomic(args.output, output)
         write_json_atomic(args.output.with_suffix('.progress.json'), {'phase':'DISPATCH', 'completed':len(attempted), 'total':len(eligible), 'candidates':len(artifacts), 'routeChecks':checked, 'candidateArtifacts':[a['content_sha256'] for a in artifacts], **current})
-    blocked = {str(f.get('engineerId', '')).split(':')[-1] for f in payload.get('facts', []) if f.get('status') == 'started' and _at(dataset,f.get('time')) <= event.event_time}
+    protected = {str(f['orderId']).split(':')[-1] for f in payload.get('facts', []) if f.get('status') in {'started', 'completed'} and _at(dataset, f.get('time')) <= event.event_time}
+    releases, blocked = {}, set()
+    for fact in payload.get('facts', []):
+        if fact.get('status') != 'started' or _at(dataset, fact.get('time')) > event.event_time:
+            continue
+        job_id = str(fact['orderId']).split(':')[-1]
+        owner = next((route for route in state.plan.engineer_plans if any(v.job_id == job_id for v in route.visits)), None)
+        if owner is None:
+            continue
+        visit = next(v for v in owner.visits if v.job_id == job_id)
+        release = max(visit.service_start_at, _at(dataset, fact.get('startedAt') or fact['time'])) + timedelta(minutes=dataset.jobs[job_id].service_duration_min)
+        if release <= event.event_time:
+            blocked.add(owner.engineer_id)
+        else:
+            releases[owner.engineer_id] = release
     blocked.update(payload['event'].get('unknownPositions', []))
     from beeline_planning.dispatch import rank_interceptions
     def checking_road(key):
@@ -430,7 +445,8 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
                 max_route_checks=min(1000 if rebuild else args.max_route_checks, remaining), departure_timing_queries=0,
                 forced_engineer_by_job={event.target_id: engineer_id}, source_dataset=canonical,
                 dispatch_engineer_id=engineer_id, rebuild_future=rebuild,
-                handoff_interrupted_job=handoff)
+                handoff_interrupted_job=handoff, protected_job_ids=protected,
+                locked_engineer_ids=blocked, available_after_by_engineer=releases)
             checked += result.exact_route_checks
             if result.state is None or event.target_id in result.state.plan.unserved_job_ids:
                 rejected.append({'engineerId': engineer_id, 'reason': result.detail or result.unserved_reasons.get(event.target_id, 'Допустимая вставка не найдена в пределах поиска')})

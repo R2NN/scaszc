@@ -19,7 +19,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   const [candidateId, setCandidateId] = useState(''), [error, setError] = useState(''), [policy, setPolicy] = useState(null);
   const refs = useRef({});
   refs.current = { shift, onApply, notify, onOpen };
-  const notified = useRef(new Set()), autoOpened = useRef(new Set()), initialized = useRef(''), clockPending = useRef(false);
+  const notified = useRef(new Set()), initialized = useRef(''), clockPending = useRef(false);
   const [serverOffset, setServerOffset] = useState(0);
   useEffect(() => {
     if (!shift?.id || shift.regionId.includes(':scenario:') || initialized.current === shift.id) return;
@@ -67,24 +67,11 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
             notified.current.add(notice.id);
             refs.current.notify(notice.message, { ...notice, id: notice.id, type: 'EMERGENCY_INCIDENT', incidentId: incident.id, shiftId: shift.id, title: notice.title, showToast: !notice.read, read: notice.read });
           }
-          if (!terminal(incident) && !autoOpened.current.has(incident.id)) {
-            autoOpened.current.add(incident.id);
-            setSelectedId(incident.id);
-            refs.current.onOpen(incident, refs.current.shift);
-            requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('beego:incident-focus', { detail: { coords: incident.order.coords } })));
-          }
           if (!terminal(incident) && shiftClock.getSnapshot().speed !== 1) shiftClock.set({ speed: 1 });
           if (incident.decision && incident.decision.revision > refs.current.shift.revision) {
             const response = await fetch(`/api/shifts/${shift.id}`);
             if (alive && response.ok) refs.current.onApply(await response.json());
           }
-        }
-        // A persisted decision is a historical snapshot. Reopen it at the
-        // incident moment instead of leaving playback before 11:17.
-        const latestAccepted = value.incidents.filter(incident => incident.status === 'ACCEPTED').at(-1);
-        if (latestAccepted) {
-          const incidentMinute = Number(latestAccepted.time.slice(0, 2)) * 60 + Number(latestAccepted.time.slice(3));
-          if (shiftClock.getSnapshot().minute < incidentMinute) shiftClock.set({ minute: incidentMinute, playing: false });
         }
       } catch (e) { if (alive) setError(e.message); }
     };
@@ -141,7 +128,13 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     } catch (e) { setError(e.message); }
   };
   const accept = async (incident, candidate) => {
-      try { setError(''); const result = await api(`incidents/${incident.id}/accept`, { candidateId:candidate.id, actor:'Диспетчер' }); setIncidents(current => current.map(item => item.id === result.id ? result : item)); if (result.playback) shiftClock.set({ speed: result.playback.speed, playing: result.playback.playing }); }
+      try {
+        setError('');
+        if (refs.current.shift.regionId.includes(':scenario:')) await api(`shifts/${incident.shiftId}/clock`, shiftClock.getSnapshot());
+        const result = await api(`incidents/${incident.id}/accept`, { candidateId:candidate.id, actor:'Диспетчер' });
+        setIncidents(current => current.map(item => item.id === result.id ? result : item));
+        if (result.status === 'ACCEPTED' && result.playback) shiftClock.set({ speed: result.playback.speed, playing: result.playback.playing });
+      }
     catch (e) { setError(e.message); }
   };
   const read = async item => {
@@ -172,6 +165,8 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const [openedRouteId,setOpenedRouteId] = useState('');
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const candidate = item?.candidates.find(entry => entry.id === candidateId) || item?.candidates.find(entry => entry.id === item.decision?.candidateId);
+  const selectedVisits = candidate?.plan.routes.find(route => route.engineerId === candidate.engineer.id)?.assignments || [];
+  const hasContinuation = Boolean(candidate && selectedVisits.findIndex(visit => visit.orderId === candidate.visit.orderId) < selectedVisits.length-1);
   const engineerName = id => candidate?.team.find(engineer => engineer.id === id)?.name || '—';
   const visitLabel = id => id === item?.order.id ? 'Новая авария' : `№ ${candidate?.orders.find(order => order.id === id)?.sourceData?.source_job_id || id}`;
   const seconds = item ? Math.max(0, Math.ceil((item.deadlineAt-now-controller.serverOffset)/1000)) : 0;
@@ -183,6 +178,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const deadlineLabel = item?.policy.enabled ? seconds ? `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}` : 'срок истёк' : 'вручную';
   return <section className='emergency-dispatch' aria-label='Решение аварии'>
     <div className='dispatch-heading'><div><small>ОПЕРАТИВНОЕ РЕШЕНИЕ</small><h3>Аварийный выезд</h3></div><AlertTriangle size={24}/></div>
+    {candidate && !terminal(item) ? <div className='dispatch-decision-bar'><div><b>{candidate.engineer.name}</b><span>Прибытие {candidate.visit.arrival}</span></div><div className='dispatch-inline-key'>{candidate.kind !== 'Выезд из дома' ? <span className='before'>Исходный путь</span> : null}<span className='after'>До аварии</span>{hasContinuation ? <span className='continuation'>После аварии</span> : null}</div><button type='button' className='primary' disabled={item.status !== 'WAITING'} onClick={() => controller.accept(item, candidate)}>Подтвердить этот вариант</button></div> : null}
     {item ? <div className='dispatch-flow' role='note'><b>Как принять решение</b><ol><li>Выберите карточку инженера.</li><li>Сравните последствия «до / после» на карте и в изменениях визитов.</li><li>Нажмите «Подтвердить этот вариант».</li></ol></div> : null}
     {!item ? <div className='dispatch-empty'><p>{controller.session ? 'Сценарная смена готова с начала дня. Нажмите «Воспроизвести» на шкале времени. Авария поступит в 11:17.' : 'При поступлении аварии здесь появятся проверенные варианты всей смены.'}</p><button type='button' className='primary' onClick={controller.startSession}>{controller.session ? 'Новая изолированная сессия' : 'Запустить сценарий с 06:00'}</button><small>17 августа · отдельная смена · событие в 11:17</small></div> : <>
       <div className='dispatch-incident'><b>{item.order.address}</b><span>{item.time} · {item.status === 'ACCEPTED' ? 'Решение принято' : item.status === 'CANCELLED' ? 'Отменена' : 'Требуется решение'}</span></div>
@@ -205,9 +201,9 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
         {option.coverage.after.unassigned > option.coverage.before.unassigned ? <span className='dispatch-error'>В очереди останется ещё {option.coverage.after.unassigned-option.coverage.before.unassigned} визита</span> : <span className='dispatch-option-ok'>Проверка пройдена · начать до {item.order.end}</span>}
       </button>)}</div>
       {candidate ? <div className='dispatch-details'>
+        {candidate.warnings?.map(warning => <p key={warning} className='dispatch-error' role='note'>{warning}</p>)}
         {candidate.interception ? <div className='dispatch-handoff-detail'><b>Прежняя заявка передаётся</b><span>{candidate.interception.address}</span><strong>{candidate.interception.receiverName} · начало {candidate.interception.plannedStart}</strong></div> : null}
-        <div className='dispatch-selected-heading'><div><small>ВЫБРАННЫЙ ВАРИАНТ</small><h4>{candidate.engineer.name}</h4></div><strong>Прибытие {candidate.visit.arrival}</strong></div><p className='dispatch-route-summary'><b>Сравнение от положения в {candidate.scenarioTime}</b>{candidate.kind === 'Выезд из дома' ? <><span>До вызова — дома, без назначенных поездок.</span><span className='dispatch-key-after'>Красный — путь из дома к аварии.</span></> : <><span className='dispatch-key-before'>Фиолетовый — весь оставшийся исходный маршрут.</span><span className='dispatch-key-after'>Красный сплошной — до аварии, пунктир — следующие заявки после неё.</span></>}</p><details className='dispatch-tech-details'><summary>Допуск, транспорт и опыт</summary><p>{candidate.engineer.skills.map(filterLabel).join(', ')} · {filterLabel(candidate.engineer.transport)}</p><p>Оснащение: {(candidate.engineer.equipment || []).map(filterLabel).join(', ') || 'Не указано'}</p><p>{candidate.experience.count} завершённых аварийных визитов в архиве · Нет оценок</p></details>
-        <button type='button' className='primary' disabled={item.status !== 'WAITING'} onClick={() => controller.accept(item, candidate)}>Подтвердить этот вариант</button>
+        <div className='dispatch-selected-heading'><div><small>ВЫБРАННЫЙ ВАРИАНТ</small><h4>{candidate.engineer.name}</h4></div><strong>Прибытие {candidate.visit.arrival}</strong></div><p className='dispatch-route-summary'><b>Сравнение от положения в {candidate.scenarioTime}</b>{candidate.kind === 'Выезд из дома' ? <><span>До вызова — дома, без назначенных поездок.</span><span className='dispatch-key-after'>Красный — путь из дома к аварии.</span></> : <><span className='dispatch-key-before'>Фиолетовый — весь оставшийся исходный маршрут.</span><span className='dispatch-key-after'>Красный сплошной — до аварии, пунктир — следующие заявки после неё.</span></>}</p><details className='dispatch-tech-details'><summary>Допуск, транспорт и опыт</summary><p>{candidate.engineer.skills.map(filterLabel).join(', ')} · {filterLabel(candidate.engineer.transport)}</p><p>Оснащение: {(candidate.engineer.equipment || []).map(filterLabel).join(', ') || 'Не указано'}</p><p>{candidate.experience.count ? `Завершённых аварийных визитов в архиве: ${candidate.experience.count}${candidate.experience.scenarioCount ? ` (сценарных: ${candidate.experience.scenarioCount})` : ''}` : 'В доступном архиве нет завершённых аварийных визитов этого инженера.'}</p><p>{candidate.experience.ratingCount ? `Оценка клиентов: ${candidate.experience.rating.toFixed(1)} из 5 · ${candidate.experience.ratingCount} оценок` : 'Оценки клиентов ещё не собраны.'}</p></details>
         <h4 className='dispatch-section-title'>Изменения в маршрутах</h4>{candidate.loads.map(load => <div key={load.engineerId}><button className='dispatch-route' type='button' onClick={() => {setOpenedRouteId(current=>current===load.engineerId?'':load.engineerId);onRoute(candidate.plan.routes.find(route=>route.engineerId===load.engineerId), candidate);}}><Route size={17}/><span>{load.name}<small>Загрузка {load.before} → {load.after} мин</small></span></button>{openedRouteId===load.engineerId?<ol className='dispatch-route-visits'>{candidate.plan.routes.find(route=>route.engineerId===load.engineerId)?.assignments.map(visit=><li key={visit.orderId}><b>{candidate.orders.find(order=>order.id===visit.orderId)?.address || visit.orderId}</b><span>Выезд {visit.departureAt} · прибытие {visit.arrival}</span><span>Работа {visit.plannedStart}–{visit.plannedFinish}</span></li>)}</ol>:null}</div>)}
         <details><summary>Все изменения визитов · {candidate.changes.length}</summary>{candidate.changes.map(change => <div className='dispatch-change' key={change.orderId}><b>{visitLabel(change.orderId)} · {change.address}</b><span>{change.before?.plannedStart || 'Не назначена'} → {change.after?.plannedStart || 'В очереди'}</span><small>{engineerName(change.before?.engineerId)} → {engineerName(change.after?.engineerId)}</small></div>)}</details>
         <details><summary>Оставшийся резерв · {candidate.reserve.length}</summary>{candidate.reserve.map(crew => <p key={crew.engineerId}><b>{crew.name}</b><br/>{crew.availableAt}–{crew.until} · {crew.skills.map(filterLabel).join(', ')}</p>)}</details>

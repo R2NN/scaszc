@@ -181,7 +181,7 @@ export function playbackFrame(shift, atMinute, mode = 'plan') {
       const coords = orders.get(String(unfinished.orderId))?.coords || null;
       return { engineerId:route.engineerId, orderId:unfinished.orderId, status:'working', coords, positionKnown:Boolean(coords), source:'dispatcher_fact', availableAt:null };
     }
-    const start = minuteOf(engineer?.shiftStart || route.shiftStart) ?? 0;
+    const start = Math.max(minuteOf(engineer?.shiftStart || route.shiftStart) ?? 0, minuteOf(engineer?.startPoint?.availableFrom) ?? 0);
     const end = minuteOf(engineer?.shiftEnd || route.shiftEnd) ?? 1440;
     if (atMinute < start || atMinute >= end) return { engineerId: route.engineerId, status: 'off_shift', coords: null };
     if (engineer?.unavailableFrom && atMinute >= minuteOf(engineer.unavailableFrom)) return { engineerId: route.engineerId, status: 'unavailable', coords: null };

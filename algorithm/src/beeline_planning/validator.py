@@ -110,6 +110,8 @@ def _validate_plan(
     previous_plan: ProposedPlan | None = None,
     event_time: datetime | None = None,
     unavailable_until_by_engineer: Mapping[str, datetime] | None = None,
+    protected_job_ids: frozenset[str] = frozenset(),
+    available_after_by_engineer: Mapping[str, datetime] | None = None,
 ) -> ValidationReport:
     violations: list[Violation] = []
     assigned_to: dict[str, str] = {}
@@ -159,6 +161,8 @@ def _validate_plan(
         old_movement_route = next((r for r in previous_plan.engineer_plans if r.engineer_id == engineer_id), None) if previous_plan else None
         if old_movement_route and engineer_plan.movements[:len(old_movement_route.movements)] != old_movement_route.movements:
             violations.append(Violation(ViolationCode.FROZEN_ACTIVITY_CHANGED, engineer_id, 'elapsed movement history changed'))
+        if old_movement_route and engineer_plan.dispatches[:len(old_movement_route.dispatches)] != old_movement_route.dispatches:
+            violations.append(Violation(ViolationCode.FROZEN_ACTIVITY_CHANGED, engineer_id, 'dispatch history changed'))
         for item in engineer_plan.movements:
             try:
                 valid_movement = verify_checkpoint(item, dataset.locations)
@@ -173,9 +177,24 @@ def _validate_plan(
         frozen_count = 0
         for dispatch in engineer_plan.dispatches:
             dispatch_at = datetime.fromisoformat(dispatch['at'])
-            first_future = next((visit for visit in engineer_plan.visits if visit.service_start_at > dispatch_at), None)
+            protected_prefix = dispatch.get('prefix_job_ids', [])
+            if event_time is not None and dispatch_at == event_time and (not old_movement_route or dispatch not in old_movement_route.dispatches):
+                previous_visits = old_routes.get(engineer_id, ())
+                expected_prefix = tuple(visit for visit in previous_visits if visit.departure_at <= event_time and visit.job_id not in interruptions)
+                last_protected = max((i for i, visit in enumerate(previous_visits) if visit.job_id in protected_job_ids), default=-1)
+                if last_protected >= 0:
+                    expected_prefix = previous_visits[:max(last_protected + 1, len(expected_prefix))]
+                if protected_prefix != [visit.job_id for visit in expected_prefix]:
+                    violations.append(Violation(ViolationCode.FROZEN_ACTIVITY_CHANGED, engineer_id, 'dispatch prefix is not backed by prior activity or facts'))
+                release = (available_after_by_engineer or {}).get(engineer_id, event_time)
+                if datetime.fromisoformat(dispatch.get('available_after', dispatch['at'])) < release:
+                    violations.append(Violation(ViolationCode.UNAVAILABLE_AFTER_EVENT, engineer_id, 'dispatch release differs from operational facts'))
+            first_future = next((visit for visit in engineer_plan.visits if visit.job_id not in protected_prefix
+                and (visit.service_start_at > dispatch_at or visit.job_id == dispatch['job_id'] and visit.service_start_at == dispatch_at)), None)
             if first_future is None or first_future.job_id != dispatch['job_id']:
                 violations.append(Violation(ViolationCode.FROZEN_ACTIVITY_CHANGED, engineer_id, 'emergency must be the first unstarted service after dispatch'))
+            if first_future and first_future.departure_at < datetime.fromisoformat(dispatch.get('available_after', dispatch['at'])):
+                violations.append(Violation(ViolationCode.UNAVAILABLE_AFTER_EVENT, engineer_id, 'emergency departure precedes service release'))
         if event_time is not None and previous_plan is not None:
             frozen = tuple(
                 visit for visit in old_routes.get(engineer_id, ())
@@ -325,7 +344,7 @@ def _validate_plan(
 
             travel = visit.travel
             origin_point = dataset.locations.get(previous_location)
-            if origin_point and origin_point.heading is not None and engineer.transport_mode.value == 'CAR':
+            if origin_point and origin_point.heading is not None and engineer.transport_mode.value == 'CAR' and not isinstance(travel, IdentityTravel):
                 if not hasattr(travel, 'provenance') or travel.provenance.provider_metadata.get('origin_heading') != origin_point.heading:
                     violations.append(Violation(ViolationCode.ROUTE_CHAIN_BROKEN, subject, 'road direction at interruption was not checked'))
             if travel.origin_id != previous_location or travel.destination_id != job.location_id:
@@ -563,6 +582,8 @@ def validate_replanned_plan(
     applied_event_ids: frozenset[str],
     canceled_job_ids: frozenset[str],
     unavailable_until_by_engineer: Mapping[str, datetime],
+    protected_job_ids: frozenset[str] = frozenset(),
+    available_after_by_engineer: Mapping[str, datetime] | None = None,
 ) -> ValidationReport:
     """Validate a full-day plan after an event, including its immutable started prefix."""
     active_jobs = {
@@ -582,4 +603,6 @@ def validate_replanned_plan(
         previous_plan=previous_plan,
         event_time=event_time,
         unavailable_until_by_engineer=unavailable_until_by_engineer,
+        protected_job_ids=protected_job_ids,
+        available_after_by_engineer=available_after_by_engineer,
     )
