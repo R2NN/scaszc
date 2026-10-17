@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import timedelta
+import pytest
 
 from algorithm.tests import test_replanning as fixtures
 from beeline_planning import EngineerPlan, ProposedPlan, ReplanningState, replan_after_event, validate_replanned_plan
@@ -12,7 +13,8 @@ from beeline_routing.oracle import OracleQuery
 class DispatchOracle(fixtures._Oracle):
     def query(self, query):
         result=super().query(query)
-        return replace(result,provenance=replace(result.provenance,provider_metadata={'origin_heading':query.origin.heading}))
+        geometry = ((query.origin.latitude, query.origin.longitude), (query.destination.latitude, query.destination.longitude))
+        return replace(result,geometry=geometry,itinerary=tuple(replace(step,geometry=geometry) for step in result.itinerary),provenance=replace(result.provenance,provider_metadata={'origin_heading':query.origin.heading}))
 
 
 def scenario(mode=TransportMode.CAR, event_minute=5, waiting=False):
@@ -194,3 +196,94 @@ def test_dispatch_prefix_and_release_cannot_be_forged_to_skip_future_work():
     report = validate_replanned_plan(parts[2], plan, parts[3], event_time=parts[4].event_time,
         applied_event_ids=frozenset({parts[4].event_id}), canceled_job_ids=frozenset(), unavailable_until_by_engineer={})
     assert not report.is_valid
+
+
+@pytest.mark.parametrize('timing_queries', [0, 24])
+@pytest.mark.parametrize('waiting', [False, True])
+def test_fact_started_before_planned_departure_survives_all_validation_stages(timing_queries, waiting):
+    f, source, data, old, event, oracle, _ = scenario(waiting=waiting)
+    event = replace(event, event_time=f.at(8, 55))
+    data = replace(data, events=(event,), jobs={**data.jobs, 'U': replace(data.jobs['U'], created_at=event.event_time)})
+    result = replan_after_event(data, ReplanningState(old), event, oracle, source_dataset=source,
+        forced_engineer_by_job={'U': 'E1'}, dispatch_engineer_id='E1',
+        protected_job_ids=frozenset({'A'}), available_after_by_engineer={'E1': f.at(11) if waiting else f.at(10)},
+        departure_timing_queries=timing_queries)
+    assert result.state is not None, result.detail
+    route = next(r for r in result.state.plan.engineer_plans if r.engineer_id == 'E1')
+    assert route.visits[0] == old.engineer_plans[0].visits[0]
+    emergency = next(v for v in route.visits if v.job_id == 'U')
+    assert emergency.departure_at >= (f.at(11) if waiting else f.at(10))
+    assert result.validation.is_valid
+
+
+def repeated_interception(minute=6):
+    parts = scenario()
+    first = solve(parts)
+    f, _, data, _, _, oracle, _ = parts
+    f.jobs = {**f.jobs, 'V': f.job('V', 'Z1', f.at(9, minute), priority=Priority.URGENT, location='L3')}
+    event = f.event(2, EventType.NEW_URGENT_JOB, 'V', f.at(9, minute))
+    first_route = next(route for route in first.state.plan.engineer_plans if route.engineer_id == 'E1')
+    point = checkpoint(first_route, event.event_time, TransportMode.CAR)
+    second_data = replace(f.make_dataset((*data.events, event)), locations={**data.locations, point['location_id']: checkpoint_location(point)})
+    return f, data, first, second_data, event, oracle
+
+
+@pytest.mark.parametrize('minute', [5, 6])
+def test_second_interception_transfers_first_emergency_and_preserves_both_elapsed_legs(minute):
+    _, data, first, second_data, event, oracle = repeated_interception(minute)
+    second = replan_after_event(second_data, first.state, event, oracle, source_dataset=data,
+        forced_engineer_by_job={'V': 'E1'}, dispatch_engineer_id='E1',
+        handoff_interrupted_job=True, departure_timing_queries=24)
+    assert second.state is not None, second.detail
+    routes = {route.engineer_id: route for route in second.state.plan.engineer_plans}
+    before = next(route for route in first.state.plan.engineer_plans if route.engineer_id == 'E1')
+    assert routes['E1'].visits[0].job_id == 'V'
+    assert 'U' not in [visit.job_id for visit in routes['E1'].visits]
+    assert any(visit.job_id == 'U' for visit in routes['E2'].visits)
+    assert routes['E1'].movements[:len(before.movements)] == before.movements
+    assert routes['E1'].movements[-1]['source_job_id'] == 'U'
+    if minute == 5:
+        assert routes['E1'].movements[-1]['coords'] == before.movements[-1]['coords']
+        assert routes['E1'].movements[-1]['location_id'] != before.movements[-1]['location_id']
+        assert routes['E1'].movements[-1]['heading'] == before.movements[-1]['heading']
+    assert routes['E1'].dispatches[:len(before.dispatches)] == before.dispatches
+    assert not second.state.plan.unserved_job_ids
+    assert second.validation.is_valid
+    # Once the receiver starts U, its original sender's superseded decision
+    # must remain historical rather than becoming an active route constraint.
+    report = validate_replanned_plan(second_data, second.state.plan, second.state.plan,
+        event_time=event.event_time, applied_event_ids=frozenset(second.state.applied_event_ids),
+        canceled_job_ids=frozenset(), unavailable_until_by_engineer={}, protected_job_ids=frozenset({'U'}))
+    assert report.is_valid, report.violations
+
+
+@pytest.mark.parametrize('mutation', ['lost_job', 'dispatch_history', 'movement_history', 'started_first_emergency'])
+def test_second_interception_keeps_independent_guards(mutation):
+    _, data, first, second_data, event, oracle = repeated_interception()
+    second = replan_after_event(second_data, first.state, event, oracle, source_dataset=data,
+        forced_engineer_by_job={'V': 'E1'}, dispatch_engineer_id='E1',
+        handoff_interrupted_job=True, departure_timing_queries=0)
+    plan = second.state.plan
+    if mutation == 'lost_job':
+        plan = replace(plan, engineer_plans=tuple(replace(r, visits=tuple(v for v in r.visits if v.job_id != 'U')) for r in plan.engineer_plans), unserved_job_ids=('U',))
+    if mutation == 'dispatch_history':
+        plan = replace(plan, engineer_plans=tuple(replace(r, dispatches=r.dispatches[1:]) if r.engineer_id == 'E1' else r for r in plan.engineer_plans))
+    if mutation == 'movement_history':
+        plan = replace(plan, engineer_plans=tuple(replace(r, movements=({**r.movements[0], 'distance_m': 0}, *r.movements[1:])) if r.engineer_id == 'E1' else r for r in plan.engineer_plans))
+    report = validate_replanned_plan(second_data, plan, first.state.plan, event_time=event.event_time,
+        applied_event_ids=frozenset(second.state.applied_event_ids), canceled_job_ids=frozenset(),
+        unavailable_until_by_engineer={}, protected_job_ids=frozenset({'U'}) if mutation == 'started_first_emergency' else frozenset())
+    assert not report.is_valid
+
+
+def test_departure_timing_preserves_locked_engineers_future_waiting_leg():
+    f, source, data, old, event, oracle, _ = scenario(event_minute=50)
+    route = old.engineer_plans[0]
+    old = replace(old, engineer_plans=(replace(route, visits=(route.visits[0], replace(route.visits[1], service_start_at=f.at(13)))),))
+    result = replan_after_event(data, ReplanningState(old), event, oracle, source_dataset=source,
+        forced_engineer_by_job={'U': 'E2'}, dispatch_engineer_id='E2', locked_engineer_ids=frozenset({'E1'}),
+        protected_job_ids=frozenset({'A'}), departure_timing_queries=24)
+    assert result.state is not None, result.detail
+    unchanged = next(route for route in result.state.plan.engineer_plans if route.engineer_id == 'E1')
+    assert unchanged.visits == old.engineer_plans[0].visits
+    assert result.validation.is_valid

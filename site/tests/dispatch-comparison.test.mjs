@@ -94,6 +94,9 @@ test('the whole future day is visible by default and separates the emergency leg
   renderDispatchRoutes(map, { ...detail, before, after, scope: 'next' });
   assert.equal(sources.get('dispatch-before').data.features.length, 1);
   assert.equal(sources.get('dispatch-after').data.features.length, 1);
+  renderDispatchRoutes(map, { ...detail, before, after, scope: 'day' });
+  assert.equal(sources.get('dispatch-before').data.features.length, 2);
+  assert.equal(sources.get('dispatch-after').data.features.length, 2);
 });
 
 test('switching a grey comparison to an intercept repaints existing layers and separates overlapping paths', () => {

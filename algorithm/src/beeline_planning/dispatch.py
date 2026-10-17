@@ -30,6 +30,15 @@ def split_geometry(points, fraction):
     return tuple(points), tuple(points[-1])
 
 
+def _checkpoint_heading(geometry, point, fraction, origin_heading):
+    """Keep the known direction when no part of a new leg has elapsed yet."""
+    if fraction == 0 and origin_heading is not None:
+        return origin_heading
+    prior = next((p for p in reversed(geometry[:-1]) if p != point), geometry[0])
+    lat1, lon1, lat2, lon2 = map(math.radians, (*prior, *point))
+    return math.degrees(math.atan2(math.sin(lon2-lon1)*math.cos(lat2), math.cos(lat1)*math.sin(lat2)-math.sin(lat1)*math.cos(lat2)*math.cos(lon2-lon1))) % 360
+
+
 def checkpoint(route, at, mode):
     """Retain elapsed movement; public transit continues to its known destination."""
     for visit in route.visits:
@@ -44,10 +53,8 @@ def checkpoint(route, at, mode):
             geometry, point = split_geometry(travel.geometry, fraction)
             heading = None
             if mode == TransportMode.CAR and fraction < 1:
-                prior = next((p for p in reversed(geometry[:-1]) if p != point), travel.geometry[0])
-                lat1, lon1, lat2, lon2 = map(math.radians, (*prior, *point))
-                heading = math.degrees(math.atan2(math.sin(lon2-lon1)*math.cos(lat2), math.cos(lat1)*math.sin(lat2)-math.sin(lat1)*math.cos(lat2)*math.cos(lon2-lon1))) % 360
-            digest = hashlib.sha256(f'{route.engineer_id}:{release.isoformat()}:{point}'.encode()).hexdigest()[:20]
+                heading = _checkpoint_heading(geometry, point, fraction, travel.provenance.provider_metadata.get('origin_heading'))
+            digest = hashlib.sha256(f'{route.engineer_id}:{visit.job_id}:{visit.departure_at.isoformat()}:{release.isoformat()}:{point}'.encode()).hexdigest()[:20]
             return {
                 'location_id': f'DISPATCH-{digest}', 'coords': list(point),
                 'heading': heading,
@@ -110,9 +117,7 @@ def verify_checkpoint(item, locations):
     registered = locations[item['location_id']]
     expected_heading = None
     if original['mode'] == 'CAR' and fraction < 1:
-        prior = next((p for p in reversed(geometry[:-1]) if p != point), original['geometry'][0])
-        lat1, lon1, lat2, lon2 = map(math.radians, (*prior, *point))
-        expected_heading = math.degrees(math.atan2(math.sin(lon2-lon1)*math.cos(lat2), math.cos(lat1)*math.sin(lat2)-math.sin(lat1)*math.cos(lat2)*math.cos(lon2-lon1))) % 360
+        expected_heading = _checkpoint_heading(geometry, point, fraction, original['provenance']['provider_metadata'].get('origin_heading'))
     return (
         original['status'] == 'OK' and original['origin_id'] == item['origin_id']
         and original['departure_at'] == item['departure_at'] and at >= departure

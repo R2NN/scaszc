@@ -17,6 +17,7 @@ const terminal = item => ['ACCEPTED', 'CANCELLED'].includes(item.status);
 export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   const [incidents, setIncidents] = useState([]), [session, setSession] = useState(null), [selectedId, setSelectedId] = useState('');
   const [candidateId, setCandidateId] = useState(''), [error, setError] = useState(''), [policy, setPolicy] = useState(null);
+  const [routeScope, setRouteScope] = useState('day');
   const refs = useRef({});
   refs.current = { shift, onApply, notify, onOpen };
   const notified = useRef(new Set()), initialized = useRef(''), clockPending = useRef(false);
@@ -108,21 +109,27 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
         saved = await response.json();
         refs.current.onApply(saved);
       }
-      setSelectedId(id); setCandidateId(''); refs.current.onOpen(item,saved);
+      setSelectedId(id); setCandidateId(''); setRouteScope('day'); refs.current.onOpen(item,saved);
       window.dispatchEvent(new CustomEvent('beego:dispatch-clear'));
       requestAnimationFrame(()=>window.dispatchEvent(new CustomEvent('beego:incident-focus', { detail: { coords: item.order.coords } })));
     } catch (e) {setError(e.message);}
   };
-  const preview = candidate => {
+  const preview = (candidate, scope = routeScope) => {
     setCandidateId(candidate.id);
-    window.dispatchEvent(new CustomEvent('beego:dispatch-preview', { detail: { before: shift.plan, after: candidate.plan, ids: [candidate.engineer.id], current: { engineerId: candidate.engineer.id, origin: candidate.state?.coords || candidate.departureOrigin, time: candidate.scenarioTime, kind: candidate.kind, emergencyOrderId: candidate.visit.orderId }, focusRoute: true } }));
+    setRouteScope(scope);
+    window.dispatchEvent(new CustomEvent('beego:dispatch-preview', { detail: { before: shift.plan, after: candidate.plan, scope, ids: [candidate.engineer.id], current: { engineerId: candidate.engineer.id, origin: candidate.state?.coords || candidate.departureOrigin, time: candidate.scenarioTime, kind: candidate.kind, emergencyOrderId: candidate.visit.orderId }, focusRoute: true } }));
+  };
+  const changeRouteScope = scope => {
+    if (!['day', 'next'].includes(scope)) return;
+    setRouteScope(scope);
+    window.dispatchEvent(new CustomEvent('beego:dispatch-scope', {detail:{scope}}));
   };
   const startSession = async () => {
     try {
       const value = await api('sessions', { baseShiftId: session?.baseShiftId || shift.id, speed: shiftClock.getSnapshot().speed });
       window.dispatchEvent(new CustomEvent('beego:dispatch-clear'));
       sessionStorage.setItem(`beego-dispatch-session:${session?.baseShiftId || shift.id}`, 'active');
-      setSession(value); setSelectedId(''); setCandidateId(''); setIncidents([]); refs.current.onApply(value.shift);
+      setSession(value); setSelectedId(''); setCandidateId(''); setRouteScope('day'); setIncidents([]); refs.current.onApply(value.shift);
       shiftClock.set({ minute:360, playing:false, speed:value.clock.speed, selectedEngineerId:'', follow:false });
       refs.current.onOpen();
     } catch (e) { setError(e.message); }
@@ -154,7 +161,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     catch (e) { setError(e.message); }
   };
   const select = incidents.find(item => item.id === selectedId) || incidents.find(item => !terminal(item)) || incidents.at(-1);
-  return { incidents, selected:select, candidateId, open, preview, startSession, session, error, serverOffset, policy, accept, read,
+  return { incidents, selected:select, candidateId, routeScope, changeRouteScope, open, preview, startSession, session, error, serverOffset, policy, accept, read,
     retry, cancel, savePolicy };
 }
 
@@ -178,7 +185,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const deadlineLabel = item?.policy.enabled ? seconds ? `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}` : 'срок истёк' : 'вручную';
   return <section className='emergency-dispatch' aria-label='Решение аварии'>
     <div className='dispatch-heading'><div><small>ОПЕРАТИВНОЕ РЕШЕНИЕ</small><h3>Аварийный выезд</h3></div><AlertTriangle size={24}/></div>
-    {candidate && !terminal(item) ? <div className='dispatch-decision-bar'><div><b>{candidate.engineer.name}</b><span>Прибытие {candidate.visit.arrival}</span></div><div className='dispatch-inline-key'>{candidate.kind !== 'Выезд из дома' ? <span className='before'>Исходный путь</span> : null}<span className='after'>До аварии</span>{hasContinuation ? <span className='continuation'>После аварии</span> : null}</div><button type='button' className='primary' disabled={item.status !== 'WAITING'} onClick={() => controller.accept(item, candidate)}>Подтвердить этот вариант</button></div> : null}
+    {candidate ? <div className='dispatch-decision-bar'><div><b>{candidate.engineer.name}</b><span>Прибытие {candidate.visit.arrival}</span></div><div className='dispatch-inline-key'>{candidate.kind !== 'Выезд из дома' ? <span className='before'>Исходный путь</span> : null}<span className='after'>До аварии</span>{hasContinuation ? <span className='continuation'>После аварии</span> : null}</div><div className='dispatch-scope-controls' role='group' aria-label='Показывать маршрут'>{[{value:'day',label:'Весь оставшийся день'},{value:'next',label:'Ближайшее действие'}].map(option => <button key={option.value} type='button' aria-pressed={(controller.routeScope || 'day') === option.value} onClick={() => controller.changeRouteScope(option.value)}>{option.label}</button>)}</div>{!terminal(item) ? <button type='button' className='primary' disabled={item.status !== 'WAITING'} onClick={() => controller.accept(item, candidate)}>Подтвердить этот вариант</button> : null}</div> : null}
     {item ? <div className='dispatch-flow' role='note'><b>Как принять решение</b><ol><li>Выберите карточку инженера.</li><li>Сравните последствия «до / после» на карте и в изменениях визитов.</li><li>Нажмите «Подтвердить этот вариант».</li></ol></div> : null}
     {!item ? <div className='dispatch-empty'><p>{controller.session ? 'Сценарная смена готова с начала дня. Нажмите «Воспроизвести» на шкале времени. Авария поступит в 11:17.' : 'При поступлении аварии здесь появятся проверенные варианты всей смены.'}</p><button type='button' className='primary' onClick={controller.startSession}>{controller.session ? 'Новая изолированная сессия' : 'Запустить сценарий с 06:00'}</button><small>17 августа · отдельная смена · событие в 11:17</small></div> : <>
       <div className='dispatch-incident'><b>{item.order.address}</b><span>{item.time} · {item.status === 'ACCEPTED' ? 'Решение принято' : item.status === 'CANCELLED' ? 'Отменена' : 'Требуется решение'}</span></div>

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Marker } from 'maplibre-gl';
-import { dispatchRouteData, renderDispatchRoutes } from './dispatchComparison.js';
+import { renderDispatchRoutes } from './dispatchComparison.js';
 
 /** Draw a comparison on the existing map, starting both lines at the current position. */
 export function useDispatchMap(map) {
@@ -44,7 +44,7 @@ export function useDispatchMap(map) {
       hiddenLayers.clear();
     };
     const preview = event => {
-      latestPreview = { ...event.detail, scope: event.detail.scope || 'day' };
+      latestPreview = { ...event.detail, scope: event.detail.scope || latestPreview?.scope || 'day' };
       const intercept = Boolean(event.detail.current?.emergencyOrderId) || event.detail.current?.kind === 'Перехват в пути';
       if (!map.isStyleLoaded()) {
         map.off('idle', restore);
@@ -68,13 +68,6 @@ export function useDispatchMap(map) {
         const row = document.createElement('div');
         row.className = className; row.textContent = label; legend.appendChild(row);
       }
-      const toggle = document.createElement('button');
-      toggle.type = 'button'; toggle.className = 'dispatch-scope-toggle';
-      toggle.textContent = wholeDay ? 'Показать только ближайшее действие' : 'Весь оставшийся день';
-      toggle.setAttribute('aria-pressed', String(wholeDay));
-      toggle.addEventListener('click', () => preview({ detail: { ...latestPreview, scope: wholeDay ? 'next' : 'day', focusRoute: true } }));
-      const hasLater = [event.detail.before,event.detail.after].some((plan,index) => dispatchRouteData(plan,event.detail,index===1).features.some(feature=>feature.properties.phase==='continuation'));
-      if (hasLater) legend.appendChild(toggle);
       map.getContainer().appendChild(legend);
       originMarker?.remove();
       if (event.detail.current?.origin) {
@@ -91,10 +84,13 @@ export function useDispatchMap(map) {
         }
       }
     };
+    const changeScope = event => {
+      if (latestPreview && ['day', 'next'].includes(event.detail?.scope)) preview({detail:{...latestPreview,scope:event.detail.scope,focusRoute:true}});
+    };
     const restore = () => { if (latestPreview) preview({ detail: { ...latestPreview, focusRoute: false } }); };
     map.on('style.load', restore);
     map.on('styledata', hideBackgroundRoutes);
-    window.addEventListener('beego:incident-focus', focus); window.addEventListener('beego:dispatch-preview', preview); window.addEventListener('beego:dispatch-clear', clear);
-    return () => { map.off('style.load', restore); map.off('styledata', hideBackgroundRoutes); window.removeEventListener('beego:incident-focus', focus); window.removeEventListener('beego:dispatch-preview', preview); window.removeEventListener('beego:dispatch-clear', clear); clear(); };
+    window.addEventListener('beego:incident-focus', focus); window.addEventListener('beego:dispatch-preview', preview); window.addEventListener('beego:dispatch-clear', clear); window.addEventListener('beego:dispatch-scope', changeScope);
+    return () => { map.off('style.load', restore); map.off('styledata', hideBackgroundRoutes); window.removeEventListener('beego:incident-focus', focus); window.removeEventListener('beego:dispatch-preview', preview); window.removeEventListener('beego:dispatch-clear', clear); window.removeEventListener('beego:dispatch-scope', changeScope); clear(); };
   }, [map]);
 }

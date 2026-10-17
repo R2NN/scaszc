@@ -958,6 +958,7 @@ def replan_after_event(
         canceled_job_ids=frozenset(canceled),
         unavailable_until_by_engineer=unavailable,
         protected_job_ids=protected_job_ids,
+        locked_engineer_ids=locked_engineer_ids,
         available_after_by_engineer=available_after_by_engineer,
     )
     if validation.status != ValidationStatus.VALID:
@@ -971,6 +972,9 @@ def replan_after_event(
         applied_event_ids=frozenset(new_applied),
         canceled_job_ids=frozenset(canceled),
         unavailable_until_by_engineer=unavailable,
+        protected_job_ids=protected_job_ids,
+        locked_engineer_ids=locked_engineer_ids,
+        available_after_by_engineer=available_after_by_engineer,
         max_total_queries=departure_timing_queries,
     )
     plan = timing.plan
@@ -980,6 +984,9 @@ def replan_after_event(
         applied_event_ids=frozenset(new_applied),
         canceled_job_ids=frozenset(canceled),
         unavailable_until_by_engineer=unavailable,
+        protected_job_ids=protected_job_ids,
+        locked_engineer_ids=locked_engineer_ids,
+        available_after_by_engineer=available_after_by_engineer,
     )
     next_state = ReplanningState(
         plan=plan,

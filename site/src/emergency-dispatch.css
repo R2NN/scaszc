@@ -38,6 +38,10 @@
 .dispatch-decision-bar>div:first-child{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .dispatch-decision-bar .primary{padding:12px;border:0;border-radius:9px;background:#ffd21f;color:#222;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
 .dispatch-decision-bar .primary:disabled{opacity:.5;cursor:default}
+.dispatch-scope-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.dispatch-scope-controls button{padding:8px 6px;min-height:36px;border:1px solid #d8d0e8;border-radius:8px;background:#fff;color:#574374;font:inherit;font-size:12px;line-height:1.3;font-weight:700;cursor:pointer}
+.dispatch-scope-controls button[aria-pressed=true]{background:#eee4ff;border-color:#7944bc;color:#51248a}
+.dark .dispatch-scope-controls button{background:#282630;border-color:#6b5b7c;color:#dec8fc}.dark .dispatch-scope-controls button[aria-pressed=true]{background:#49335f;border-color:#c395f4;color:#fff}
 .dispatch-inline-key{display:flex;gap:8px 14px;flex-wrap:wrap;font-size:12px}
 .dispatch-inline-key span{display:flex;align-items:center;gap:5px}.dispatch-inline-key span:before{content:'';width:18px;height:4px;background:#6d28d9;border-radius:2px}
 .dispatch-inline-key .after:before{background:#e52b20}.dispatch-inline-key .continuation:before{height:3px;background:repeating-linear-gradient(to right,#e52b20 0 4px,transparent 4px 7px)}

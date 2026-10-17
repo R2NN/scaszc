@@ -111,6 +111,7 @@ def _validate_plan(
     event_time: datetime | None = None,
     unavailable_until_by_engineer: Mapping[str, datetime] | None = None,
     protected_job_ids: frozenset[str] = frozenset(),
+    locked_engineer_ids: frozenset[str] = frozenset(),
     available_after_by_engineer: Mapping[str, datetime] | None = None,
 ) -> ValidationReport:
     violations: list[Violation] = []
@@ -191,6 +192,17 @@ def _validate_plan(
                     violations.append(Violation(ViolationCode.UNAVAILABLE_AFTER_EVENT, engineer_id, 'dispatch release differs from operational facts'))
             first_future = next((visit for visit in engineer_plan.visits if visit.job_id not in protected_prefix
                 and (visit.service_start_at > dispatch_at or visit.job_id == dispatch['job_id'] and visit.service_start_at == dispatch_at)), None)
+            handoff = next((movement for movement in engineer_plan.movements
+                if movement['source_job_id'] == dispatch['job_id']
+                and datetime.fromisoformat(movement['measured_at']) >= dispatch_at
+                and datetime.fromisoformat(movement['departure_at']) >= dispatch_at), None)
+            recipient = next((visit for route in plan.engineer_plans if route.engineer_id != engineer_id
+                for visit in route.visits if visit.job_id == dispatch['job_id']), None)
+            historical_handoff = handoff and old_movement_route and handoff in old_movement_route.movements
+            if handoff and recipient and (historical_handoff or dispatch['job_id'] not in protected_job_ids) and recipient.departure_at >= datetime.fromisoformat(handoff['measured_at']):
+                # The prior decision remains in history; its still-future visit
+                # has been handed off after a verified interruption of its trip.
+                continue
             if first_future is None or first_future.job_id != dispatch['job_id']:
                 violations.append(Violation(ViolationCode.FROZEN_ACTIVITY_CHANGED, engineer_id, 'emergency must be the first unstarted service after dispatch'))
             if first_future and first_future.departure_at < datetime.fromisoformat(dispatch.get('available_after', dispatch['at'])):
@@ -200,6 +212,12 @@ def _validate_plan(
                 visit for visit in old_routes.get(engineer_id, ())
                 if visit.departure_at <= event_time and visit.job_id not in interruptions
             )
+            previous_visits = old_routes.get(engineer_id, ())
+            last_protected = max((i for i, visit in enumerate(previous_visits) if visit.job_id in protected_job_ids), default=-1)
+            if engineer_id in locked_engineer_ids:
+                frozen = previous_visits
+            elif last_protected >= 0:
+                frozen = previous_visits[:max(last_protected + 1, len(frozen))]
             frozen_count = len(frozen)
             if engineer_plan.visits[:frozen_count] != frozen:
                 violations.append(
@@ -583,6 +601,7 @@ def validate_replanned_plan(
     canceled_job_ids: frozenset[str],
     unavailable_until_by_engineer: Mapping[str, datetime],
     protected_job_ids: frozenset[str] = frozenset(),
+    locked_engineer_ids: frozenset[str] = frozenset(),
     available_after_by_engineer: Mapping[str, datetime] | None = None,
 ) -> ValidationReport:
     """Validate a full-day plan after an event, including its immutable started prefix."""
@@ -604,5 +623,6 @@ def validate_replanned_plan(
         event_time=event_time,
         unavailable_until_by_engineer=unavailable_until_by_engineer,
         protected_job_ids=protected_job_ids,
+        locked_engineer_ids=locked_engineer_ids,
         available_after_by_engineer=available_after_by_engineer,
     )

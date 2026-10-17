@@ -44,6 +44,7 @@ def _retime_departures(
     *,
     validate: Callable[[ProposedPlan], ValidationReport],
     frozen_at: datetime | None,
+    frozen_job_ids: frozenset[str] = frozenset(),
     arrival_buffer_minutes: int = 15,
     minimum_wait_reduction_minutes: int = 5,
     max_queries_per_leg: int = 3,
@@ -68,7 +69,7 @@ def _retime_departures(
     candidates = []
     for route_index, route in enumerate(plan.engineer_plans):
         for visit_index, visit in enumerate(route.visits):
-            if frozen_at is not None and visit.departure_at <= frozen_at:
+            if visit.job_id in frozen_job_ids or frozen_at is not None and visit.departure_at <= frozen_at:
                 continue
             wait = int((visit.service_start_at - visit.departure_at).total_seconds() // 60)
             wait -= visit.travel.duration_minutes
@@ -198,12 +199,20 @@ def retime_replanned_departures(
     applied_event_ids: frozenset[str],
     canceled_job_ids: frozenset[str],
     unavailable_until_by_engineer: Mapping[str, datetime],
+    protected_job_ids: frozenset[str] = frozenset(),
+    locked_engineer_ids: frozenset[str] = frozenset(),
+    available_after_by_engineer: Mapping[str, datetime] | None = None,
     arrival_buffer_minutes: int = 15,
     minimum_wait_reduction_minutes: int = 5,
     max_queries_per_leg: int = 3,
     max_total_queries: int = 24,
 ) -> DepartureTimingResult:
-    """Retime only future legs; started event activity remains unchanged."""
+    """Retime future legs with the same factual protection and release checks."""
+    frozen_ids = set(protected_job_ids)
+    for route in previous_plan.engineer_plans:
+        last_protected = max((i for i, visit in enumerate(route.visits) if visit.job_id in protected_job_ids), default=-1)
+        frozen_ids.update(visit.job_id for visit in route.visits if route.engineer_id in locked_engineer_ids)
+        frozen_ids.update(visit.job_id for visit in route.visits[:last_protected + 1])
     return _retime_departures(
         dataset, plan, oracle,
         validate=lambda candidate: validate_replanned_plan(
@@ -212,8 +221,12 @@ def retime_replanned_departures(
             applied_event_ids=applied_event_ids,
             canceled_job_ids=canceled_job_ids,
             unavailable_until_by_engineer=unavailable_until_by_engineer,
+            protected_job_ids=protected_job_ids,
+            locked_engineer_ids=locked_engineer_ids,
+            available_after_by_engineer=available_after_by_engineer,
         ),
         frozen_at=event_time,
+        frozen_job_ids=frozenset(frozen_ids),
         arrival_buffer_minutes=arrival_buffer_minutes,
         minimum_wait_reduction_minutes=minimum_wait_reduction_minutes,
         max_queries_per_leg=max_queries_per_leg,
