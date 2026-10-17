@@ -101,8 +101,8 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     try {
       const value = await api(`shifts/${current.id}/clock`, shiftClock.getSnapshot());
       setIncidents(value.incidents || []);
-      const current = shiftClock.getSnapshot();
-      const reanchor = !current.playing || !value.clock.playing || Math.abs(Number(value.clock.minute) - Number(current.minute)) > 2;
+      const snapshot = shiftClock.getSnapshot();
+      const reanchor = !snapshot.playing || !value.clock.playing || Math.abs(Number(value.clock.minute) - Number(snapshot.minute)) > 2;
       shiftClock.set(reanchor
         ? { minute: value.clock.minute, playing: value.clock.playing, speed: value.clock.speed }
         : { speed: value.clock.speed });
