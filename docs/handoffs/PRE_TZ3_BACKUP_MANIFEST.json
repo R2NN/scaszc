@@ -1,0 +1,32 @@
+{
+  "createdAt": "2026-10-17T16:59:37.088Z",
+  "sourceCommit": "ba829e8d1b90508fefd85bc075ebabaae280ec29",
+  "branch": "safety/pre-tz3-20261017",
+  "tag": "beego-before-tz3-20261017",
+  "repository": "https://github.com/R2NN/scaszc.git",
+  "candidateUrl": "http://127.0.0.1:4199/",
+  "sourceDatabase": "A:/BeeGo-final-object-complexity/runtime/qa/fresh-planning-20261017/candidate-release.sqlite3",
+  "integrity": [
+    {
+      "integrity_check": "ok"
+    }
+  ],
+  "counts": {
+    "duration_visits": 2105,
+    "duration_snapshots": 207,
+    "engineer_feedback": 1822,
+    "object_conditions": 25,
+    "shifts": 1,
+    "plan_versions": 1
+  },
+  "files": {
+    "candidate-release.sqlite3": {
+      "bytes": 27762688,
+      "sha256": "2327488ad11f8e48d4a2904fc7365323af62e79d4524b020b83fa209e1fea8da"
+    },
+    "beego-before-tz3.bundle": {
+      "bytes": 137781658,
+      "sha256": "5b68bf948aad0e15d723f74a2b727e2fc3cc05a3cfade556b52de7a1b48b23ad"
+    }
+  }
+}
