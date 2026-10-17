@@ -100,7 +100,7 @@ test('switching a grey comparison to an intercept repaints existing layers and s
   const { map, layers } = mapFixture();
   const before = plan([leg('next', '11:17', '11:27', [[0, 1], [1, 1]])]);
   const data = { ...detail, before, after: before };
-  renderDispatchRoutes(map, { ...data, current: { ...detail.current, kind: 'Свободный инженер' } });
+  renderDispatchRoutes(map, { ...data, current: { ...detail.current, kind: 'Свободный инженер', emergencyOrderId: undefined } });
   assert.equal(layers.get('dispatch-before').paint['line-color'], '#737b87');
   renderDispatchRoutes(map, data);
   assert.equal(layers.get('dispatch-before').paint['line-color'], MAP_UI.routeSelected);
@@ -108,7 +108,17 @@ test('switching a grey comparison to an intercept repaints existing layers and s
   assert.deepEqual(layers.get('dispatch-before').paint['line-dasharray'], [1, 0]);
   assert.equal(layers.get('dispatch-before').paint['line-offset'], -3);
   assert.equal(layers.get('dispatch-after').paint['line-offset'], 3);
-  renderDispatchRoutes(map, { ...data, current: { ...detail.current, kind: 'Свободный инженер' } });
+  renderDispatchRoutes(map, { ...data, current: { ...detail.current, kind: 'Свободный инженер', emergencyOrderId: undefined } });
   assert.equal(layers.get('dispatch-after').paint['line-color'], MAP_UI.routeSelected);
   assert.equal(layers.get('dispatch-after').paint['line-offset'], 0);
+});
+
+test('home and after-work emergency approaches use the same red comparison color', () => {
+  const { map, layers } = mapFixture();
+  const before = plan([leg('next', '11:17', '11:27', [[0, 1], [1, 1]])]);
+  for (const kind of ['Выезд из дома', 'После текущей работы']) {
+    renderDispatchRoutes(map, {...detail, before, after:before, current:{...detail.current,kind}});
+    assert.equal(layers.get('dispatch-before').paint['line-color'], MAP_UI.routeSelected);
+    assert.equal(layers.get('dispatch-after').paint['line-color'], MAP_UI.urgent);
+  }
 });

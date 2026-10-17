@@ -1,0 +1,8 @@
+{
+  "status": "PREPARED_NOT_FULLY_VALIDATED",
+  "scope": "Generated duration snapshots and matching CSV/JSON. Validate with the authoritative loader; exact plan validation is retained separately.",
+  "originalReport": "data/dataset/validation_report.json",
+  "modelVersion": "duration-2",
+  "seed": 27082026,
+  "anchor": "2026-08-17"
+}

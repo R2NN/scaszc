@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { EmergencyDispatch } from './emergencyDispatch.mjs';
 import { minuteOf } from '../src/shiftDomain.js';
 import { operationalStates } from '../src/operationalState.js';
+import { homeStartScenario } from './homeStartScenario.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 
@@ -45,7 +46,7 @@ export function createDispatchApi(store, options) {
         const base = store.get(input.baseShiftId);
         if (!base?.plan) throw new Error('Исходная смена не найдена');
         const id = randomUUID();
-        const first = base.versions[0];
+        const first = homeStartScenario(base);
         const shift = store.ensure({ regionId: `${base.regionId.split(':')[0]}:scenario:${id}`, date: base.date, orders: first.orders, team: first.team, plan: first.plan });
         const requestedSpeed = Number(input.speed);
         const speed = [30, 60, 120, 300].includes(requestedSpeed) ? requestedSpeed : 60;

@@ -70,7 +70,7 @@ export function dispatchRouteData(plan, detail, includeMovements = false) {
 
 /** Reapply paints on every selection so an existing grey layer cannot survive an intercept preview. */
 export function renderDispatchRoutes(map, detail) {
-  const intercept = detail.current?.kind === 'Перехват в пути';
+  const intercept = Boolean(detail.current?.emergencyOrderId) || detail.current?.kind === 'Перехват в пути';
   const rendered = {};
   const stops = [];
   for (const [key, color, dash] of intercept

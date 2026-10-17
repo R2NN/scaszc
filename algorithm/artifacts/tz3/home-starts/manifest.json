@@ -1,0 +1,17 @@
+{
+  "date": "2026-08-17",
+  "sourcePlanContentSha256": "44b01c4be2a40deb34e3c4518a7cd9fa5730e335619a2a64a9d19f9a408df3e9",
+  "sourceKey": "8fafd8561a27fea103f552742308c6c792e80a885fcae8dc2a5ee56343f3500c",
+  "rawFileSha256": "39b17d426a2e0562f700f4fccf098fdf23295a6d4eb599f320730ee19ed956d7",
+  "inputFileSha256": "a27f6fba0f4f0ba64207eb44b1ff72fd1c782512ff3816303acf7a4434677f3e",
+  "contentSha256": "b6d4119bc6043cdce1b241ca02d6dc4996ed2780ea440a695c64616dce61a6e5",
+  "datasetSha256": "de53b0a2569b8e265508676436c36198ae7804e8e8204aef314755323f7f1d67",
+  "homeEngineers": [
+    "SOUTHEAST-ENG-04",
+    "SOUTHCENTER-ENG-04"
+  ],
+  "baselineAssigned": 203,
+  "assigned": 204,
+  "total": 205,
+  "scenarioHomes": true
+}

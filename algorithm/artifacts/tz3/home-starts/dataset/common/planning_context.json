@@ -1,0 +1,9 @@
+{
+  "planning_date": "2026-08-17",
+  "initial_planning_at": "2026-08-17T07:00:00+03:00",
+  "timezone": "Europe/Moscow",
+  "day_type": "WEEKDAY",
+  "event_application_order": "event_time ascending, then apply_order ascending",
+  "event_time_tie_break": "apply_order ascending",
+  "live_state_derivation": "Перед каждым событием состояния COMPLETED/IN_SERVICE/IN_TRANSIT_TO_JOB/NOT_STARTED/CANCELED однозначно выводятся из текущего плана и времени события."
+}

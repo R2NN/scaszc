@@ -30,6 +30,18 @@ test('incident creation is idempotent and reading a notice never solves it',()=>
   const f=fixture();try{const first=f.create();assert.equal(f.create().id,first.id);f.dispatch.read(first.id,first.notifications[0].id);assert.equal(f.dispatch.get(first.id).status,'QUEUED');assert.equal(f.store.get(f.shift.id).revision,1);}finally{f.store.close();}
 });
 
+test('an available engineer still at their confirmed home is offered as a home departure', async () => {
+  const f = fixture();
+  try {
+    const home = {...engineer,startPoint:{kind:'home',address:'Адрес старта',coords:engineer.startCoords,confirmed:true,availableFrom:'08:00',scenario:true}};
+    f.store.ensure({regionId:f.shift.regionId,date:f.shift.date,orders:[order],team:[home],plan:initial});
+    const item = await f.dispatch.search(f.create().id);
+    assert.equal(item.status,'WAITING',item.error);
+    assert.equal(item.candidates[0].kind,'Выезд из дома');
+    assert.equal(item.candidates[0].startPoint.address,'Адрес старта');
+  } finally {f.store.close();}
+});
+
 test('clock ticks retain the selected speed without loading full shift archives', async () => {
   const f = fixture();
   const api = createDispatchApi(f.store, {routing:f.dispatch.routing});

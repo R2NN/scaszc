@@ -1,0 +1,8 @@
+﻿equipment_id;equipment_name;category;reusable;unit;shared_stock
+DIAG_SET;Диагностический комплект;TOOLKIT;true;комплект;false
+INSTALL_SET;Монтажный комплект;TOOLKIT;true;комплект;false
+CABLE_SET;Комплект для работы с кабелем;TOOLKIT;true;комплект;false
+ROUTER;Роутер для замены;DEVICE;false;шт.;true
+TV_BOX;ТВ-приставка;DEVICE;false;шт.;true
+ONT_GIGABIT;Гигабитный ONT;DEVICE;false;шт.;true
+CABLE_PACK;Комплект кабельных материалов;CONSUMABLE;false;комплект;true

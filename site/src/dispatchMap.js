@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Marker } from 'maplibre-gl';
-import { renderDispatchRoutes } from './dispatchComparison.js';
+import { dispatchRouteData, renderDispatchRoutes } from './dispatchComparison.js';
 
 /** Draw a comparison on the existing map, starting both lines at the current position. */
 export function useDispatchMap(map) {
@@ -45,7 +45,7 @@ export function useDispatchMap(map) {
     };
     const preview = event => {
       latestPreview = { ...event.detail, scope: event.detail.scope || 'day' };
-      const intercept = event.detail.current?.kind === 'Перехват в пути';
+      const intercept = Boolean(event.detail.current?.emergencyOrderId) || event.detail.current?.kind === 'Перехват в пути';
       if (!map.isStyleLoaded()) {
         map.off('idle', restore);
         map.once('idle', restore);
@@ -59,9 +59,11 @@ export function useDispatchMap(map) {
       legend.setAttribute('aria-label', 'Сравнение маршрутов');
       const wholeDay = latestPreview.scope === 'day';
       const toEmergency = rendered.after.features.some(feature => feature.properties.orderId === event.detail.current?.emergencyOrderId);
-      const rows = [['origin', `От положения в ${event.detail.current?.time || ''}`], ['before', wholeDay ? 'Будущие заявки без перехвата' : 'К своей следующей заявке'], ['after', toEmergency ? 'До аварии · стрелки по ходу движения' : 'Новый путь к следующей заявке']];
-      if (wholeDay) rows.push(['continuation', toEmergency ? 'Пунктир — заявки после аварии' : 'Пунктир — следующие заявки']);
-      if (wholeDay) rows.push(['note', 'Цифры — порядок заявок, время — прибытие']);
+      const rows = [['origin', `${event.detail.current?.kind === 'Выезд из дома' ? 'Домашний старт' : 'От положения'} в ${event.detail.current?.time || ''}`]];
+      if (rendered.before.features.length) rows.push(['before', wholeDay ? 'Будущие заявки без перехвата' : 'К своей следующей заявке']);
+      rows.push(['after', toEmergency ? 'До аварии · стрелки по ходу движения' : 'Новый путь к следующей заявке']);
+      if (wholeDay && rendered.after.features.some(f=>f.properties.phase==='continuation')) rows.push(['continuation', toEmergency ? 'Пунктир — заявки после аварии' : 'Пунктир — следующие заявки']);
+      if (wholeDay && rendered.after.features.filter(f=>!f.properties.movement).length > 1) rows.push(['note', 'Цифры — порядок заявок, время — прибытие']);
       for (const [className, label] of rows) {
         const row = document.createElement('div');
         row.className = className; row.textContent = label; legend.appendChild(row);
@@ -71,7 +73,8 @@ export function useDispatchMap(map) {
       toggle.textContent = wholeDay ? 'Показать только ближайшее действие' : 'Весь оставшийся день';
       toggle.setAttribute('aria-pressed', String(wholeDay));
       toggle.addEventListener('click', () => preview({ detail: { ...latestPreview, scope: wholeDay ? 'next' : 'day', focusRoute: true } }));
-      legend.appendChild(toggle);
+      const hasLater = [event.detail.before,event.detail.after].some((plan,index) => dispatchRouteData(plan,event.detail,index===1).features.some(feature=>feature.properties.phase==='continuation'));
+      if (hasLater) legend.appendChild(toggle);
       map.getContainer().appendChild(legend);
       originMarker?.remove();
       if (event.detail.current?.origin) {

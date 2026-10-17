@@ -1,0 +1,142 @@
+{
+  "initial": {
+    "contentSha256": "b6d4119bc6043cdce1b241ca02d6dc4996ed2780ea440a695c64616dce61a6e5",
+    "datasetSha256": "de53b0a2569b8e265508676436c36198ae7804e8e8204aef314755323f7f1d67",
+    "status": "VALID",
+    "assigned": 204,
+    "unserved": [
+      "SOUTHCENTER-23637"
+    ]
+  },
+  "homes": [
+    {
+      "id": "SOUTHEAST-ENG-04",
+      "name": "Бригада Саламатин",
+      "transport": "PUBLIC_TRANSIT",
+      "start": {
+        "kind": "home",
+        "date": "2026-08-17",
+        "confirmed": true,
+        "address": "Город Москва, ул.Кустанайская, д. 8 к 1",
+        "coords": [
+          55.6188601,
+          37.7516036
+        ],
+        "source": "scenario-home:confirmed-registry:OBJ-f0198364f151e44328",
+        "availableFrom": "12:00",
+        "scenario": true
+      }
+    },
+    {
+      "id": "SOUTHCENTER-ENG-04",
+      "name": "Ионов Геннадий",
+      "transport": "WALKING",
+      "start": {
+        "kind": "home",
+        "date": "2026-08-17",
+        "confirmed": true,
+        "address": "Город Москва, ул.Большая Пионерская, д. 33 к 2",
+        "coords": [
+          55.7261963,
+          37.6351637
+        ],
+        "source": "scenario-home:confirmed-registry:OBJ-e6c3c906b8c868f906",
+        "availableFrom": "08:00",
+        "scenario": true
+      }
+    }
+  ],
+  "newlyAssigned": [
+    {
+      "job": "SOUTHEAST-40698",
+      "engineer": "SOUTHEAST-ENG-04",
+      "start": "2026-08-17T12:04:00+03:00"
+    }
+  ],
+  "emergency": [
+    {
+      "engineer": "SOUTHCENTER-ENG-09",
+      "arrival": "11:58",
+      "assigned": 205,
+      "total": 206,
+      "status": "VALID",
+      "sha": "71478bc80e08faa9f2abf8016c1b39cb3c95899149be1314a4eb0478bc86926b"
+    },
+    {
+      "engineer": "SOUTHCENTER-ENG-04",
+      "arrival": "11:47",
+      "assigned": 205,
+      "total": 206,
+      "status": "VALID",
+      "sha": "512f61fa5cfa4f9826504d679307d4d60a489e772da7072191f9671005471b9b"
+    },
+    {
+      "engineer": "SOUTHCENTER-ENG-11",
+      "arrival": "11:38",
+      "assigned": 204,
+      "total": 206,
+      "status": "VALID",
+      "sha": "ceec92b7b9720f93de7828c20cdad1dba59522af182891d9cb09d5d46441b65d"
+    },
+    {
+      "engineer": "SOUTHCENTER-ENG-01",
+      "arrival": "11:39",
+      "assigned": 203,
+      "total": 206,
+      "status": "VALID",
+      "sha": "a7098cc6da0a1c4fa8d7bde06421b5a152b4beccc2651b87b54e3c321238e483"
+    },
+    {
+      "engineer": "SOUTHCENTER-ENG-06",
+      "arrival": "12:18",
+      "assigned": 203,
+      "total": 206,
+      "status": "VALID",
+      "sha": "2da533bbfeb6aac3834628a794d3b87766ddb9f9fe6c828f555f0a7b7fa173c6"
+    }
+  ],
+  "homeScreen": [
+    {
+      "id": "SOUTHCENTER-66376",
+      "address": "Город Москва, ул.Дубининская, д. 59 к 2",
+      "minutes": 32,
+      "status": "OK"
+    },
+    {
+      "id": "SOUTHCENTER-47560",
+      "address": "Город Москва, ул.Большая Пионерская, д. 33 к 2",
+      "minutes": 30,
+      "status": "OK"
+    },
+    {
+      "id": "SOUTHCENTER-80308",
+      "address": "Город Москва, ул.Большая Серпуховская, д. 31 к 6",
+      "minutes": 34,
+      "status": "OK"
+    },
+    {
+      "id": "SOUTHCENTER-94575",
+      "address": "Город Москва, ул.Автозаводская, д. 11",
+      "minutes": 43,
+      "status": "OK"
+    },
+    {
+      "id": "SOUTHCENTER-61311",
+      "address": "Город Москва, пер.Ослябинский, д. 3",
+      "minutes": 49,
+      "status": "OK"
+    }
+  ],
+  "officeComparison": [
+    {
+      "position": 0,
+      "routeFeasible": false,
+      "failure": "MaterializationFailure(engineer_id='SOUTHEAST-ENG-04', job_id='SOUTHEAST-79450', origin_location_id='LOC-0098', destination_location_id='LOC-0003', departure_at='2026-08-17T14:13:00+03:00', reason='exact arrival makes the closed service-start window impossible', constraint='client_window', service_start_at='2026-08-17T14:37:00+03:00', service_end_at='2026-08-17T15:47:00+03:00', limit_at='2026-08-17T14:00:00+03:00', violation_minutes=37)"
+    },
+    {
+      "position": 1,
+      "routeFeasible": false,
+      "failure": "MaterializationFailure(engineer_id='SOUTHEAST-ENG-04', job_id='SOUTHEAST-40698', origin_location_id='LOC-0003', destination_location_id='LOC-0098', departure_at='2026-08-17T14:04:00+03:00', reason='exact arrival makes the closed service-start window impossible', constraint='client_window', service_start_at='2026-08-17T14:28:00+03:00', service_end_at='2026-08-17T15:38:00+03:00', limit_at='2026-08-17T14:00:00+03:00', violation_minutes=28)"
+    }
+  ]
+}

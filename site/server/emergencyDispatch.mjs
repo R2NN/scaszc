@@ -178,6 +178,8 @@ export class EmergencyDispatch {
     if (movement) state.availableAt = movement.at.slice(11,16);
     if (['unknown', 'unavailable', 'before_shift', 'after_shift'].includes(state.status) || state.availableAt == null) throw new Error('Нет достоверного доступного оперативного состояния');
     const before = index(shift.plan), after = index(plan), orders = [...shift.orders, incident.order];
+    const fromHome = engineer.startPoint?.kind === 'home' && state.status === 'idle'
+      && !shift.plan.routes.find(r => r.engineerId === engineer.id)?.assignments.some(v => (minuteOf(v.departureAt) ?? Infinity) <= minuteOf(time));
     const changes = [...new Set([...before.keys(), ...after.keys()])].flatMap(id => {
       const old = before.get(id), next = after.get(id);
       if (old && next && ['engineerId', 'plannedStart', 'plannedFinish', 'departureAt', 'arrival'].every(key => old[key] === next[key])) return [];
@@ -200,7 +202,8 @@ export class EmergencyDispatch {
     return { id: `${incident.id}:${plan.contentSha256}`, fingerprint, baseRevision: shift.revision, scenarioTime: time, checkedAt: this.now(), artifact: candidate.artifact,
       engineer: { id: engineer.id, name: engineer.name, skills: engineer.skills, equipment: engineer.equipment, transport: engineer.transport }, state, visit,
       departureOrigin: movement?.coords || state.coords, responseMinutes: minuteOf(visit.arrival)-minuteOf(time),
-      kind: state.status === 'travelling' ? 'Перехват в пути' : state.status === 'working' ? 'После текущей работы' : 'Свободный инженер',
+      kind: state.status === 'travelling' ? 'Перехват в пути' : state.status === 'working' ? 'После текущей работы' : fromHome ? 'Выезд из дома' : 'Свободный инженер',
+      startPoint: engineer.startPoint || null,
       experience: { count: experience, source: 'duration_visits', rating: null, ratingCount: 0 },
       interception, changes, changedEngineerIds, loads, reserve, coverage: { before: shift.plan.metrics, after: plan.metrics },
       plan, orders, team: shift.team, validation: plan.validation, contentSha256: plan.contentSha256 };
