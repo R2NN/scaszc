@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <radialGradient id="surface" cx=".4" cy=".3" r=".8">
+      <stop stop-color="#fff"/>
+      <stop offset="1" stop-color="#e4d4fa"/>
+    </radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="54" fill="url(#surface)" stroke="#580c91" stroke-width="5"/>
+  <circle cx="64" cy="64" r="49" stroke="#ffd21f" stroke-width="5"/>
+  <path d="M32 59V98H91V59L62 35Z" fill="#fff" stroke="#580c91" stroke-width="4.5" stroke-linejoin="round"/>
+  <path d="M83 45V31H93V54" fill="#eee6f8" stroke="#580c91" stroke-width="4.5" stroke-linejoin="round"/>
+  <path d="M25 61L62 29L100 61" stroke="#580c91" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M25 61L62 29L100 61" stroke="#ffd21f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="52" y="55" width="20" height="18" rx="2" fill="#eee6f8" stroke="#580c91" stroke-width="4"/>
+  <path d="M62 56V71M53 64H71" stroke="#580c91" stroke-width="3"/>
+  <path d="M52 98V84Q52 80 56 80H68Q72 80 72 84V98" fill="#ffd21f" stroke="#580c91" stroke-width="4"/>
+  <path d="M30 98H94" stroke="#580c91" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="99" cy="99" r="18" fill="#ffd21f" stroke="#580c91" stroke-width="3.5"/>
+  <circle cx="99" cy="94" r="5" fill="#580c91"/>
+  <path d="M90 108V105C90 97 108 97 108 105V108Z" fill="#580c91"/>
+</svg>

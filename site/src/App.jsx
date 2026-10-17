@@ -34,6 +34,7 @@ import { parseImportedDate, resolveImportedDate } from './importDate.js';
 import { importIdentity, summarizeImport } from './importMerge.js';
 import { DEFAULT_REGION, regionCatalog } from './regions.js';
 import depotMarkerPurple from './assets/depot-marker-purple.png';
+import homeStartMarker from './assets/home-start-marker.svg';
 import { MAP_SCALE, MAP_UI, routeModeForCount, shouldShowRouteNumbers, stableRouteColor } from './mapDesign.js';
 import { AnalyticsWorkspace } from './AnalyticsWorkspace.jsx';
 import { ManualEntryModal } from './ManualEntryModal.jsx';
@@ -699,10 +700,14 @@ function MapCanvas({onComplexityModeChange,complexityMode=false,complexityPanelO
   },[locationVisible,clearUserLocation]);
   const routeStarts=useMemo(()=>{
     if(!scheduled)return[];
-    const visibleRoutes=routes.filter(route=>route.assignments?.length&&(!crewPlayback?.selectedEngineerId||String(route.engineerId)===String(crewPlayback.selectedEngineerId)));
+    const startRoutes=[...routes];
+    team.filter(engineer=>engineer.startPoint?.kind==='home').forEach(engineer=>{
+      if(!startRoutes.some(route=>String(route.engineerId)===String(engineer.id)))startRoutes.push({engineerId:engineer.id,engineerName:engineer.name,assignments:[],shiftStart:engineer.shiftStart,shiftEnd:engineer.shiftEnd});
+    });
+    const visibleRoutes=startRoutes.filter(route=>(route.assignments?.length||team.some(engineer=>String(engineer.id)===String(route.engineerId)&&engineer.startPoint?.kind==='home'))&&(!crewPlayback?.selectedEngineerId||String(route.engineerId)===String(crewPlayback.selectedEngineerId)));
     const starts=visibleRoutes.map(route=>{const engineer=team.find(item=>String(item.id)===String(route.engineerId));return engineer&&Array.isArray(engineer.startCoords)&&engineer.startCoords.length===2?{route,engineer,coords:engineer.startCoords}:null}).filter(Boolean);
     const grouped=new globalThis.Map();
-    starts.forEach(item=>{const key=item.coords.join(':');const current=grouped.get(key)||{...item,names:[],entries:[]};current.names.push(item.engineer.name);current.entries.push(item);grouped.set(key,current)});
+    starts.forEach(item=>{const key=`${item.engineer.startPoint?.kind==='home'?'home':'depot'}:${item.coords.join(':')}`;const current=grouped.get(key)||{...item,names:[],entries:[]};current.names.push(item.engineer.name);current.entries.push(item);grouped.set(key,current)});
     return[...grouped.values()];
   },[scheduled,routes,team,crewPlayback?.selectedEngineerId]);
   const routeGeoJson=useMemo(()=>{
@@ -976,21 +981,22 @@ function MapCanvas({onComplexityModeChange,complexityMode=false,complexityPanelO
       startMarkersRef.current=routeStarts.map(item=>{
         const entries=item.entries||[{route:item.route,engineer:item.engineer}],brigadeCount=entries.length;
         const brigadeWord=countForm(brigadeCount,'бригада','бригады','бригад');
-        const element=document.createElement('button');element.type='button';element.className='route-start-marker';element.setAttribute('aria-label',`Открыть стартовую точку: ${brigadeCount} ${brigadeWord}`);element.innerHTML=`<span class="route-start-orb" aria-hidden="true"><img src="${depotMarkerPurple}" alt="" draggable="false"></span>`;
+        const isHome=item.engineer.startPoint?.kind==='home',startTitle=isHome?'Личный дом':'Стартовая точка';
+        const element=document.createElement('button');element.type='button';element.className=`route-start-marker${isHome?' is-home':''}`;element.setAttribute('aria-label',`Открыть ${isHome?'личный дом':'стартовую точку'}: ${brigadeCount} ${brigadeWord}`);element.innerHTML=`<span class="route-start-orb" aria-hidden="true"><img src="${isHome?homeStartMarker:depotMarkerPurple}" alt="" draggable="false"></span>`;
         const content=document.createElement('div');content.className='map-popup-detail start-popup-detail';
-        const header=document.createElement('div'),heading=document.createElement('strong'),state=document.createElement('span');header.className='map-popup-heading';heading.textContent='Стартовая точка';state.className='map-popup-state start';state.textContent=`${brigadeCount} ${brigadeWord}`;header.append(heading,state);
-        const subtitle=document.createElement('p');subtitle.className='map-popup-title';subtitle.textContent='База выездных бригад';content.append(header,subtitle);
+        const header=document.createElement('div'),heading=document.createElement('strong'),state=document.createElement('span');header.className='map-popup-heading';heading.textContent=startTitle;state.className='map-popup-state start';state.textContent=`${brigadeCount} ${brigadeWord}`;header.append(heading,state);
+        const subtitle=document.createElement('p');subtitle.className='map-popup-title';subtitle.textContent=isHome?'Старт из дома':'База выездных бригад';content.append(header,subtitle);
         const addStartRow=(label,value)=>{const row=document.createElement('div'),name=document.createElement('span'),leader=document.createElement('i'),text=document.createElement('b');row.className='map-popup-row';name.textContent=label;text.textContent=value;row.append(name,leader,text);content.append(row)};
         const shifts=entries.map(({route})=>[route.shiftStart,route.shiftEnd]).filter(([start,end])=>start&&end),shiftStart=shifts.map(([start])=>start).sort()[0]||'—',shiftEnd=shifts.map(([,end])=>end).sort().at(-1)||'—';
         addStartRow('Адрес',item.engineer.startAddress||'Адрес не указан');
         addStartRow('Рабочее время',shiftStart==='—'?'Не указано':`${shiftStart}–${shiftEnd}`);
-        if(brigadeCount>1)addStartRow('Состав',`${brigadeCount} ${brigadeWord} с общей базой`);
+        if(brigadeCount>1)addStartRow('Состав',`${brigadeCount} ${brigadeWord} ${isHome?'с общим домашним стартом':'с общей базой'}`);
         const routeList=document.createElement('div');routeList.className='start-popup-routes';
         entries.forEach(({route,engineer})=>{const button=document.createElement('button'),avatar=document.createElement('span'),copy=document.createElement('span'),name=document.createElement('b'),metaText=document.createElement('small'),stopCount=route.assignments.length;button.type='button';button.setAttribute('aria-label',`Показать маршрут бригады ${engineer.name} на карте`);avatar.textContent=engineer.name.split(' ').map(part=>part[0]).join('').slice(0,2);name.textContent=engineer.name;metaText.textContent=`${stopCount} ${countForm(stopCount,'остановка','остановки','остановок')} · ${route.shiftStart}–${route.shiftEnd}`;copy.append(name,metaText);button.append(avatar,copy);button.addEventListener('click',event=>{event.stopPropagation();popup.remove();showRoute(route)});routeList.append(button)});
         if(entries.length)content.append(routeList);
         const popup=new maplibregl.Popup({closeButton:true,closeOnClick:false,anchor:'right',offset:31,maxWidth:'380px',className:'order-popup start-detail-popup'}).setDOMContent(content);
         popup.on('close',()=>{if(activePopupRef.current===popup)activePopupRef.current=null});
-        element.addEventListener('mouseenter',()=>scheduleShiftHoverInfo(item.coords,()=>hoverCard('Стартовая точка',[
+        element.addEventListener('mouseenter',()=>scheduleShiftHoverInfo(item.coords,()=>hoverCard(startTitle,[
           ['Адрес',item.engineer.startAddress||'Адрес не указан'],
           ['Бригады',entries.map(({engineer})=>engineer.name).join(', ')],
           ['Рабочее время',shiftStart==='—'?'Не указано':`${shiftStart}–${shiftEnd}`],
