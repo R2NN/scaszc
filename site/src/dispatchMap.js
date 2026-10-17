@@ -60,13 +60,15 @@ export function useDispatchMap(map) {
     };
     const preview = event => {
       latestPreview = event.detail;
-      for (const [key, color, dash] of [['before', '#737b87', [3, 3]], ['after', '#7c3aed', [1, 0]]]) {
+      const intercept = event.detail.current?.kind === 'Перехват в пути';
+      const styles = intercept ? [['before', '#7c3aed', [1, 0]], ['after', '#ef4444', [1, 0]]] : [['before', '#737b87', [3, 3]], ['after', '#7c3aed', [1, 0]]];
+      for (const [key, color, dash] of styles) {
         const data = routeData(event.detail[key], event.detail, key === 'after');
         const source = map.getSource(`dispatch-${key}`);
         if (source) source.setData(data);
         else if (map.isStyleLoaded()) {
           map.addSource(`dispatch-${key}`, { type: 'geojson', data });
-          map.addLayer({ id: `dispatch-${key}`, type: 'line', source: `dispatch-${key}`, paint: { 'line-color': color, 'line-width': key === 'after' ? 5 : 4, 'line-dasharray': dash, 'line-opacity': .9 } });
+          map.addLayer({ id: `dispatch-${key}`, type: 'line', source: `dispatch-${key}`, paint: { 'line-color': color, 'line-width': intercept ? 6 : key === 'after' ? 5 : 4, 'line-dasharray': dash, 'line-opacity': .94 } });
         }
       }
       originMarker?.remove();

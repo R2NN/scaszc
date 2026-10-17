@@ -215,6 +215,6 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
     </>}
     {controller.error ? <p role='alert' className='dispatch-error'>{controller.error}</p> : null}
     {policy ? <details className='dispatch-policy'><summary>Настройка автовыбора</summary><label><input type='checkbox' checked={policy.enabled} onChange={e => controller.savePolicy({...policy,enabled:e.target.checked})}/>Автоматическое решение</label><BusinessSelect ariaLabel='Время ожидания решения' value={String(policy.waitSeconds)} options={[30,60,120,300,600,900].map(value => ({value:String(value), label:value < 60 ? `${value} секунд` : `${value/60} минут`}))} onChange={value => controller.savePolicy({...policy,waitSeconds:Number(value)})}/><small>Настройка действует для новых аварий. Покрытие аварий → остальных заявок → состав → прибытие → дорога.</small></details> : null}
-    {candidate ? <div className='dispatch-map-key'><span>● Текущее положение</span><span>┄┄ Оставить заявки</span><span>━━ Отправить на аварию</span></div> : null}
+    {candidate ? <div className='dispatch-map-key'>{candidate.kind === 'Перехват в пути' ? <><span className='dispatch-key-before'>━━ Его обычный маршрут</span><span className='dispatch-key-after'>━━ После перехвата на аварию</span></> : <><span>● Текущее положение</span><span>┄┄ Оставить заявки</span><span>━━ Отправить на аварию</span></>}</div> : null}
   </section>;
 }
