@@ -247,7 +247,20 @@ export class ComplexityStore {
     const all = this.visits(knowledgeAt).filter(visit => objects.has(visit.entities?.object) && visit.endedAt && Date.parse(visit.endedAt) <= Date.parse(at));
     const eligible = all.filter(visit => visit.eligible && !visit.excluded && Number.isFinite(visit.actualTechnical) && visit.forecast && !visit.forecast.override);
     const holdout = eligible.filter(visit => visit.partition === 'holdout' || visit.source === 'dispatcher');
-    const stats = rows => rows.length ? { count: rows.length, mae: rows.reduce((sum, v) => sum + Math.abs(v.actualTechnical - v.forecast.technical), 0) / rows.length, fixedMae: rows.reduce((sum, v) => sum + Math.abs(v.actualTechnical - v.forecast.baseTechnical), 0) / rows.length, underestimated: rows.filter(v => v.actualTechnical > v.forecast.technical).length, overestimated: rows.filter(v => v.actualTechnical < v.forecast.technical).length, underMinutes: rows.reduce((sum, v) => sum + Math.max(0, v.actualTechnical - v.forecast.technical), 0) / rows.length, overMinutes: rows.reduce((sum, v) => sum + Math.max(0, v.forecast.technical - v.actualTechnical), 0) / rows.length } : { count: 0, mae: null, fixedMae: null, underestimated: 0, overestimated: 0, underMinutes: null, overMinutes: null };
+    const stats = rows => {
+      const longer = rows.filter(visit => visit.actualTechnical > visit.forecast.technical);
+      const shorter = rows.filter(visit => visit.actualTechnical < visit.forecast.technical);
+      const mean = (items, value) => items.length ? items.reduce((sum, visit) => sum + value(visit), 0) / items.length : null;
+      return {
+        count: rows.length,
+        mae: mean(rows, visit => Math.abs(visit.actualTechnical - visit.forecast.technical)),
+        fixedMae: mean(rows, visit => Math.abs(visit.actualTechnical - visit.forecast.baseTechnical)),
+        underestimated: longer.length,
+        overestimated: shorter.length,
+        underMinutes: mean(longer, visit => visit.actualTechnical - visit.forecast.technical),
+        overMinutes: mean(shorter, visit => visit.forecast.technical - visit.actualTechnical),
+      };
+    };
     return { ...stats(holdout), eligible: eligible.length, total: all.length, coverage: all.length ? eligible.length / all.length : null, trainingCount: eligible.length - holdout.length, byKind: Object.keys(DEFAULT_MODEL.norms).map(kind => ({ kind, ...stats(holdout.filter(v => v.kind === kind)) })), temporalSplit: holdout.filter(visit => visit.partition === 'holdout').map(visit => visit.endedAt.slice(0, 10)).sort()[0] || null, measure: 'Технические минуты; одинаковые пригодные факты, прогноз до визита', limitations: 'Синтетическая независимая симуляция, а не доказательство качества на производственных данных.' };
   }
 }

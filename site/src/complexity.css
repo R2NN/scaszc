@@ -64,6 +64,28 @@
 .cx-fact-draft-status{display:flex;gap:10px;align-items:center;justify-content:space-between;font-size:11px;line-height:1.5}.cx-fact-draft-status button{border:0;background:transparent;color:inherit;text-decoration:underline;cursor:pointer;white-space:nowrap}
 
 .cx-group-summary{padding:14px 16px;border-bottom:1px solid var(--cx-line);max-height:220px;overflow:auto;background:var(--cx-soft);font-size:12px}
+.cx-time-content{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
+.cx-time-content .cx-group-summary{max-height:none;overflow:visible;padding:12px 16px}
+.cx-time-content .cx-object-list{overflow:visible;flex:none}
+.cx-group-filters{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.cx-group-filters button{display:flex;align-items:center;gap:6px;border:1px solid var(--cx-line);border-radius:8px;background:var(--cx-bg);padding:7px 9px;font:inherit;font-size:11px;color:var(--cx-text);cursor:pointer}
+.cx-group-filters button[aria-pressed='true']{border-color:#cab052;background:#fff7d5;color:#514411}
+.cx-group-filters b{font-variant-numeric:tabular-nums}
+.cx-group-summary details>summary{font-size:11px;color:var(--cx-muted);cursor:pointer;padding:4px 0}
+.cx-group-compositions{display:grid;gap:5px;margin-top:8px}
+.cx-group-compositions>button{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px;border:1px solid var(--cx-line);border-radius:8px;background:var(--cx-bg);color:var(--cx-text);text-align:left;cursor:pointer}
+.cx-group-compositions>button[aria-pressed='true']{border-color:#cab052;background:#fff7d5;color:#514411}
+.cx-group-compositions span{display:grid;gap:3px;min-width:0}
+.cx-group-compositions b{font-size:12px;font-weight:600}.cx-group-compositions small{font-size:11px;color:var(--cx-muted)}
+.cx-visit.is-target{border:1px solid #d6b83d;border-radius:10px;padding:12px;background:#fffbed;scroll-margin-top:12px;outline:none}
+.cx-selected-visit{display:inline-block;margin-bottom:9px;color:#77601e;font-size:11px;font-weight:650}
+.cx-condition-edit-fields{display:grid;gap:8px}
+.cx-condition-edit-fields textarea{box-sizing:border-box;width:100%;min-height:76px;padding:10px;border:1px solid var(--cx-line);border-radius:8px;background:var(--cx-soft);color:var(--cx-text);font:inherit;line-height:1.5;resize:vertical}
+.cx-condition-edit-fields textarea:focus-visible{outline:2px solid #d9b83e;outline-offset:2px}
+.cx-metrics .cx-direction-stat{display:grid;gap:4px;margin-top:8px}
+.cx-metrics .cx-direction-stat b{font-size:14px;line-height:1.4}
+[data-theme='dark'] .cx-group-filters button[aria-pressed='true'],[data-theme='dark'] .cx-group-compositions>button[aria-pressed='true'],[data-theme='dark'] .cx-visit.is-target{background:#393524;color:#f2dfa7;border-color:#9e8848}
+[data-theme='dark'] .cx-selected-visit{color:#e0c676}
 
 /* Visit-time groups share BeeGo surfaces; their size follows the text, never the count. */
 .cx-map-active .maplibregl-marker.cx-cluster-marker{visibility:visible}

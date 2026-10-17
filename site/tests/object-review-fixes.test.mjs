@@ -4,7 +4,7 @@ import { ShiftStore } from '../server/shiftStore.mjs';
 import { calculateDuration } from '../server/durationModel.mjs';
 import { savedFactDraft, updateFactDraft, visitFactDraft } from '../src/visitFactDraft.js';
 import { addressIdentity, changeServiceLocation } from '../src/serviceLocation.js';
-import { summarizeObjectGroup } from '../src/objectPresentation.js';
+import { conditionVisitChoices, filterObjectGroup, standardVolumeLabel, summarizeObjectGroup, visibleVisitLimit, workComposition } from '../src/objectPresentation.js';
 import { objectAttention } from '../server/complexityAttention.mjs';
 import { isUrgentOrder, effectiveOrderSkill, isInformationalOrder, workPointType } from '../src/workTypes.js';
 import { handleComplexity } from '../server/complexityApi.mjs';
@@ -171,4 +171,58 @@ test('a late exclusion changes current analytics without rewriting the historica
   const current = await (await handleComplexity(new Request(`http://localhost/api/complexity/accuracy?at=${encodeURIComponent(at)}&review=current`), store)).json();
   assert.equal(current.count, 0);
   assert.equal(store.visits().find(item => item.id === 'late-error').eligible, true);
+});
+
+test('a shared condition exposes its foreign source visit and can be revised from another object', async context => {
+  const store = fixture(context);
+  for (const [index, id] of ['A', 'B', 'C'].entries()) visit(store, `shared-${index}`, id);
+  const condition = store.decide({ visitId: 'shared-0', action: 'confirm', scope: 'operation', reason: 'Подтверждено на трёх адресах', at });
+  const payload = await (await handleComplexity(new Request(`http://localhost/api/complexity/objects/B?at=${encodeURIComponent(at)}&kind=local`), store)).json();
+  const shared = payload.conditions.find(item => item.id === condition.id);
+  const choices = conditionVisitChoices(payload.visits, shared, 'local');
+  const source = choices.find(item => item.id === 'shared-0');
+  assert.equal(source.entities.object, 'A');
+  assert.ok(source.forecast && Number.isFinite(source.actualTechnical));
+  assert.equal(choices.filter(item => item.id === 'shared-1').length, 1);
+  const response = await handleComplexity(new Request('http://localhost/api/complexity/decisions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ visitId: source.id, action: 'confirm', scope: shared.scope, replacesConditionId: shared.id, finding: 'Уточнённое описание', preparation: 'Взять прибор', reason: 'Уточнение общей особенности', at: later }) }), store);
+  assert.equal(response.status, 200);
+  const revised = await response.json();
+  assert.equal(revised.scope, 'operation');
+  assert.equal(revised.finding, 'Уточнённое описание');
+  assert.equal(revised.preparation, 'Взять прибор');
+  assert.equal(store.conditions('B').find(item => item.id === condition.id).closedAt, later);
+  assert.equal(store.estimate(order('B'), at).historyMinutes, store.estimate(order('B'), later).historyMinutes);
+});
+
+test('a linked historical visit is rendered immediately and more pagination continues after it', () => {
+  const rows = Array.from({ length: 14 }, (_, index) => ({ id: `visit-${index}` }));
+  assert.equal(visibleVisitLimit(rows, 'visit-11', 5), 12);
+  assert.equal(visibleVisitLimit(rows, 'visit-11', 17), 17);
+  assert.equal(visibleVisitLimit(rows, 'missing', 5), 5);
+});
+
+test('group actions filter identical addresses without mixing composition or missing measurements', () => {
+  const rows = [{ id: 'A', kind: 'local', delta: 20, estimate: { operation: 'one' } }, { id: 'B', kind: 'local', delta: 35, insufficient: true, estimate: { operation: 'one' } }, { id: 'C', kind: 'connection', delta: 30, estimate: { operation: 'two' } }];
+  assert.deepEqual(filterObjectGroup(rows, 'slower').map(item => item.id), ['A', 'C']);
+  assert.deepEqual(filterObjectGroup(rows, 'unknown').map(item => item.id), ['B']);
+  assert.deepEqual(filterObjectGroup(rows, 'all', 'local/one').map(item => item.id), ['A', 'B']);
+  assert.deepEqual(filterObjectGroup(rows, 'slower', 'local/one').map(item => item.id), ['A']);
+  for (const kind of ['local', 'emergency', 'information']) assert.doesNotMatch(standardVolumeLabel(kind), /устройство|точка/);
+  assert.match(standardVolumeLabel('connection'), /устройство.*точка/);
+  assert.match(workComposition({ kind: 'emergency', factors: { damage: 'cable', nodeSearch: true } }), /Восстановление кабеля.*Поиск узла/);
+  assert.doesNotMatch(workComposition({ kind: 'local', factors: {} }), /устр\.|точ\./);
+  assert.notEqual(workComposition({ kind: 'emergency', factors: { damage: 'cable' } }), workComposition({ kind: 'emergency', factors: { damage: 'equipment' } }));
+});
+
+test('mean overrun uses only overrunning visits, independently for each work type', context => {
+  const store = fixture(context);
+  for (const [index, actualTechnical] of [40, 60, 20, 30].entries()) visit(store, `mean-${index}`, 'A', {}, { actualTechnical, source: 'dispatcher' });
+  const accuracy = store.accuracy(at);
+  assert.equal(accuracy.count, 4);
+  assert.equal(accuracy.underestimated, 2);
+  assert.equal(accuracy.underMinutes, 20);
+  assert.equal(accuracy.overestimated, 1);
+  assert.equal(accuracy.overMinutes, 10);
+  assert.equal(accuracy.byKind.find(item => item.kind === 'local').underMinutes, 20);
+  assert.equal(accuracy.byKind.find(item => item.kind === 'connection').underMinutes, null);
 });
