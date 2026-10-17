@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Marker } from 'maplibre-gl';
-import { dispatchRouteData, renderDispatchRoutes } from './dispatchComparison.js';
+import { renderDispatchRoutes } from './dispatchComparison.js';
 
 /** Draw a comparison on the existing map, starting both lines at the current position. */
 export function useDispatchMap(map) {
@@ -36,33 +36,42 @@ export function useDispatchMap(map) {
     const clear = () => {
       latestPreview = null;
       map.off('idle', restore);
-      for (const key of ['before', 'after']) {
-        if (map.getLayer(`dispatch-${key}`)) map.removeLayer(`dispatch-${key}`);
-        if (map.getSource(`dispatch-${key}`)) map.removeSource(`dispatch-${key}`);
-      }
+      for (const id of ['dispatch-stop-labels', 'dispatch-stop-points', 'dispatch-before-arrows', 'dispatch-after-arrows', 'dispatch-after-continuation', 'dispatch-before', 'dispatch-after']) if (map.getLayer(id)) map.removeLayer(id);
+      for (const id of ['dispatch-stops', 'dispatch-before', 'dispatch-after']) if (map.getSource(id)) map.removeSource(id);
       marker?.remove(); originMarker?.remove(); marker = null; originMarker = null;
       legend?.remove(); legend = null;
       for (const [id, visibility] of hiddenLayers) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
       hiddenLayers.clear();
     };
     const preview = event => {
-      latestPreview = event.detail;
+      latestPreview = { ...event.detail, scope: event.detail.scope || 'day' };
       const intercept = event.detail.current?.kind === 'Перехват в пути';
       if (!map.isStyleLoaded()) {
         map.off('idle', restore);
         map.once('idle', restore);
         return;
       }
-      renderDispatchRoutes(map, event.detail);
+      const rendered = renderDispatchRoutes(map, latestPreview);
       hideBackgroundRoutes();
       legend?.remove();
       legend = document.createElement('div');
       legend.className = `dispatch-comparison-legend${intercept ? ' intercept' : ''}`;
       legend.setAttribute('aria-label', 'Сравнение маршрутов');
-      for (const [className, label] of [['origin', `Точка выбора · ${event.detail.current?.time || ''}`], ['before', 'Продолжить свои заявки'], ['after', 'Направить на аварию']]) {
+      const wholeDay = latestPreview.scope === 'day';
+      const toEmergency = rendered.after.features.some(feature => feature.properties.orderId === event.detail.current?.emergencyOrderId);
+      const rows = [['origin', `От положения в ${event.detail.current?.time || ''}`], ['before', wholeDay ? 'Будущие заявки без перехвата' : 'К своей следующей заявке'], ['after', toEmergency ? 'До аварии · стрелки по ходу движения' : 'Новый путь к следующей заявке']];
+      if (wholeDay) rows.push(['continuation', toEmergency ? 'Пунктир — заявки после аварии' : 'Пунктир — следующие заявки']);
+      if (wholeDay) rows.push(['note', 'Цифры — порядок заявок, время — прибытие']);
+      for (const [className, label] of rows) {
         const row = document.createElement('div');
         row.className = className; row.textContent = label; legend.appendChild(row);
       }
+      const toggle = document.createElement('button');
+      toggle.type = 'button'; toggle.className = 'dispatch-scope-toggle';
+      toggle.textContent = wholeDay ? 'Показать только ближайшее действие' : 'Весь оставшийся день';
+      toggle.setAttribute('aria-pressed', String(wholeDay));
+      toggle.addEventListener('click', () => preview({ detail: { ...latestPreview, scope: wholeDay ? 'next' : 'day', focusRoute: true } }));
+      legend.appendChild(toggle);
       map.getContainer().appendChild(legend);
       originMarker?.remove();
       if (event.detail.current?.origin) {
@@ -71,7 +80,7 @@ export function useDispatchMap(map) {
         originMarker = new Marker({ element }).setLngLat([event.detail.current.origin[1], event.detail.current.origin[0]]).addTo(map);
       }
       if (event.detail.focusRoute) {
-        const points = [dispatchRouteData(event.detail.before, event.detail), dispatchRouteData(event.detail.after, event.detail, true)]
+        const points = [rendered.before, rendered.after]
           .flatMap(data => data.features.flatMap(feature => feature.geometry.coordinates));
         if (points.length) {
           const bounds = map.getContainer().getBoundingClientRect(), panel = document.querySelector('.shift-panel')?.getBoundingClientRect();
