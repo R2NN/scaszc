@@ -5,14 +5,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Marker } from 'maplibre-gl';
 import { useDropdownPresence } from './useDropdownPresence.js';
-import { Building2, Check, ChevronRight, Clock3, MapPin, Search, X } from 'lucide-react';
+import { Building2, Check, ChevronRight, Clock3, MapPin, Maximize2, Search, X } from 'lucide-react';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { cachedObjectPassport, clearObjectPassports, loadObjectPassport } from './objectPassport.js';
-import { OBJECT_TIME_LEGEND, objectTimeExplanation, conditionVisitChoices, filterObjectGroup, objectTimeCategory, standardVolumeLabel, summarizeObjectGroup, visibleVisitLimit, visitTimeRows } from './objectPresentation.js';
+import { objectTimeExplanation, conditionVisitChoices, filterObjectGroup, objectTimeCategory, standardVolumeLabel, summarizeObjectGroup, visibleVisitLimit, visitTimeRows } from './objectPresentation.js';
 import { mountObjectTimeClusters } from './objectTimeClusters.js';
 import { durationFormula } from './durationPresentation.js';
-import { objectTimeGeoJSON, syncObjectTimeLayers } from './objectTimeLayers.js';
+import { fitObjectTimeLayer, hideObjectTimeLayers, objectTimeGeoJSON, syncObjectTimeLayers } from './objectTimeLayers.js';
+import { WorkspaceFilters } from './WorkspaceFilters.jsx';
+import { DurationErrorChart, DurationImpact } from './DurationCharts.jsx';
 import './complexity.css';
+import './durationCharts.css';
 
 const KINDS = { connection: 'Подключение', local: 'Ремонт и диагностика', equipment: 'Работы с оборудованием', emergency: 'Аварийные работы', information: 'Информационная заявка' };
 const SCOPES = { object: 'Объект', entrance: 'Подъезд', node: 'Технический узел', line: 'Линия', operation: 'Такие же работы' };
@@ -94,19 +97,18 @@ export function DurationFields({ form, onChange, date }) {
 }
 
 /** Group objects only in the visit-time mode; opening a passport preserves the camera. */
-export function ComplexityMapLayer({ map, enabled, date, territory = '', territoryControl, regionId = 'moscow', routeOrderIds = [], panelOpen = true, onClosePanel }) {
+export function ComplexityMapLayer({ map, enabled, view = 'markers', onLayerReady, date, territory = '', territoryControl, regionId = 'moscow', routeOrderIds = [], panelOpen = true, onClosePanel }) {
   const [kind, setKind] = useState('all');
   const [volume, setVolume] = useState('order');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
-  const [view, setView] = useState('markers');
+  const [category, setCategory] = useState('all');
   const [objects, setObjects] = useState([]);
-  const [visibleIds, setVisibleIds] = useState(null);
   const [groupIds, setGroupIds] = useState(null);
   const [groupCategory, setGroupCategory] = useState('all');
   const [groupComposition, setGroupComposition] = useState('');
   const clearGroup = () => { setGroupIds(null); setGroupCategory('all'); setGroupComposition(''); };
-  useEffect(clearGroup, [kind, volume, territory, regionId, day(date), query]);
+  useEffect(clearGroup, [kind, volume, territory, regionId, day(date), query, category]);
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -134,15 +136,25 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
     return () => { live = false; clearTimeout(timer); };
   }, [enabled, kind, volume, day(date), zone, regionId, query, version]);
   const routeIds = new Set(routeOrderIds.map(String));
-  const filtered = objects.filter(object => filter === 'review' ? object.state === 'review' : filter === 'route' ? object.orderIds.some(id => routeIds.has(String(id))) : filter === 'repeat' ? object.observations >= 3 && ['faster', 'slower'].includes(objectTimeCategory(object)) : true);
-  const grouped = groupIds ? filtered.filter(object => groupIds.includes(object.id)) : filtered;
+  const locatedObjects = objects.filter(object => Array.isArray(object.coords) && object.coords.length === 2 && object.coords.every(Number.isFinite));
+  const filtered = locatedObjects.filter(object => filter === 'review' ? object.state === 'review' : filter === 'route' ? object.orderIds.some(id => routeIds.has(String(id))) : filter === 'repeat' ? object.observations >= 3 && ['faster', 'slower'].includes(objectTimeCategory(object)) : true);
+  const availableObjects = view === 'access' ? filtered.filter(object => object.estimate?.access > 0) : filtered;
+  const categorized = filterObjectGroup(availableObjects, category);
+  const grouped = groupIds ? categorized.filter(object => groupIds.includes(object.id)) : categorized;
   const groupSummary = groupIds ? summarizeObjectGroup(grouped) : [];
   const selectedComposition = groupSummary.find(group => `${group.kind}/${group.operation || 'unspecified'}` === groupComposition);
   const selectedGroup = filterObjectGroup(grouped, groupCategory, groupComposition);
-  const scopedObjects = groupIds ? selectedGroup : filtered;
+  const scopedObjects = groupIds ? selectedGroup : categorized;
   const accessObjects = scopedObjects.filter(object => object.estimate?.access > 0);
   const mapObjects = view === 'access' ? accessObjects : scopedObjects;
-  const visible = groupIds || query.trim() ? mapObjects : mapObjects.filter(object => !visibleIds || visibleIds.has(object.id));
+  const visible = mapObjects;
+  const fitObjects = view === 'access' ? categorized.filter(object => object.estimate?.access > 0) : categorized;
+  useEffect(() => {
+    if (!map || !enabled) { onLayerReady?.(null); return; }
+    const fit = () => { clearGroup(); fitObjectTimeLayer(map, fitObjects); };
+    onLayerReady?.({ count: fitObjects.length, fit });
+    return () => onLayerReady?.(null);
+  }, [map, enabled, view, JSON.stringify(fitObjects), onLayerReady]);
   useEffect(() => {
     if (!enabled) return;
     let live = true;
@@ -163,7 +175,7 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
       syncObjectTimeLayers(map, data, { enabled, view, dark: document.documentElement.dataset.theme === 'dark' });
     };
     render(); map.on('style.load', render);
-    return () => { map.off('style.load', render); container.classList.remove('cx-map-active'); };
+    return () => { map.off('style.load', render); hideObjectTimeLayers(map); container.classList.remove('cx-map-active'); };
   }, [map, enabled, data, view]);
   useEffect(() => {
     if (!map || !enabled || view !== 'markers') return;
@@ -171,7 +183,6 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
   }, [map, enabled, data, view]);
   useEffect(() => {
     if (!map || !enabled) return;
-    const bounds = () => { const box = map.getBounds(); setVisibleIds(new Set(objects.filter(object => object.coords && box.contains([object.coords[1], object.coords[0]])).map(object => object.id))); };
     const hover = event => {
       map.getCanvas().style.cursor = 'pointer';
       const object = objects.find(item => item.id === event.features?.[0]?.properties.id);
@@ -179,7 +190,7 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
     };
     const leave = () => { map.getCanvas().style.cursor = ''; };
     const click = async event => {
-      const layers = (view === 'access' ? ['cx-access-points', 'cx-access-label'] : ['cx-points', 'cx-point-label']).filter(id => map.getLayer(id));
+      const layers = (view !== 'markers' ? ['cx-access-points', 'cx-access-label'] : ['cx-points', 'cx-point-label']).filter(id => map.getLayer(id));
       if (!layers.length) return;
       const features = map.queryRenderedFeatures(event.point, { layers });
       const feature = features[0];
@@ -187,29 +198,31 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
       const object = objects.find(item => item.id === feature.properties.id);
       if (object) openObjectPassport(passportTarget(object, kind, volume));
     };
-    bounds(); map.on('moveend', bounds); map.on('click', click);
+    map.on('click', click);
     for (const layer of ['cx-points', 'cx-access-points']) { map.on('mousemove', layer, hover); map.on('mouseleave', layer, leave); }
-    return () => { map.off('moveend', bounds); map.off('click', click); for (const layer of ['cx-points', 'cx-access-points']) { map.off('mousemove', layer, hover); map.off('mouseleave', layer, leave); } leave(); };
+    return () => { map.off('click', click); for (const layer of ['cx-points', 'cx-access-points']) { map.off('mousemove', layer, hover); map.off('mouseleave', layer, leave); } leave(); };
   }, [map, enabled, objects, kind, volume, view]);
   if (!panelPresence.present || !panelHost) return null;
   return createPortal(<section className={`orders-panel route-list-panel cx-time-panel workspace-panel-enter ${panelMotionClass}`} aria-label='Время на объектах'>
     <div className='panel-heading'><div><h3>Время на объектах</h3><b className='engineer-count' aria-label='Объектов на карте'>{visible.length}</b></div><div className='panel-heading-actions'><button type='button' className='panel-close' aria-label='Скрыть панель времени на объектах' data-tooltip='Скрыть панель' onClick={onClosePanel}><X/></button></div></div>
     {territoryControl}
-    <div className='cx-panel-controls'>
-    <div className='cx-view-switch' role='group' aria-label='Вид слоя времени'><button type='button' aria-pressed={view === 'markers'} onClick={() => setView('markers')}>Метки времени</button><button type='button' aria-pressed={view === 'access'} onClick={() => setView('access')}>Тепловая карта доступа</button></div>
-    <label className='cx-filter-label'>Вид работ<BusinessSelect ariaLabel='Вид работ на карте' value={kind} onChange={setKind} options={[{ value: 'all', label: 'Все виды работ' }, ...options(KINDS)]}/></label>
-    <div className='panel-search-row'><label className='panel-search'><Search aria-hidden='true'/><input type='search' aria-label='Поиск обслуживаемого объекта' placeholder='Адрес объекта…' value={query} onChange={event => setQuery(event.target.value)}/>{query ? <button type='button' aria-label='Очистить поиск объектов' onClick={() => setQuery('')}><X/></button> : null}</label></div>
-    <details className='cx-map-options'><summary>Дополнительные фильтры{filter !== 'all' || volume !== 'order' ? ' · включены' : ''}</summary>
-    <label className='cx-filter-label'>Объём работ<BusinessSelect ariaLabel='Объём сравнения на карте' value={volume} onChange={setVolume} options={[{value:'order',label:'Как в заявках'},{value:'standard',label:kind === 'all' ? 'Стандартный объём по виду работ' : `Стандартный: ${standardVolumeLabel(kind)}`} ]}/></label>
-    <label className='cx-filter-label'>Показать<BusinessSelect ariaLabel='Показать объекты' value={filter} onChange={setFilter} options={[{ value: 'all', label: 'Все объекты на карте' }, { value: 'repeat', label: 'Отклонение от норматива от 10 мин' }, { value: 'review', label: 'Нужно проверить время' }, { value: 'route', label: 'Объекты выбранного маршрута' }]}/></label>
-    </details>
+    <div className='engineer-tools cx-object-tools'>
+      <button type='button' className='cx-fit-layer' aria-label='Показать все объекты слоя на карте' disabled={!fitObjects.length} onClick={() => { clearGroup(); fitObjectTimeLayer(map, fitObjects); }}><Maximize2 size={17}/><span>Показать все объекты на карте</span></button>
+      <div className='engineer-load-filters' role='group' aria-label='Отобрать объекты по времени'>
+        {[['all', 'Все', availableObjects.length], ['slower', 'Дольше', availableObjects.filter(object => objectTimeCategory(object) === 'slower').length], ['faster', 'Быстрее', availableObjects.filter(object => objectTimeCategory(object) === 'faster').length], ['unknown', 'Мало истории', availableObjects.filter(object => objectTimeCategory(object) === 'unknown').length]].map(([key, label, count]) => <button type='button' key={key} className={category === key ? 'selected' : ''} aria-pressed={category === key} onClick={() => setCategory(current => current === key && key !== 'all' ? 'all' : key)}>{label}<b>{count}</b></button>)}
+      </div>
+      <div className='panel-search-row'><label className='panel-search'><Search aria-hidden='true'/><input type='search' aria-label='Поиск обслуживаемого объекта' placeholder='Адрес объекта…' value={query} onChange={event => setQuery(event.target.value)}/>{query ? <button type='button' aria-label='Очистить поиск объектов' onClick={() => setQuery('')}><X/></button> : null}</label>
+      <WorkspaceFilters title='Отобрать объекты' sections={[
+        ['kind', 'Вид работ', [['', 'Все виды работ'], ...Object.entries(KINDS)]],
+        ['volume', 'Объём работ', [['', 'Как в заявках'], ['standard', kind === 'all' ? 'Стандартный объём по виду работ' : `Стандартный: ${standardVolumeLabel(kind)}`]]],
+        ['filter', 'Дополнительно', [['', 'Все объекты'], ['repeat', 'Отклонение от норматива от 10 мин'], ['review', 'Нужно проверить время'], ['route', 'Объекты выбранного маршрута']]],
+      ]} value={{ kind: kind === 'all' ? '' : kind, volume: volume === 'order' ? '' : volume, filter: filter === 'all' ? '' : filter }} onChange={change => { const next = typeof change === 'function' ? change({ kind: kind === 'all' ? '' : kind, volume: volume === 'order' ? '' : volume, filter: filter === 'all' ? '' : filter }) : change; setKind(next.kind || 'all'); setVolume(next.volume || 'order'); setFilter(next.filter || 'all'); }}/></div>
     </div>
-    {view === 'access' ? <div className='cx-heat-legend' aria-label='Тепловая карта проблемности доступа'><strong>Адресов с задержкой доступа: {accessObjects.length}</strong><div className='cx-heat-ramp'/><span><small>Меньше</small><small>Больше</small></span><p>Плотность подтверждённых задержек с учётом минут на доступ.</p></div> : <div className='cx-legend' aria-label='Цвета времени визита'>{OBJECT_TIME_LEGEND.map(item => <span key={item.key}><i style={{ background: item.color }}/>{item.label}</span>)}<span className='cx-cluster-key'><b>↑</b>В группе: с увеличенным временем · (+мин) к нормативу</span></div>}
     <div className='cx-time-content'>
     {groupIds ? <section className='cx-group-summary' aria-label='Состав группы объектов'>
       <header><strong>Группа · {grouped.length}</strong><button type='button' aria-label='Сбросить выбранную группу' onClick={clearGroup}><X size={16}/></button></header>
       <div className='cx-group-filters' aria-label='Отобрать адреса группы'>
-        {[['all', 'Все', grouped.length], ['slower', 'Увеличенное время', grouped.filter(object => objectTimeCategory(object) === 'slower').length], ['unknown', 'Мало сведений', grouped.filter(object => objectTimeCategory(object) === 'unknown').length]].map(([value, label, count]) => <button type='button' key={value} aria-pressed={groupCategory === value && !groupComposition} onClick={() => { setGroupCategory(value); setGroupComposition(''); }}>{label}<b>{count}</b></button>)}
+        {[['all', 'Все', grouped.length], ['slower', 'Увеличенное время', grouped.filter(object => objectTimeCategory(object) === 'slower').length], ['faster', 'Меньше времени', grouped.filter(object => objectTimeCategory(object) === 'faster').length], ['unknown', 'Мало сведений', grouped.filter(object => objectTimeCategory(object) === 'unknown').length]].map(([value, label, count]) => <button type='button' key={value} aria-pressed={groupCategory === value && !groupComposition} onClick={() => { setGroupCategory(value); setGroupComposition(''); }}>{label}<b>{count}</b></button>)}
       </div>
       <details><summary>{selectedComposition ? `${KINDS[selectedComposition.kind]} · ${selectedComposition.composition}` : `По видам и составу работ · ${groupSummary.length}`}</summary><div className='cx-group-compositions'>{groupSummary.map(group => {
         const key = `${group.kind}/${group.operation || 'unspecified'}`;
@@ -217,7 +230,11 @@ export function ComplexityMapLayer({ map, enabled, date, territory = '', territo
       })}</div></details>
     </section> : null}
     {error ? <p role='alert' className='cx-error'>{error}</p> : null}
-    <div className='cx-object-list' aria-busy={loading}>{loading ? <p role='status'>Загружаем объекты…</p> : visible.length ? visible.map(object => <button type='button' key={object.id} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => openObjectPassport(passportTarget(object, kind, volume))}><Building2 size={17}/><span><strong>{object.address}</strong><small>{KINDS[object.kind]}</small>{object.insufficient || object.delta !== 0 ? <small>{object.insufficient ? 'Предварительное время' : deltaLabel(object.delta)}</small> : null}{objectTimeExplanation(object.estimate) ? <small className='cx-time-explanation'>{objectTimeExplanation(object.estimate)}</small> : null}</span><b>{object.total} мин</b></button>) : <p className='cx-empty'>{view === 'access' ? 'Подтверждённых задержек доступа по выбранным фильтрам нет.' : 'Объектов не найдено. Измените фильтры или найдите адрес.'}</p>}</div>
+    <div className='cx-object-list' aria-busy={loading}>{loading ? <p role='status'>Загружаем объекты…</p> : visible.length ? visible.map(object => <button type='button' className='cx-object-row' key={object.id} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => openObjectPassport(passportTarget(object, kind, volume))}>
+      <span className='person-avatar cx-object-avatar'><Building2 size={21}/></span>
+      <span className='cx-object-copy'><strong>{object.address}</strong><span className='engineer-list-skills'><small>{KINDS[object.kind]}</small></span>{objectTimeExplanation(object.estimate) ? <span className='cx-time-explanation'>{objectTimeExplanation(object.estimate)}</span> : null}{object.insufficient ? <span className='cx-row-status'>Мало истории</span> : null}</span>
+      <span className='cx-object-duration'><b>{object.total} <small>мин</small></b>{object.delta !== 0 && Number.isFinite(object.delta) ? <span className={`cx-row-delta ${object.delta > 0 ? 'is-increased' : 'is-reduced'}`} title={deltaLabel(object.delta)}>{object.delta > 0 ? '+' : '−'}{Math.abs(object.delta)} мин</span> : null}<ChevronRight size={17}/></span>
+    </button>) : <p className='cx-empty'>{view === 'access' ? 'Подтверждённых задержек доступа по выбранным фильтрам нет.' : 'Объектов не найдено. Измените фильтры или найдите адрес.'}</p>}</div>
     </div>
   </section>, panelHost);
 }
@@ -362,11 +379,11 @@ export function DurationAccuracy({ date, zone = '', regionId = 'moscow' }) {
   const [objects, setObjects] = useState([]);
   useEffect(() => { let live = true; const load = async () => { try { const [result, places] = await Promise.all([requestJson(`/api/complexity/accuracy?review=current&at=${encodeURIComponent(asOf(date))}&zone=${encodeURIComponent(zone)}&regionId=${encodeURIComponent(regionId)}`), requestJson(`/api/complexity/objects?review=current&at=${encodeURIComponent(asOf(date))}&zone=${encodeURIComponent(zone)}&regionId=${encodeURIComponent(regionId)}`)]); if (live) { setData(result); setObjects(places.filter(item => item.attention).sort((a, b) => b.attention.score - a.attention.score).slice(0, 3)); setError(''); } } catch (issue) { if (live) setError(issue.message); } }; load(); window.addEventListener('beego:complexity-changed', load); return () => { live = false; window.removeEventListener('beego:complexity-changed', load); }; }, [day(date), zone, regionId]);
   return <section className='analytics-panel cx-accuracy'>
-    <div className='cx-section-heading'><Clock3 size={20}/><h3>Точность времени работы</h3></div>
+    <div className='cx-section-heading'><Clock3 size={24}/><h3>Точность времени работы</h3></div>
     {error ? <p role='alert'>{error}</p> : data ? <>
-      {data.impactWeek ? <article className='cx-sla-impact' aria-label='Предотвращено опозданий'><div className='cx-impact-heading'><span className='cx-impact-icon'><Clock3 size={21}/></span><div><h4>Предотвращено опозданий</h4><span>{data.impactWeek.startDate.split('-').reverse().join('.')} — {data.impactWeek.endDate.split('-').reverse().join('.')}{data.impactWeek.synthetic ? ' · Учебная история' : ''}</span></div><span className='cx-impact-state'>Нужно сравнение планов</span></div><div className='cx-impact-body'><strong>—</strong><p>{data.impactWeek.comparedVisits ? <>Визитов с увеличенным временем: <b>{data.impactWeek.extendedVisits}</b>. В прогнозах учтено <b>{data.impactWeek.additionalMinutes} мин сверх норматива</b>.</> : 'За неделю нет завершённых визитов с полным измерением и сохранённым прогнозом.'}</p></div><details><summary>Как считаются предотвращённые опоздания</summary><p>Нужны два независимо проверенных расписания на одних заявках и дорогах: с обычным нормативом и с адаптивным временем. Сравниваются приезды позже конца клиентского окна. Дополнительные минуты сами по себе не доказывают предотвращённое опоздание.</p>{data.impactWeek.synthetic ? <p>Текущая история — учебная симуляция.</p> : null}</details></article> : null}
-      <div className='cx-metrics'><article><small>Средняя ошибка прогноза</small><b>{number(data.mae)} мин</b><span>По одному нормативу: {number(data.fixedMae)} мин</span></article><article><small>Проверено по истории</small><b>{data.count} визитов</b><span>Завершено всего: {data.total}</span></article><article><small>Отклонения по истории</small><div className='cx-direction-stat'><b>{data.underestimated} визитов дольше</b><span>{data.underestimated ? `В среднем +${number(data.underMinutes)} мин` : 'Превышений нет'}</span></div><div className='cx-direction-stat'><b>{data.overestimated} визитов быстрее</b><span>{data.overestimated ? `В среднем −${number(data.overMinutes)} мин` : 'Сокращений нет'}</span></div></article></div>
-      <div className='cx-table-wrap'><table><caption>Средняя ошибка прогноза, мин</caption><thead><tr><th>Вид работ</th><th>Визитов</th><th>С учётом объекта</th><th>По нормативу</th></tr></thead><tbody>{data.byKind.map(item => <tr key={item.kind}><td>{KINDS[item.kind]}</td><td>{item.count}</td><td>{number(item.mae)}</td><td>{number(item.fixedMae)}</td></tr>)}</tbody></table></div>
+      {data.impactWeek ? <DurationImpact impact={data.impactWeek}/> : null}
+      <div className='cx-metrics'><article><small>Средняя ошибка прогноза</small><b>{number(data.mae)} мин</b><span>По одному нормативу: {number(data.fixedMae)} мин</span></article><article><small>Проверено визитов по истории</small><b>{data.count}</b><span>Завершено всего: {data.total}</span></article><article><small>Отклонения по истории</small><div className='cx-direction-stat'><b>Дольше прогноза: {data.underestimated}</b><span>{data.underestimated ? `В среднем +${number(data.underMinutes)} мин` : 'Превышений нет'}</span></div><div className='cx-direction-stat'><b>Быстрее прогноза: {data.overestimated}</b><span>{data.overestimated ? `В среднем −${number(data.overMinutes)} мин` : 'Сокращений нет'}</span></div></article></div>
+      <DurationErrorChart data={data} kinds={KINDS}/>
       <details><summary>Данные проверки</summary><p>Период: {data.temporalSplit ? `с ${data.temporalSplit.split('-').reverse().join('.')}` : 'вся доступная история'}. Визитов с измеренным временем работы: {data.eligible}.</p><p className='cx-muted'>{data.limitations}</p></details>
       {objects.length ? <><h4>Проверить время на объектах</h4>{objects.map(object => <button type='button' className='cx-action' key={object.id} onClick={() => openObjectPassport({ objectId: object.id, passportKind: object.attention.kind, visitId: object.attention.visitId }, 'conditions')}><span>{object.address}<small>{object.attention.why}</small><strong>{object.attention.action}</strong></span><ChevronRight size={16}/></button>)}</> : null}
     </> : <p>Загружаем историю визитов…</p>}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { durationFormula, durationImpactWeek } from '../src/durationPresentation.js';
-import { objectTimeGeoJSON, syncObjectTimeLayers } from '../src/objectTimeLayers.js';
+import { fitObjectTimeLayer, hideObjectTimeLayers, objectTimeGeoJSON, syncObjectTimeLayers } from '../src/objectTimeLayers.js';
 import { calculateDuration, DEFAULT_MODEL } from '../server/durationModel.mjs';
 
 const at = '2026-08-17T07:00:00+03:00';
@@ -41,7 +41,22 @@ test('weekly impact respects calendar boundaries and excludes missing, future, r
   assert.equal(impact.additionalMinutes, 20);
   assert.equal(impact.preventedLate, null);
   assert.equal(impact.synthetic, true);
+  assert.equal(impact.daily.length, 7);
+  assert.deepEqual(impact.daily[0], { date: '2026-08-11', comparedVisits: 1, extendedVisits: 1, additionalMinutes: 20 });
+  assert.ok(impact.daily.slice(1).every(item => item.comparedVisits === 0 && item.additionalMinutes === 0));
   assert.equal(durationImpactWeek([], at).preventedLate, null);
+});
+
+test('weekly chart groups by Moscow calendar day and sums increases without subtracting faster visits', () => {
+  const forecast = { baseTechnical: 60, documents: 10, total: 90, asOf: '2026-08-10T07:00:00+03:00' };
+  const visit = { eligible: true, total: 95, forecast, startedAt: '2026-08-11T08:00:00+03:00', endedAt: '2026-08-11T20:59:59Z' };
+  const impact = durationImpactWeek([visit, { ...visit, endedAt: '2026-08-11T21:00:00Z' }, { ...visit, endedAt: '2026-08-17T20:59:59Z' }, { ...visit, forecast: { ...forecast, total: 45 } }], at);
+  assert.deepEqual(impact.daily.map(item => item.additionalMinutes), [20, 20, 0, 0, 0, 0, 20]);
+  assert.equal(impact.daily[0].comparedVisits, 2);
+  assert.equal(impact.daily.reduce((sum, item) => sum + item.additionalMinutes, 0), impact.additionalMinutes);
+  assert.equal(impact.daily.reduce((sum, item) => sum + item.extendedVisits, 0), impact.extendedVisits);
+  assert.equal(impact.daily.reduce((sum, item) => sum + item.comparedVisits, 0), impact.comparedVisits);
+  assert.equal(impact.preventedLate, null);
 });
 
 test('map keeps signed deltas separate from confirmed access and never invents coordinates', () => {
@@ -58,11 +73,15 @@ test('map keeps signed deltas separate from confirmed access and never invents c
   assert.equal(data.features[3].properties.deltaLabel, '');
   assert.equal(data.features[3].properties.color, '#92999f');
   const sources = new Map(), layers = new Map();
-  const map = { isStyleLoaded: () => true, getSource: id => sources.get(id), addSource: (id, source) => sources.set(id, { ...source, setData(data) { this.data = data; } }), getLayer: id => layers.get(id), addLayer: layer => layers.set(layer.id, layer), setLayoutProperty: (id, key, value) => { (layers.get(id).layout ||= {})[key] = value; }, setPaintProperty: (id, key, value) => { layers.get(id).paint[key] = value; } };
+  const map = { getStyle: () => ({ version: 8 }), isStyleLoaded: () => false, getSource: id => sources.get(id), addSource: (id, source) => sources.set(id, { ...source, setData(data) { this.data = data; } }), getLayer: id => layers.get(id), addLayer: layer => layers.set(layer.id, layer), setLayoutProperty: (id, key, value) => { (layers.get(id).layout ||= {})[key] = value; }, setPaintProperty: (id, key, value) => { layers.get(id).paint[key] = value; } };
   syncObjectTimeLayers(map, data, { enabled: true, view: 'access', dark: false });
   assert.deepEqual(sources.get('cx-access').data.features.map(row => row.properties.id), ['access']);
   assert.equal(layers.get('cx-points').layout.visibility, 'none');
   assert.equal(layers.get('cx-access-heat').layout.visibility, 'visible');
+  syncObjectTimeLayers(map, data, { enabled: true, view: 'heat', dark: false });
+  assert.equal(sources.get('cx-access').data.features.length, 4);
+  assert.ok(layers.get('cx-access-heat').paint['heatmap-weight'].includes(180));
+  assert.deepEqual(layers.get('cx-access-label').layout['text-field'], ['get', 'label']);
   syncObjectTimeLayers(map, data, { enabled: true, view: 'markers', dark: false });
   assert.equal(sources.size, 2);
   assert.equal(layers.size, 5);
@@ -73,4 +92,23 @@ test('map keeps signed deltas separate from confirmed access and never invents c
   assert.equal(layers.get('cx-access-label').paint['text-halo-color'], '#252a31');
   syncObjectTimeLayers(map, data, { enabled: false, view: 'access', dark: true });
   assert.ok([...layers.values()].every(layer => layer.layout.visibility === 'none'));
+  syncObjectTimeLayers(map, data, { enabled: true, view: 'heat', dark: true });
+  map.isStyleLoaded = () => false;
+  hideObjectTimeLayers(map);
+  assert.ok([...layers.values()].every(layer => layer.layout.visibility === 'none'));
+});
+
+test('show the whole layer fits every filtered coordinate with panel padding and leaves ordinary toggles alone', context => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { querySelector: () => ({ getBoundingClientRect: () => ({ right: 200 }) }) };
+  context.after(() => { globalThis.document = originalDocument; });
+  let fitted = null;
+  const map = { getContainer: () => ({ clientWidth: 1200, getBoundingClientRect: () => ({ left: 0, width: 1200 }), closest: () => ({ querySelector: () => ({ getBoundingClientRect: () => ({ right: 620 }) }) }) }), fitBounds: (bounds, options) => { fitted = { bounds, options }; } };
+  fitObjectTimeLayer(map, [{ id: 'north', coords: [55.9, 37.4], total: 70 }, { id: 'south', coords: [54.8, 38.2], total: 30 }, { id: 'missing' }]);
+  assert.deepEqual(fitted.bounds, [[37.4, 54.8], [38.2, 55.9]]);
+  assert.ok(fitted.options.padding.left > 620);
+  assert.equal(fitted.options.maxZoom, 14);
+  fitted = null;
+  fitObjectTimeLayer(map, []);
+  assert.equal(fitted, null);
 });

@@ -32,5 +32,12 @@ export function durationImpactWeek(visits, at) {
   const start = end - 7 * 86400000 + 1;
   const rows = visits.filter(visit => visit.eligible && !visit.excluded && visit.forecast && !visit.forecast.override && Number.isFinite(visit.total) && Date.parse(visit.forecast.asOf) <= Date.parse(visit.startedAt) && Date.parse(visit.endedAt) >= start && Date.parse(visit.endedAt) <= end);
   const extended = rows.filter(visit => visit.forecast.total > visit.forecast.baseTechnical + visit.forecast.documents);
-  return { startDate: new Date(start + 3 * 3600000).toISOString().slice(0, 10), endDate: endDay, comparedVisits: rows.length, extendedVisits: extended.length, additionalMinutes: extended.reduce((sum, visit) => sum + visit.forecast.total - visit.forecast.baseTechnical - visit.forecast.documents, 0), preventedLate: null, status: 'NO_COMPARABLE_PLANS', synthetic: rows.some(visit => String(visit.source).includes('synthetic')) };
+  const daily = Array.from({ length: 7 }, (_, index) => ({ date: new Date(start + index * 86400000 + 3 * 3600000).toISOString().slice(0, 10), comparedVisits: 0, extendedVisits: 0, additionalMinutes: 0 }));
+  for (const visit of rows) {
+    const item = daily[Math.floor((Date.parse(visit.endedAt) - start) / 86400000)];
+    item.comparedVisits += 1;
+    const extra = visit.forecast.total - visit.forecast.baseTechnical - visit.forecast.documents;
+    if (extra > 0) { item.extendedVisits += 1; item.additionalMinutes += extra; }
+  }
+  return { startDate: daily[0].date, endDate: endDay, daily, comparedVisits: rows.length, extendedVisits: extended.length, additionalMinutes: extended.reduce((sum, visit) => sum + visit.forecast.total - visit.forecast.baseTechnical - visit.forecast.documents, 0), preventedLate: null, status: 'NO_COMPARABLE_PLANS', synthetic: rows.some(visit => String(visit.source).includes('synthetic')) };
 }

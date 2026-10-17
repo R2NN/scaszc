@@ -135,7 +135,7 @@
 .analytics-toolbar.is-stuck::before {
   top: -12px;
   left: calc(-1 * var(--analytics-page-gutter) - 1px);
-  right: calc(-1 * var(--analytics-page-gutter) - 24px);
+  right: calc(-1 * var(--analytics-page-gutter) - 1px);
   border-color: rgba(211, 216, 221, .92);
   border-radius: 16px 16px 0 0;
   background: var(--an-bg);
