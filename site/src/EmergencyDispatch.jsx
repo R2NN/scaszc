@@ -143,6 +143,8 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const [openedRouteId,setOpenedRouteId] = useState('');
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const candidate = item?.candidates.find(entry => entry.id === candidateId) || item?.candidates.find(entry => entry.id === item.decision?.candidateId);
+  const engineerName = id => candidate?.team.find(engineer => engineer.id === id)?.name || '—';
+  const visitLabel = id => id === item?.order.id ? 'Новая авария' : `№ ${candidate?.orders.find(order => order.id === id)?.sourceData?.source_job_id || id}`;
   const seconds = item ? Math.max(0, Math.ceil((item.deadlineAt-now-controller.serverOffset)/1000)) : 0;
   return <section className='emergency-dispatch' aria-label='Решение аварии'>
     <div className='dispatch-heading'><div><small>ОПЕРАТИВНОЕ РЕШЕНИЕ</small><h3>Аварийный выезд</h3></div><AlertTriangle size={24}/></div>
@@ -155,17 +157,19 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
       <div className='dispatch-options' role='group' aria-label='Проверенные варианты'>{item.candidates.map((option, position) => <button type='button' key={option.id} aria-pressed={option.id === candidate?.id} className={`dispatch-option ${option.id === candidate?.id ? 'selected' : ''}`} onClick={() => controller.preview(option)}>
         <span className='dispatch-option-kind'>{position === 0 ? 'Рекомендуем · ' : ''}{option.kind}</span><b>{option.engineer.name}</b>
         <span className='dispatch-eta'>Прибытие <strong>{option.visit.arrival}</strong><small>Выезд {option.visit.departureAt} · дорога {option.visit.travelMinutes} мин</small></span>
+        <span>Реакция {option.responseMinutes} мин · начать до {item.order.end}</span>
         <span>{option.changes.filter(change => change.before).length} изменений визитов · резерв {option.reserve.length}</span>
         <span>Назначено {option.coverage.after.assigned}/{option.coverage.after.total} · аварий {option.coverage.after.urgentAssigned} · проверка пройдена</span>
         {option.coverage.after.unassigned > option.coverage.before.unassigned ? <span className='dispatch-error'>Ещё {option.coverage.after.unassigned-option.coverage.before.unassigned} визита в очереди</span> : null}
       </button>)}</div>
       {candidate ? <div className='dispatch-details'>
         <h4>{candidate.engineer.name}</h4><p>{candidate.engineer.skills.map(filterLabel).join(', ')} · {filterLabel(candidate.engineer.transport)}</p>
+        <p>Оснащение: {(candidate.engineer.equipment || []).map(filterLabel).join(', ') || 'Не указано'}</p>
         <p>{candidate.experience.count} завершённых аварийных визитов в архиве · Нет оценок</p>
         <button type='button' className='primary' disabled={item.status !== 'WAITING'} onClick={() => controller.accept(item, candidate)}>Подтвердить этот вариант</button>
         <h4>Изменившиеся маршруты</h4>{candidate.loads.map(load => <div key={load.engineerId}><button className='dispatch-route' type='button' onClick={() => {setOpenedRouteId(current=>current===load.engineerId?'':load.engineerId);onRoute(candidate.plan.routes.find(route => route.engineerId === load.engineerId), candidate);}}><Route size={17}/><span>{load.name}<small>Загрузка {load.before} → {load.after} мин</small></span></button>{openedRouteId===load.engineerId?<ol className='dispatch-route-visits'>{candidate.plan.routes.find(route=>route.engineerId===load.engineerId)?.assignments.map(visit=><li key={visit.orderId}><b>{candidate.orders.find(order=>order.id===visit.orderId)?.address || visit.orderId}</b><span>Выезд {visit.departureAt} · прибытие {visit.arrival}</span><span>Работа {visit.plannedStart}–{visit.plannedFinish}</span></li>)}</ol>:null}</div>)}
-        <details><summary>Все изменения визитов · {candidate.changes.length}</summary>{candidate.changes.map(change => <div className='dispatch-change' key={change.orderId}><b>{change.address}</b><span>{change.before?.plannedStart || 'Не назначена'} → {change.after?.plannedStart || 'В очереди'}</span><small>{change.before?.engineerId || '—'} → {change.after?.engineerId || '—'}</small></div>)}</details>
-        <details><summary>Оставшийся резерв · {candidate.reserve.length}</summary>{candidate.reserve.map(crew => <p key={crew.engineerId}><b>{crew.name}</b><br/>{crew.availableAt}–{crew.until} · {crew.skills.join(', ')}</p>)}</details>
+        <details><summary>Все изменения визитов · {candidate.changes.length}</summary>{candidate.changes.map(change => <div className='dispatch-change' key={change.orderId}><b>{visitLabel(change.orderId)} · {change.address}</b><span>{change.before?.plannedStart || 'Не назначена'} → {change.after?.plannedStart || 'В очереди'}</span><small>{engineerName(change.before?.engineerId)} → {engineerName(change.after?.engineerId)}</small></div>)}</details>
+        <details><summary>Оставшийся резерв · {candidate.reserve.length}</summary>{candidate.reserve.map(crew => <p key={crew.engineerId}><b>{crew.name}</b><br/>{crew.availableAt}–{crew.until} · {crew.skills.map(filterLabel).join(', ')}</p>)}</details>
         <details><summary>Проверка и происхождение</summary><p>Вся смена проверена. Версия {candidate.baseRevision}, срез {candidate.scenarioTime}. Расчётное положение по дорожной геометрии.</p><code>{candidate.contentSha256}</code></details>
       </div> : item.candidates.length ? <p>Выберите вариант, чтобы сравнить маршруты на карте и последствия.</p> : null}
       {!terminal(item) && item.search?.complete === false ? <p>{item.search.stoppedReason ? 'Поиск завершён по лимиту. Показаны сохранённые проверенные варианты; оптимальность не доказана.' : 'Поиск продолжается. Уже проверенные варианты можно выбрать.'}</p> : null}

@@ -1,0 +1,32 @@
+[
+  {
+    "incidentId": "9abd0123-e32d-4423-bcde-52a431982702",
+    "sameDecisionAfterDuplicateRequest": true,
+    "decision": {
+      "candidateId": "9abd0123-e32d-4423-bcde-52a431982702:39c54c83b187c17b2c432726b25cabdff1cfdcd2685f05e2ee8a0e069bd3c2bc",
+      "actor": "Диспетчер",
+      "at": 1792259078444,
+      "revision": 2,
+      "planId": "586c5694-3492-4705-a958-6b75dd9395e1",
+      "contentSha256": "39c54c83b187c17b2c432726b25cabdff1cfdcd2685f05e2ee8a0e069bd3c2bc"
+    },
+    "revision": 2,
+    "planVersions": 2,
+    "events": 1
+  },
+  {
+    "incidentId": "da594d52-7a40-419f-8c9b-85ecdd4bbd22",
+    "sameDecisionAfterDuplicateRequest": true,
+    "decision": {
+      "candidateId": "da594d52-7a40-419f-8c9b-85ecdd4bbd22:6d4dd03220746d80272d9f3d4ab4f0f83c2fbd401a37bf24588125b05461b734",
+      "actor": "system",
+      "at": 1792259731170,
+      "revision": 2,
+      "planId": "529a65f6-e1ac-4592-a2a9-4759267b52cd",
+      "contentSha256": "6d4dd03220746d80272d9f3d4ab4f0f83c2fbd401a37bf24588125b05461b734"
+    },
+    "revision": 2,
+    "planVersions": 2,
+    "events": 1
+  }
+]

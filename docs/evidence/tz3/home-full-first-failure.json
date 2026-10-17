@@ -1,0 +1,47 @@
+{
+  "artifact_type": "EXACT_PLAN_MATERIALIZATION",
+  "status": "ROUTING_INCOMPLETE",
+  "exact_provider_queries": 179,
+  "identity_legs": 0,
+  "dropped_job_ids": [
+    "EAST-74949",
+    "EAST-41077",
+    "EAST-94409",
+    "SOUTHCENTER-79707",
+    "SOUTHCENTER-61311",
+    "SOUTHCENTER-52576",
+    "SOUTHCENTER-26845",
+    "SOUTHCENTER-95501",
+    "SOUTHEAST-76173",
+    "SOUTHEAST-876",
+    "SOUTHEAST-63591",
+    "SOUTHEAST-24482"
+  ],
+  "failure": {
+    "engineer_id": "SOUTHEAST-ENG-01",
+    "job_id": "SOUTHEAST-58129",
+    "origin_location_id": "LOC-JOB-UI-130",
+    "destination_location_id": "LOC-JOB-UI-98",
+    "departure_at": "2026-08-17T10:52:00+03:00",
+    "reason": "Valhalla route has no road segments for Traffic4cast assessment",
+    "constraint": null,
+    "service_start_at": null,
+    "service_end_at": null,
+    "limit_at": null,
+    "violation_minutes": null
+  },
+  "plan": null,
+  "validation": null,
+  "publication_allowed": false,
+  "routing_configuration": {
+    "provider": "valhalla-local-transit",
+    "transit_index": "A:\\BeeGo-tz3-emergency-dispatch\\data\\transit\\moscow_2026-08-17.sqlite",
+    "metro_wait_assumption_seconds": 180,
+    "query_time_api_key_required": false,
+    "exact_historical_metro_timetable_proof": false
+  },
+  "result_interpretation": "Validated against frozen surface and rail schedules plus an explicit metro waiting-time model; this is not a proof against a complete historical metro departure timetable.",
+  "dataset_sha256": "eed1b319d891d44eb515da88910fbde3a060a88d07699bb01b0ab16dd3812ea0",
+  "master_solution_content_sha256": "8f16546a3072e398e5fe8c1bb458468640e713b11e15242f28e0dfaeeb8a5d20",
+  "content_sha256": "c4be337cafc2fdcaff36ea17b86c927f6605e91498ddfe8ae80ed379ed780fa5"
+}

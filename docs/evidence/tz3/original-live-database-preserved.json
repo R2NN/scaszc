@@ -1,0 +1,81 @@
+{
+  "sourceDatabase": "A:/BeeGo-final-object-complexity/runtime/qa/fresh-planning-20261017/candidate-release.sqlite3",
+  "tables": {
+    "migrations": {
+      "count": 2,
+      "identicalToBackup": true
+    },
+    "shifts": {
+      "count": 1,
+      "identicalToBackup": true
+    },
+    "staff_roster": {
+      "count": 35,
+      "identicalToBackup": true
+    },
+    "plan_versions": {
+      "count": 1,
+      "identicalToBackup": true
+    },
+    "shift_events": {
+      "count": 0,
+      "identicalToBackup": true
+    },
+    "visit_facts": {
+      "count": 0,
+      "identicalToBackup": true
+    },
+    "replan_previews": {
+      "count": 0,
+      "identicalToBackup": true
+    },
+    "ai_usage": {
+      "count": 0,
+      "identicalToBackup": true
+    },
+    "report_artifacts": {
+      "count": 0,
+      "identicalToBackup": true
+    },
+    "duration_models": {
+      "count": 1,
+      "identicalToBackup": true
+    },
+    "service_objects": {
+      "count": 197,
+      "identicalToBackup": true
+    },
+    "infrastructure_entities": {
+      "count": 1669,
+      "identicalToBackup": true
+    },
+    "duration_snapshots": {
+      "count": 207,
+      "identicalToBackup": true
+    },
+    "duration_plan_receipts": {
+      "count": 0,
+      "identicalToBackup": true
+    },
+    "duration_visits": {
+      "count": 2105,
+      "identicalToBackup": true
+    },
+    "object_conditions": {
+      "count": 25,
+      "identicalToBackup": true
+    },
+    "complexity_audit": {
+      "count": 3953,
+      "identicalToBackup": true
+    },
+    "engineer_feedback": {
+      "count": 1822,
+      "identicalToBackup": true
+    },
+    "service_client_links": {
+      "count": 400,
+      "identicalToBackup": true
+    }
+  }
+}
