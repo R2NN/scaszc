@@ -145,6 +145,7 @@ export function proposeStaffingTeam(shift, catalog, input = {}) {
   const routes = shift.plan.routes.filter(route => route.assignments.length);
   const lockedEngineerIds = routes.filter(route => route.assignments.some(a => a.manual)).map(route => id({ id: route.engineerId }));
   const used = new Set(lockedEngineerIds), team = [], missing = [];
+  const requests = new Map((input.clientPreferences || []).map(item => [String(item.orderId), item]));
   for (const key of lockedEngineerIds) {
     const original = originals.get(key), rated = catalog.find(item => id(item) === key);
     if (!original) throw new Error('Не найден инженер ручного закрепления.');
@@ -152,7 +153,14 @@ export function proposeStaffingTeam(shift, catalog, input = {}) {
   }
   for (const route of routes.filter(route => !lockedEngineerIds.includes(id({ id: route.engineerId }))).sort((a, b) => b.assignments.length - a.assignments.length)) {
     const template = originals.get(id({ id: route.engineerId }));
-    const target = candidates.find(item => !used.has(item.id) && profile(item) === profile(template));
+    const routePreference = candidate => route.assignments.reduce((score, visit) => {
+      const request = requests.get(String(visit.orderId));
+      if (!request) return score;
+      return score + (request.avoidEngineerIds.includes(candidate.id) ? 1000 : 0)
+        - (candidate.rating.score >= 4.2 && request.preferredEngineerIds.includes(candidate.id) ? 1 : 0);
+    }, 0);
+    const target = candidates.filter(item => !used.has(item.id) && profile(item) === profile(template))
+      .sort((a, b) => routePreference(a) - routePreference(b) || b.rating.score - a.rating.score || a.id.localeCompare(b.id))[0];
     if (target) { used.add(target.id); team.push(target); }
     else missing.push({ templateId: id(template), zone: template.zone, skills: template.skills, jobs: route.assignments.length });
   }
@@ -203,7 +211,7 @@ export async function calculateStaffingPlan(shift, catalog, scenario, onProgress
     child.once('error', err => { clearTimeout(timer); reject(err); });
     child.stdin.on('error', err => { clearTimeout(timer); reject(err); });
     child.once('close', code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(error.trim().split('\n').at(-1) || 'Проверка состава не пройдена.')); });
-    child.stdin.end(JSON.stringify({ sourceInputs:{orders:shift.orders,team:shift.team}, candidates: candidates.map(item => ({ id: item.id, templateId: item.templateId, rating: item.rating })),
+    child.stdin.end(JSON.stringify({ sourceInputs:{orders:shift.orders,team:shift.team}, clientPreferences: scenario.clientPreferences || [], candidates: candidates.map(item => ({ id: item.id, templateId: item.templateId, rating: item.rating })),
       qualityFloor: options.qualityFloor, qualityCeiling: options.qualityCeiling, lockedEngineerIds, ratingVersion: scenario.ratingVersion }));
   });
   const raw = JSON.parse(await readFile(output, 'utf8'));
@@ -220,7 +228,7 @@ export async function calculateStaffingPlan(shift, catalog, scenario, onProgress
       ...(raw.staffing.lockedEngineerIds || []).map(key => shift.plan.routes.find(route => id({ id: route.engineerId }) === key)).filter(Boolean)) } };
   const breakdown = staffingBreakdown(reduced, catalog, options, raw.staffing.missing);
   const complete = !raw.staffing.missing.length && !(plan.unassigned?.length) && plan.metrics.assigned === shift.orders.length;
-  return { plan, team, orders: shift.orders, candidateCount: candidates.length, settings: options,
+  return { plan, team, orders: shift.orders, candidateCount: candidates.length, settings: options, clientPreferenceResults: raw.client_preference_results || [],
     timing:{startedAt:new Date(startedAt).toISOString(),finishedAt:new Date().toISOString(),elapsedMs:Date.now()-startedAt},
     staffing: { ...raw.staffing, breakdown, assigned, complete, hypothetical: Boolean(options.addTemplateId),
       selected: team.length, available: catalog.filter(item => (options.pool === 'all' || item.kind === 'staff') && item.rating.score >= options.qualityFloor && item.rating.score <= options.qualityCeiling).length,

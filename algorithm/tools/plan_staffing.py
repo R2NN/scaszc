@@ -15,6 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from rating_inputs import validate_rating_inputs
+from customer_preferences import apply_customer_preferences
 from beeline_planning import load_planning_dataset, validate_initial_plan, build_candidate_index
 from beeline_planning.exact_repair import master_from_orders
 from beeline_planning.export import load_exact_plan_artifact, materialization_result_dict
@@ -149,6 +150,14 @@ def main():
     reduced, search = compact(dataset, plan, locked, oracle)
     print(json.dumps({'type':'progress','phase':'SELECTING_ENGINEERS','routeChecks':search['routeChecks']}), flush=True)
     rated_dataset, final, missing, matches = compose(dataset, reduced, payload['candidates'], payload['qualityFloor'], locked, payload.get('qualityCeiling', 5))
+    before_preferences = final
+    final, preferences = apply_customer_preferences(rated_dataset, final, payload['candidates'],
+        payload.get('clientPreferences', []), locked, operational_profile, payload['qualityFloor'], payload.get('qualityCeiling', 5))
+    actual = {visit.job_id: route.engineer_id for route in final.engineer_plans for visit in route.visits}
+    for match in matches:
+        source_route = next(route for route in before_preferences.engineer_plans if route.engineer_id == match['engineerId'])
+        match['engineerId'] = actual[source_route.visits[0].job_id]
+        match['rating'] = next(item['rating']['score'] for item in payload['candidates'] if item['id'] == match['engineerId'])
     validation = validate_initial_plan(rated_dataset, final)
     if not validation.is_valid:
         raise ValueError('Состав не прошёл независимую проверку ограничений')
@@ -157,6 +166,7 @@ def main():
     result.update({'artifact_type': 'STAFFING_COMPOSITION', 'dataset_sha256': dataset.dataset_sha256,
         'source_plan_content_sha256': source['content_sha256'], 'candidate_profiles': payload['candidates'],
         'rating_version': payload['ratingVersion'], 'rating_assignments': matches,
+        'client_preferences': payload.get('clientPreferences', []), 'client_preference_results': preferences,
         'search_scope': 'BOUNDED_EXACT_CREW_ELIMINATION_AND_PROFILE_MATCHING',
         'global_optimality_proven': False, 'staffing': {'needed': len(reduced.engineer_plans),
             'sourceUsed': len(plan.engineer_plans), 'missing': missing, 'search': search,

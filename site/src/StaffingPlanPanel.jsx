@@ -1,4 +1,5 @@
 import { EngineerPortrait } from './EngineerPortrait.jsx';
+import { CustomerPreferenceSummary } from './CustomerPreferenceSummary.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, LoaderCircle, MapPin, Route, Settings2, Star, Users, X } from 'lucide-react';
@@ -61,6 +62,7 @@ export function StaffingPlanControls({ model, footer = false }) {
   if(footer)return <footer className="staff-plan-footer">{model.ready?<button onClick={()=>{model.setPlanRouteId(null);model.setScheduled(true);model.setPlanFitToken(Date.now());}}><MapPin size={15}/>Все маршруты</button>:<span>Отдельный план · рабочая смена сохраняется</span>}</footer>;
   return <div className="staff-plan-controls">
     <div className="staff-plan-toolbar"><button className="staff-plan-settings-button" onClick={()=>model.setPlanSettingsOpen(true)} disabled={model.running} aria-label="Настройки расчёта состава"><Settings2 size={18}/><b>Условия расчёта</b><span>{number(model.qualityFloor)}–{number(model.qualityCeiling)} <Star size={13}/></span><ChevronRight size={16}/></button><StaffingCoverageInfo model={model}/></div>
+    <CustomerPreferenceSummary items={scenario?.clientPreferences || context?.clientPreferences} results={scenario?.clientPreferenceResults} catalog={model.catalog} nameFor={model.nameForEngineer}/>
     {model.ready&&stale?<small className="staff-plan-warning">Условия изменены. Для нового расчёта откройте настройки.</small>:null}
     {model.ready&&!report?.complete?<small className="staff-plan-warning">Не все заявки назначены. Откройте «Не назначены» или измените условия.</small>:null}
     {model.ready&&report?.hypothetical?<small className="staff-plan-warning">Сценарий с условным специалистом · сохранение недоступно</small>:null}

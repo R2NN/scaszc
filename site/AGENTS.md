@@ -1,5 +1,7 @@
 # Prototype Instructions
 
+- Customer repeat wishes and 1-star exact-address avoidance are soft choices in rating staffing. Select only interchangeable validated profiles in the approved quality range (preferred specialists at least 4.2); preserve coverage, route order, visit times, road evidence, crew count and manual/factual protection. Explain unmet wishes and unavoidable repeats; never drop jobs to satisfy them. Positive wishes require a stable customer/account ID, never a display-name match. Ignore future, excluded and corrected-away 1-star evidence. Mark model examples explicitly and keep them out of operational facts and real customer history.
+
 - Engineer avatars must show one centered face without contact-sheet dividers, adjacent people or black padding. Use the shared EngineerPortrait renderer in every workspace and preserve stable ID-to-face mappings; source tiles 26–33 need explicit framing or restored assets.
 
 - Rating staffing uses the selected shift's stored engineer profiles and validated historical membership, not the later roster seed date or another day's shifts. Normalize retained territory/equipment formatting without rewriting published inputs. Preserve rating bounds, explicit unavailability and current/future roster periods; never adapt reserve home origins or shifts just to make them eligible.

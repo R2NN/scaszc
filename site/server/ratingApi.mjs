@@ -1,5 +1,6 @@
 import { RatingStore, ratingFingerprint } from './ratingStore.mjs';
 import { ratingPlanningShift } from './ratingProfiles.mjs';
+import { customerPreferencesForShift, seedCustomerPreferenceExamples } from './customerPreferences.mjs';
 import { calculateRatingPlan, reassignRatingPlan } from './ratingPlanning.mjs';
 import { ensureBaseHistoricalShift } from './baseHistoryStore.mjs';
 import { acquirePlanningSlot } from './planningSlot.mjs';
@@ -15,6 +16,7 @@ export function createRatingApi(shiftStore, { calculate = calculateRatingPlan, c
     if (!url.pathname.startsWith('/api/ratings/')) return null;
     try {
       seed ||= ratings.seed(); await seed;
+      seedCustomerPreferenceExamples(ratings, shiftStore.byDate('moscow', '2026-08-17'));
       ratings.syncCompletedVisits();
       const target = url.pathname.slice('/api/ratings/'.length);
       const input = ['POST', 'PATCH'].includes(request.method) ? await request.json() : {};
@@ -26,6 +28,7 @@ export function createRatingApi(shiftStore, { calculate = calculateRatingPlan, c
         const shift = ratingPlanningShift(shiftStore.byDate(regionId, date)), catalog = ratings.catalog(regionId,date), forecast = await loadStaffingForecast();
         const calibration = ratingPlanningShift(shiftStore.byDate(regionId, forecast.training.historyEnd));
         return json({ date, settings, version: ratings.version(), orders: shift?.orders.length || 0,
+          clientPreferences: customerPreferencesForShift(ratings.db, shift),
           hasPlan: shift?.plan?.status === 'EXACT_VALID', started: Boolean(shift?.facts?.some(item => ['started','completed'].includes(item.status))),
           sourceRevision: shift?.revision, sourceHash: shift?.plan?.contentSha256,
           breakdown: shift ? staffingBreakdown(shift, catalog, settings) : [],
@@ -55,16 +58,17 @@ export function createRatingApi(shiftStore, { calculate = calculateRatingPlan, c
         if (input.baselineId && (!baseline || baseline.kind !== 'staffing' || baseline.status !== 'READY' || baseline.regionId !== shift.regionId || baseline.date !== shift.date || baseline.sourceHash !== shift.plan.contentSha256 || baseline.sourceRevision !== shift.revision || baseline.ratingVersion !== ratings.version() || baseline.settings.qualityFloor !== Number(input.settings?.qualityFloor) || (baseline.settings.qualityCeiling ?? 5) !== Number(input.settings?.qualityCeiling ?? 5) || baseline.settings.pool !== input.pool)) throw new Error('Исходный состав изменился. Сначала пересчитайте его для сравнения.');
         if (input.kind === 'staffing') {
           const settings = staffingOptions({ ...input.settings, pool: input.pool });
-          const proposal = proposeStaffingTeam(shift, ratings.catalog(shift.regionId,shift.date), settings);
+          const clientPreferences = customerPreferencesForShift(ratings.db, shift);
+          const proposal = proposeStaffingTeam(shift, ratings.catalog(shift.regionId,shift.date), { ...settings, clientPreferences });
           const scenario = ratings.createScenario({ kind: 'staffing', status: 'AWAITING_CONFIRMATION',
             progress: { phase: 'AWAITING_CONFIRMATION' }, regionId: shift.regionId, date: shift.date, pool: input.pool,
-            settings, proposal, baselineId: baseline?.id || null, ratingVersion: ratings.version(), sourceRevision: shift.revision, sourceHash: shift.plan.contentSha256, inputFingerprint:inputFingerprint(shift) });
+            settings, proposal, clientPreferences, baselineId: baseline?.id || null, ratingVersion: ratings.version(), sourceRevision: shift.revision, sourceHash: shift.plan.contentSha256, inputFingerprint:inputFingerprint(shift) });
           return json(scenario, 201);
         }
         const release = acquirePlanningSlot();
         if (!release) return json({ error: 'Другой расчёт уже выполняется. Дождитесь его завершения.' }, 429);
         let scenario;
-        try { scenario = ratings.createScenario({ regionId: shift.regionId, date: shift.date, pool: input.pool, ratingVersion: ratings.version(), sourceRevision: shift.revision, sourceHash: shift.plan.contentSha256, inputFingerprint:inputFingerprint(shift) }); }
+        try { scenario = ratings.createScenario({ regionId: shift.regionId, date: shift.date, pool: input.pool, clientPreferences: customerPreferencesForShift(ratings.db, shift), ratingVersion: ratings.version(), sourceRevision: shift.revision, sourceHash: shift.plan.contentSha256, inputFingerprint:inputFingerprint(shift) }); }
         catch (error) { release(); throw error; }
         Promise.resolve().then(async () => {
           const result = await calculate(shift, ratings.catalog(shift.regionId,shift.date), scenario, progress => ratings.updateScenario(scenario.id, { ...ratings.scenario(scenario.id), progress }));
@@ -82,7 +86,9 @@ export function createRatingApi(shiftStore, { calculate = calculateRatingPlan, c
           const shift = ratingPlanningShift(shiftStore.byDate(scenario.regionId, scenario.date));
           if (!shift || shift.revision !== scenario.sourceRevision || shift.plan?.contentSha256 !== scenario.sourceHash || scenario.ratingVersion !== ratings.version() || scenario.inputFingerprint !== inputFingerprint(shift)) throw new Error('Заявки, состав или оценки изменились. Подберите состав заново.');
           const catalog = ratings.catalog(scenario.regionId,scenario.date);
-          const current = proposeStaffingTeam(shift, catalog, scenario.settings);
+          const clientPreferences = customerPreferencesForShift(ratings.db, shift);
+          if (ratingFingerprint(clientPreferences) !== ratingFingerprint(scenario.clientPreferences || [])) throw new Error('Пожелания клиентов изменились. Подберите состав заново.');
+          const current = proposeStaffingTeam(shift, catalog, { ...scenario.settings, clientPreferences });
           if (JSON.stringify(current.team.map(item => item.id)) !== JSON.stringify(scenario.proposal.team.map(item => item.id))) throw new Error('Доступность инженеров изменилась. Подберите состав заново.');
           if (!current.team.length) throw new Error('В диапазоне нет подходящего состава. Измените условия.');
           const release = acquirePlanningSlot();
@@ -117,6 +123,7 @@ export function createRatingApi(shiftStore, { calculate = calculateRatingPlan, c
         if (scenarioMatch[2] === 'save' && request.method === 'POST') {
           const shift = ratingPlanningShift(shiftStore.byDate(scenario.regionId, scenario.date));
           if (shift?.revision !== scenario.sourceRevision || shift?.plan.contentSha256 !== scenario.sourceHash || scenario.inputFingerprint && scenario.inputFingerprint !== inputFingerprint(shift)) throw new Error('Основной план изменился. Пересчитайте сценарий.');
+          if (scenario.clientPreferences && ratingFingerprint(customerPreferencesForShift(ratings.db, shift)) !== ratingFingerprint(scenario.clientPreferences)) throw new Error('Пожелания клиентов изменились. Пересчитайте сценарий.');
           return json(ratings.saveScenario(scenario.id));
         }
       }

@@ -46,11 +46,11 @@ export async function calculateRatingPlan(shift, catalog, scenario, onProgress =
   if (!shift.plan || shift.plan.status !== 'EXACT_VALID') throw new Error('Сначала нужен проверенный план заявок выбранного дня.');
   const source = await findRatingSource(shift, root);
   const sourceTeam = new Map(shift.team.map(item => [sourceId(item), item]));
-  const candidates = catalog.filter(item => (scenario.pool !== 'staff' || item.kind === 'staff') && sourceTeam.has(item.templateId) && hardProfile(item) === hardProfile(sourceTeam.get(item.templateId)));
+  const candidates = catalog.filter(item => item.available !== false && (scenario.pool !== 'staff' || item.kind === 'staff') && sourceTeam.has(item.templateId) && hardProfile(item) === hardProfile(sourceTeam.get(item.templateId)));
   // The current roster always uses the exact, server-owned operational profile.
   for (const engineer of shift.team) {
     const existing = catalog.find(item => sourceId(item) === sourceId(engineer));
-    if (!candidates.some(item => sourceId(item) === sourceId(engineer))) candidates.push({ ...engineer, id: sourceId(engineer), sourceId: sourceId(engineer), templateId: sourceId(engineer), kind: 'staff', rating: existing?.rating || { score: 4.2, count: 0 } });
+    if (existing?.available !== false && !candidates.some(item => sourceId(item) === sourceId(engineer))) candidates.push({ ...engineer, id: sourceId(engineer), sourceId: sourceId(engineer), templateId: sourceId(engineer), kind: 'staff', rating: existing?.rating || { score: 4.2, count: 0 } });
   }
   if (!candidates.length) throw new Error('Нет подходящих доступных инженеров.');
   const directory = path.join(root, 'runtime/rating-runs', scenario.id);
@@ -66,7 +66,7 @@ export async function calculateRatingPlan(shift, catalog, scenario, onProgress =
     child.stdin.on('error', error => { clearTimeout(timer); reject(error); });
     child.on('error', error => { clearTimeout(timer); reject(error); });
     child.on('close', code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(stderr.split('\n').filter(Boolean).at(-1) || 'Проверка плана не пройдена.')); });
-    child.stdin.end(JSON.stringify({ sourceInputs:{orders:shift.orders,team:shift.team}, candidates: candidates.map(item => ({ id: sourceId(item), templateId: item.templateId, rating: item.rating })), ratingVersion: scenario.ratingVersion, lockedEngineerIds }));
+    child.stdin.end(JSON.stringify({ sourceInputs:{orders:shift.orders,team:shift.team}, clientPreferences: scenario.clientPreferences || [], candidates: candidates.map(item => ({ id: sourceId(item), templateId: item.templateId, rating: item.rating })), ratingVersion: scenario.ratingVersion, lockedEngineerIds }));
   });
   const raw = JSON.parse(await readFile(output, 'utf8'));
   const normalizedTeam = candidates.map(item => ({ ...item, id: sourceId(item), sourceId: sourceId(item) }));
@@ -77,8 +77,8 @@ export async function calculateRatingPlan(shift, catalog, scenario, onProgress =
   const sourceAverage = total ? shift.plan.routes.reduce((n, route) => n + (catalog.find(item => sourceId(item) === sourceId({ id: route.engineerId }))?.rating.score || 4.2) * route.assignments.length, 0) / total : 0;
   const selectedIds = new Set(plan.routes.map(item => String(item.engineerId)));
   return { plan: { ...plan, algorithm: 'beego-rating-profile-matching-v1', ratingAverage: average, ratingVersion: scenario.ratingVersion, ratingAssignments: raw.rating_assignments,
-    scope: raw.search_scope, explanation: 'Выбор лучших по рейтингу для проверенных маршрутов среди инженеров с одинаковыми стартом, сменой, навыками, транспортом и оснащением. Порядок визитов сохранён.' },
-    orders: shift.orders, team: normalizedTeam.filter(item => selectedIds.has(String(item.id))), candidateCount: candidates.length,
+    scope: raw.search_scope, explanation: 'Подбор по рейтингу и пожеланиям клиентов среди инженеров с одинаковыми стартом, сменой, навыками, транспортом и оснащением. Порядок и время визитов сохранены.' },
+    orders: shift.orders, team: normalizedTeam.filter(item => selectedIds.has(String(item.id))), candidateCount: candidates.length, clientPreferenceResults: raw.client_preference_results || [],
     sourceRevision: shift.revision, sourceHash: shift.plan.contentSha256, sourceRating: sourceAverage, inputFingerprint: ratingFingerprint({ orders: shift.orders, team: shift.team, plan: shift.plan.contentSha256 }) };
 }
 

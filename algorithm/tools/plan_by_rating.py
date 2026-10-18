@@ -2,7 +2,7 @@
 
 This mode preserves the road-validated visit order and all appointments. It does
 not claim a global optimum over new route sequences. Within each identical
-operational profile it maximizes the visit-weighted rating by a sorted matching.
+operational profile it first selects by rating, then honors safe customer wishes.
 No fleet-size objective or unchecked travel estimates are used.
 """
 from __future__ import annotations
@@ -15,6 +15,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from rating_inputs import validate_rating_inputs
+from customer_preferences import apply_customer_preferences
 from beeline_planning import load_planning_dataset, validate_initial_plan
 from beeline_planning.export import load_exact_plan_artifact, materialization_result_dict
 from beeline_planning.materialize import MaterializationResult, MaterializationStatus
@@ -81,6 +82,13 @@ def main():
         raise ValueError('Исходный план не прошёл проверку. Нужен точный план выбранного дня.')
     locked = frozenset(item.engineer_id for item in dataset.active_commitments_at(plan.planning_at)) | frozenset(payload.get('lockedEngineerIds', []))
     rated_dataset, rated_plan, matches = rated_assignment(dataset, plan, payload['candidates'], locked)
+    rated_plan, preferences = apply_customer_preferences(rated_dataset, rated_plan, payload['candidates'],
+        payload.get('clientPreferences', []), locked, operational_profile, floor=4.2)
+    actual = {visit.job_id: route.engineer_id for route in rated_plan.engineer_plans for visit in route.visits}
+    for match in matches:
+        source_route = next(route for route in plan.engineer_plans if route.engineer_id == match['sourceEngineerId'])
+        match['engineerId'] = actual[source_route.visits[0].job_id]
+        match['rating'] = next(item['rating']['score'] for item in payload['candidates'] if str(item['id']) == match['engineerId'])
     validation = validate_initial_plan(rated_dataset, rated_plan)
     if not validation.is_valid:
         raise ValueError('План по рейтингу не прошёл независимую проверку ограничений')
@@ -89,7 +97,7 @@ def main():
         failure=None, exact_provider_queries=0, identity_legs=0))
     result.update({'artifact_type': 'RATING_ROUTE_ASSIGNMENT', 'dataset_sha256': dataset.dataset_sha256,
                    'source_plan_content_sha256': source['content_sha256'], 'rating_assignments': matches,
-                   'rating_version': payload['ratingVersion'], 'global_optimality_proven': False,
+                   'rating_version': payload['ratingVersion'], 'client_preferences': payload.get('clientPreferences', []), 'client_preference_results': preferences, 'global_optimality_proven': False,
                    'search_scope': 'MAX_VISIT_WEIGHTED_RATING_WITHIN_IDENTICAL_OPERATIONAL_PROFILES',
                    'road_evidence': 'REUSED_IDENTICAL_START_MODE_ORDER_AND_DEPARTURES',
                    'candidate_profiles': payload['candidates']})

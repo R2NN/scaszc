@@ -148,7 +148,7 @@ export class RatingStore {
         if (!engineer || !order) continue;
         const engineerId = engineerIdentity(engineer);
         this.db.prepare('INSERT OR IGNORE INTO rating_engineers VALUES (?,?,?,?)').run(engineerId, fact.region_id, 'staff', json({ ...engineer, id: engineerId, kind: 'staff', templateId: engineerId }));
-        const visit = { id: `OP-${fact.shift_id}-${fact.order_id}`, engineerId, orderId: order.sourceId || order.id, address: order.address, coords: order.coords, client: order.client || '', date: fact.service_date, status: 'completed', finishedAt: fact.fact_time, provenance: 'OPERATIONAL_COMPLETED_FACT', planVersionId: version.id, factId: fact.id };
+        const visit = { id: `OP-${fact.shift_id}-${fact.order_id}`, engineerId, orderId: order.sourceId || order.id, address: order.address, coords: order.coords, clientId: order.clientId || order.customerId || order.accountId || '', client: order.client || '', date: fact.service_date, status: 'completed', finishedAt: fact.fact_time, provenance: 'OPERATIONAL_COMPLETED_FACT', planVersionId: version.id, factId: fact.id };
         this.db.prepare('INSERT OR IGNORE INTO rating_visits VALUES (?,?,?)').run(visit.id, engineerId, json(visit));
       }
     })();
@@ -175,7 +175,10 @@ export class RatingStore {
       if (this.db.prepare('SELECT id FROM rating_reviews WHERE visit_id=?').get(visit.id)) throw new Error('Для этого визита отзыв уже получен.');
       const client = String(input.client || '').trim(), comment = String(input.comment || '').trim(), score = Number(input.score);
       if (!client || client.length > 100 || comment.length < 3 || comment.length > 2000 || !Number.isInteger(score) || score < 1 || score > 5) throw new Error('Укажите клиента, оценку от 1 до 5 и отзыв от 3 до 2000 символов.');
-      const review = { id: randomUUID(), engineerId: visit.engineerId, visitId: visit.id, client, comment, date: stamp(), createdAt: stamp(), preferred: input.preferred === true, provenance: visit.provenance };
+      const clientId = String(visit.clientId || input.clientId || '').trim();
+      if (clientId.length > 100 || visit.clientId && input.clientId && visit.clientId !== input.clientId) throw new Error('ID клиента не совпадает с завершённым визитом.');
+      if (input.preferred === true && (!clientId || score < 4)) throw new Error('Для повторного назначения укажите ID клиента и положительную оценку от 4★.');
+      const review = { id: randomUUID(), engineerId: visit.engineerId, visitId: visit.id, clientId, client, comment, date: stamp(), createdAt: stamp(), preferred: input.preferred === true, provenance: visit.provenance };
       this.db.prepare('INSERT INTO rating_reviews VALUES (?,?,?,?,1,?)').run(review.id, visit.engineerId, visit.id, score, json(review));
       this.bump(); return this.engineer(visit.engineerId);
     })();
