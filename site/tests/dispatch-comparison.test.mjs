@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dispatchRouteData, renderDispatchRoutes } from '../src/dispatchComparison.js';
+import { dispatchRouteData, renderDispatchRoutes, renderDispatchImpact, renderDispatchHighlight } from '../src/dispatchComparison.js';
 import { MAP_UI } from '../src/mapDesign.js';
 
 const leg = (orderId, departureAt, arrival, geometry) => ({ orderId, departureAt, arrival, geometry });
@@ -20,6 +20,22 @@ const mapFixture = () => {
   };
   return { map, sources, layers };
 };
+
+test('publication highlights only affected future routes and marks unassigned addresses independently', () => {
+  const {map,sources,layers} = mapFixture();
+  const after = plan([leg('past','10:00','10:10',[[0,0],[0,1]]),leg('emergency','11:17','11:38',[[0,1],[1,1]])]);
+  after.routes.push({engineerId:'receiver',assignments:[leg('transferred','12:00','12:10',[[1,1],[1,2]])]});
+  after.routes.push({engineerId:'unchanged',assignments:[leg('other','12:00','12:10',[[2,2],[2,3]])]});
+  renderDispatchRoutes(map, {...detail,before:after,after});
+  const highlighted = renderDispatchHighlight(map, {...detail,after,highlightIds:['crew','receiver']});
+  assert.deepEqual(highlighted.features.map(feature => feature.properties.orderId),['emergency','transferred']);
+  assert.equal(layers.get('dispatch-result-highlight').paint['line-color'],'#ffd21f');
+  const lost = {type:'Feature',properties:{orderId:'lost',address:'Адрес без назначения'},geometry:{type:'Point',coordinates:[37.6,55.7]}};
+  renderDispatchImpact(map,[lost]);
+  assert.deepEqual(sources.get('dispatch-impact').data.features,[lost]);
+  renderDispatchImpact(map,[]);
+  assert.equal(sources.get('dispatch-impact').data.features.length,0);
+});
 
 test('comparison trims elapsed travel along a bent road without a connector back to its start', () => {
   const before = plan([

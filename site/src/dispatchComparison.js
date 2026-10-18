@@ -137,3 +137,31 @@ export function renderDispatchRoutes(map, detail) {
   map.moveLayer('dispatch-stop-labels');
   return rendered;
 }
+
+/** Mark the actual addresses in an expanded consequence group, including unassigned jobs. */
+export function renderDispatchImpact(map, features) {
+  const data = {type:'FeatureCollection',features};
+  if (map.getSource('dispatch-impact')) map.getSource('dispatch-impact').setData(data);
+  else map.addSource('dispatch-impact', {type:'geojson',data});
+  if (!map.getLayer('dispatch-impact-points')) map.addLayer({id:'dispatch-impact-points',type:'circle',source:'dispatch-impact',
+    paint:{'circle-radius':12,'circle-color':'#ffd21f','circle-stroke-color':'#6d28d9','circle-stroke-width':3}});
+  if (!map.getLayer('dispatch-impact-labels')) map.addLayer({id:'dispatch-impact-labels',type:'symbol',source:'dispatch-impact',
+    layout:{'text-field':['get','address'],'text-size':14,'text-anchor':'bottom','text-offset':[0,-1.5],'text-max-width':18},
+    paint:{'text-color':'#482477','text-halo-color':'#fff','text-halo-width':2}});
+  map.moveLayer('dispatch-impact-points');
+  map.moveLayer('dispatch-impact-labels');
+  return data;
+}
+
+/** A temporary bright overlay shows the remaining routes affected by a publication. */
+export function renderDispatchHighlight(map, detail) {
+  const ids = detail.highlightIds?.length ? detail.highlightIds : detail.ids;
+  const data = dispatchRouteData(detail.after, {...detail,ids}, true);
+  if (map.getSource('dispatch-result-highlight')) map.getSource('dispatch-result-highlight').setData(data);
+  else map.addSource('dispatch-result-highlight', {type:'geojson',data});
+  if (!map.getLayer('dispatch-result-highlight')) map.addLayer({id:'dispatch-result-highlight',type:'line',source:'dispatch-result-highlight',
+    layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#ffd21f','line-width':14,'line-opacity':.7}});
+  map.moveLayer('dispatch-after');
+  map.moveLayer('dispatch-after-continuation');
+  return data;
+}

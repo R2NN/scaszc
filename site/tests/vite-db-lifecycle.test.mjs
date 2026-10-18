@@ -13,7 +13,15 @@ test('parallel SSR imports do not open or seed a shared operational SQLite file'
   process.env.BEEGO_DB_PATH = file;
   const servers = [];
   try {
-    const settled = await Promise.allSettled([0, 1].map(() => createServer({ server: { middlewareMode: true, hmr: false } })));
+    const settled = await Promise.allSettled([0, 1].map(() => createServer({
+      server: { middlewareMode: true, hmr: false },
+      plugins: [{name:'ssr-lifecycle-without-client-warmup',enforce:'post',config(config) {
+        // This checks the real API configuration's SSR lifecycle; client
+        // prebundling and browser warmup add unrelated background work.
+        config.optimizeDeps = {noDiscovery:true,include:[]};
+        config.server.warmup = {clientFiles:[]};
+      }}],
+    })));
     for (const result of settled) if (result.status === 'fulfilled') servers.push(result.value);
     const failure = settled.find(result => result.status === 'rejected');
     if (failure) throw failure.reason;
