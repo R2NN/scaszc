@@ -1,5 +1,7 @@
 # Prototype Instructions
 
+- Preserve access to retained historical operational days in Orders, Engineers and Shift through the shared date selector. Load saved independently validated orders, crews and road geometry from the full history archive; never generate replacement history or fabricate completion facts from analytics summaries. Preserve existing shift revisions and dispatch sessions when restoring missing days.
+
 - Engineer comments are short natural first-person explanations of why a visit was faster or slower, suited to the actual work and recorded context. Never append archive IDs, plan/actual reports, work/paperwork minute breakdowns, or model-review language to their messages. Show plan versus actual as the whole visit in the feedback card. Keep repeatability and future-transfer decisions in the separate operator/system controls. Correct only untouched synthetic fixture prose; retain human replies, measured facts, model inputs and published calculations.
 
 - Put engineer feedback immediately below the duration formula in the passport overview. Show measured plan/actual differences, the engineer's explanation, review state, scope, future affected orders, retained calculations and every reply/decision version. Keep one common passport scroll and reveal full lists explicitly. Preserve unsaved reply drafts when switching passport tabs. Remove the extra full-width map extent button from the time panel; keep the existing map controls.
