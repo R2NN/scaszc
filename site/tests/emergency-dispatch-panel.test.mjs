@@ -5,6 +5,56 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 
+test('notification actions occupy their own row before and after reading; playback shows actual values', async()=>{
+  const server=await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
+  try{
+    const {NotificationActions}=await server.ssrLoadModule('/src/NotificationActions.jsx');
+    const {PlaybackDropdown,ShiftPlaybackBar}=await server.ssrLoadModule('/src/ShiftWorkspace.jsx');
+    const {shiftClock}=await server.ssrLoadModule('/src/shiftClock.js');
+    for(const read of [false,true]) for(const toast of [false,true]){
+      const opened=[],acknowledged=[],item={id:'N',incidentId:'I',read};
+      const props={item,toast,onOpen:value=>opened.push(value),onRead:id=>acknowledged.push(id)};
+      const html=renderToStaticMarkup(React.createElement(NotificationActions,props));
+      assert.match(html,/class="notification-actions"/);assert.match(html,/Открыть решение/);assert.match(html,/Прочитано/);
+      assert.equal((html.match(/<button/g)||[]).length,read?1:2);
+      assert.doesNotMatch(html,/absolute|style=/);
+      const actions=NotificationActions(props).props.children;
+      actions[0].props.onClick();
+      assert.deepEqual(opened,[item]);assert.deepEqual(acknowledged,[]);
+      if(!read){actions[1].props.onClick();assert.deepEqual(acknowledged,['N']);assert.deepEqual(opened,[item]);}
+    }
+    const html=renderToStaticMarkup(React.createElement(PlaybackDropdown,{label:'Скорость',value:1,options:[{value:30,label:'×30'}]}));
+    assert.match(html,/<span>1<\/span>/);assert.doesNotMatch(html,/×30/);
+    shiftClock.set({minute:600,speed:1,playing:false,awaitingDecision:true});
+    const bar=renderToStaticMarkup(React.createElement(ShiftPlaybackBar));
+    assert.match(bar,/×1/);assert.match(bar,/Ожидаем решения · реальное время ×1/);
+    assert.match(bar,/disabled="" aria-label="Скорость воспроизведения"/);
+    shiftClock.set({awaitingDecision:false,speed:60});
+  }finally{await server.close();}
+});
+
+test('opening a read or unread notification selects the incident workspace and focuses its real address',async()=>{
+  const server=await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
+  const previous={fetch:globalThis.fetch,window:globalThis.window,raf:globalThis.requestAnimationFrame};
+  try{
+    const {useEmergencyDispatch}=await server.ssrLoadModule('/src/EmergencyDispatch.jsx');
+    const opened=[],events=[];let controller;
+    function Harness(){controller=useEmergencyDispatch({shift:{id:'shift'},onOpen:(...args)=>opened.push(args)});return null;}
+    renderToStaticMarkup(React.createElement(Harness));
+    globalThis.window={dispatchEvent:event=>events.push(event)};
+    globalThis.requestAnimationFrame=fn=>{fn();return 1;};
+    for(const read of [false,true]){
+      const incident={id:'incident',shiftId:'shift',status:'WAITING',order:{coords:[55.71,37.61]},notifications:[{read}],candidates:[{id:'verified'}]};
+      globalThis.fetch=async()=>Response.json(incident);
+      await controller.open('incident');
+      assert.deepEqual(opened.at(-1)[0].candidates,[{id:'verified'}]);
+      assert.equal(events.at(-2).type,'beego:dispatch-clear');
+      assert.equal(events.at(-1).type,'beego:incident-focus');
+      assert.deepEqual(events.at(-1).detail.coords,[55.71,37.61]);
+    }
+  }finally{globalThis.fetch=previous.fetch;globalThis.window=previous.window;globalThis.requestAnimationFrame=previous.raf;await server.close();}
+});
+
 test('an unaccepted alternative keeps prospective loss wording after another decision is accepted', async () => {
   const server = await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
   try {

@@ -4,6 +4,7 @@ import { acquirePlanningSlot } from './planningSlot.mjs';
 import { minuteOf, timeOf } from '../src/shiftDomain.js';
 import { operationalStates } from '../src/operationalState.js';
 import { preservesStartedVisits } from './exactShiftReplan.mjs';
+import { syncDispatchPlayback } from './dispatchPlayback.mjs';
 
 const encode = JSON.stringify;
 const hash = value => createHash('sha256').update(encode(value)).digest('hex');
@@ -33,6 +34,7 @@ export class EmergencyDispatch {
     store.db.prepare('INSERT OR IGNORE INTO migrations(version) VALUES (3)').run();
     // Interrupted work is requeued on restart; its durable deadline is retained.
     for (const item of this.active()) if (['SEARCHING', 'CHECKING'].includes(item.status)) this.save({ ...item, status: 'QUEUED', error: 'Расчёт продолжится после перезапуска сервера' });
+    for (const row of store.db.prepare('SELECT shift_id FROM dispatch_sessions').all()) syncDispatchPlayback(this,row.shift_id);
   }
 
   all(shiftId) {
@@ -52,6 +54,7 @@ export class EmergencyDispatch {
       const current = this.get(item.id);
       if (current && terminal(current) && current.status !== item.status) return current;
       this.store.db.prepare('UPDATE dispatch_incidents SET payload=? WHERE id=?').run(encode(item), item.id);
+      syncDispatchPlayback(this,item.shiftId);
       return item;
     }).immediate();
   }
@@ -87,6 +90,7 @@ export class EmergencyDispatch {
       const item = { id: randomUUID(), shiftId, eventKey, order: prepared, time, mode, policy, createdAt: stamp, deadlineAt: stamp + policy.waitSeconds * 1000,
         status: 'QUEUED', candidates: [], version: 0, decision: null, error: null, notifications: [{ id: randomUUID(), type: 'EMERGENCY_INCIDENT', title: 'Новая авария', message: `${prepared.address} · ${time}`, read: false, createdAt: stamp }] };
       this.store.db.prepare('INSERT INTO dispatch_incidents VALUES (?,?,?,?)').run(item.id, shiftId, eventKey, encode(item));
+      syncDispatchPlayback(this,shiftId);
       return item;
     })();
     if (!prior && this.store.get(shiftId)?.regionId?.includes(':scenario:')) this.prioritize(shiftId);

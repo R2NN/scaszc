@@ -1,3 +1,4 @@
+import { createDispatchClockSync } from './dispatchClockSync.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, Clock3, Route, RotateCcw, X } from 'lucide-react';
 import { shiftClock } from './shiftClock.js';
@@ -23,7 +24,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   const [acceptingId, setAcceptingId] = useState('');
   const refs = useRef({});
   refs.current = { shift, onApply, notify, onOpen };
-  const notified = useRef(new Set()), initialized = useRef(''), clockPending = useRef(false);
+  const notified = useRef(new Set()), initialized = useRef(''), clockSync = useRef(null);
   const [serverOffset, setServerOffset] = useState(0);
   useEffect(() => {
     if (!shift?.id || shift.regionId.includes(':scenario:') || initialized.current === shift.id) return;
@@ -38,12 +39,12 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
           const fresh = await api('sessions', { baseShiftId: shift.id });
           sessionStorage.setItem(marker, 'active');
           setSession(fresh); refs.current.onApply(fresh.shift);
-          shiftClock.set({ minute: fresh.clock.minute, playing: false, speed: fresh.clock.speed });
+          shiftClock.set({ minute: fresh.clock.minute, playing: false, speed: fresh.clock.speed, awaitingDecision:Boolean(fresh.clock.awaitingDecision) });
           return;
         }
         sessionStorage.setItem(marker, 'active');
         setSession(value); refs.current.onApply(value.shift);
-        shiftClock.set({ minute: value.clock.minute, playing: false, speed: value.clock.speed });
+        shiftClock.set({ minute: value.clock.minute, playing: false, speed: value.clock.speed, awaitingDecision:Boolean(value.clock.awaitingDecision) });
       } catch (e) { if (alive) setError(e.message); }
     };
     restore();
@@ -62,16 +63,15 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
       try {
         const value = await api(`shifts/${shift.id}/incidents`);
         if (!alive) return;
+        if (value.clock && clockSync.current && !clockSync.current.apply(value.clock)) return;
         setServerOffset(value.serverNow-Date.now());
         setIncidents(value.incidents);
-        if (value.clock && value.clock.speed !== shiftClock.getSnapshot().speed) shiftClock.set({ speed: value.clock.speed });
         for (const incident of value.incidents) {
           for (const notice of incident.notifications) {
             if (notified.current.has(notice.id)) continue;
             notified.current.add(notice.id);
             refs.current.notify(notice.message, { ...notice, id: notice.id, type: 'EMERGENCY_INCIDENT', incidentId: incident.id, shiftId: shift.id, title: notice.title, showToast: !notice.read, read: notice.read });
           }
-          if (!terminal(incident) && shiftClock.getSnapshot().speed !== 1) shiftClock.set({ speed: 1 });
           if (incident.decision && incident.decision.revision > refs.current.shift.revision) {
             const response = await fetch(`/api/shifts/${shift.id}`);
             if (alive && response.ok) refs.current.onApply(await response.json());
@@ -83,24 +83,14 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     const timer = setInterval(poll, 2000);
     return () => { alive = false; clearInterval(timer); };
   }, [shift?.id]);
-  useEffect(() => shiftClock.subscribe(async () => {
-    const current = refs.current.shift;
-    if (!current?.regionId.includes(':scenario:') || clockPending.current) return;
-    clockPending.current = true;
-    try {
-      const value = await api(`shifts/${current.id}/clock`, shiftClock.getSnapshot());
-      setIncidents(value.incidents || []);
-      const snapshot = shiftClock.getSnapshot();
-      // While playing, the animation clock is the smooth visual source. The
-      // server response can describe the request's older minute, so snapping
-      // to it would make the timeline jump backwards on every slow response.
-      const reanchor = !snapshot.playing || !value.clock.playing;
-      shiftClock.set(reanchor
-        ? { minute: value.clock.minute, playing: value.clock.playing, speed: value.clock.speed }
-        : { speed: value.clock.speed });
-    } catch (e) { setError(e.message); }
-    finally { clockPending.current = false; }
-  }), []);
+  useEffect(() => {
+    if (!shift?.regionId.includes(':scenario:')) return;
+    const bridge = createDispatchClockSync({clock:shiftClock,
+      send:snapshot => api(`shifts/${shift.id}/clock`,snapshot),
+      onValue:value => setIncidents(value.incidents || []),onError:e => setError(e.message)});
+    clockSync.current = bridge;
+    return () => {bridge.close();if (clockSync.current === bridge) clockSync.current=null;};
+  }, [shift?.id]);
   const open = async id => {
     try {
       const item = incidents.find(entry => entry.id === id) || await api(`incidents/${id}`);
@@ -148,7 +138,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
       window.dispatchEvent(new CustomEvent('beego:dispatch-clear'));
       sessionStorage.setItem(`beego-dispatch-session:${session?.baseShiftId || shift.id}`, 'active');
       setSession(value); setSelectedId(''); setCandidateId(''); setRouteScope('day'); setIncidents([]); refs.current.onApply(value.shift);
-      shiftClock.set({ minute:360, playing:false, speed:value.clock.speed, selectedEngineerId:'', follow:false });
+      shiftClock.set({ minute:360, playing:false, speed:value.clock.speed, awaitingDecision:false, selectedEngineerId:'', follow:false });
       refs.current.onOpen();
     } catch (e) { setError(e.message); }
   };
@@ -157,7 +147,11 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
       setAcceptingId(incident.id);
       try {
         setError('');
-        if (refs.current.shift.regionId.includes(':scenario:')) await api(`shifts/${incident.shiftId}/clock`, shiftClock.getSnapshot());
+        if (refs.current.shift.regionId.includes(':scenario:')) {
+          await clockSync.current?.flush();
+          const synchronized = await api(`shifts/${incident.shiftId}/clock`,shiftClock.getSnapshot());
+          clockSync.current?.apply(synchronized.clock);
+        }
         const result = await api(`incidents/${incident.id}/accept`, { candidateId:candidate.id, actor:'Диспетчер' });
         setIncidents(current => current.map(item => item.id === result.id ? result : item));
         if (result.status === 'ACCEPTED' && result.decision.revision > refs.current.shift.revision) {
@@ -165,7 +159,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
           if (!response.ok) throw new Error('Решение сохранено, но обновить план не удалось. Обновите смену.');
           refs.current.onApply(await response.json());
         }
-        if (result.status === 'ACCEPTED' && result.playback) shiftClock.set({ speed: result.playback.speed, playing: result.playback.playing });
+        if (result.status === 'ACCEPTED') clockSync.current?.apply(result.playback);
       }
     catch (e) { setError(e.message); }
     finally { setAcceptingId(''); }

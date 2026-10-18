@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Marker } from 'maplibre-gl';
 import { renderDispatchRoutes, renderDispatchImpact, renderDispatchHighlight } from './dispatchComparison.js';
+import { measureDispatchViewport } from './dispatchViewport.js';
 
 /** Draw a comparison on the existing map, starting both lines at the current position. */
 export function attachDispatchMap(map, {events = window, dom = document, markerFactory = element => new Marker({element}), schedule = setTimeout, cancel = clearTimeout} = {}) {
@@ -11,6 +12,7 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
   let impactNeedsFocus = false;
   let routeNeedsFocus = false;
   let latestPreview;
+  let incidentCoords;
   const hiddenLayers = new Map();
   const hideBackgroundRoutes = () => {
     if (!latestPreview) return;
@@ -27,15 +29,12 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
     const element = dom.createElement('div');
     element.className = 'dispatch-map-incident'; element.textContent = '!'; element.setAttribute('aria-label', 'Место новой аварии');
     marker = markerFactory(element).setLngLat([coords[1], coords[0]]).addTo(map);
-    const panel = (dom.querySelector('.shift-panel') || dom.querySelector('.orders-panel'))?.getBoundingClientRect();
-    const bounds = map.getContainer().getBoundingClientRect();
-    const sidebar = dom.querySelector('.sidebar')?.getBoundingClientRect();
-    const visibleLeft = Math.max(panel?.right || 0, (sidebar?.right || 0) + 420);
-    const offset = (visibleLeft + bounds.right - 60 - bounds.left - bounds.right) / 2;
-    map.flyTo({ center: [coords[1], coords[0]], zoom: Math.max(13.4, map.getZoom()), offset: [Math.max(0, offset), -65], duration: 900, essential: true });
+    incidentCoords = coords;
+    fit([[coords[1],coords[0]]]);
   };
   const clear = () => {
     latestPreview = null;
+    incidentCoords = null;
     map.off('idle', restore);
     cancel(highlightTimer);
     impactFeatures = [];
@@ -77,7 +76,7 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
         if (map.getLayer('dispatch-result-highlight')) map.removeLayer('dispatch-result-highlight');
         if (map.getSource('dispatch-result-highlight')) map.removeSource('dispatch-result-highlight');
       }, 3600);
-      if (event.detail.focusRoute && highlighted.features.length) fit(highlighted.features.flatMap(feature => feature.geometry.coordinates));
+      if (event.detail.focusRoute) fit(highlighted.features.flatMap(feature => feature.geometry.coordinates));
     }
     originMarker?.remove();
     if (event.detail.current?.origin) {
@@ -88,15 +87,16 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
     if (event.detail.focusRoute) {
       const points = [rendered.before, rendered.after]
         .flatMap(data => data.features.flatMap(feature => feature.geometry.coordinates));
-      if (points.length) {
-        if (!event.detail.highlightIds) fit(points);
-      }
+      if (!event.detail.highlightIds) fit(points);
     }
   };
   const fit = points => {
-    if (!points.length) return;
-    const bounds = map.getContainer().getBoundingClientRect(), panel = dom.querySelector('.shift-panel')?.getBoundingClientRect();
-    map.fitBounds([[Math.min(...points.map(p => p[0])), Math.min(...points.map(p => p[1]))], [Math.max(...points.map(p => p[0])), Math.max(...points.map(p => p[1]))]], {padding:{left:Math.min(bounds.width * .65,Math.max(40,(panel?.right || bounds.left) - bounds.left + 20)),right:60,top:90,bottom:150},maxZoom:15,duration:650});
+    const anchors = [latestPreview?.current?.origin,latestPreview?.current?.emergencyCoords || incidentCoords].filter(Boolean).map(([lat,lon]) => [lon,lat]);
+    const visible = [...points,...anchors];
+    if (!visible.length) return;
+    const padding = measureDispatchViewport(map,dom);
+    if (!padding) return;
+    map.fitBounds([[Math.min(...visible.map(p => p[0])),Math.min(...visible.map(p => p[1]))],[Math.max(...visible.map(p => p[0])),Math.max(...visible.map(p => p[1]))]],{padding,retainPadding:false,maxZoom:15,duration:650});
   };
   const showImpact = event => {
     impactFeatures = event.detail.features;
@@ -116,10 +116,22 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
     if (latestPreview) preview({detail:{...latestPreview,focusRoute:routeNeedsFocus,restore:true}});
     routeNeedsFocus = false;
   };
+  const refit = () => {
+    if (!latestPreview) {if (incidentCoords) fit([]);return;}
+    preview({detail:{...latestPreview,focusRoute:true,restore:true}});
+  };
+  const layoutSettled = event => {
+    if (event.target?.matches?.('.shift-panel,.shift-timeline,.map-control-stack,.sidebar')) refit();
+  };
   map.on('style.load', restore);
   map.on('styledata', hideBackgroundRoutes);
+  events.addEventListener('resize',refit);
+  dom.addEventListener?.('transitionend',layoutSettled,true);
+  dom.addEventListener?.('animationend',layoutSettled,true);
+  const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(refit) : null;
+  for (const selector of ['.shift-panel','.map-control-stack','.shift-timeline']) for (const element of dom.querySelectorAll?.(selector) || []) observer?.observe(element);
   events.addEventListener('beego:dispatch-impact', showImpact); events.addEventListener('beego:incident-focus', focus); events.addEventListener('beego:dispatch-preview', preview); events.addEventListener('beego:dispatch-clear', clear); events.addEventListener('beego:dispatch-scope', changeScope);
-  return () => { map.off('style.load', restore); map.off('styledata', hideBackgroundRoutes); events.removeEventListener('beego:dispatch-impact', showImpact); events.removeEventListener('beego:incident-focus', focus); events.removeEventListener('beego:dispatch-preview', preview); events.removeEventListener('beego:dispatch-clear', clear); events.removeEventListener('beego:dispatch-scope', changeScope); clear(); };
+  return () => {observer?.disconnect();events.removeEventListener('resize',refit);dom.removeEventListener?.('transitionend',layoutSettled,true);dom.removeEventListener?.('animationend',layoutSettled,true); map.off('style.load', restore); map.off('styledata', hideBackgroundRoutes); events.removeEventListener('beego:dispatch-impact', showImpact); events.removeEventListener('beego:incident-focus', focus); events.removeEventListener('beego:dispatch-preview', preview); events.removeEventListener('beego:dispatch-clear', clear); events.removeEventListener('beego:dispatch-scope', changeScope); clear(); };
 }
 
 /** Keep the existing map instance and release every comparison layer on unmount. */

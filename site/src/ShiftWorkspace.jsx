@@ -130,7 +130,7 @@ const planChange = (before, after, orders = []) => {
   return { moved, inserted, removed, risky };
 };
 
-function PlaybackDropdown({ label, value, options, onChange }) {
+export function PlaybackDropdown({ label, value, options, onChange, disabled = false }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   useEffect(() => {
@@ -148,9 +148,9 @@ function PlaybackDropdown({ label, value, options, onChange }) {
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
-  const selected = options.find(option => String(option.value) === String(value)) || options[0];
+  const selected = options.find(option => String(option.value) === String(value)) || {value,label:String(value ?? '—')};
   return <div className="shift-playback-select" ref={rootRef}>
-    <button type="button" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(current => !current)}>
+    <button type="button" disabled={disabled} aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(current => !current)}>
       <span>{selected.label}</span><ChevronDown size={15} aria-hidden="true"/>
     </button>
     {open ? <div className="shift-playback-menu" role="menu" aria-label={label}>
@@ -209,7 +209,7 @@ function DailyReportDashboard({ report }) {
 }
 
 export function ShiftPlaybackBar({ compact = false, shift = null, onSelectOrder, onEditOrder, selectedOrderId }) {
-  const clock = useSyncExternalStore(shiftClock.subscribe, shiftClock.getSnapshot);
+  const clock = useSyncExternalStore(shiftClock.subscribe, shiftClock.getSnapshot, shiftClock.getSnapshot);
   const point = shiftDisplayAt(shift, clock.minute);
   const frame = point?.plan ? playbackFrame(point, clock.minute, clock.mode) : null;
   const selectedEngineer = clock.selectedEngineerId ? point?.team?.find(item => String(item.id) === String(clock.selectedEngineerId)) : null;
@@ -226,7 +226,8 @@ export function ShiftPlaybackBar({ compact = false, shift = null, onSelectOrder,
       <button type="button" aria-label={clock.playing ? 'Пауза' : 'Воспроизвести'} onClick={() => shiftClock.set({ playing: !clock.playing })}>{clock.playing ? <Pause/> : <Play/>}</button>
       <b>{timeOf(Math.floor(clock.minute))}</b>
       <PlaybackDropdown label="Режим смены" value={clock.mode} options={[{value:'plan',label:'По плану · демонстрация'},{value:'fact',label:'Фактическая смена'}]} onChange={mode => shiftClock.set({ mode })}/>
-      <PlaybackDropdown label="Скорость воспроизведения" value={clock.speed} options={[30,60,120,300].map(speed => ({value:speed,label:`×${speed}`}))} onChange={speed => shiftClock.set({ speed:Number(speed) })}/>
+      <PlaybackDropdown label="Скорость воспроизведения" value={clock.speed} disabled={clock.awaitingDecision} options={[1,30,60,120,300].map(speed => ({value:speed,label:`×${speed}`}))} onChange={speed => shiftClock.set({ speed:Number(speed) })}/>
+      {clock.awaitingDecision ? <span className="shift-decision-wait" role="status">Ожидаем решения · реальное время ×1</span> : null}
       <label className="shift-follow-toggle"><input type="checkbox" checked={clock.follow} onChange={event => shiftClock.set({ follow:event.target.checked })}/><span className="shift-follow-check" aria-hidden="true"><Check size={13}/></span><span>Следить за бригадой</span></label>
     </div>
     {!compact && selected ? <div className="shift-timeline-crew"><strong>{selected.route.engineerName}</strong><span>{!selected.route.assignments?.length ? 'Без маршрута' : clock.mode === 'fact' ? 'По подтверждённым отметкам' : selected.crew?.status === 'travelling' ? `В пути ${selected.phaseMinutes} мин` : selected.crew?.status === 'working' ? `На объекте ${selected.phaseMinutes} мин` : 'По плану'}</span><span>Следующая: {selected.upcomingOrder ? orderNumber(selected.upcomingOrder) : 'нет'}</span><button type="button" onClick={() => shiftClock.set({ selectedEngineerId: '', follow: false })} aria-label="Снять выбор бригады">×</button></div> : null}

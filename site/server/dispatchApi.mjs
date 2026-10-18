@@ -1,3 +1,4 @@
+import { reconcileDispatchPlayback } from './dispatchPlayback.mjs';
 import { randomUUID } from 'node:crypto';
 import { EmergencyDispatch } from './emergencyDispatch.mjs';
 import { minuteOf } from '../src/shiftDomain.js';
@@ -49,8 +50,8 @@ export function createDispatchApi(store, options) {
         const first = homeStartScenario(base);
         const shift = store.ensure({ regionId: `${base.regionId.split(':')[0]}:scenario:${id}`, date: base.date, orders: first.orders, team: first.team, plan: first.plan });
         const requestedSpeed = Number(input.speed);
-        const speed = [30, 60, 120, 300].includes(requestedSpeed) ? requestedSpeed : 60;
-        const session = { id, baseShiftId: input.baseShiftId, shiftId: shift.id, clock: { minute: 360, playing: false, speed, anchorAt: Date.now() }, lastMinute: 360, fired: false };
+        const speed = [1, 30, 60, 120, 300].includes(requestedSpeed) ? requestedSpeed : 60;
+        const session = { id, baseShiftId: input.baseShiftId, shiftId: shift.id, clock: { minute: 360, playing: false, speed, anchorAt: Date.now(), awaitingDecision:false, version:1 }, lastMinute: 360, fired: false };
         store.db.prepare('INSERT INTO dispatch_sessions VALUES (?,?,?,?)').run(id, input.baseShiftId, shift.id, JSON.stringify(session));
         return json({ ...session, shift }, 201);
       }
@@ -76,7 +77,6 @@ export function createDispatchApi(store, options) {
           if (!Number.isFinite(minute) || minute < 0 || minute > 1439) throw new Error('Некорректное время смены');
           if (!session.fired && session.lastMinute < 677 && minute >= 677) {
             const shift = store.get(shiftId);
-            session.preIncidentSpeed = Number(session.clock.speed) || 60;
             const address = shift.orders.find(order => order.id === 'SOUTHCENTER-32840') || shift.orders.find(order => order.zoneId === 'SOUTHCENTER');
             const order = { id: `TZ3-${session.id}`, sourceId: `TZ3-${session.id}`, name: 'Аварийный вызов', address: address.address, coords: address.coords,
               regionId: 'moscow', zone: address.zone, zoneId: address.zoneId, objectId: address.objectId, serviceEntities: { object: address.objectId },
@@ -86,12 +86,14 @@ export function createDispatchApi(store, options) {
             session.fired = true;
           }
           session.lastMinute = Math.max(session.lastMinute, minute);
-          const pending = session.fired && dispatch.hasPending(shiftId);
-          const resumeSpeed = session.preIncidentSpeed;
-          const speed = pending ? 1 : resumeSpeed || (serverTick ? Number(session.clock.speed) : Number(input.speed)) || 60;
-          if (!pending && resumeSpeed) session.preIncidentSpeed = null;
+          // A request may have crossed the scheduled incident boundary above.
+          // Use this request's clock as the anchor before applying the queue override.
           const playing = serverTick ? Boolean(session.clock.playing) : Boolean(input.playing);
-          session.clock = { minute, playing: playing && minute < 1439, speed, anchorAt: Date.now() };
+          const requestedSpeed = serverTick ? session.clock.speed : Number(input.speed);
+          session.clock = { ...session.clock, minute, playing:playing && minute < 1439,
+            speed:session.preIncidentSpeed != null ? session.clock.speed : [1,30,60,120,300].includes(requestedSpeed) ? requestedSpeed : session.clock.speed,
+            anchorAt:Date.now(),version:(session.clock.version || 0)+1 };
+          reconcileDispatchPlayback(session,dispatch.hasPending(shiftId),Date.now());
           store.db.prepare('UPDATE dispatch_sessions SET payload=? WHERE id=?').run(JSON.stringify(session), row.id);
           return json(serverTick ? session : { ...session, incidents: dispatch.all(shiftId) });
         }
@@ -101,17 +103,6 @@ export function createDispatchApi(store, options) {
         const [, id, action] = incidentRoute;
         if (action === 'accept') {
           const result = dispatch.accept(id, input.candidateId, input.actor);
-          if (result?.status === 'ACCEPTED') {
-            const row = store.db.prepare('SELECT id,payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(result.shiftId);
-            if (row) {
-              const session = JSON.parse(row.payload);
-              if (session.preIncidentSpeed) {
-                session.clock = { ...session.clock, speed: session.preIncidentSpeed, anchorAt: Date.now() };
-                session.preIncidentSpeed = null;
-                store.db.prepare('UPDATE dispatch_sessions SET payload=? WHERE id=?').run(JSON.stringify(session), row.id);
-              }
-            }
-          }
           const sessionRow = store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(result.shiftId);
           return json({ ...result, playback: sessionRow ? JSON.parse(sessionRow.payload).clock : null });
         }

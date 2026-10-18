@@ -14,18 +14,34 @@ const setup = () => {
     setPaintProperty(id,key,value) {layers.get(id).paint[key]=value;},
     setFilter(id,value) {layers.get(id).filter=value;},moveLayer(){},
     removeLayer:id => layers.delete(id),removeSource:id => sources.delete(id),
-    getContainer:() => ({getBoundingClientRect:() => ({left:0,right:1600,width:1600})}),
+    getContainer:() => ({getBoundingClientRect:() => ({left:0,right:1600,width:1600,top:0,bottom:900,height:900})}),
     fitBounds:(...args) => fits.push(args),
     on:(event,fn) => handlers.set(event,fn),once:(event,fn) => handlers.set(event,fn),
     off(event,fn) {if(handlers.get(event)===fn)handlers.delete(event);},
   };
-  const cleanup = attachDispatchMap(map,{events,dom:{querySelector:() => null},schedule:fn => {timers.set(++sequence,fn);return sequence;},cancel:id => timers.delete(id)});
+  const markerFactory=()=>({setLngLat(){return this;},addTo(){return this;},remove(){}});
+  const cleanup = attachDispatchMap(map,{events,dom:{querySelector:() => null,createElement:()=>({setAttribute(){}})},markerFactory,schedule:fn => {timers.set(++sequence,fn);return sequence;},cancel:id => timers.delete(id)});
   const fire = (type,detail) => events.dispatchEvent(new CustomEvent(`beego:${type}`,{detail}));
   const loaded = event => {ready=true;const fn=handlers.get(event);if(event==='idle')handlers.delete(event);fn?.();};
   const after = {routes:[{engineerId:'E',assignments:[{orderId:'U',departureAt:'11:17',arrival:'11:38',plannedStart:'11:38',geometry:[[55.7,37.6],[55.71,37.61]]}]}]};
   const preview = {before:{routes:[]},after,ids:['E'],scope:'day',focusRoute:false,current:{engineerId:'E',time:'11:17',emergencyOrderId:'U'}};
   return {map,sources,layers,handlers,timers,fits,fire,loaded,preview,cleanup};
 };
+
+for (const scope of ['day','next']) test(`${scope} scope retains the engineer checkpoint and emergency even when neither is a route endpoint`,()=>{
+  const f=setup();
+  try{
+    f.fire('dispatch-preview',{...f.preview,scope,focusRoute:true,current:{...f.preview.current,origin:[55.6,37.5],emergencyCoords:[55.9,37.9]}});
+    assert.deepEqual(f.fits.at(-1)[0],[[37.5,55.6],[37.9,55.9]]);
+    assert.equal(f.fits.at(-1)[1].retainPadding,false);
+    const count=f.fits.length;
+    f.loaded('idle');
+    f.fire('dispatch-scope',{scope:scope==='day'?'next':'day'});
+    f.loaded('idle');
+    assert.ok(f.fits.length>count);
+    assert.deepEqual(f.fits.at(-1)[0],[[37.5,55.6],[37.9,55.9]]);
+  }finally{f.cleanup();}
+});
 
 test('an address request arriving while route sources load survives until idle and retains its focus', () => {
   const f = setup();

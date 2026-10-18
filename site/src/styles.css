@@ -710,8 +710,8 @@ html[data-theme="dark"],html[data-theme="dark"] body{background:#15171a}
 
 /* Timestamp belongs to the card header, not beneath the message. */
 .notification-center-list article{position:relative}
-.notification-center-list article>div{padding-right:62px}
-.notification-center-list article small{position:absolute;top:17px;right:17px;line-height:1;color:#8f969d}
+.notification-center-list article>div{padding-right:0}
+.notification-center-list article small{position:static;align-self:flex-end;line-height:1;color:#8f969d}
 
 /* Notifications close with the same deliberate motion used for opening. */
 .notification-center{animation:none;opacity:0;transform:translateX(-18px);transition:opacity .24s ease,transform .28s cubic-bezier(.4,0,.2,1)}
@@ -804,12 +804,10 @@ html[data-theme="dark"],html[data-theme="dark"] body{background:#15171a}
 }
 
 /* Notifications stay unread until the dispatcher explicitly acknowledges them. */
-.notification-center-list article>div{padding-bottom:34px}
+.notification-center-list article>div{padding-bottom:0}
 .notification-mark-read,.notification-read-state{
-  position:absolute;
-  right:14px;
-  bottom:12px;
-  height:28px;
+  position:static;
+  min-height:28px;
   display:inline-flex;
   align-items:center;
   gap:5px;
@@ -818,8 +816,8 @@ html[data-theme="dark"],html[data-theme="dark"] body{background:#15171a}
   font-weight:750;
 }
 .notification-mark-read{
-  width:30px;
-  padding:0;
+  width:auto;
+  padding:5px 8px;
   border:0;
   background:transparent;
   color:#6c5200;
@@ -871,7 +869,7 @@ html[data-theme="dark"],html[data-theme="dark"] body{background:#15171a}
 .notification-alert-artwork .alert-cross{fill:none;stroke:#24272b;stroke-width:2.6;stroke-linecap:round}
 .notification-center-list article.unread>div{
   min-height:94px;
-  padding:3px 64px 42px 0;
+  padding:3px 0 0;
   justify-content:center;
 }
 .notification-center-list article.unread b{font-size:17px;line-height:1.28;color:#25282c}
@@ -953,16 +951,14 @@ html[data-theme="dark"],html[data-theme="dark"] body{background:#15171a}
 }
 .toast .toast-artwork img{display:block;width:100%;height:100%;object-fit:cover}
 .toast .toast-artwork .notification-alert-artwork{padding:6px}
-.toast .toast-copy{position:relative;min-width:0;min-height:60px;flex:1;display:flex;flex-direction:column;gap:2px;padding:0 0 27px;font-size:11px;line-height:1.32}
+.toast .toast-copy{position:relative;min-width:0;min-height:60px;flex:1;display:flex;flex-direction:column;gap:2px;padding:0;font-size:11px;line-height:1.32}
 .toast .toast-heading{width:100%;display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:14px}
 .toast .toast-copy b{font-size:13px;line-height:1.22;color:#25282c}
 .toast .toast-heading time{flex:0 0 auto;color:#959ba2;font-size:9px;font-weight:500;line-height:1.2}
 .toast .toast-copy p{margin:0;color:#687079;font-size:11.5px;line-height:1.38;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .toast .toast-mark-read{
-  position:absolute;
-  right:0;
-  bottom:0;
-  height:25px;
+  position:static;
+  min-height:28px;
   padding:0 9px;
   border:0;
   border-radius:7px;
@@ -4149,3 +4145,5 @@ html[data-theme="dark"]{
 .app-shell.dark .import-norm-warning small{color:#d1bf86}
 .app-shell.dark .import-norm-warning button{background:#292e34;color:#ffe69a;border-color:#a7862e}
 @media(max-width:900px){.import-norm-warning{align-items:flex-start;flex-wrap:wrap}.import-norm-warning button{margin-left:36px}}
+
+.notification-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px;min-width:0}.notification-actions>button,.notification-actions>.notification-read-state{position:static!important;width:auto!important;height:auto!important;min-height:30px;max-width:100%;white-space:normal;text-align:center;line-height:1.35;padding:6px 9px;flex-shrink:0}.notification-actions>button{border:0;border-radius:8px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}.notification-open-incident,.toast-open-incident{background:#ffd21f;color:#312700}.toast .notification-actions{justify-content:flex-end}.toast .notification-actions span{display:inline}.notification-actions svg{flex-shrink:0;width:15px;height:15px}.app-shell.dark .notification-open-incident,.app-shell.dark .toast-open-incident{background:#ffd21f;color:#312700}

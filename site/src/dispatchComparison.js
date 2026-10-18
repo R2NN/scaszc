@@ -11,7 +11,8 @@ export function dispatchPreviewDetail(shift, candidate, { engineerId = candidate
   const primary = String(engineerId) === String(candidate.engineer.id);
   return { before, after:candidate.plan, scope, ids:[engineerId],
     current:{engineerId,origin:primary ? candidate.state?.coords || candidate.departureOrigin : null,
-      time:candidate.scenarioTime,kind:primary ? candidate.kind : 'Изменение маршрута',emergencyOrderId:candidate.visit.orderId},
+      time:candidate.scenarioTime,kind:primary ? candidate.kind : 'Изменение маршрута',emergencyOrderId:candidate.visit.orderId,
+      emergencyCoords:candidate.orders?.find(order => String(order.id) === String(candidate.visit.orderId))?.coords},
     focusRoute:true };
 }
 

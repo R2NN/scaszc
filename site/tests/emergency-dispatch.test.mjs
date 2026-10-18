@@ -27,6 +27,47 @@ const fixture = (file=':memory:') => {
   return {store,shift,dispatch,create,advance:seconds=>{clock+=seconds*1000;}};
 };
 
+for (const automatic of [false,true]) for (const playing of [false,true]) test(`${automatic ? 'automatic' : 'manual'} dispatch restores ×300 and preserves ${playing ? 'playing' : 'pause'}`,async()=>{
+  const f=fixture();
+  let now=Date.now();
+  const api=createDispatchApi(f.store,{routing:f.dispatch.routing,now:()=>now});
+  const post=async(path,body)=>{
+    const response=await api.handle(new Request(`http://localhost/api/dispatch/${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}));
+    const value=await response.json();assert.ok(response.ok,JSON.stringify(value));return value;
+  };
+  try{
+    const session=await post('sessions',{baseShiftId:f.shift.id,speed:300});
+    await post(`shifts/${session.shiftId}/clock`,{minute:600,playing,speed:300});
+    api.dispatch.setPolicy(session.shiftId,{enabled:true,waitSeconds:10});
+    const incident=api.dispatch.create(session.shiftId,{order:{...order,id:'U1',start:'10:00'},time:'10:00'});
+    const current=()=>JSON.parse(f.store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=?').get(session.shiftId).payload).clock;
+    assert.equal(current().speed,1);assert.equal(current().awaitingDecision,true);
+    const ready=await api.dispatch.search(incident.id);assert.equal(ready.status,'WAITING',ready.error);
+    if(automatic){now+=10001;await api.dispatch.tick();}
+    else await post(`incidents/${incident.id}/accept`,{candidateId:ready.candidates[0].id,actor:'Диспетчер'});
+    assert.equal(api.dispatch.get(incident.id).status,'ACCEPTED');
+    assert.equal(current().speed,300);assert.equal(current().playing,playing);assert.equal(current().awaitingDecision,false);
+    const tick=await post(`shifts/${session.shiftId}/clock`,{serverTick:true});
+    assert.equal(tick.clock.speed,300);assert.equal(tick.clock.playing,playing);
+  }finally{api.close();f.store.close();}
+});
+
+test('accepting one of two pending emergencies retains ×1 until the whole queue is resolved',async()=>{
+  const f=fixture(),api=createDispatchApi(f.store,{routing:f.dispatch.routing});
+  try{
+    const response=await api.handle(new Request('http://localhost/api/dispatch/sessions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({baseShiftId:f.shift.id,speed:300})}));
+    const session=await response.json();
+    const clock=()=>JSON.parse(f.store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=?').get(session.shiftId).payload).clock;
+    const first=api.dispatch.create(session.shiftId,{order:{...order,id:'U1',start:'10:00'},time:'10:00'});
+    const second=api.dispatch.create(session.shiftId,{order:{...order,id:'U2',start:'10:00'},time:'10:00'});
+    const ready=await api.dispatch.search(first.id);assert.equal(ready.status,'WAITING',ready.error);
+    api.dispatch.accept(first.id,ready.candidates[0].id);
+    assert.equal(clock().speed,1);assert.equal(clock().awaitingDecision,true);
+    api.dispatch.cancel(second.id);
+    assert.equal(clock().speed,300);assert.equal(clock().playing,false);assert.equal(clock().awaitingDecision,false);
+  }finally{api.close();f.store.close();}
+});
+
 test('incident creation is idempotent and reading a notice never solves it',()=>{
   const f=fixture();try{const first=f.create();assert.equal(f.create().id,first.id);f.dispatch.read(first.id,first.notifications[0].id);assert.equal(f.dispatch.get(first.id).status,'QUEUED');assert.equal(f.store.get(f.shift.id).revision,1);}finally{f.store.close();}
 });
