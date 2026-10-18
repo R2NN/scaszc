@@ -10,13 +10,14 @@ export function publishDispatchMapEvent(events, type, detail) {
 /** A late map subscription must not lose an already announced emergency. */
 export function savedDispatchFocus(events) {return saved.get(events)?.detail;}
 
-/** Focus each newly received pending emergency once; polling never moves it repeatedly. */
-export function createIncidentAnnouncer(events) {
+/** Open and focus each newly received pending emergency once, before candidates finish loading. */
+export function createIncidentAnnouncer(events, onIncident = () => {}) {
   const seen = new Set();
   return incidents => {
     for (const incident of incidents) {
       if (seen.has(incident.id) || ['ACCEPTED','CANCELLED'].includes(incident.status) || !Array.isArray(incident.order?.coords)) continue;
       seen.add(incident.id);
+      onIncident(incident);
       publishDispatchMapEvent(events,'incident-focus',{coords:incident.order.coords});
     }
   };

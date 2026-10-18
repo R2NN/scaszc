@@ -34,16 +34,20 @@ const setup = ({preFocus = null,readyInitially = true} = {}) => {
 test('a newly received emergency marks and focuses the map before any notification click, once per incident',()=>{
   const f=setup();
   try{
-    const announce=createIncidentAnnouncer(f.events);
+    const opened=[];
+    const announce=createIncidentAnnouncer(f.events,incident=>opened.push(incident));
     const incident={id:'I',status:'SEARCHING',order:{coords:[55.71,37.61]}};
     announce([incident]);
+    assert.deepEqual(opened,[incident],'The panel opens as soon as the emergency arrives, before candidates are ready');
     assert.deepEqual(f.markers.at(-1).coords,[37.61,55.71]);
     assert.equal(f.markers.at(-1).element.className,'dispatch-map-incident');
     assert.deepEqual(f.fits.at(-1)[0],[[37.61,55.71],[37.61,55.71]]);
     const count=f.fits.length;
     announce([{...incident,status:'WAITING'}]);
+    assert.equal(opened.length,1,'Polling must not reopen a panel the operator has closed');
     assert.equal(f.fits.length,count,'Polling must not keep recentering the camera');
     announce([{id:'accepted',status:'ACCEPTED',order:{coords:[55,37]}}]);
+    assert.equal(opened.length,1,'Past accepted incidents do not open the panel');
     assert.equal(f.fits.length,count);
     publishDispatchMapEvent(f.events,'clear');
     assert.equal(savedDispatchFocus(f.events),undefined);

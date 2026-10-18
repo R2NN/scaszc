@@ -28,7 +28,13 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   const notified = useRef(new Set()), initialized = useRef(''), clockSync = useRef(null);
   const [serverOffset, setServerOffset] = useState(0);
   const announcer = useRef(null);
-  const announce = items => {announcer.current ||= createIncidentAnnouncer(window);announcer.current(items);};
+  const announce = items => {
+    announcer.current ||= createIncidentAnnouncer(window,incident => {
+      setSelectedId(incident.id);setCandidateId('');setRouteScope('day');
+      refs.current.onOpen(incident,refs.current.shift);
+    });
+    announcer.current(items);
+  };
   useEffect(() => {
     if (!shift?.id || shift.regionId.includes(':scenario:') || initialized.current === shift.id) return;
     initialized.current = shift.id;
