@@ -70,13 +70,13 @@ try {
   assert.equal(await page.locator('.building-customer-marker').count(), 1);
   assert.match(await page.locator('.building-customer-panel').innerText(), /Демо-привязка/);
   await dragDrawing('mouse-pan-cutaway-no-accidental-selection');
-  await page.locator('.building-customer-marker').focus(); await page.keyboard.press('Enter');
-  assert.equal(await page.locator('[data-building-section]').count(), 1);
+  assert.equal(await page.locator('.building-cutaway .building-customer-room, .building-cutaway .building-customer-caption').count(), 0);
   await capture('customer-cutaway');
-  await page.getByRole('button', { name: 'На плане этажа', exact: true }).click();
+  await page.locator('.building-customer-marker').focus(); await page.keyboard.press('Enter');
   await page.locator('.building-floor-plan').waitFor();
   assert.equal(await page.getByRole('button', { name: 'Этаж на плане', exact: true }).innerText(), `${customer.floor} этаж`);
   assert.equal(await page.locator('.building-customer-marker').count(), 1);
+  assert.equal(await page.locator('.building-floor-plan .building-customer-room').count(), 1);
   assert.match(await page.locator('.building-customer-caption').textContent(), new RegExp(`Кв\\. ${customer.unit}`));
   await capture('customer-floor');
   await dragDrawing('mouse-pan-floor-no-accidental-selection');
