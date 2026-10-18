@@ -159,7 +159,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
         }
         const result = await api(`incidents/${incident.id}/accept`, { candidateId:candidate.id, actor:'Диспетчер' });
         setIncidents(current => current.map(item => item.id === result.id ? result : item));
-        if(result.status!=='ACCEPTED') throw new Error(result.error || 'Решение не применено. Выбранное направление не удалось подтвердить.');
+        if(result.status!=='ACCEPTED') return;
         setCandidateId(result.decision.candidateId);
         if (result.status === 'ACCEPTED' && result.decision.revision > refs.current.shift.revision) {
           const response = await fetch(`/api/shifts/${incident.shiftId}`);
@@ -263,6 +263,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
       <div className='dispatch-incident'><b>{item.order.address}</b><span>{item.time} · {accepted ? 'Решение принято' : item.status === 'CANCELLED' ? 'Отменена' : 'Требуется решение'}</span></div>
       {acceptedCandidate && accepted ? <div className='dispatch-result' role='status'>
         <Check size={24}/><div><b>{acceptedCandidate.engineer.name} направлен на аварию</b><strong>Прибытие {acceptedCandidate.visit.arrival}</strong><span>{item.decision.actor === 'system' ? 'Автовыбор' : 'Решение диспетчера'} · версия {item.decision.revision}</span></div>
+        {item.confirmation?.routeUpdate ? <p>{item.confirmation.routeUpdate}</p> : null}
         {applied.transferred.length ? <><ul>{applied.transferred.slice(0,3).map(row => <li key={row.orderId}><b>{row.address}</b><span>Передана: {acceptedCandidate.team?.find(engineer => engineer.id === row.after.engineerId)?.name || row.after.engineerId} · {row.after.plannedStart}</span></li>)}</ul>{applied.transferred.length > 3 ? <details className='dispatch-result-more'><summary>Остальные передачи · {applied.transferred.length - 3}</summary><ul>{applied.transferred.slice(3).map(row => <li key={row.orderId}><b>{row.address}</b><span>Передана: {acceptedCandidate.team?.find(engineer => engineer.id === row.after.engineerId)?.name || row.after.engineerId} · {row.after.plannedStart}</span></li>)}</ul></details> : null}</> : <p>Прежние заявки другим инженерам не передавались.</p>}
         {applied.lost.length ? <strong className='dispatch-error'>Без назначения: {applied.lost.length}. Нужен разбор очереди.</strong> : null}
       </div> : null}
@@ -270,7 +271,6 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
       {!terminal(item) && !pending ? <div className={`dispatch-search-state ${searching ? 'is-searching' : 'is-ready'}`} role='status'>
         <span className='dispatch-search-icon'><Clock3 size={19}/></span><div><b>{item.status === 'ERROR' ? 'Расчёт прерван' : checkingIntercept ? 'Проверяем перехват в пути' : searching ? 'Поиск продолжается' : resultCountLabel(item.candidates.length)}</b><span>{checkingIntercept ? item.progress.engineerName || 'Ближайшая бригада' : searching ? item.candidates.length ? `Готовых вариантов: ${item.candidates.length} · уже можно выбирать` : 'Проверяем маршруты и окна клиентов' : item.search?.stoppedReason ? 'Поиск остановлен по лимиту' : item.status === 'ERROR' ? 'Можно повторить расчёт' : 'Расчёт завершён'}</span></div>
       </div> : null}
-      {item.error ? <p className='dispatch-error' role='alert'>{item.error}</p> : null}
       {!pending ? <details className='dispatch-alternatives' open={accepted ? undefined : true} key={accepted ? 'accepted' : 'choosing'}><summary>{accepted ? 'Сравнить сохранённые варианты' : 'Варианты направления'}</summary><div className='dispatch-options' role='group' aria-label='Проверенные варианты'>{item.candidates.map(option => {
         const effect = impacts.get(option.id);
         return <button type='button' key={option.id} aria-pressed={option.id === candidate?.id} className={`dispatch-option ${option.id === candidate?.id ? 'selected' : ''}`} onClick={() => controller.preview(option)}>
@@ -306,7 +306,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
       {item.progress || item.search?.rejected?.length ? <details className='dispatch-tech-details'><summary>Подробности поиска</summary>{item.progress ? <p>Проверено инженеров: {item.progress.completed} из {item.progress.total} · проверок маршрута: {item.progress.routeChecks ?? '—'}</p> : null}{item.search?.stoppedReason ? <p>Достигнут лимит поиска. Показаны проверенные варианты; оптимальность не доказана.</p> : null}{item.search?.rejected?.map(entry => <p key={entry.engineerId}>{entry.engineerName}: {entry.reason}</p>)}</details> : null}
       {!terminal(item) ? <div className='dispatch-actions'><button type='button' onClick={() => controller.retry(item.id)} disabled={item.status === 'SEARCHING' || pending}><RotateCcw size={16}/>Повторить расчёт</button><button type='button' onClick={() => controller.cancel(item.id)} disabled={pending}><X size={16}/>Отменить аварию</button></div> : <button type='button' className='dispatch-map-action' onClick={controller.startSession}>Новая изолированная сессия</button>}
     </>}
-    {controller.error ? <p role='alert' className='dispatch-error'>{controller.error}</p> : null}
+    {controller.error || item?.error ? <p role='alert' className='dispatch-error'>{controller.error || item.error}</p> : null}
     {policy ? <details className='dispatch-policy'><summary>Настройка автовыбора</summary><label><input type='checkbox' checked={policy.enabled} onChange={e => controller.savePolicy({...policy,enabled:e.target.checked})}/>Автоматическое решение</label><BusinessSelect ariaLabel='Время ожидания решения' value={String(policy.waitSeconds)} options={[30,60,120,300,600,900].map(value => ({value:String(value), label:value < 60 ? `${value} секунд` : `${value/60} минут`}))} onChange={value => controller.savePolicy({...policy,waitSeconds:Number(value)})}/><small>Настройка действует для новых аварий.</small></details> : null}
   </section>;
 }

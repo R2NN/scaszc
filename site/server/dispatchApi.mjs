@@ -110,7 +110,7 @@ export function createDispatchApi(store, options) {
         if (action === 'cancel') return json(dispatch.cancel(id));
         if (action === 'read') return json(dispatch.read(id, input.notificationId));
         const item = dispatch.get(id);
-        if (item && !['ACCEPTED', 'CANCELLED'].includes(item.status)) dispatch.save({ ...item, status: 'QUEUED', candidates: [] });
+        if (item && !['ACCEPTED', 'CANCELLED'].includes(item.status)) dispatch.save({ ...item, status: 'QUEUED', candidates: [], confirmation:null, error:null });
         return json(dispatch.get(id));
       }
       return json({ error: 'Неизвестный адрес аварийного диспетчирования' }, 404);

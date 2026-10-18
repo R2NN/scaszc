@@ -220,3 +220,16 @@ test('preview controller emits the original revision after the shift plan was re
     await server.close();
   }
 });
+
+test('a confirmation failure is displayed once even when both server and controller report it',async()=>{
+  const server=await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
+  try {
+    const {EmergencyDispatchPanel}=await server.ssrLoadModule('/src/EmergencyDispatch.jsx');
+    const error='Проверка выбранного инженера не завершена';
+    const item={id:'incident',status:'ERROR',order:{address:'Адрес аварии'},candidates:[],error};
+    const html=renderToStaticMarkup(React.createElement(EmergencyDispatchPanel,{controller:{selected:item,error}}));
+    assert.equal(html.split(error).length-1,1);
+    assert.equal((html.match(/role="alert"/g)||[]).length,1);
+    assert.doesNotMatch(html,/Выбранное направление больше недоступно/);
+  }finally{await server.close();}
+});

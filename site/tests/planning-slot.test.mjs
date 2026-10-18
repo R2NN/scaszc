@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { acquirePlanningSlot, withPlanningSlot } from '../server/planningSlot.mjs';
+import { acquirePlanningSlot, withPlanningSlot, waitForPlanningSlot } from '../server/planningSlot.mjs';
 
 test('one calculation blocks another and frees the slot when complete', async () => {
   let finish;
@@ -19,4 +19,17 @@ test('background calculations release their reservation after a failure', async 
   release();
   await assert.rejects(withPlanningSlot(async () => { throw new Error('failed'); }));
   assert.equal(await withPlanningSlot(async () => 'ready'), 'ready');
+});
+
+test('explicit confirmations reserve the next planner slots in order',async()=>{
+  const release=acquirePlanningSlot();
+  const first=waitForPlanningSlot(),second=waitForPlanningSlot();
+  release();
+  const done=await first;
+  assert.equal(acquirePlanningSlot(),null);
+  done();done();
+  const last=await second;
+  assert.equal(acquirePlanningSlot(),null);
+  last();
+  const available=acquirePlanningSlot();assert.ok(available);available();
 });

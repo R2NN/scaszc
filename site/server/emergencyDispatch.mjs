@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { runExactReplan } from '../scripts/exact-replan-runner.mjs';
-import { acquirePlanningSlot } from './planningSlot.mjs';
+import { acquirePlanningSlot, waitForPlanningSlot } from './planningSlot.mjs';
 import { minuteOf, timeOf } from '../src/shiftDomain.js';
 import { operationalStates } from '../src/operationalState.js';
 import { preservesStartedVisits } from './exactShiftReplan.mjs';
@@ -12,6 +12,10 @@ const decode = row => row ? JSON.parse(row.payload) : null;
 export const DEFAULT_DISPATCH_POLICY = Object.freeze({ enabled: true, waitSeconds: 300, choice: 'COVERAGE_STAFF_ETA_DISTANCE_V1' });
 const terminal = item => ['ACCEPTED', 'CANCELLED'].includes(item.status);
 const index = plan => new Map(plan.routes.flatMap(route => route.assignments.map(visit => [String(visit.orderId), { ...visit, engineerId: route.engineerId }])));
+const lostAssignments = candidate => candidate.lostAssignments ?? candidate.changes.filter(change => change.before && !change.after).length;
+// Keep small server-issued receipts so a poll cannot invalidate an already clicked card.
+const choiceReceipt = candidate => ({id:candidate.id,engineer:candidate.engineer,kind:candidate.kind,
+  lostAssignments:lostAssignments(candidate),coverage:candidate.coverage,plan:{metrics:candidate.plan.metrics}});
 const orderCandidates = candidates => {
   const intercepts = candidates.filter(item => item.kind === 'Перехват в пути').sort((a, b) => a.responseMinutes - b.responseMinutes);
   return [...intercepts, ...candidates.filter(item => item.kind !== 'Перехват в пути')];
@@ -55,6 +59,8 @@ export class EmergencyDispatch {
     return this.store.db.transaction(() => {
       const current = this.get(item.id);
       if (current && terminal(current) && current.status !== item.status) return current;
+      item.offeredChoices = [...new Map([...(current?.offeredChoices || []),...(current?.candidates || []),...item.candidates]
+        .map(candidate => [candidate.id,choiceReceipt(candidate)])).values()].slice(-50);
       this.store.db.prepare('UPDATE dispatch_incidents SET payload=? WHERE id=?').run(encode(item), item.id);
       syncDispatchPlayback(this,item.shiftId);
       return item;
@@ -137,19 +143,21 @@ export class EmergencyDispatch {
   }
   notification(item, title, message) { item.notifications.push({ id: randomUUID(), type: 'EMERGENCY_INCIDENT', title, message, read: false, createdAt: this.now() }); }
 
-  search(id) {
+  search(id, options) {
     if (this.searchTasks.has(id)) return this.searchTasks.get(id);
-    const task=this.runSearch(id).finally(()=>this.searchTasks.delete(id));
+    const task=this.runSearch(id,options).finally(()=>this.searchTasks.delete(id));
     this.searchTasks.set(id,task);
     return task;
   }
 
-  async runSearch(id) {
-    if (this.busy) return this.get(id);
-    const item = this.get(id);
+  async runSearch(id, {waitForSlot = false} = {}) {
+    if (this.busy && !waitForSlot) return this.get(id);
+    let item = this.get(id);
     if (!item || terminal(item)) return item;
-    const release = acquirePlanningSlot();
+    const release = waitForSlot ? await waitForPlanningSlot() : acquirePlanningSlot();
     if (!release) return item;
+    item = this.get(id);
+    if (!item || terminal(item)) {release();return item;}
     this.busy = true;
     const controller = new AbortController();
     this.controllers.set(id,controller);
@@ -207,7 +215,12 @@ export class EmergencyDispatch {
   /** Commit the selected engineer after a fresh exact check, rather than returning to generic search. */
   confirm(id,candidateId,actor='Диспетчер') {
     if(this.confirmRequests.has(id)) return this.confirmRequests.get(id);
-    const task=this.confirmSelected(id,candidateId,actor).finally(()=>this.confirmRequests.delete(id));
+    const shiftId=this.get(id)?.shiftId;
+    const prior=[...this.confirmRequests].findLast(([otherId])=>this.get(otherId)?.shiftId===shiftId)?.[1];
+    const task=(async()=>{
+      try {await prior;} catch { /* A failed earlier request must not block a different incident. */ }
+      return this.confirmSelected(id,candidateId,actor);
+    })().finally(()=>this.confirmRequests.delete(id));
     this.confirmRequests.set(id,task);
     return task;
   }
@@ -215,23 +228,25 @@ export class EmergencyDispatch {
   async confirmSelected(id,candidateId,actor) {
     let item=this.get(id);
     if(!item || terminal(item)) return item;
-    const selected=item.candidates.find(candidate=>candidate.id===candidateId);
-    if(item.status!=='WAITING' || !selected) throw new Error('Выберите готовый проверенный вариант');
+    const selected=item.candidates.find(candidate=>candidate.id===candidateId) || item.offeredChoices?.find(candidate=>candidate.id===candidateId);
+    if(!selected) throw new Error('Выберите готовый проверенный вариант');
     holdDispatchClock(this,item.shiftId,true);
     try {
       this.save({...item,confirmation:{state:'CHECKING',engineer:selected.engineer,requestedAt:this.now()}});
       let candidate=selected;
-      const stale=selected.fingerprint!==this.fingerprint(this.store.get(item.shiftId)) || selected.scenarioTime!==timeOf(this.currentMinute(item)) || minuteOf(selected.visit.departureAt)<this.currentMinute(item);
+      const stale=item.status!=='WAITING' || !selected.plan.publicationAllowed || selected.fingerprint!==this.fingerprint(this.store.get(item.shiftId)) || selected.scenarioTime!==timeOf(this.currentMinute(item)) || minuteOf(selected.visit.departureAt)<this.currentMinute(item);
       if(stale) {
         this.controllers.get(id)?.abort();
         await this.searchTasks.get(id);
         if(terminal(this.get(id))) return this.get(id);
-        const refreshed=await this.search(id);
-        candidate=refreshed.candidates.find(option=>String(option.engineer.id)===String(selected.engineer.id) && option.kind===selected.kind);
-        if(refreshed.status!=='WAITING' || !candidate) throw new Error('Выбранное направление больше недоступно. Решение не применено; выберите другой вариант.');
-        const lost=option=>option.changes.filter(change=>change.before && !change.after).length;
-        if(lost(candidate)>lost(selected) || candidate.coverage.after.unassigned>selected.coverage.after.unassigned
+        const refreshed=await this.search(id,{waitForSlot:true});
+        if(terminal(refreshed)) return refreshed;
+        candidate=refreshed.candidates.find(option=>String(option.engineer.id)===String(selected.engineer.id));
+        if(refreshed.status!=='WAITING' || !candidate) throw new Error(`Не удалось подтвердить маршрут: ${selected.engineer.name}. ${refreshed.error || 'Нет допустимого выезда от текущего положения.'}`);
+        if(lostAssignments(candidate)>lostAssignments(selected) || candidate.coverage.after.unassigned>selected.coverage.after.unassigned
           || candidate.plan.metrics?.urgentAssigned<selected.plan.metrics?.urgentAssigned) throw new Error('После обновления последствия ухудшились. Решение не применено; сравните новые варианты.');
+        if(candidate.kind !== selected.kind) this.save({...refreshed,confirmation:{...refreshed.confirmation,
+          routeUpdate:`Положение инженера обновилось: ${candidate.kind.toLowerCase()}. Прибытие ${candidate.visit.arrival}.`}});
       }
       const accepted=this.accept(id,candidate.id,actor);
       if(accepted.status!=='ACCEPTED') throw new Error('Подтвердить выбранное направление не удалось. Решение не применено.');
@@ -239,7 +254,7 @@ export class EmergencyDispatch {
     } catch(error) {
       item=this.get(id);
       if(terminal(item)) return item;
-      return this.save({...item,status:'ERROR',candidates:[],recommendedId:null,error:error.message,retryAt:this.now()+30000,
+      return this.save({...item,status:'ERROR',candidates:[],recommendedId:null,error:error.message,retryAt:null,
         confirmation:{state:'FAILED',engineer:selected.engineer,error:error.message}});
     } finally {holdDispatchClock(this,item.shiftId,false);}
   }
@@ -344,7 +359,7 @@ export class EmergencyDispatch {
     for (const item of this.active().sort((left, right) => left.shiftId === right.shiftId
       ? minuteOf(left.time)-minuteOf(right.time) || left.createdAt-right.createdAt : right.createdAt-left.createdAt)) {
       if (terminal(item) || this.confirmRequests.has(item.id)) continue;
-      if (item.status === 'QUEUED' || (item.status === 'ERROR' && item.retryAt <= this.now())) { await this.search(item.id); return; }
+      if (item.status === 'QUEUED' || (item.status === 'ERROR' && item.confirmation?.state !== 'FAILED' && item.retryAt <= this.now())) { await this.search(item.id); return; }
       if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { await this.confirm(item.id, item.recommendedId, 'system'); return; }
     }
   }

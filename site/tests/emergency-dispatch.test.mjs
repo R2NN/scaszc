@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ShiftStore } from '../server/shiftStore.mjs';
+import { acquirePlanningSlot } from '../server/planningSlot.mjs';
 import { EmergencyDispatch } from '../server/emergencyDispatch.mjs';
 import { createDispatchApi } from '../server/dispatchApi.mjs';
 import { operationalStates } from '../src/operationalState.js';
@@ -319,7 +320,9 @@ test('a stale selection cannot silently substitute a different engineer',async()
     f.dispatch.routing=async()=>({dispatchCandidates:[],dispatchSearch:{complete:true,rejected:[]}});
     const result=await f.dispatch.confirm(ready.id,ready.candidates[0].id);
     assert.equal(result.status,'ERROR');assert.equal(result.confirmation.state,'FAILED');
-    assert.match(result.error,/Решение не применено/);
+    assert.match(result.error,/Не удалось подтвердить маршрут/);
+    f.advance(60);await f.dispatch.tick();
+    assert.equal(f.dispatch.get(ready.id).status,'ERROR','A failed confirmation must not launch generic search on its own');
     assert.equal(f.store.get(f.shift.id).revision,1);
   }finally{f.store.close();}
 });
@@ -437,4 +440,105 @@ test('started work has a forecast release until overdue and home availability ap
   const working = {...shift,team:[engineer],facts:[{orderId:'J1',engineerId:'E1',status:'started',time:'12:00'}]};
   assert.equal(operationalStates(working,730)[0].availableAt,'13:20');
   assert.equal(operationalStates(working,810)[0].availableAt,null);
+});
+
+for (const automatic of [false,true]) test(`the selected travelling engineer can finish the reached job before dispatch, automatic=${automatic}`,async()=>{
+  const f=fixture();
+  try {
+    const ready=await f.dispatch.search(f.create().id),chosen=ready.candidates[0];
+    // The kind is presentation state at the original checkpoint, not the engineer identity.
+    chosen.kind='Перехват в пути';
+    f.dispatch.save(ready);
+    setScenarioMinute(f,720);
+    const routing=f.dispatch.routing;
+    f.dispatch.routing=async payload=>{
+      const result=await routing(payload),plan=result.dispatchCandidates[0].plan;
+      plan.contentSha256='d'.repeat(64);
+      const visit=plan.routes[0].assignments.shift();
+      Object.assign(visit,{departureAt:'13:20',arrival:'13:30',plannedStart:'13:30',plannedFinish:'14:50'});
+      plan.routes[0].assignments.push(visit);
+      return result;
+    };
+    if(automatic) {f.advance(301);await f.dispatch.tick();}
+    else await f.dispatch.confirm(ready.id,chosen.id);
+    const applied=f.dispatch.get(ready.id);
+    assert.equal(applied.status,'ACCEPTED',applied.error);
+    const current=applied.candidates.find(c=>c.id===applied.decision.candidateId);
+    assert.equal(current.engineer.id,chosen.engineer.id);
+    assert.equal(current.kind,'После текущей работы');
+    assert.equal(current.visit.departureAt,'13:20');
+    assert.match(applied.confirmation.routeUpdate,/после текущей работы/);
+    assert.equal(f.store.get(f.shift.id).revision,2);
+  }finally{f.store.close();}
+});
+
+test('a server-issued selection survives replacement of the cards by a newer search',async()=>{
+  const f=fixture();
+  try {
+    const ready=await f.dispatch.search(f.create().id),chosen=ready.candidates[0];
+    setScenarioMinute(f,601);
+    const routing=f.dispatch.routing;
+    let calls=0;
+    f.dispatch.routing=async payload=>{
+      const result=await routing(payload),plan=result.dispatchCandidates[0].plan;
+      plan.contentSha256=String(++calls).repeat(64);
+      Object.assign(plan.routes[0].assignments[0],{departureAt:'10:01',arrival:'10:11',plannedStart:'10:11',plannedFinish:'11:31'});
+      return result;
+    };
+    const replaced=await f.dispatch.search(ready.id);
+    assert.notEqual(replaced.candidates[0].id,chosen.id);
+    const applied=await f.dispatch.confirm(ready.id,chosen.id);
+    assert.equal(applied.status,'ACCEPTED',applied.error);
+    assert.equal(applied.candidates.find(c=>c.id===applied.decision.candidateId).engineer.id,chosen.engineer.id);
+    assert.equal(f.store.get(f.shift.id).revision,2);
+    assert.ok(applied.offeredChoices.length<=50);
+  }finally{f.store.close();}
+});
+
+test('confirmation waits for a busy planner without clearing or substituting the selected engineer',async()=>{
+  const f=fixture();
+  let release;
+  try {
+    const ready=await f.dispatch.search(f.create().id),chosen=ready.candidates[0];
+    setScenarioMinute(f,601);
+    const routing=f.dispatch.routing;
+    f.dispatch.routing=async payload=>{
+      const result=await routing(payload),plan=result.dispatchCandidates[0].plan;
+      plan.contentSha256='e'.repeat(64);
+      Object.assign(plan.routes[0].assignments[0],{departureAt:'10:01',arrival:'10:11',plannedStart:'10:11',plannedFinish:'11:31'});
+      return result;
+    };
+    release=acquirePlanningSlot();assert.ok(release);
+    const pending=f.dispatch.confirm(ready.id,chosen.id);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(f.dispatch.get(ready.id).confirmation.state,'CHECKING');
+    assert.equal(f.dispatch.currentMinute(ready),601);
+    release();
+    const applied=await pending;
+    assert.equal(applied.status,'ACCEPTED',applied.error);
+    assert.equal(applied.decision.candidateId,applied.candidates.find(c=>c.engineer.id===chosen.engineer.id).id);
+  }finally{release?.();f.store.close();}
+});
+
+test('three simultaneous decisions in one shift publish in sequence without racing the held clock',async()=>{
+  const f=fixture();
+  try {
+    const incidents=['U1','U2','U3'].map(id=>f.create(id));
+    let active=0,maxActive=0;
+    f.dispatch.routing=async payload=>{
+      active++;maxActive=Math.max(maxActive,active);
+      await new Promise(resolve=>setImmediate(resolve));
+      const departure=Math.max(minuteOf(payload.event.time),...payload.plan.routes.flatMap(r=>r.assignments.map(v=>minuteOf(v.plannedFinish))));
+      const visit={orderId:payload.event.orderId,departureAt:timeOf(departure),arrival:timeOf(departure+1),plannedStart:timeOf(departure+1),plannedFinish:timeOf(departure+81),geometry:[engineer.startCoords,order.coords]};
+      const plan={...payload.plan,contentSha256:`${payload.event.orderId}-${payload.plan.contentSha256}`.slice(0,64),routes:[{...payload.plan.routes[0],assignments:[...payload.plan.routes[0].assignments,visit]}],metrics:{total:payload.orders.length,assigned:payload.orders.length}};
+      active--;
+      return {dispatchCandidates:[{engineerSourceId:'E1',plan}],dispatchSearch:{eligible:['E1'],rejected:[]}};
+    };
+    const choices=[];
+    for(const incident of incidents) choices.push((await f.dispatch.search(incident.id)).candidates[0]);
+    const applied=await Promise.all(incidents.map((incident,i)=>f.dispatch.confirm(incident.id,choices[i].id)));
+    assert.deepEqual(applied.map(item=>item.status),['ACCEPTED','ACCEPTED','ACCEPTED'],JSON.stringify(applied.map(item=>item.error)));
+    assert.equal(maxActive,1);
+    assert.equal(f.store.get(f.shift.id).revision,4);
+  }finally{f.store.close();}
 });

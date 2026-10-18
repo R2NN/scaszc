@@ -1,15 +1,28 @@
 let active = false;
+const waiting = [];
+
+const reservation = () => {
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const next = waiting.shift();
+    if (next) next(reservation());
+    else active = false;
+  };
+};
 
 /** Reserve the single API process for one exact calculation. */
 export function acquirePlanningSlot() {
   if (active) return null;
   active = true;
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    active = false;
-  };
+  return reservation();
+}
+
+/** An explicit dispatch confirmation waits for the planner instead of losing the selection. */
+export function waitForPlanningSlot() {
+  const release = acquirePlanningSlot();
+  return release ? Promise.resolve(release) : new Promise(resolve => waiting.push(resolve));
 }
 
 /** Run a calculation while rejecting another simultaneous launch. */
