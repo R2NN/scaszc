@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS app
+FROM node:24-trixie-slim AS app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates python3 python3-pip python3-venv build-essential fonts-dejavu-core \

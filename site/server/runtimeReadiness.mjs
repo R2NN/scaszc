@@ -5,7 +5,7 @@ import { projectRoot } from '../scripts/project-root.mjs';
 
 const exists = file => access(file).then(() => true, () => false);
 const pythonReady = python => new Promise(resolve => {
-  const child = spawn(python, ['-c', 'import aiohttp, ortools, pandas; print("READY")'], { windowsHide:true, stdio:['ignore','pipe','ignore'] });
+  const child = spawn(python, ['-c', 'import sys; assert sys.version_info >= (3, 12); import aiohttp, ortools, pandas; print("READY")'], { windowsHide:true, stdio:['ignore','pipe','ignore'] });
   let output = '', done = false;
   const finish = value => { if (!done) {done=true;clearTimeout(timer);resolve(value);} };
   const timer = setTimeout(() => {child.kill();finish(false);}, 10000);
