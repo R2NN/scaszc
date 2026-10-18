@@ -138,7 +138,7 @@ test('route scope controls stay in the sticky panel before and after acceptance'
       assert.match(html,/Начнутся позже исходного плана/);
       assert.match(html,/В окне клиента/);
       assert.match(html,/Показать адреса на карте/);
-      assert.doesNotMatch(html,/Как принять решение|Сравните варианты|Все изменения визитов|dispatch-comparison-legend|dispatch-map-key/);
+      assert.doesNotMatch(html,/Подсветить изменённые маршруты|Как принять решение|Сравните варианты|Все изменения визитов|dispatch-comparison-legend|dispatch-map-key/);
     }
   } finally {await server.close();}
 });
@@ -207,7 +207,9 @@ test('preview controller emits the original revision after the shift plan was re
     assert.equal(events[3].type, 'beego:dispatch-impact');
     assert.deepEqual(events[3].detail.features[0].geometry.coordinates, [37.6,55.7]);
     controller.showResult({...candidate,changedEngineerIds:['E1','E2']});
-    assert.deepEqual(events[4].detail.highlightIds, ['E1','E2']);
+    assert.equal(events[4].detail.highlightIds, undefined);
+    assert.deepEqual(events[4].detail.ids, ['E1']);
+    assert.equal(events[4].detail.focusRoute, true);
     assert.equal(events[4].detail.before, before);
     controller.preview({...candidate,baseRevision:3});
     controller.showChanges({...candidate,baseRevision:3}, []);

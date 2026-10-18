@@ -154,16 +154,3 @@ export function renderDispatchImpact(map, features) {
   map.moveLayer('dispatch-impact-labels');
   return data;
 }
-
-/** A temporary bright overlay shows the remaining routes affected by a publication. */
-export function renderDispatchHighlight(map, detail) {
-  const ids = detail.highlightIds?.length ? detail.highlightIds : detail.ids;
-  const data = dispatchRouteData(detail.after, {...detail,ids}, true);
-  if (map.getSource('dispatch-result-highlight')) map.getSource('dispatch-result-highlight').setData(data);
-  else map.addSource('dispatch-result-highlight', {type:'geojson',data});
-  if (!map.getLayer('dispatch-result-highlight')) map.addLayer({id:'dispatch-result-highlight',type:'line',source:'dispatch-result-highlight',
-    layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#ffd21f','line-width':14,'line-opacity':.7}});
-  map.moveLayer('dispatch-after');
-  map.moveLayer('dispatch-after-continuation');
-  return data;
-}

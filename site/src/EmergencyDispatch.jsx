@@ -135,14 +135,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     if (!preview(candidate, routeScope, candidate.engineer.id, false)) return;
     window.dispatchEvent(new CustomEvent('beego:dispatch-impact', {detail:{features:dispatchImpactPoints(rows)}}));
   };
-  const showResult = candidate => {
-    try {
-      const detail = dispatchPreviewDetail(refs.current.shift, candidate, {scope:routeScope});
-      setCandidateId(candidate.id);
-      window.dispatchEvent(new CustomEvent('beego:dispatch-preview', {detail:{...detail,
-        highlightIds:candidate.changedEngineerIds || [...new Set((candidate.changes || []).flatMap(change => [change.before?.engineerId, change.after?.engineerId]).filter(Boolean))]}}));
-    } catch (e) {setError(e.message);}
-  };
+  const showResult = candidate => preview(candidate, routeScope);
   const startSession = async () => {
     try {
       const value = await api('sessions', { baseShiftId: session?.baseShiftId || shift.id, speed: shiftClock.getSnapshot().speed });
@@ -272,7 +265,6 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
         <Check size={24}/><div><b>{acceptedCandidate.engineer.name} направлен на аварию</b><strong>Прибытие {acceptedCandidate.visit.arrival}</strong><span>{item.decision.actor === 'system' ? 'Автовыбор' : 'Решение диспетчера'} · версия {item.decision.revision}</span></div>
         {applied.transferred.length ? <><ul>{applied.transferred.slice(0,3).map(row => <li key={row.orderId}><b>{row.address}</b><span>Передана: {acceptedCandidate.team?.find(engineer => engineer.id === row.after.engineerId)?.name || row.after.engineerId} · {row.after.plannedStart}</span></li>)}</ul>{applied.transferred.length > 3 ? <details className='dispatch-result-more'><summary>Остальные передачи · {applied.transferred.length - 3}</summary><ul>{applied.transferred.slice(3).map(row => <li key={row.orderId}><b>{row.address}</b><span>Передана: {acceptedCandidate.team?.find(engineer => engineer.id === row.after.engineerId)?.name || row.after.engineerId} · {row.after.plannedStart}</span></li>)}</ul></details> : null}</> : <p>Прежние заявки другим инженерам не передавались.</p>}
         {applied.lost.length ? <strong className='dispatch-error'>Без назначения: {applied.lost.length}. Нужен разбор очереди.</strong> : null}
-        <button type='button' className='dispatch-map-action' onClick={() => controller.showResult(acceptedCandidate)}>Подсветить изменённые маршруты</button>
       </div> : null}
       {pending ? <div className='dispatch-confirming' role='status'><Clock3 size={20}/><div><b>Подтверждаем направление</b><span>{submitting?.engineer.name || item.confirmation?.engineer.name} · проверяем актуальный путь. Выбранный инженер сохраняется.</span></div></div> : null}
       {!terminal(item) && !pending ? <div className={`dispatch-search-state ${searching ? 'is-searching' : 'is-ready'}`} role='status'>

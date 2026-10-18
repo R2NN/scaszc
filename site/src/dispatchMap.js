@@ -1,15 +1,14 @@
 import { useEffect } from 'react';
 import { Marker } from 'maplibre-gl';
-import { renderDispatchRoutes, renderDispatchImpact, renderDispatchHighlight } from './dispatchComparison.js';
+import { renderDispatchRoutes, renderDispatchImpact } from './dispatchComparison.js';
 import { measureDispatchViewport } from './dispatchViewport.js';
 import { DISPATCH_STOP_LABEL, DISPATCH_IMPACT_LABEL } from './dispatchLabelStyle.js';
 import { savedDispatchFocus } from './dispatchMapEvents.js';
 
 /** Draw a comparison on the existing map, starting both lines at the current position. */
-export function attachDispatchMap(map, {events = window, dom = document, markerFactory = element => new Marker({element}), schedule = setTimeout, cancel = clearTimeout} = {}) {
+export function attachDispatchMap(map, {events = window, dom = document, markerFactory = element => new Marker({element})} = {}) {
   let marker;
   let originMarker;
-  let highlightTimer;
   let impactFeatures = [];
   let impactNeedsFocus = false;
   let routeNeedsFocus = false;
@@ -50,12 +49,11 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
     routeLabels = [];
     incidentCoords = null;
     map.off('idle', restore);
-    cancel(highlightTimer);
     impactFeatures = [];
     impactNeedsFocus = false;
     routeNeedsFocus = false;
-    for (const id of ['dispatch-impact-labels', 'dispatch-impact-points', 'dispatch-result-highlight', 'dispatch-stop-labels', 'dispatch-stop-points', 'dispatch-before-arrows', 'dispatch-after-arrows', 'dispatch-after-continuation', 'dispatch-before', 'dispatch-after']) if (map.getLayer(id)) map.removeLayer(id);
-    for (const id of ['dispatch-impact', 'dispatch-result-highlight', 'dispatch-stops', 'dispatch-before', 'dispatch-after']) if (map.getSource(id)) map.removeSource(id);
+    for (const id of ['dispatch-impact-labels', 'dispatch-impact-points', 'dispatch-stop-labels', 'dispatch-stop-points', 'dispatch-before-arrows', 'dispatch-after-arrows', 'dispatch-after-continuation', 'dispatch-before', 'dispatch-after']) if (map.getLayer(id)) map.removeLayer(id);
+    for (const id of ['dispatch-impact', 'dispatch-stops', 'dispatch-before', 'dispatch-after']) if (map.getSource(id)) map.removeSource(id);
     marker?.remove(); originMarker?.remove(); marker = null; originMarker = null;
     for (const [id, visibility] of hiddenLayers) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
     hiddenLayers.clear();
@@ -64,9 +62,6 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
     if (!event.detail.restore) {
       impactFeatures = [];
       impactNeedsFocus = false;
-      cancel(highlightTimer);
-      if (map.getLayer('dispatch-result-highlight')) map.removeLayer('dispatch-result-highlight');
-      if (map.getSource('dispatch-result-highlight')) map.removeSource('dispatch-result-highlight');
     }
     latestPreview = { ...event.detail, scope: event.detail.scope || latestPreview?.scope || 'day' };
     placeIncident(latestPreview.current?.emergencyCoords);
@@ -84,16 +79,6 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
       fit(impactFeatures.map(feature => feature.geometry.coordinates));
       impactNeedsFocus = false;
     }
-    if (event.detail.highlightIds) {
-      cancel(highlightTimer);
-      const highlighted = renderDispatchHighlight(map, latestPreview);
-      latestPreview.highlightIds = undefined;
-      highlightTimer = schedule(() => {
-        if (map.getLayer('dispatch-result-highlight')) map.removeLayer('dispatch-result-highlight');
-        if (map.getSource('dispatch-result-highlight')) map.removeSource('dispatch-result-highlight');
-      }, 3600);
-      if (event.detail.focusRoute) fit(highlighted.features.flatMap(feature => feature.geometry.coordinates));
-    }
     originMarker?.remove();
     if (event.detail.current?.origin) {
       const element = dom.createElement('div');
@@ -103,7 +88,7 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
     if (event.detail.focusRoute) {
       const points = [rendered.before, rendered.after]
         .flatMap(data => data.features.flatMap(feature => feature.geometry.coordinates));
-      if (!event.detail.highlightIds) fit(points);
+      fit(points);
     }
   };
   const fit = points => {
