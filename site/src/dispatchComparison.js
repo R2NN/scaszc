@@ -2,6 +2,12 @@ import { minuteOf } from './shiftDomain.js';
 import { MAP_UI } from './mapDesign.js';
 import { DISPATCH_STOP_LABEL, DISPATCH_IMPACT_LABEL } from './dispatchLabelStyle.js';
 
+/** Keep the operator's selection when its verified coverage improvement replaces an offer. */
+export function resolveDispatchCandidate(incident, candidateId) {
+  return incident?.candidates.find(candidate => candidate.id === candidateId)
+    || incident?.candidates.find(candidate => candidate.replacesCandidateId === candidateId);
+}
+
 /** Resolve comparisons against the candidate's immutable source revision. */
 export function dispatchPreviewDetail(shift, candidate, { engineerId = candidate.engineer.id, scope = 'day' } = {}) {
   const before = shift?.versions?.find(version => Number(version.version) === Number(candidate.baseRevision))?.plan;

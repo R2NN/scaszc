@@ -7,6 +7,7 @@ import sys
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from beeline_planning import (
@@ -395,13 +396,34 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
     from beeline_planning.eligibility import build_candidate_index
     index = build_candidate_index(dataset, event.event_time, applied_event_ids=frozenset((*state.applied_event_ids, event.event_id)))
     eligible = index.eligible_engineers_by_job.get(event.target_id, ())
-    checked, artifacts, rejected = 0, [], []
+    checked, artifacts, rejected, repair_reports = 0, [], [], []
     attempted = set()
     current = {}
     def score(a):
         metrics = a['validation']['metrics']
         visit = next(v for r in a['plan']['engineer_plans'] for v in r['visits'] if v['job_id'] == event.target_id)
         return (metrics['unserved_urgent_jobs'], metrics['unserved_normal_jobs'], metrics['used_engineers'], visit['service_start_at'], metrics['total_distance_m'])
+    def artifact_for(result, engineer_id, handoff, incumbent=None):
+        artifact = materialization_result_dict(MaterializationResult(
+            status=MaterializationStatus.EXACT_VALID, plan=result.state.plan,
+            validation=result.validation, failure=None, exact_provider_queries=0, identity_legs=0))
+        artifact.update({
+            'artifact_type': 'EXACT_PLAN_REPLANNING', 'dataset_sha256': dataset.dataset_sha256,
+            'source_plan_content_sha256': source['content_sha256'],
+            'event_time': event.event_time.isoformat(), 'event_id': event.event_id,
+            'exact_route_checks': result.exact_route_checks + (incumbent['exact_route_checks'] if incumbent else 0),
+            'budget_exhausted': result.budget_exhausted,
+            'search_phase': 'DISPATCH_FORCED_FULL_SHIFT', 'dispatch_engineer_id': engineer_id,
+            'dispatch_handoff': handoff, 'coverage_repair': dict(result.coverage_repair),
+            'changes': _changes(state.plan, result.state.plan), 'global_optimality_proven': False,
+            'routing_configuration': {'provider': 'valhalla-local-transit', 'transit_index': str(args.transit_index)},
+            'ui_history': [*history, {'event': payload['event'], 'orders': payload['orders'], 'team': payload['team']}],
+            'dispatch_input': payload,
+        })
+        if incumbent:
+            artifact['improves_content_sha256'] = incumbent['content_sha256']
+        artifact['content_sha256'] = payload_sha256(artifact)
+        return artifact
     def save_progress(complete=False):
         if artifacts:
             artifacts.sort(key=score)
@@ -411,7 +433,7 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
                     write_json_atomic(retained, artifact)
             output = dict(artifacts[0])
             output['dispatch_candidates'] = artifacts
-            output['dispatch_search'] = {'eligible': list(eligible), 'rejected': rejected, 'route_checks': checked, 'route_check_budget': args.rebuild_route_checks, 'global_optimality_proven': False, 'complete': complete}
+            output['dispatch_search'] = {'eligible': list(eligible), 'rejected': rejected, 'route_checks': checked, 'route_check_budget': args.rebuild_route_checks, 'coverage_repair': repair_reports, 'global_optimality_proven': False, 'complete': complete}
             write_json_atomic(args.output, output)
         write_json_atomic(args.output.with_suffix('.progress.json'), {'phase':'DISPATCH', 'completed':len(attempted), 'total':len(eligible), 'candidates':len(artifacts), 'routeChecks':checked, 'candidateArtifacts':[a['content_sha256'] for a in artifacts], **current})
     constraints = _dispatch_constraints(dataset, state.plan, event.event_time, payload)
@@ -457,29 +479,58 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
             if result.state is None or event.target_id in result.state.plan.unserved_job_ids:
                 rejected.append({'engineerId': engineer_id, 'reason': result.detail or result.unserved_reasons.get(event.target_id, 'Допустимая вставка не найдена в пределах поиска')})
                 continue
-            artifact = materialization_result_dict(MaterializationResult(
-                status=MaterializationStatus.EXACT_VALID, plan=result.state.plan,
-                validation=result.validation, failure=None, exact_provider_queries=0, identity_legs=0))
-            artifact.update({
-                'artifact_type': 'EXACT_PLAN_REPLANNING', 'dataset_sha256': dataset.dataset_sha256,
-                'source_plan_content_sha256': source['content_sha256'],
-                'event_time': event.event_time.isoformat(), 'event_id': event.event_id,
-                'exact_route_checks': result.exact_route_checks, 'budget_exhausted': result.budget_exhausted,
-                'search_phase': 'DISPATCH_FORCED_FULL_SHIFT', 'dispatch_engineer_id': engineer_id,
-                'dispatch_handoff': handoff,
-                'changes': _changes(state.plan, result.state.plan), 'global_optimality_proven': False,
-                'routing_configuration': {'provider': 'valhalla-local-transit', 'transit_index': str(args.transit_index)},
-                'ui_history': [*history, {'event': payload['event'], 'orders': payload['orders'], 'team': payload['team']}],
-                'dispatch_input': payload,
-            })
-            artifact['content_sha256'] = payload_sha256(artifact)
-            artifacts.append(artifact)
+            artifacts.append(artifact_for(result, engineer_id, handoff))
             attempted.add(engineer_id)
             save_progress()
         except Exception as error:
             rejected.append({'engineerId': engineer_id, 'reason': str(error)})
         finally:
             attempted.add(engineer_id)
+    # Publish all first responses before spending the remaining shared budget
+    # on restoring coverage. An unsuccessful improvement never removes an offer.
+    repair_deadline = monotonic() + 30
+    for incumbent in sorted(artifacts, key=lambda item: (-len(item['changes']['removed_from_route']), score(item))):
+        if payload.get('dispatchCoverageRepair') is False:
+            break
+        remaining = args.rebuild_route_checks - checked
+        if remaining <= 0 or monotonic() >= repair_deadline or not incumbent['plan']['unserved_job_ids']:
+            continue
+        engineer_id = incumbent['dispatch_engineer_id']
+        current.update(engineerId=engineer_id, stage='COVERAGE_REPAIR')
+        save_progress()
+        incumbent_plan, _ = load_exact_plan_artifact(args.output.parent / f'{incumbent["content_sha256"]}.json', dataset.dataset_sha256)
+        def repairing_progress(count):
+            current.update(repairRouteChecks=count)
+            save_progress()
+        try:
+            result = replan_after_event(dataset, state, event, oracle,
+                max_route_checks=min(1200, remaining), departure_timing_queries=0,
+                forced_engineer_by_job={event.target_id: engineer_id}, source_dataset=canonical,
+                dispatch_engineer_id=engineer_id, rebuild_future=True,
+                handoff_interrupted_job=incumbent['dispatch_handoff'],
+                incumbent_plan=incumbent_plan, coverage_repair_seconds=min(10, repair_deadline - monotonic()),
+                progress_callback=repairing_progress, **constraints)
+            checked += result.exact_route_checks
+            repair_reports.append({'engineerId': engineer_id, 'checks': result.exact_route_checks,
+                                   **result.coverage_repair, 'accepted': False})
+            if result.state is None:
+                continue
+            before = set(incumbent_plan.unserved_job_ids)
+            after = set(result.state.plan.unserved_job_ids)
+            old_emergency = next(v for r in incumbent_plan.engineer_plans for v in r.visits if v.job_id == event.target_id)
+            new_emergency = next(v for r in result.state.plan.engineer_plans for v in r.visits if v.job_id == event.target_id)
+            if after < before and new_emergency.service_start_at <= old_emergency.service_start_at and (
+                new_emergency.departure_at + timedelta(minutes=new_emergency.travel.duration_minutes)
+                <= old_emergency.departure_at + timedelta(minutes=old_emergency.travel.duration_minutes)
+            ):
+                artifacts[artifacts.index(incumbent)] = artifact_for(result, engineer_id, incumbent['dispatch_handoff'], incumbent)
+                repair_reports[-1].update(accepted=True, restoredJobs=sorted(before - after))
+                save_progress()
+        except Exception as error:
+            # The exact incumbent is still a valid selectable result.
+            current['repairNote'] = str(error)
+            repair_reports.append({'engineerId': engineer_id, 'accepted': False, 'error': str(error)})
+            save_progress()
     if not artifacts:
         raise ValueError('Проверенный вариант не найден: ' + json.dumps(rejected, ensure_ascii=False))
     save_progress(True)

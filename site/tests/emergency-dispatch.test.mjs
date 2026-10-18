@@ -28,6 +28,33 @@ const fixture = (file=':memory:') => {
   return {store,shift,dispatch,create,advance:seconds=>{clock+=seconds*1000;}};
 };
 
+test('an improved offer retains the original receipt and can be accepted through either selection', async () => {
+  const f = fixture();
+  try {
+    const originalRouting = f.dispatch.routing;
+    let originalId;
+    const repairModes = [];
+    f.dispatch.routing = async (payload, root, options) => {
+      repairModes.push(payload.dispatchCoverageRepair);
+      const first = await originalRouting(payload);
+      options.onProgress({ stage: 'COVERAGE_REPAIR', dispatchCandidates: first.dispatchCandidates });
+      originalId = f.dispatch.all(f.shift.id)[0].candidates[0].id;
+      const candidate = first.dispatchCandidates[0];
+      return { ...first, dispatchCandidates: [{ ...candidate, improvesContentSha256:candidate.plan.contentSha256,
+        plan:{ ...candidate.plan, contentSha256:'c'.repeat(64) }, coverageRepair:{ improved_jobs:1 } }] };
+    };
+    const result = await f.dispatch.search(f.create().id);
+    assert.equal(result.status, 'WAITING');
+    assert.equal(result.candidates[0].replacesCandidateId, originalId);
+    assert.ok(result.offeredChoices.some(choice => choice.id === originalId));
+    assert.equal(result.candidates[0].coverageRepair.improved_jobs, 1);
+    const accepted = await f.dispatch.confirm(result.id, originalId);
+    assert.equal(accepted.status, 'ACCEPTED', accepted.error);
+    assert.equal(accepted.candidates.find(c => c.id === accepted.decision.candidateId).engineer.id, 'E1');
+    assert.deepEqual(repairModes, [true, false], 'Explicit confirmation does not wait for an optional repair phase');
+  } finally { f.store.close(); }
+});
+
 for (const automatic of [false,true]) for (const playing of [false,true]) test(`${automatic ? 'automatic' : 'manual'} dispatch restores ×300 and preserves ${playing ? 'playing' : 'pause'}`,async()=>{
   const f=fixture();
   let now=Date.now();

@@ -350,7 +350,7 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd(), { 
           const candidate = JSON.parse(await readFile(file,'utf8').catch(() => 'null'));
           if (!candidate) continue;
           await writeFile(`${file}.meta.json`,JSON.stringify({dataset:inProject(repositoryRoot,dataset),cache:inProject(repositoryRoot,cache),transitIndex:inProject(repositoryRoot,transitIndex)}));
-          const compact = {engineerSourceId:candidate.dispatch_engineer_id,plan:compactExactReplan(candidate,payload),artifact:inProject(repositoryRoot,file)};
+          const compact = {engineerSourceId:candidate.dispatch_engineer_id,plan:compactExactReplan(candidate,payload),artifact:inProject(repositoryRoot,file),improvesContentSha256:candidate.improves_content_sha256,coverageRepair:candidate.coverage_repair};
           compactCandidates.set(sha, compact);
           dispatchCandidates.push(compact);
         }
@@ -387,7 +387,7 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd(), { 
         const file = path.join(retainedRoot, `${candidate.content_sha256}.json`);
         await access(file);
         await writeFile(`${file}.meta.json`, JSON.stringify({ dataset: inProject(repositoryRoot, dataset), cache: inProject(repositoryRoot, cache), transitIndex: inProject(repositoryRoot, transitIndex) }));
-        result.dispatchCandidates.push({ engineerSourceId: candidate.dispatch_engineer_id, plan: compactExactReplan(candidate, payload), artifact: inProject(repositoryRoot, file) });
+        result.dispatchCandidates.push({ engineerSourceId: candidate.dispatch_engineer_id, plan: compactExactReplan(candidate, payload), artifact: inProject(repositoryRoot, file), improvesContentSha256:candidate.improves_content_sha256, coverageRepair:candidate.coverage_repair });
       }
       result.dispatchSearch = bundle.dispatch_search;
     }

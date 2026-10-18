@@ -7,10 +7,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from prepare_ui_dataset import prepare
-from replan_ui_event import _at, _event_dataset
+from replan_ui_event import _at, _event_dataset, _dispatch_constraints
 from verify_dispatch_artifact import verify
 from beeline_planning import EngineerPlan, PlannedVisit, ProposedPlan, ReplanningState, load_planning_dataset, replan_after_event, validate_initial_plan
-from beeline_planning.export import materialization_result_dict
+from beeline_planning.export import materialization_result_dict, load_exact_plan_artifact
 from beeline_planning.materialize import MaterializationResult, MaterializationStatus
 from beeline_routing.export import payload_sha256, write_json_atomic
 from beeline_routing.oracle import OracleQuery
@@ -68,6 +68,26 @@ def test_saved_artifact_restores_operational_facts(tmp_path,overdue):
     file,dataset_path,_ = stored_artifact(tmp_path,overdue=overdue)
     report = verify(file,dataset_path,tmp_path)
     assert report['status'] == 'VALID', report['violations']
+
+
+@pytest.mark.parametrize('overdue', [False, True])
+def test_coverage_repair_reopens_fact_bound_incumbent_without_releasing_work(tmp_path, overdue):
+    file, dataset_path, raw = stored_artifact(tmp_path, overdue=overdue)
+    source = load_planning_dataset(dataset_path, 'core')
+    old, _ = load_exact_plan_artifact(tmp_path / 'algorithm/artifacts/complexity/initial-exact.json', source.dataset_sha256)
+    data, event = _event_dataset(source, raw['dispatch_input'])
+    data = replace(data, events=(event,))
+    incumbent, _ = load_exact_plan_artifact(file, data.dataset_sha256)
+    engineer = next(r.engineer_id for r in incumbent.engineer_plans if any(v.job_id == 'U' for v in r.visits))
+    result = replan_after_event(data, ReplanningState(old), event, DispatchOracle(), source_dataset=source,
+        incumbent_plan=incumbent, coverage_repair_seconds=.1, rebuild_future=True,
+        dispatch_engineer_id=engineer, forced_engineer_by_job={'U': engineer}, departure_timing_queries=0,
+        **_dispatch_constraints(data, old, event.event_time, raw['dispatch_input']))
+    assert result.state is not None, result.detail
+    assert result.validation.is_valid
+    before = next(r for r in incumbent.engineer_plans if r.engineer_id == 'E1')
+    after = next(r for r in result.state.plan.engineer_plans if r.engineer_id == 'E1')
+    assert after.visits == before.visits
 
 
 def test_saved_artifact_still_checks_content_checksum(tmp_path):

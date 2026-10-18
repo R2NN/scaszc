@@ -170,7 +170,7 @@ export class EmergencyDispatch {
       const orders = this.prepareSearch(shift, item, time), prepared = orders.at(-1);
       const searchShift = { ...shift, orders: orders.slice(0,-1) }, searchItem = { ...item, order: prepared };
       const event = { type: 'NEW_ORDER', time, orderId: prepared.id, order: prepared, reason: 'Аварийный выезд', incidentId: item.id };
-      const result = await this.routing({ orders, team: shift.team, plan: shift.plan, planningDate: shift.date, basePlanContentSha256: shift.plan.contentSha256, event, dispatch: true, facts: shift.facts }, undefined, {signal:controller.signal,onProgress:progress => {
+      const result = await this.routing({ orders, team: shift.team, plan: shift.plan, planningDate: shift.date, basePlanContentSha256: shift.plan.contentSha256, event, dispatch: true, dispatchCoverageRepair:item.confirmation?.state !== 'CHECKING', facts: shift.facts }, undefined, {signal:controller.signal,onProgress:progress => {
         const fresh=this.get(id);
         if (!fresh || terminal(fresh) || controller.signal.aborted) return;
         const {dispatchCandidates:partial,...summary}=progress;
@@ -297,6 +297,7 @@ export class EmergencyDispatch {
       && visit.kind === 'emergency' && visit.status === 'completed' && !visit.excluded && visit.endedAt && Date.parse(visit.endedAt) < Date.parse(at));
     const ratings = visits.filter(visit => !visit.source?.startsWith('synthetic') && Number.isFinite(visit.rating) && visit.rating >= 1 && visit.rating <= 5).map(visit => visit.rating);
     return { id: `${incident.id}:${plan.contentSha256}`, fingerprint, baseRevision: shift.revision, basePlanContentSha256: shift.plan.contentSha256, scenarioTime: time, checkedAt: this.now(), artifact: candidate.artifact,
+      replacesCandidateId: candidate.improvesContentSha256 ? `${incident.id}:${candidate.improvesContentSha256}` : null, coverageRepair:candidate.coverageRepair || null,
       engineer: { id: engineer.id, name: engineer.name, skills: engineer.skills, equipment: engineer.equipment, transport: engineer.transport }, state, visit,
       departureOrigin: movement?.coords || state.coords, responseMinutes: minuteOf(visit.arrival)-minuteOf(time),
       kind: state.status === 'travelling' ? 'Перехват в пути' : state.status === 'working' ? 'После текущей работы' : fromHome ? 'Выезд из дома' : 'Свободный инженер',

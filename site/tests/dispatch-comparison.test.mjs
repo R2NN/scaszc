@@ -1,11 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dispatchRouteData, renderDispatchRoutes, renderDispatchImpact } from '../src/dispatchComparison.js';
+import { dispatchRouteData, renderDispatchRoutes, renderDispatchImpact, resolveDispatchCandidate } from '../src/dispatchComparison.js';
 import { MAP_UI } from '../src/mapDesign.js';
 
 const leg = (orderId, departureAt, arrival, geometry) => ({ orderId, departureAt, arrival, geometry });
 const plan = assignments => ({ routes: [{ engineerId: 'crew', assignments }] });
 const detail = { ids: ['crew'], current: { engineerId: 'crew', time: '11:17', origin: [0, 1], kind: 'Перехват в пути', emergencyOrderId: 'emergency' } };
+
+test('verified coverage improvements preserve the selection without choosing another engineer or revision', () => {
+  const improved = { id: 'new', replacesCandidateId: 'old' };
+  const other = { id: 'other' };
+  assert.equal(resolveDispatchCandidate({ candidates: [other, improved] }, 'old'), improved);
+  assert.equal(resolveDispatchCandidate({ candidates: [other, improved] }, 'new'), improved);
+  assert.equal(resolveDispatchCandidate({ candidates: [other, improved] }, 'unrelated'), undefined);
+  assert.equal(resolveDispatchCandidate(undefined, 'old'), undefined);
+});
 
 const mapFixture = () => {
   const sources = new Map(), layers = new Map();

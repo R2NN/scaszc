@@ -6,7 +6,7 @@ import { AlertTriangle, Check, Clock3, Route, RotateCcw, X } from 'lucide-react'
 import { shiftClock } from './shiftClock.js';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { filterLabel } from './filterPresentation.js';
-import { dispatchPreviewDetail } from './dispatchComparison.js';
+import { dispatchPreviewDetail, resolveDispatchCandidate } from './dispatchComparison.js';
 import { dispatchConsequences, dispatchRecommendation, dispatchImpactPoints } from './dispatchConsequences.js';
 import './emergency-dispatch.css';
 
@@ -189,6 +189,11 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     catch (e) { setError(e.message); }
   };
   const select = incidents.find(item => item.id === selectedId) || incidents.find(item => !terminal(item)) || incidents.at(-1);
+  useEffect(() => {
+    if (!select || submission || terminal(select)) return;
+    const improved = resolveDispatchCandidate(select, candidateId);
+    if (improved && improved.id !== candidateId) preview(improved, routeScope, improved.engineer.id, false);
+  }, [select, candidateId, submission]);
   return { incidents, selected:select, candidateId, routeScope, acceptingId, submission, changeRouteScope, showChanges, showResult, open, preview, startSession, session, error, serverOffset, policy, accept, read,
     retry, cancel, savePolicy };
 }
@@ -218,7 +223,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const accepted = item?.status === 'ACCEPTED';
   const acceptedCandidate = item?.candidates.find(option => option.id === item.decision?.candidateId);
   const submitting=controller.submission?.incidentId===item?.id ? controller.submission.candidate : null;
-  const candidate = (!accepted && submitting) || item?.candidates.find(option => option.id === candidateId) || acceptedCandidate;
+  const candidate = (!accepted && submitting) || resolveDispatchCandidate(item, candidateId) || acceptedCandidate;
   const candidateApplied = accepted && candidate?.id === acceptedCandidate?.id;
   const impacts = useMemo(() => new Map((item?.candidates || []).map(option => [option.id, dispatchConsequences(option)])), [item?.candidates]);
   const impact = candidate && (impacts.get(candidate.id) || dispatchConsequences(candidate));
@@ -242,6 +247,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const countdown = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
   const searching = Boolean(item && !terminal(item) && (['QUEUED', 'SEARCHING'].includes(item.status) || item.search?.complete === false && !item.search?.stoppedReason && item.status !== 'ERROR'));
   const checkingIntercept = searching && item?.progress?.stage?.startsWith('INTERCEPT_');
+  const repairingCoverage = searching && item?.progress?.stage === 'COVERAGE_REPAIR';
   const recommended = item?.candidates.find(option => option.id === item.recommendedId);
   const recommendation = useMemo(() => recommended ? dispatchRecommendation(recommended, item.candidates) : '', [recommended, item?.candidates]);
   const arrivalTimes = (item?.candidates || []).map(option => option.responseMinutes).filter(Number.isFinite);
@@ -270,7 +276,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
       </div> : null}
       {pending ? <div className='dispatch-confirming' role='status'><Clock3 size={20}/><div><b>Подтверждаем направление</b><span>{ratingName(submitting?.engineer || item.confirmation?.engineer)} · проверяем актуальный путь. Выбранный инженер сохраняется.</span></div></div> : null}
       {!terminal(item) && !pending ? <div className={`dispatch-search-state ${searching ? 'is-searching' : 'is-ready'}`} role='status'>
-        <span className='dispatch-search-icon'><Clock3 size={19}/></span><div><b>{item.status === 'ERROR' ? 'Расчёт прерван' : checkingIntercept ? 'Проверяем перехват в пути' : searching ? 'Поиск продолжается' : resultCountLabel(item.candidates.length)}</b><span>{checkingIntercept ? item.progress.engineerName || 'Ближайшая бригада' : searching ? item.candidates.length ? `Готовых вариантов: ${item.candidates.length} · уже можно выбирать` : 'Проверяем маршруты и окна клиентов' : item.search?.stoppedReason ? 'Поиск остановлен по лимиту' : item.status === 'ERROR' ? 'Можно повторить расчёт' : 'Расчёт завершён'}</span></div>
+        <span className='dispatch-search-icon'><Clock3 size={19}/></span><div><b>{item.status === 'ERROR' ? 'Расчёт прерван' : checkingIntercept ? 'Проверяем перехват в пути' : repairingCoverage ? 'Восстанавливаем назначения' : searching ? 'Поиск продолжается' : resultCountLabel(item.candidates.length)}</b><span>{repairingCoverage ? 'Ищем обмены между инженерами · готовые варианты доступны' : checkingIntercept ? item.progress.engineerName || 'Ближайшая бригада' : searching ? item.candidates.length ? `Готовых вариантов: ${item.candidates.length} · уже можно выбирать` : 'Проверяем маршруты и окна клиентов' : item.search?.stoppedReason ? 'Поиск остановлен по лимиту' : item.status === 'ERROR' ? 'Можно повторить расчёт' : 'Расчёт завершён'}</span></div>
       </div> : null}
       {!pending ? <details className='dispatch-alternatives' open={accepted ? undefined : true} key={accepted ? 'accepted' : 'choosing'}><summary>{accepted ? 'Сравнить сохранённые варианты' : 'Варианты направления'}</summary><div className='dispatch-options' role='group' aria-label='Проверенные варианты'>{item.candidates.map(option => {
         const effect = impacts.get(option.id);

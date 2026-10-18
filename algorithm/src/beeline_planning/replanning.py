@@ -8,9 +8,10 @@ using exact, departure-time routing before independent full-plan validation.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
+from time import monotonic
 from typing import Callable, Mapping
 
 from beeline_routing.errors import RoutingError
@@ -76,6 +77,7 @@ class ReplanningResult:
     )
     departure_timing_queries: int = 0
     departure_timing_changes: int = 0
+    coverage_repair: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +203,8 @@ def replan_after_event(
     protected_job_ids: frozenset[str] = frozenset(),
     locked_engineer_ids: frozenset[str] = frozenset(),
     available_after_by_engineer: Mapping[str, datetime] | None = None,
+    incumbent_plan: ProposedPlan | None = None,
+    coverage_repair_seconds: float = 0,
 ) -> ReplanningResult:
     """Apply one ordered event and return an exactly validated full-day plan.
 
@@ -210,6 +214,9 @@ def replan_after_event(
     """
     if max_route_checks < 1:
         raise ValueError('max_route_checks must be positive')
+    if coverage_repair_seconds < 0 or incumbent_plan is not None and not dispatch_engineer_id:
+        raise ValueError('Coverage repair requires a dispatch engineer and a non-negative time budget')
+    coverage_deadline = monotonic() + coverage_repair_seconds if incumbent_plan is not None and coverage_repair_seconds > 0 else None
     if urgent_slack_minutes < 0 or urgent_ejection_gain_minutes < 1:
         raise ValueError('Urgency thresholds must be non-negative and positive respectively')
     forced_assignments = dict(forced_engineer_by_job or {})
@@ -359,11 +366,36 @@ def replan_after_event(
         ) if not rebuild_future or (dispatch_engineer_id and dataset.engineers[engineer_id].zone_id != dataset.engineers[dispatch_engineer_id].zone_id) else ()
         for engineer_id in dataset.engineers
     }
+    emergency_deadline = emergency_arrival_deadline = None
+    if incumbent_plan is not None:
+        incumbent_validation = validate_replanned_plan(
+            dataset, incumbent_plan, state.plan, event_time=event.event_time,
+            applied_event_ids=frozenset(new_applied), canceled_job_ids=frozenset(canceled),
+            unavailable_until_by_engineer=unavailable, protected_job_ids=protected_job_ids,
+            locked_engineer_ids=locked_engineer_ids,
+            available_after_by_engineer=available_after_by_engineer,
+        )
+        if not incumbent_validation.is_valid:
+            raise InvalidPlanningData('Coverage repair incumbent must pass independent validation')
+        incumbent_routes = {route.engineer_id: route for route in incumbent_plan.engineer_plans}
+        emergency = next((visit for visit in incumbent_routes.get(dispatch_engineer_id, EngineerPlan(dispatch_engineer_id, ())).visits
+                          if visit.job_id == event.target_id), None)
+        if emergency is None:
+            raise InvalidPlanningData('Coverage repair must retain the selected emergency engineer')
+        emergency_deadline = emergency.service_start_at
+        emergency_arrival_deadline = emergency.departure_at + timedelta(minutes=emergency.travel.duration_minutes)
+        orders = {key: tuple(visit.job_id for visit in incumbent_routes.get(key, EngineerPlan(key, ())).visits
+                             if visit.job_id not in frozen_job_ids) for key in dataset.engineers}
     exact_checks = 0
     budget_exhausted = False
     unknown_by_job: set[str] = set()
     trial_cache: dict[tuple[str, tuple[str, ...]], _RouteTrial] = {}
     leg_cache: dict[tuple[str, str, str, datetime], object] = {}
+    if incumbent_plan is not None:
+        # Keep the validated incumbent usable even when speculative repair runs
+        # out of time or encounters an unavailable road response.
+        trial_cache.update({(key, orders[key]): _RouteTrial(incumbent_routes.get(key, EngineerPlan(key, ())).visits)
+                            for key in dataset.engineers})
 
     def schedule(engineer_id: str, order: tuple[str, ...]) -> _RouteTrial:
         nonlocal exact_checks, budget_exhausted
@@ -411,7 +443,7 @@ def replan_after_event(
             result = _RouteTrial(original_route.visits if original_route else ())
             trial_cache[key] = result
             return result
-        if exact_checks >= max_route_checks:
+        if exact_checks >= max_route_checks or coverage_deadline is not None and monotonic() >= coverage_deadline:
             budget_exhausted = True
             return _RouteTrial(None, order[0] if order else None, 'SEARCH_BUDGET_EXHAUSTED')
         exact_checks += 1
@@ -514,6 +546,12 @@ def replan_after_event(
                         departure, travel, arrival = delayed_at, delayed, delayed_arrival
             service_start = max(arrival, job.window_start)
             service_end = service_start + timedelta(minutes=job.service_duration_min)
+            if emergency_deadline is not None and engineer_id == dispatch_engineer_id and job_id == event.target_id and (
+                service_start > emergency_deadline or arrival > emergency_arrival_deadline
+            ):
+                result = _RouteTrial(None, job_id, 'EMERGENCY_RESPONSE_MUST_NOT_WORSEN')
+                trial_cache[key] = result
+                return result
             if (
                 service_start > job.window_end
                 or service_end > engineer.shift_end
@@ -916,6 +954,72 @@ def replan_after_event(
         else:
             reasons[job_id] = 'NO_EXACT_FEASIBLE_INSERTION_IN_CURRENT_ROUTES'
 
+    repair_report = {}
+    if incumbent_plan is not None and coverage_repair_seconds > 0:
+        from .exact_lns import find_exact_lns_coverage_move
+        from .exact_repair import find_coverage_move
+        deadline = coverage_deadline
+        repair_report = {'improved_jobs': 0, 'route_checks': 0, 'neighbourhoods': 0,
+                         'expanded_states': 0, 'chain_route_checks': 0, 'budget_exhausted': False}
+        frozen_owner = {visit.job_id: key for key, visits in frozen.items() for visit in visits}
+        repair_candidates = replace(candidates, eligible_engineers_by_job={
+            job_id: tuple(key for key in eligible_engineers(job_id)
+                          if job_id not in frozen_owner or frozen_owner[job_id] == key)
+            for job_id in candidates.active_job_ids
+        })
+        def repair_check(engineer_id, full_order):
+            prefix = tuple(visit.job_id for visit in frozen[engineer_id])
+            if full_order[:len(prefix)] != prefix:
+                return False
+            if dataset.engineers[engineer_id].zone_id != dataset.engineers[dispatch_engineer_id].zone_id:
+                return full_order == prefix + orders[engineer_id]
+            suffix = full_order[len(prefix):]
+            if any(job_id in frozen_job_ids for job_id in suffix):
+                return False
+            try:
+                trial = schedule(engineer_id, suffix)
+            except _RoutingIncomplete:
+                return False
+            if trial.visits is None:
+                return False
+            if engineer_id == dispatch_engineer_id:
+                emergency = next((visit for visit in trial.visits if visit.job_id == event.target_id), None)
+                return emergency is not None and emergency.service_start_at <= emergency_deadline
+            return True
+        while exact_checks < max_route_checks and monotonic() < deadline:
+            missing = {job_id for job_id in active_job_ids - assigned_jobs()
+                       if dataset.jobs[job_id].zone_id == dataset.engineers[dispatch_engineer_id].zone_id}
+            if not missing:
+                break
+            full_routes = {key: tuple(visit.job_id for visit in frozen[key]) + orders[key] for key in orders}
+            targets = missing & original_owner.keys() or missing
+            chain = find_coverage_move(
+                dataset, full_routes, targets, repair_candidates, repair_check,
+                max_route_checks=min(400, max_route_checks - exact_checks), max_displacements=3,
+                max_seconds=max(.001, min(3, (deadline - monotonic()) * .35)),
+            )
+            repair_report['chain_route_checks'] += chain.route_checks
+            repair_report['route_checks'] += chain.route_checks
+            move = chain.move
+            if move is None and exact_checks < max_route_checks and monotonic() < deadline:
+                report = find_exact_lns_coverage_move(
+                    dataset, full_routes, targets, repair_candidates, repair_check,
+                    max_route_checks=max_route_checks - exact_checks, beam_width=32,
+                    max_destroyed_jobs=8, max_engineers=4,
+                    max_seconds=max(.001, deadline - monotonic()),
+                )
+                repair_report['route_checks'] += report.route_checks
+                repair_report['neighbourhoods'] += report.neighbourhoods_tried
+                repair_report['expanded_states'] += report.expanded_states
+                repair_report['budget_exhausted'] |= report.budget_exhausted
+                move = report.move
+            if move is None:
+                break
+            for key, full_order in move.routes.items():
+                orders[key] = full_order[len(frozen[key]):]
+            repair_report['improved_jobs'] += 1
+            reasons.pop(move.inserted_job_id, None)
+
     unresolved_routing = unknown_by_job & (active_job_ids - assigned_jobs())
     if handoff_job_id and handoff_job_id not in assigned_jobs():
         return ReplanningResult(
@@ -923,7 +1027,7 @@ def replan_after_event(
             event.event_id, exact_checks, budget_exhausted, reasons,
             'The interrupted destination could not be assigned to another engineer',
         )
-    if unresolved_routing:
+    if unresolved_routing and incumbent_plan is None:
         return ReplanningResult(
             ReplanningStatus.ROUTING_INCOMPLETE, None, None,
             event.event_id, exact_checks, budget_exhausted, reasons,
@@ -1001,4 +1105,5 @@ def replan_after_event(
         candidate_evaluations=candidate_evaluations,
         departure_timing_queries=timing.exact_queries,
         departure_timing_changes=timing.changed_legs,
+        coverage_repair=repair_report,
     )

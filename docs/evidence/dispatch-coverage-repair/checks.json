@@ -1,0 +1,188 @@
+{
+  "modelChain": {
+    "syntheticTest": true,
+    "assignedBefore": 3,
+    "assignedAfter": 4,
+    "total": 4,
+    "emergencyStartBefore": "2026-08-17T08:05:00+03:00",
+    "emergencyStartAfter": "2026-08-17T08:05:00+03:00",
+    "owners": {
+      "U": "E1",
+      "C": "E2",
+      "A": "E3",
+      "B": "E4"
+    },
+    "repair": {
+      "improved_jobs": 1,
+      "route_checks": 4,
+      "neighbourhoods": 0,
+      "expanded_states": 0,
+      "chain_route_checks": 4,
+      "budget_exhausted": false
+    },
+    "validation": "VALID"
+  },
+  "fullDemo": {
+    "candidates": [
+      {
+        "engineer": "SOUTHCENTER-ENG-09",
+        "assigned": 205,
+        "total": 206,
+        "contentSha256": "65c0df194678a50e56460d80cc2ab6111cbe84bd88283aedff7d7f8b477cf931"
+      },
+      {
+        "engineer": "SOUTHCENTER-ENG-04",
+        "assigned": 205,
+        "total": 206,
+        "contentSha256": "e587b1c5d9bdca22356e6436f00759956b4efb67a7f038a5a06ac5cb07eb7880"
+      },
+      {
+        "engineer": "SOUTHCENTER-ENG-11",
+        "assigned": 204,
+        "total": 206,
+        "contentSha256": "8b2f7f0dd4b8d55362963b71730a2f41facfcfa5ad08965b023237201a752de1"
+      },
+      {
+        "engineer": "SOUTHCENTER-ENG-01",
+        "assigned": 204,
+        "total": 206,
+        "contentSha256": "71bb0f04503dbb3ad3bfee5febd5f13aa4d91ad0eaa636d1fbaec04b87848c50"
+      },
+      {
+        "engineer": "SOUTHCENTER-ENG-06",
+        "assigned": 203,
+        "total": 206,
+        "contentSha256": "0c3b80fb280011995cd56e82392b049807ab6de0a621f22f86b27f085153291e"
+      }
+    ],
+    "search": {
+      "eligible": [
+        "SOUTHCENTER-ENG-01",
+        "SOUTHCENTER-ENG-04",
+        "SOUTHCENTER-ENG-06",
+        "SOUTHCENTER-ENG-07",
+        "SOUTHCENTER-ENG-09",
+        "SOUTHCENTER-ENG-10",
+        "SOUTHCENTER-ENG-11"
+      ],
+      "rejected": [
+        {
+          "engineerId": "SOUTHCENTER-ENG-07",
+          "reason": "Инженер ещё не вышел на смену или смена закончилась"
+        },
+        {
+          "engineerId": "SOUTHCENTER-ENG-10",
+          "reason": "Инженер ещё не вышел на смену или смена закончилась"
+        }
+      ],
+      "route_checks": 1190,
+      "route_check_budget": 5000,
+      "coverage_repair": [
+        {
+          "engineerId": "SOUTHCENTER-ENG-06",
+          "checks": 50,
+          "improved_jobs": 0,
+          "route_checks": 46,
+          "neighbourhoods": 5,
+          "expanded_states": 28081,
+          "chain_route_checks": 4,
+          "budget_exhausted": true,
+          "accepted": false
+        },
+        {
+          "engineerId": "SOUTHCENTER-ENG-11",
+          "checks": 30,
+          "improved_jobs": 0,
+          "route_checks": 98,
+          "neighbourhoods": 8,
+          "expanded_states": 15977,
+          "chain_route_checks": 49,
+          "budget_exhausted": false,
+          "accepted": false
+        },
+        {
+          "engineerId": "SOUTHCENTER-ENG-01",
+          "checks": 56,
+          "improved_jobs": 0,
+          "route_checks": 55,
+          "neighbourhoods": 6,
+          "expanded_states": 32339,
+          "chain_route_checks": 8,
+          "budget_exhausted": false,
+          "accepted": false
+        },
+        {
+          "engineerId": "SOUTHCENTER-ENG-09",
+          "checks": 0,
+          "improved_jobs": 0,
+          "route_checks": 0,
+          "neighbourhoods": 0,
+          "expanded_states": 0,
+          "chain_route_checks": 0,
+          "budget_exhausted": false,
+          "accepted": false
+        },
+        {
+          "engineerId": "SOUTHCENTER-ENG-04",
+          "checks": 0,
+          "improved_jobs": 0,
+          "route_checks": 0,
+          "neighbourhoods": 0,
+          "expanded_states": 0,
+          "chain_route_checks": 0,
+          "budget_exhausted": false,
+          "accepted": false
+        }
+      ],
+      "global_optimality_proven": false,
+      "complete": true
+    },
+    "independentValidation": [
+      {
+        "contentSha256": "65c0df194678a50e56460d80cc2ab6111cbe84bd88283aedff7d7f8b477cf931",
+        "status": "VALID",
+        "recomputedMetrics": {
+          "waitingMinutes": 2573,
+          "travelMinutes": 4812,
+          "distanceM": 1446869
+        }
+      },
+      {
+        "contentSha256": "e587b1c5d9bdca22356e6436f00759956b4efb67a7f038a5a06ac5cb07eb7880",
+        "status": "VALID",
+        "recomputedMetrics": {
+          "waitingMinutes": 2207,
+          "travelMinutes": 4794,
+          "distanceM": 1435826
+        }
+      },
+      {
+        "contentSha256": "8b2f7f0dd4b8d55362963b71730a2f41facfcfa5ad08965b023237201a752de1",
+        "status": "VALID",
+        "recomputedMetrics": {
+          "waitingMinutes": 2347,
+          "travelMinutes": 4703,
+          "distanceM": 1431737
+        }
+      },
+      {
+        "contentSha256": "71bb0f04503dbb3ad3bfee5febd5f13aa4d91ad0eaa636d1fbaec04b87848c50",
+        "status": "VALID",
+        "recomputedMetrics": {
+          "waitingMinutes": 1647,
+          "travelMinutes": 4745,
+          "distanceM": 1440317
+        }
+      },
+      {
+        "contentSha256": "0c3b80fb280011995cd56e82392b049807ab6de0a621f22f86b27f085153291e",
+        "status": "VALID",
+        "recomputedMetrics": {
+          "waitingMinutes": 1832,
+          "travelMinutes": 4746,
+          "distanceM": 1445814
+        }
+      }
+    ]
+  }
+}
