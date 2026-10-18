@@ -3,6 +3,7 @@ import { AlertTriangle, Check, Clock3, Route, RotateCcw, X } from 'lucide-react'
 import { shiftClock } from './shiftClock.js';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { filterLabel } from './filterPresentation.js';
+import { dispatchPreviewDetail } from './dispatchComparison.js';
 import './emergency-dispatch.css';
 
 const api = async (path, body) => {
@@ -114,10 +115,12 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
       requestAnimationFrame(()=>window.dispatchEvent(new CustomEvent('beego:incident-focus', { detail: { coords: item.order.coords } })));
     } catch (e) {setError(e.message);}
   };
-  const preview = (candidate, scope = routeScope) => {
-    setCandidateId(candidate.id);
-    setRouteScope(scope);
-    window.dispatchEvent(new CustomEvent('beego:dispatch-preview', { detail: { before: shift.plan, after: candidate.plan, scope, ids: [candidate.engineer.id], current: { engineerId: candidate.engineer.id, origin: candidate.state?.coords || candidate.departureOrigin, time: candidate.scenarioTime, kind: candidate.kind, emergencyOrderId: candidate.visit.orderId }, focusRoute: true } }));
+  const preview = (candidate, scope = routeScope, engineerId = candidate.engineer.id) => {
+    try {
+      const detail = dispatchPreviewDetail(refs.current.shift,candidate,{engineerId,scope});
+      setError(''); setCandidateId(candidate.id); setRouteScope(scope);
+      window.dispatchEvent(new CustomEvent('beego:dispatch-preview', {detail}));
+    } catch (e) { setError(e.message); }
   };
   const changeRouteScope = scope => {
     if (!['day', 'next'].includes(scope)) return;

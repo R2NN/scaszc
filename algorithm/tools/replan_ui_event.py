@@ -369,6 +369,27 @@ def _changes(before, after) -> dict[str, list[dict[str, str]]]:
     }
 
 
+def _dispatch_constraints(dataset, plan, event_time, payload):
+    """Derive search/replay constraints from captured facts, not plan claims."""
+    protected = {str(f['orderId']).split(':')[-1] for f in payload.get('facts', [])
+        if f.get('status') in {'started', 'completed'} and _at(dataset, f.get('time')) <= event_time}
+    releases, blocked = {}, set(payload.get('event', {}).get('unknownPositions', []))
+    for fact in payload.get('facts', []):
+        if fact.get('status') != 'started' or _at(dataset, fact.get('time')) > event_time:
+            continue
+        job_id = str(fact['orderId']).split(':')[-1]
+        owner = next((route for route in plan.engineer_plans if any(v.job_id == job_id for v in route.visits)), None)
+        if owner is None:
+            continue
+        visit = next(v for v in owner.visits if v.job_id == job_id)
+        release = max(visit.service_start_at, _at(dataset, fact.get('startedAt') or fact['time'])) + timedelta(minutes=dataset.jobs[job_id].service_duration_min)
+        if release <= event_time:
+            blocked.add(owner.engineer_id)
+        else:
+            releases[owner.engineer_id] = max(releases.get(owner.engineer_id, release), release)
+    return {'protected_job_ids': frozenset(protected), 'locked_engineer_ids': frozenset(blocked), 'available_after_by_engineer': releases}
+
+
 def dispatch_variants(args, payload, canonical, dataset, state, event, source, history, oracle):
     """Search every statically eligible engineer with one shared routing budget."""
     from beeline_planning.eligibility import build_candidate_index
@@ -393,22 +414,8 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
             output['dispatch_search'] = {'eligible': list(eligible), 'rejected': rejected, 'route_checks': checked, 'route_check_budget': args.rebuild_route_checks, 'global_optimality_proven': False, 'complete': complete}
             write_json_atomic(args.output, output)
         write_json_atomic(args.output.with_suffix('.progress.json'), {'phase':'DISPATCH', 'completed':len(attempted), 'total':len(eligible), 'candidates':len(artifacts), 'routeChecks':checked, 'candidateArtifacts':[a['content_sha256'] for a in artifacts], **current})
-    protected = {str(f['orderId']).split(':')[-1] for f in payload.get('facts', []) if f.get('status') in {'started', 'completed'} and _at(dataset, f.get('time')) <= event.event_time}
-    releases, blocked = {}, set()
-    for fact in payload.get('facts', []):
-        if fact.get('status') != 'started' or _at(dataset, fact.get('time')) > event.event_time:
-            continue
-        job_id = str(fact['orderId']).split(':')[-1]
-        owner = next((route for route in state.plan.engineer_plans if any(v.job_id == job_id for v in route.visits)), None)
-        if owner is None:
-            continue
-        visit = next(v for v in owner.visits if v.job_id == job_id)
-        release = max(visit.service_start_at, _at(dataset, fact.get('startedAt') or fact['time'])) + timedelta(minutes=dataset.jobs[job_id].service_duration_min)
-        if release <= event.event_time:
-            blocked.add(owner.engineer_id)
-        else:
-            releases[owner.engineer_id] = release
-    blocked.update(payload['event'].get('unknownPositions', []))
+    constraints = _dispatch_constraints(dataset, state.plan, event.event_time, payload)
+    blocked = constraints['locked_engineer_ids']
     from beeline_planning.dispatch import rank_interceptions
     def checking_road(key):
         current.update(engineerId=key, stage='INTERCEPT_ROAD_CHECK')
@@ -445,8 +452,7 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
                 max_route_checks=min(1000 if rebuild else args.max_route_checks, remaining), departure_timing_queries=0,
                 forced_engineer_by_job={event.target_id: engineer_id}, source_dataset=canonical,
                 dispatch_engineer_id=engineer_id, rebuild_future=rebuild,
-                handoff_interrupted_job=handoff, protected_job_ids=protected,
-                locked_engineer_ids=blocked, available_after_by_engineer=releases)
+                handoff_interrupted_job=handoff, **constraints)
             checked += result.exact_route_checks
             if result.state is None or event.target_id in result.state.plan.unserved_job_ids:
                 rejected.append({'engineerId': engineer_id, 'reason': result.detail or result.unserved_reasons.get(event.target_id, 'Допустимая вставка не найдена в пределах поиска')})

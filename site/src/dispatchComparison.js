@@ -1,6 +1,20 @@
 import { minuteOf } from './shiftDomain.js';
 import { MAP_UI } from './mapDesign.js';
 
+/** Resolve comparisons against the candidate's immutable source revision. */
+export function dispatchPreviewDetail(shift, candidate, { engineerId = candidate.engineer.id, scope = 'day' } = {}) {
+  const before = shift?.versions?.find(version => Number(version.version) === Number(candidate.baseRevision))?.plan;
+  if (!before) throw new Error(`Исходная версия плана ${candidate.baseRevision} недоступна. Обновите смену перед сравнением.`);
+  if (candidate.basePlanContentSha256 && before.contentSha256 !== candidate.basePlanContentSha256) {
+    throw new Error('Исходная версия плана не совпадает с проверенным вариантом. Обновите смену.');
+  }
+  const primary = String(engineerId) === String(candidate.engineer.id);
+  return { before, after:candidate.plan, scope, ids:[engineerId],
+    current:{engineerId,origin:primary ? candidate.state?.coords || candidate.departureOrigin : null,
+      time:candidate.scenarioTime,kind:primary ? candidate.kind : 'Изменение маршрута',emergencyOrderId:candidate.visit.orderId},
+    focusRoute:true };
+}
+
 const distance = (a, b) => {
   const rad = value => value * Math.PI / 180;
   const lat1 = rad(a[0]), lat2 = rad(b[0]);

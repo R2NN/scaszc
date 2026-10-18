@@ -9,6 +9,7 @@ import { createDispatchApi } from '../server/dispatchApi.mjs';
 import { operationalStates } from '../src/operationalState.js';
 import { eventModel, playbackRouteSegments, minuteOf, timeOf, playbackFrame } from '../src/shiftDomain.js';
 import { notificationPresentation } from '../src/notificationPresentation.js';
+import { dispatchPreviewDetail, dispatchRouteData } from '../src/dispatchComparison.js';
 
 const engineer = { id:'E1',name:'Инженер 1',skills:['EMERGENCY'],equipment:['DIAG_SET'],transport:'CAR',zoneId:'EAST',zone:'Восток',startCoords:[55.7,37.6],shiftStart:'08:00',shiftEnd:'18:00',status:'Доступен' };
 const order = { id:'J1',name:'Заявка',address:'Адрес 1',zoneId:'EAST',zone:'Восток',coords:[55.71,37.61],skill:'EMERGENCY',priority:'EMERGENCY',workType:'Аварийные работы',equipment:'DIAG_SET',start:'12:00',end:'17:00',duration:80 };
@@ -105,6 +106,42 @@ test('interception cards expose the destination recipient while preserving the q
 });
 test('manual decision wins once; duplicate callbacks return that same decision',async()=>{
   const f=fixture();try{const item=await f.dispatch.search(f.create().id);assert.equal(item.status,'WAITING');const selected=item.candidates[0];const accepted=f.dispatch.accept(item.id,selected.id,'Диспетчер');f.advance(301);await f.dispatch.tick();assert.deepEqual(f.dispatch.accept(item.id,selected.id,'system').decision,accepted.decision);assert.equal(f.store.get(f.shift.id).revision,2);assert.equal(f.store.get(f.shift.id).events.length,1);}finally{f.store.close();}
+});
+
+test('reopened published decisions compare against the saved source revision', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'beego-comparison-'));
+  const file = join(directory, 'shift.sqlite3');
+  const f = fixture(file);
+  let reopened;
+  try {
+    const incident = await f.dispatch.search(f.create().id);
+    const candidate = incident.candidates[0];
+    f.dispatch.accept(incident.id, candidate.id, 'Диспетчер');
+    f.store.close();
+    reopened = new ShiftStore(file);
+    const saved = new EmergencyDispatch(reopened).get(incident.id).candidates[0];
+    const shift = reopened.get(f.shift.id);
+    assert.equal(shift.revision, 2);
+    assert.equal(saved.basePlanContentSha256, initial.contentSha256);
+    const detail = dispatchPreviewDetail(shift, saved);
+    assert.equal(detail.before.contentSha256, initial.contentSha256);
+    assert.equal(detail.after.contentSha256, shift.plan.contentSha256);
+    assert.notDeepEqual(detail.before, detail.after);
+    assert.deepEqual(detail.before.routes[0].assignments.map(visit => visit.orderId), ['J1']);
+    assert.deepEqual(detail.after.routes[0].assignments.map(visit => visit.orderId), ['U1', 'J1']);
+    assert.notDeepEqual(dispatchRouteData(detail.before, detail), dispatchRouteData(detail.after, detail));
+    const affected = dispatchPreviewDetail(shift, saved, {engineerId:'E2', scope:'next'});
+    assert.equal(affected.before, detail.before);
+    assert.equal(affected.scope, 'next');
+    assert.deepEqual(affected.ids, ['E2']);
+    assert.equal(affected.current.origin, null);
+    assert.throws(() => dispatchPreviewDetail({...shift,versions:[]}, saved), /Исходная версия плана/);
+    assert.throws(() => dispatchPreviewDetail(shift, {...saved,basePlanContentSha256:'wrong'}), /не совпадает/);
+  } finally {
+    if (reopened) reopened.close();
+    else f.store.close();
+    await rm(directory, {recursive:true,force:true});
+  }
 });
 
 test('a stale worker snapshot cannot resurrect an accepted or cancelled incident',async()=>{

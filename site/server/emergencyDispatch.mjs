@@ -227,7 +227,7 @@ export class EmergencyDispatch {
       String(visit.engineerId).split(':').at(-1) === String(engineer.sourceId || engineer.id).split(':').at(-1)
       && visit.kind === 'emergency' && visit.status === 'completed' && !visit.excluded && visit.endedAt && Date.parse(visit.endedAt) < Date.parse(at));
     const ratings = visits.filter(visit => !visit.source?.startsWith('synthetic') && Number.isFinite(visit.rating) && visit.rating >= 1 && visit.rating <= 5).map(visit => visit.rating);
-    return { id: `${incident.id}:${plan.contentSha256}`, fingerprint, baseRevision: shift.revision, scenarioTime: time, checkedAt: this.now(), artifact: candidate.artifact,
+    return { id: `${incident.id}:${plan.contentSha256}`, fingerprint, baseRevision: shift.revision, basePlanContentSha256: shift.plan.contentSha256, scenarioTime: time, checkedAt: this.now(), artifact: candidate.artifact,
       engineer: { id: engineer.id, name: engineer.name, skills: engineer.skills, equipment: engineer.equipment, transport: engineer.transport }, state, visit,
       departureOrigin: movement?.coords || state.coords, responseMinutes: minuteOf(visit.arrival)-minuteOf(time),
       kind: state.status === 'travelling' ? 'Перехват в пути' : state.status === 'working' ? 'После текущей работы' : fromHome ? 'Выезд из дома' : 'Свободный инженер',

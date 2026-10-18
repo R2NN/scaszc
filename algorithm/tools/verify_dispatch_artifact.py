@@ -15,7 +15,7 @@ from beeline_routing.cache import RoutingCache
 from beeline_routing.cli import create_route_client
 from beeline_routing.export import write_json_atomic
 from beeline_routing.oracle import ExactRoutingOracle, OracleQuery
-from replan_ui_event import _event_dataset
+from replan_ui_event import _dispatch_constraints, _event_dataset
 
 
 def verify(artifact, dataset_path, root, oracle=None):
@@ -35,11 +35,18 @@ def verify(artifact, dataset_path, root, oracle=None):
     source_file=next(path for path in sources if path.exists() and json.loads(path.read_text(encoding='utf-8'))['content_sha256']==source_hash)
     old,_=load_exact_plan_artifact(source_file,previous.dataset_sha256)
     plan,_=load_exact_plan_artifact(artifact,dataset.dataset_sha256)
+    captured=raw.get('dispatch_input', {})
+    if captured:
+        if any(captured.get(key) != raw['ui_history'][-1].get(key) for key in ['event','orders','team']):
+            raise ValueError('Captured dispatch input differs from its event history')
+        if captured.get('basePlanContentSha256', source_hash) != source_hash:
+            raise ValueError('Captured dispatch source checksum differs from the reopened plan')
+    constraints=_dispatch_constraints(dataset,old,events[-1].event_time,captured)
     unavailable={}
     for event in events:
         if event.event_type==EventType.ENGINEER_UNAVAILABLE: unavailable[event.target_id]=event.unavailable_until
         elif event.event_type==EventType.CAPACITY_ADDED: unavailable.pop(event.target_id,None)
-    report=validate_replanned_plan(dataset,plan,old,event_time=events[-1].event_time,applied_event_ids=frozenset(e.event_id for e in events),canceled_job_ids=frozenset(e.target_id for e in events if e.event_type==EventType.CANCEL_JOB),unavailable_until_by_engineer=unavailable)
+    report=validate_replanned_plan(dataset,plan,old,event_time=events[-1].event_time,applied_event_ids=frozenset(e.event_id for e in events),canceled_job_ids=frozenset(e.target_id for e in events if e.event_type==EventType.CANCEL_JOB),unavailable_until_by_engineer=unavailable,**constraints)
     trips=[]
     if oracle:
         for route in plan.engineer_plans:
