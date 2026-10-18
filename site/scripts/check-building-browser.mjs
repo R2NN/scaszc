@@ -29,6 +29,31 @@ const capture = async name => {
   assert.ok(overflow.right <= overflow.viewport + 2 && overflow.left >= -1, `${name}: панель вне экрана`);
   checks.push({ name, ...overflow });
 };
+const dragDrawing = async name => {
+  for (let index = 0; index < 6; index++) await page.getByRole('button', { name: 'Увеличить схему', exact: true }).click();
+  const canvas = page.locator('.building-canvas-scroll');
+  const box = await canvas.boundingBox();
+  const selected = await page.locator('.building-asset.is-selected, .building-floor-asset.selected').getAttribute('aria-label');
+  const before = await canvas.evaluate(element => ({ x: element.scrollLeft, y: element.scrollTop }));
+  await page.mouse.move(box.x + box.width * .75, box.y + box.height * .7);
+  await page.mouse.down(); await page.mouse.move(box.x + box.width * .75 - 145, box.y + box.height * .7 - 105, { steps: 10 }); await page.mouse.up();
+  const after = await canvas.evaluate(element => ({ x: element.scrollLeft, y: element.scrollTop, dragging: element.classList.contains('is-panning') }));
+  assert.ok(after.x > before.x + 100 && after.y > before.y + 80, `${name}: перетаскивание по двум осям`);
+  assert.equal(after.dragging, false);
+  assert.equal(await page.locator('.building-asset.is-selected, .building-floor-asset.selected').getAttribute('aria-label'), selected);
+  await canvas.locator('.building-asset, .building-floor-asset').first().scrollIntoViewIfNeeded();
+  const asset = await canvas.evaluate(element => {
+    const frame = element.getBoundingClientRect();
+    return [...element.querySelectorAll('.building-asset, .building-floor-asset')].map(item => {
+      const rect = item.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, left: frame.x, top: frame.y };
+    }).find(point => point.x > frame.x + 10 && point.x < frame.right - 10 && point.y > frame.y + 10 && point.y < frame.bottom - 10);
+  });
+  assert.ok(asset, `${name}: видимый узел для проверки перетаскивания`);
+  await page.mouse.move(asset.x, asset.y); await page.mouse.down(); await page.mouse.move(asset.x + (asset.x - asset.left < 150 ? 120 : -120), asset.y + (asset.y - asset.top < 100 ? 80 : -80), { steps: 10 }); await page.mouse.up();
+  assert.equal(await page.locator('.building-asset.is-selected, .building-floor-asset.selected').getAttribute('aria-label'), selected, 'Перетаскивание узла не выбирает его');
+  await page.getByRole('button', { name: 'Показать всю схему', exact: true }).click();
+  checks.push({ name, passed: true });
+};
 const original = await modelFor(target);
 let modified = false;
 const restoreOriginal = async () => {
@@ -40,6 +65,49 @@ const restoreOriginal = async () => {
 try {
   await open(target);
   await capture('desktop-light');
+  assert.ok(original.model.customerLocations.length, 'Тестовый объект должен содержать синтетическую привязку клиента');
+  const customer = original.model.customerLocations[0];
+  assert.equal(await page.locator('.building-customer-marker').count(), 1);
+  assert.match(await page.locator('.building-customer-panel').innerText(), /Демо-привязка/);
+  await dragDrawing('mouse-pan-cutaway-no-accidental-selection');
+  await page.locator('.building-customer-marker').focus(); await page.keyboard.press('Enter');
+  assert.equal(await page.locator('[data-building-section]').count(), 1);
+  await capture('customer-cutaway');
+  await page.getByRole('button', { name: 'На плане этажа', exact: true }).click();
+  await page.locator('.building-floor-plan').waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Этаж на плане', exact: true }).innerText(), `${customer.floor} этаж`);
+  assert.equal(await page.locator('.building-customer-marker').count(), 1);
+  assert.match(await page.locator('.building-customer-caption').textContent(), new RegExp(`Кв\\. ${customer.unit}`));
+  await capture('customer-floor');
+  await dragDrawing('mouse-pan-floor-no-accidental-selection');
+  await page.getByRole('button', { name: 'Открыть заявку клиента', exact: true }).click();
+  assert.equal(await page.locator('.cx-passport').count(), 0);
+  checks.push({ name: 'exact-apartment-floor-keyboard-and-order-navigation', passed: true });
+  const noLocationRoute = `**/api/buildings/${target.id}`;
+  const noLocation = async route => { const response = await route.fetch(); const payload = await response.json(); payload.model.customerLocations = []; await route.fulfill({ response, json: payload }); };
+  await page.route(noLocationRoute, noLocation); await open(target);
+  assert.equal(await page.locator('.building-customer-marker').count(), 0);
+  assert.match(await page.locator('.building-customer-unknown').innerText(), /не указано/);
+  await page.unroute(noLocationRoute, noLocation);
+  await open(target);
+  await page.getByRole('button', { name: 'Уточнить сведения', exact: true }).click();
+  await page.locator('.building-customer-editor summary').click();
+  await page.locator('.building-customer-edit-fields input[type=number]').first().fill('2');
+  await page.locator('.building-customer-edit-fields input[maxlength="40"]').first().fill('47Б');
+  await page.getByLabel('Основание изменения', { exact: true }).fill('Уточнение квартиры клиента на отдельном тестовом стенде');
+  assert.deepEqual(await page.locator('.building-editor input:invalid').allTextContents(), [], 'Параметры из геометрии должны допускать сохранение без округления');
+  const saveCustomer = page.waitForResponse(response => response.url().includes('/api/buildings/') && response.request().method() === 'PUT');
+  modified = true; await page.getByRole('button', { name: 'Сохранить', exact: true }).click(); assert.equal((await saveCustomer).status(), 200);
+  await page.locator('.building-editor').waitFor({ state: 'detached' });
+  await page.reload({ waitUntil: 'domcontentloaded' }); await page.locator('.building-customer-panel').waitFor();
+  assert.equal(await page.locator('.building-customer-panel h3').innerText(), 'Кв. 47Б');
+  assert.equal(await page.getByText('Демо-привязка', { exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'На плане этажа', exact: true }).click();
+  assert.equal(await page.getByRole('button', { name: 'Этаж на плане', exact: true }).innerText(), '2 этаж');
+  await capture('customer-correction-persisted');
+  await restoreOriginal(); await open(target);
+  checks.push({ name: 'unknown-apartment-no-fake-marker-and-explicit-correction-persisted', passed: true });
+
   const problemsRoute = `**/api/complexity/objects/${target.id}?*`;
   const sharedProblem = async route => {
     const response = await route.fetch();
@@ -63,13 +131,13 @@ try {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.unroute(problemsRoute, sharedProblem);
   await open(target);
-  const nodeName = await page.locator('.building-detail h3').innerText();
+  const nodeName = await page.locator('.building-detail-heading h3').innerText();
   await page.locator('.building-asset.is-schematic').first().click();
-  assert.equal(await page.locator('.building-detail h3').innerText(), 'Этажная коробка');
+  assert.equal(await page.locator('.building-detail-heading h3').innerText(), 'Этажная коробка');
   assert.equal(await page.locator('.building-order').count(), 0);
   await page.locator('.building-asset:not(.is-schematic)').first().focus();
   await page.keyboard.press('Enter');
-  assert.equal(await page.locator('.building-detail h3').innerText(), nodeName);
+  assert.equal(await page.locator('.building-detail-heading h3').innerText(), nodeName);
   await page.getByRole('button', { name: 'Секция здания', exact: true }).click();
   await page.getByRole('option', { name: original.model.sections[1].label, exact: true }).click();
   assert.equal(await page.locator('[data-building-section]').count(), 1);
@@ -140,7 +208,7 @@ try {
   assert.equal(await page.getByLabel('Этажей', { exact: true }).first().inputValue(), String(original.model.sections[0].floors));
   await page.locator('.building-editor input[type=file]').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{"sections":null}') });
   assert.match(await page.locator('.building-editor [role=alert]').innerText(), /Не удалось прочитать схему/);
-  const building = { ...original.model, footprint: [[-40, -30], [40, -30], [40, 30], [-40, 30], [-40, -30]], placements: [], sections: [{ id: 'wing-a', label: 'Корпус А', floors: 17, width: 24, depth: 13, x: 0, z: 0, roof: 'flat', basement: true }, { id: 'wing-b', label: 'Корпус Б', floors: 5, width: 28, depth: 13, x: 24, z: 13, roof: 'gable', basement: false }] };
+  const building = { ...original.model, customerLocations: [], footprint: [[-40, -30], [40, -30], [40, 30], [-40, 30], [-40, -30]], placements: [], sections: [{ id: 'wing-a', label: 'Корпус А', floors: 17, width: 24, depth: 13, x: 0, z: 0, roof: 'flat', basement: true }, { id: 'wing-b', label: 'Корпус Б', floors: 5, width: 28, depth: 13, x: 24, z: 13, roof: 'gable', basement: false }] };
   await page.locator('.building-editor input[type=file]').setInputFiles({ name: 'wings.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(building)) });
   await page.getByLabel('Основание изменения', { exact: true }).fill('Автоматическая проверка на отдельном локальном стенде');
   const save = page.waitForResponse(response => response.url().includes('/api/buildings/') && response.request().method() === 'PUT');
@@ -179,7 +247,7 @@ try {
   await restoreOriginal();
   assert.deepEqual(errors, [], 'Ошибки JavaScript в браузере');
   const report = { at: new Date().toISOString(), url: base, isolatedDatabaseRequired: true, browser: await browser.version(), objects: objects.length, checks, javascriptErrors: errors, tested: ['выбор оборудования мышью и клавиатурой', 'изоляция модельных точек от реальных заявок', 'фильтр секций', 'масштаб кнопками и колёсиком', 'контур в навигаторе без отдельной вкладки', 'переход в заявку', 'темы и адаптивность', '25-этажный дом', 'длинный дом', 'проверка JSON-импорта', 'разновысотные крылья', 'сохранение после перезагрузки', 'экспорт JSON', 'одноэтажный корпус', 'предпросмотр без сохранения', 'сохранение черновика формы', 'сброс черновика', 'переход к конкретному визиту', 'контур с отрицательными координатами'] };
-  report.tested.push('подпись подвального узла поверх соседнего оборудования и компактный клавиатурный фокус', 'план этажа и выбор узла', 'импорт произвольных полигонов помещений', 'индивидуальный план шестого этажа', 'явная кабельная трасса', 'поворот крыла и корпуса разной высоты', 'открытие всех секций', 'жёлтое выделение секции через навигатор', 'общая проблема подсвечивает две секции', 'клавиатурная навигация по форме здания', 'пульсация и отключение анимации при reduced motion');
+  report.tested.push('перетаскивание разреза по двум осям без случайного выбора', 'перетаскивание плана этажа и отпускание мыши', 'одна квартира клиента в разрезе и на нужном этаже', 'выбор квартиры клавиатурой и переход в исходную заявку', 'неизвестная квартира без выдуманной отметки', 'ручная привязка квартиры с сохранением и источником', 'подпись подвального узла поверх соседнего оборудования и компактный клавиатурный фокус', 'план этажа и выбор узла', 'импорт произвольных полигонов помещений', 'индивидуальный план шестого этажа', 'явная кабельная трасса', 'поворот крыла и корпуса разной высоты', 'открытие всех секций', 'жёлтое выделение секции через навигатор', 'общая проблема подсвечивает две секции', 'клавиатурная навигация по форме здания', 'пульсация и отключение анимации при reduced motion');
   await writeFile(resolve(output, 'browser-report.json'), JSON.stringify(report, null, 2));
   process.stdout.write(JSON.stringify({ screenshots: checks.filter(item => 'viewport' in item).length, checks: report.tested.length, javascriptErrors: errors.length, output }) + '\n');
 } finally { try { if (modified) await restoreOriginal(); } finally { await browser.close(); } }

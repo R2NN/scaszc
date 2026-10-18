@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-18T20:23:55.826Z",
+  "at": "2026-10-18T20:40:42.861Z",
   "url": "http://127.0.0.1:4186",
   "isolatedDatabaseRequired": true,
   "browser": "155.0.8059.82",
@@ -12,6 +12,46 @@
       "left": 221.484375,
       "right": 1558.921875,
       "viewport": 1586
+    },
+    {
+      "name": "mouse-pan-cutaway-no-accidental-selection",
+      "passed": true
+    },
+    {
+      "name": "customer-cutaway",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "customer-floor",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "mouse-pan-floor-no-accidental-selection",
+      "passed": true
+    },
+    {
+      "name": "exact-apartment-floor-keyboard-and-order-navigation",
+      "passed": true
+    },
+    {
+      "name": "customer-correction-persisted",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "unknown-apartment-no-fake-marker-and-explicit-correction-persisted",
+      "passed": true
     },
     {
       "name": "navigator-shared-problem",
@@ -167,6 +207,12 @@
     "сброс черновика",
     "переход к конкретному визиту",
     "контур с отрицательными координатами",
+    "перетаскивание разреза по двум осям без случайного выбора",
+    "перетаскивание плана этажа и отпускание мыши",
+    "одна квартира клиента в разрезе и на нужном этаже",
+    "выбор квартиры клавиатурой и переход в исходную заявку",
+    "неизвестная квартира без выдуманной отметки",
+    "ручная привязка квартиры с сохранением и источником",
     "подпись подвального узла поверх соседнего оборудования и компактный клавиатурный фокус",
     "план этажа и выбор узла",
     "импорт произвольных полигонов помещений",

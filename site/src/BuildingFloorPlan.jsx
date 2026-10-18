@@ -2,11 +2,12 @@ import { useId } from 'react';
 import { floorPlanAt } from './buildingInterior.js';
 import { sectionOutline, sectionPlanPoint } from './buildingGeometry.js';
 import { useBuildingDrawing } from './useBuildingDrawing.js';
+import { BuildingCustomerMarkers } from './BuildingCustomerMarkers.jsx';
 
 const points = values => values.map(point => point.map(value => value.toFixed(2)).join(',')).join(' ');
 const colors = { apartment: '#f4eee2', office: '#edf0e6', technical: '#dfedf6', storage: '#e8e9ed', lobby: '#f8f9fa', hall: '#f4eee2', corridor: '#f8f9fa', stairs: '#edf0f3', lift: '#dce6ec' };
 
-function PlanSpace({ space, section, scale, model }) {
+function PlanSpace({ space, section, scale, model, hasCustomer }) {
   const p = point => sectionPlanPoint(section, ...point);
   const xs = space.polygon.map(point => point[0]), zs = space.polygon.map(point => point[1]);
   const x = Math.min(...xs), z = Math.min(...zs), w = Math.max(...xs) - x, d = Math.max(...zs) - z;
@@ -30,13 +31,13 @@ function PlanSpace({ space, section, scale, model }) {
     <polygon points={points(space.polygon.map(p))} fill={colors[space.kind]} stroke='#aab5bd' strokeWidth='1.4' vectorEffect='non-scaling-stroke'/>
     {space.kind === 'stairs' ? <g className='building-plan-stairs'>{Array.from({ length: 9 }, (_, index) => <path key={index} d={`M ${p([x, z + d * index / 9])} L ${p([x + w, z + d * index / 9])}`} stroke='#a1adb7' strokeWidth='.9' vectorEffect='non-scaling-stroke'/>)}<path d={`M ${p([x + w * .5, z + d * .82])} L ${p([x + w * .5, z + d * .2])} M ${p([x + w * .35, z + d * .36])} L ${p([x + w * .5, z + d * .2])} L ${p([x + w * .65, z + d * .36])}`} fill='none' stroke='#6e8392' strokeWidth='1.5' vectorEffect='non-scaling-stroke'/></g> : null}
     {space.kind === 'lift' ? <g><path d={`M ${p([x + w * .12, z + d * .12])} L ${p([x + w * .88, z + d * .88])} M ${p([x + w * .88, z + d * .12])} L ${p([x + w * .12, z + d * .88])}`} stroke='#a2b3bf' strokeWidth='1' vectorEffect='non-scaling-stroke'/></g> : null}
-    {widthPx > 33 && !['stairs', 'lift'].includes(space.kind) ? <text x={cx} y={cy} style={{ fontSize }} textAnchor='middle' dominantBaseline='middle'>{label}</text> : null}
+    {!hasCustomer && widthPx > 33 && !['stairs', 'lift'].includes(space.kind) ? <text x={cx} y={cy} style={{ fontSize }} textAnchor='middle' dominantBaseline='middle'>{label}</text> : null}
     {door}<title>{space.label}</title>
   </g>;
 }
 
 /** Architectural floor drawing preserves supplied polygons/walls; door symbols are model-only. */
-export function BuildingFloorPlan({ model, assets, selectedId, onSelect, floor, sectionId, zoom, attentionIds }) {
+export function BuildingFloorPlan({ model, assets, selectedId, onSelect, floor, sectionId, zoom, attentionIds, customers = [], selectedCustomerId, onCustomer }) {
   const uid = useId().replace(/:/g, '');
   const sections = model.sections.filter(section => (sectionId === 'all' || section.id === sectionId) && (floor === -1 ? section.basement : section.floors >= floor));
   const outlines = sections.map(sectionOutline), all = outlines.flat();
@@ -51,7 +52,7 @@ export function BuildingFloorPlan({ model, assets, selectedId, onSelect, floor, 
       const p = point => sectionPlanPoint(section, ...point), plan = floorPlanAt(section, floor), caption = p([section.width / 2, section.depth + 1.5]);
       return <g key={section.id} className='building-floor-section'>
         <polygon points={points(outlines[index])} className='building-floor-shell' strokeWidth='2.4' vectorEffect='non-scaling-stroke' filter={`url(#${uid}-plan-shadow)`}/>
-        {plan.spaces.map(space => <PlanSpace key={space.id} space={space} section={section} scale={scale} model={section.floorPlans.source === 'model'}/>)}
+        {plan.spaces.map(space => <PlanSpace key={space.id} space={space} section={section} scale={scale} model={section.floorPlans.source === 'model'} hasCustomer={customers.some(customer => customer.known && customer.sectionId === section.id && customer.floor === floor && customer.spaceId === space.id)}/>)}
         {plan.walls.map((wall, index) => <polyline key={index} points={points(wall.map(p))} fill='none' stroke='#647783' strokeWidth='3' vectorEffect='non-scaling-stroke'/>)}
         <text x={caption[0]} y={caption[1]} style={{ fontSize: 12 * unit }} className='building-floor-caption' textAnchor='middle'>{section.label}</text>
       </g>;
@@ -77,5 +78,6 @@ export function BuildingFloorPlan({ model, assets, selectedId, onSelect, floor, 
         <title>{asset.label} · {asset.location}</title>
       </g>;
     })}
+    <BuildingCustomerMarkers customers={customers} selectedOrderId={selectedCustomerId} onSelect={onCustomer} floor={floor} sectionId={sectionId} scale={scale} bounds={bounds}/>
   </svg>;
 }
