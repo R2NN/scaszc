@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowDownToLine, Building2, Cable, ChevronRight, CircleHelp, Expand, FileText, Layers3, LoaderCircle, Minus, Plus, Save, Settings2, Upload, Wrench, X } from 'lucide-react';
+import { AlertCircle, ArrowDownToLine, Building2, Cable, ChevronRight, Expand, FileText, Layers3, LoaderCircle, Minus, Plus, Save, Settings2, Upload, Wrench, X } from 'lucide-react';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { buildingAssets, buildingScene, linkedBuildingOrders, validateBuildingModel } from './buildingModel.js';
 import { floorPlanAt, syntheticFloorPlans } from './buildingInterior.js';
@@ -310,7 +310,6 @@ export function BuildingWorkspace({ data, date, orders = [], initialOrderId, act
         <BuildingNavigator model={model} sectionId={activeSectionId} currentSectionId={activeSectionId === 'all' ? selectedCustomer?.sectionId || selected?.sectionId : activeSectionId} sectionConditions={attention.sectionConditions} onSection={id => { setSectionId(id); setSelectedId(''); setZoom(1); canvasRef.current?.scrollTo(0, 0); }}/>
       </div>
       <div className='building-legend'><span><span className='building-legend-cabinet'/>Оборудование</span><span><i className='building-legend-line'/>Стояк</span><span><span className='building-legend-count'>1</span>Заявки</span><span><AlertCircle size={15} color='#d17b24'/>Особенности</span><span><span className='building-legend-customer'/>Квартира клиента</span><span className='building-legend-note'>Внутреннее устройство и размещение условные</span></div>
-      <details className='building-provenance'><summary><CircleHelp size={15}/>Источники данных и точность схемы<ChevronRight size={15}/></summary><div>{Object.values(model.provenance).map((label, index) => <p key={index}>{String(label)}</p>)}{model.source.url ? <a href={model.source.url} target='_blank' rel='noreferrer'>{payload.attribution.label} · {timestamp(payload.attribution.fetchedAt)}</a> : null}<p>Квартиры с пометкой «Демо-привязка» синтетические. Для новых заявок расположение появляется только после явной привязки к помещению в параметрах здания или импорте.</p><p>Схема стояков и этажные коробки — модельные. Состояние сети в реальном времени не подключено.</p></div></details>
     </div>
     <div className='building-detail'>
       {!editing ? <BuildingCustomerPanel customers={customers} selected={selectedCustomer} onSelect={selectCustomer} onFloor={customer => { selectCustomer(customer.orderId); setView('floor'); }} onOrder={order => onOrder?.(orders.find(item => String(item.id) === String(order.id)) || order)}/> : null}
