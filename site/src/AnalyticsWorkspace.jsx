@@ -1,3 +1,4 @@
+import { EngineerPortrait } from './EngineerPortrait.jsx';
 import { isUrgentOrder } from './workTypes.js';
 import { orderSemantics } from './orderSemantics.js';
 import { DurationAccuracy, openObjectPassport, useDurationAttention } from './ComplexityWorkspace.jsx';
@@ -58,7 +59,7 @@ const crewInitials = value => String(value || 'Бригада').trim().split(/\s
 const analyticsEngineerName = engineer => ratingName(engineer || {});
 function AnalyticsEngineerAvatar({ id, name, className = '' }) {
   const portrait = portraitForEngineer(id);
-  return <i className={`analytics-engineer-avatar ${portrait ? 'has-portrait' : ''} ${className}`.trim()}>{portrait ? <img src={portrait} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} /> : null}<span>{crewInitials(name)}</span></i>;
+  return <i className={`analytics-engineer-avatar ${portrait ? 'has-portrait' : ''} ${className}`.trim()}>{portrait ? <EngineerPortrait id={id}/> : null}<span>{crewInitials(name)}</span></i>;
 }
 const clusterOf = item => String(item?.cluster || item?.clusterName || item?.zone || item?.zoneName || item?.zoneId || item?.regionName || item?.regionId || 'Без региона').trim();
 const CLUSTER_ORDER = ['Юго-восток', 'Восток', 'Югоцентр'];

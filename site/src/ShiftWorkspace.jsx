@@ -1,3 +1,4 @@
+import { EngineerPortrait } from './EngineerPortrait.jsx';
 import { workPointType } from './workTypes.js';
 import { EmergencyDispatchPanel } from './EmergencyDispatch.jsx';
 import { EngineerStartSettings } from './EngineerStartSettings.jsx';
@@ -43,7 +44,7 @@ import "./shift-workspace.css";
 const shiftEngineerName = engineer => ratingName(engineer || {});
 function ShiftEngineerAvatar({ engineer, name }) {
   const portrait = portraitForEngineer(engineer?.id);
-  return <span className={`person-avatar ${portrait ? 'has-portrait' : ''}`}>{portrait ? <img src={portrait} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} /> : null}<span>{String(name || shiftEngineerName(engineer)).split(/\s+/).map(part => part[0]).join('').slice(0, 2)}</span></span>;
+  return <span className={`person-avatar ${portrait ? 'has-portrait' : ''}`}>{portrait ? <EngineerPortrait id={engineer.id}/> : null}<span>{String(name || shiftEngineerName(engineer)).split(/\s+/).map(part => part[0]).join('').slice(0, 2)}</span></span>;
 }
 
 const filterTokens = value => (Array.isArray(value) ? value : String(value || '').split(/\s*[|,;]\s*/)).map(item => String(item).trim()).filter(Boolean);

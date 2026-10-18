@@ -12,5 +12,27 @@ export function portraitForEngineer(id) {
   if (casePortraits[key]) return '/engineer-portraits/portrait-' + casePortraits[key] + '.jpg?v=2';
   const index = primary.indexOf(key);
   if (index < 0 || index >= primaryPortraitNumbers.length) return null;
-  return '/engineer-portraits/portrait-' + primaryPortraitNumbers[index] + '.jpg?v=3';
+  const number = primaryPortraitNumbers[index];
+  if (number === 29 || number === 33) return `/engineer-portraits/portrait-${number}-restored.png?v=1`;
+  return '/engineer-portraits/portrait-' + number + '.jpg?v=3';
+}
+
+// Retained tiles overlap adjacent portraits. Reassemble their available edges;
+// the two incomplete faces use separately restored assets above.
+const repairedFrames = {
+  26: { box: [6, 38, 350, 350], tiles: [[26, 0]] },
+  27: { box: [0, 78, 300, 300], tiles: [[27, 0]] },
+  28: { box: [0, 72, 338, 338], tiles: [[27, -326], [28, 94]] },
+  30: { box: [8, 70, 350, 350], tiles: [[30, 0]] },
+  31: { box: [0, 72, 341, 341], tiles: [[30, -383], [31, 37]] },
+  32: { box: [0, 72, 338, 338], tiles: [[31, -326], [32, 94]] },
+};
+
+/** Return the retained source regions for a consistently framed avatar. */
+export function portraitFrameForEngineer(id) {
+  const url = portraitForEngineer(id);
+  if (!url) return null;
+  const number = Number(url.match(/portrait-(\d+)/)[1]);
+  const repaired = repairedFrames[number];
+  return repaired ? { box: repaired.box, tiles: repaired.tiles.map(([tile, x]) => ({ url: `/engineer-portraits/portrait-${tile}.jpg?v=3`, x })) } : null;
 }

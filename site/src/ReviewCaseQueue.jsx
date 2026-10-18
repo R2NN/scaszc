@@ -1,3 +1,4 @@
+import { EngineerPortrait } from './EngineerPortrait.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, CheckCheck, ChevronRight, CircleAlert, Eye, Flag, Inbox, LoaderCircle, MessageSquare, Search, Star, X } from 'lucide-react';
 import { BusinessSelect } from './BusinessSelect.jsx';
@@ -33,7 +34,7 @@ export function ReviewCaseQueue({cases,current,loading,listLoading,error,onOpen,
         const name=nameFor(item.engineer),portrait=portraitForEngineer(item.engineer.id),lastDecision=item.decisions?.at(-1);
         return <article key={item.id} role="listitem" data-case-id={item.id} className={`review-case-card ${current?.id===item.id?'selected':''} ${item.triage?.unread!==false&&item.status!=='RESOLVED'?'unread':''}`}>
           <button className="review-case-card-open" aria-label={`Рассмотреть обращение ${name}`} aria-pressed={current?.id===item.id} onClick={()=>onOpen(item.id)}>
-            <span className="review-case-card-heading"><span className="review-case-avatar">{portrait?<img src={portrait} alt=""/>:name.split(/\s+/).map(part=>part[0]).join('').slice(0,2)}</span><span className="review-case-person"><b>{name}</b><small>{item.origin==='client'?`От клиента · ${item.review?.client}`:'От инженера · оспаривание отзыва'}</small></span><span className="review-case-state"><span className={`review-inbox-status ${item.status==='RESOLVED'?'resolved':item.triage?.unread!==false?'new':'viewed'}`}>{statusLabel(item)}</span><time>{date(item.createdAt)}</time></span></span>
+            <span className="review-case-card-heading"><span className="review-case-avatar">{portrait?<EngineerPortrait id={item.engineer.id}/>:name.split(/\s+/).map(part=>part[0]).join('').slice(0,2)}</span><span className="review-case-person"><b>{name}</b><small>{item.origin==='client'?`От клиента · ${item.review?.client}`:'От инженера · оспаривание отзыва'}</small></span><span className="review-case-state"><span className={`review-inbox-status ${item.status==='RESOLVED'?'resolved':item.triage?.unread!==false?'new':'viewed'}`}>{statusLabel(item)}</span><time>{date(item.createdAt)}</time></span></span>
             <span className="review-case-reason"><small>{item.origin==='client'?'Что просит проверить клиент':'Что оспаривает инженер'}</small><span>{item.appealText||item.subject}</span></span>
             <span className="review-case-quote"><span className="review-case-quote-heading"><span>Отзыв · <b>{item.review?.client}</b></span><em><Star size={14}/>{item.review?.score} из 5</em></span><span className="review-case-quote-text">{item.review?.comment}</span></span>
             <span className="review-case-visit"><span>{filterLabel(item.review?.visit?.skill)}</span><span>{item.review?.visit?.orderId}</span></span>

@@ -1,5 +1,7 @@
 # Prototype Instructions
 
+- Engineer avatars must show one centered face without contact-sheet dividers, adjacent people or black padding. Use the shared EngineerPortrait renderer in every workspace and preserve stable ID-to-face mappings; source tiles 26–33 need explicit framing or restored assets.
+
 - Rating staffing uses the selected shift's stored engineer profiles and validated historical membership, not the later roster seed date or another day's shifts. Normalize retained territory/equipment formatting without rewriting published inputs. Preserve rating bounds, explicit unavailability and current/future roster periods; never adapt reserve home origins or shifts just to make them eligible.
 
 - Preserve access to retained historical operational days in Orders, Engineers and Shift through the shared date selector. Load saved independently validated orders, crews and road geometry from the full history archive; never generate replacement history or fabricate completion facts from analytics summaries. Preserve existing shift revisions and dispatch sessions when restoring missing days.

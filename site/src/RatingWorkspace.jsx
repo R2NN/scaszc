@@ -1,3 +1,4 @@
+import { EngineerPortrait } from './EngineerPortrait.jsx';
 import { ratingName } from './engineerPresentation.js';
 import { Fragment, useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -120,7 +121,7 @@ export function useRatingWorkspace({ active, regionId, date, actor }) {
 
 function Avatar({ name, id, profile }) {
   const portrait = profile?.avatar ? `/avatars/${profile.avatar}.png` : id ? portraitForEngineer(id) : null;
-  return <span className={`rating-avatar${profile ? ' is-profile' : ''}`} style={profile ? { backgroundColor: profileAvatarColor(profile) } : undefined}>{portrait ? <img key={portrait} src={portrait} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} /> : null}<span>{initials(name)}</span></span>;
+  return <span className={`rating-avatar${profile ? ' is-profile' : ''}`} style={profile ? { backgroundColor: profileAvatarColor(profile) } : undefined}>{portrait ? !profile ? <EngineerPortrait id={id}/> : <img key={portrait} src={portrait} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} /> : null}<span>{initials(name)}</span></span>;
 }
 function InfoPopover({ label = 'Как считается рейтинг', children, placement = 'side' }) {
   const [open, setOpen] = useState(false); const [position, setPosition] = useState(null); const root = useRef(null); const button = useRef(null); const popover = useRef(null);

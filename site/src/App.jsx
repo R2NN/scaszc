@@ -1,3 +1,4 @@
+import { EngineerPortrait } from './EngineerPortrait.jsx';
 import { engineerIdentity, ratingName } from './engineerPresentation.js';
 import { publishDispatchMapEvent } from './dispatchMapEvents.js';
 import { NotificationActions } from './NotificationActions.jsx';
@@ -1446,7 +1447,7 @@ function PersonAvatar({ engineer, name, className = '' }) {
   const displayName = name || displayEngineerName(engineer);
   const portrait = engineer?.id ? portraitForEngineer(engineer.id) : null;
   const initials = String(displayName || '').split(/\s+/).map(part => part[0]).join('').slice(0, 2);
-  return <span className={`person-avatar ${portrait ? 'has-portrait' : ''} ${className}`.trim()}>{portrait ? <img src={portrait} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} /> : null}<span>{initials}</span></span>;
+  return <span className={`person-avatar ${portrait ? 'has-portrait' : ''} ${className}`.trim()}>{portrait ? <EngineerPortrait id={engineer.id}/> : null}<span>{initials}</span></span>;
 }
 function OrderList({orders,onOrder,onHover,plan,selectedId}){
   const listRef=useRef(null);
