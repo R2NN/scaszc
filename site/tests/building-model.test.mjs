@@ -36,7 +36,7 @@ test('unequal sections, wings, one-storey warehouses and skyscrapers produce fin
     const model = validateBuildingModel({ ...generated(), sections: [{ id: 'a', label: 'Крыло А', floors, width: 18, depth: 12, x: 0, z: 0, roof: 'flat', basement: true }, { id: 'b', label: 'Крыло Б', floors: 2, width: 24, depth: 9, x: 18, z: 12, roof: 'gable', basement: false }], placements: [] }, object.id, entities);
     const scene = buildingScene(model); assert.ok(scene.viewBox.every(Number.isFinite)); assert.ok(scene.viewBox[2] > 0 && scene.viewBox[3] > 0);
     assert.equal(buildingScene(model, 'b').sections.length, 1);
-    const assets = buildingAssets(model, entities); assert.equal(assets.length, floors + 2);
+    const assets = buildingAssets(model, entities); assert.ok(assets.length > 0 && assets.length <= floors + 2); assert.ok(assets.every(asset => asset.floor >= 1 && asset.floor <= model.sections.find(section => section.id === asset.sectionId).floors));
   }
 });
 

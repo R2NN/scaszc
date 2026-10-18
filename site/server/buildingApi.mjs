@@ -23,7 +23,7 @@ export function readBuilding(registry, objectId) {
   const row = registry.db.prepare('SELECT * FROM building_models WHERE object_id=?').get(objectId);
   const osmId = object.sourceId || object.examples?.[0]?.sourceData?.geocode_object_id;
   const osm = buildings.get(osmId);
-  const model = row ? decode(row) : generateBuildingModel(object, registry.entities(objectId), osm ? { ...osm, fetchedAt: catalog.fetchedAt } : null, entrances);
+  const model = row ? validateBuildingModel(decode(row), objectId, registry.entities(objectId)) : generateBuildingModel(object, registry.entities(objectId), osm ? { ...osm, fetchedAt: catalog.fetchedAt } : null, entrances);
   return { model, revision: row?.revision || 0, attribution: { label: '© OpenStreetMap contributors', url: catalog.attributionUrl, fetchedAt: catalog.fetchedAt }, history: registry.db.prepare('SELECT revision,changed_at AS changedAt,actor,reason FROM building_model_history WHERE object_id=? ORDER BY revision DESC LIMIT 20').all(objectId) };
 }
 
