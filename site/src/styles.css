@@ -4147,3 +4147,17 @@ html[data-theme="dark"]{
 @media(max-width:900px){.import-norm-warning{align-items:flex-start;flex-wrap:wrap}.import-norm-warning button{margin-left:36px}}
 
 .notification-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px;min-width:0}.notification-actions>button,.notification-actions>.notification-read-state{position:static!important;width:auto!important;height:auto!important;min-height:30px;max-width:100%;white-space:normal;text-align:center;line-height:1.35;padding:6px 9px;flex-shrink:0}.notification-actions>button{border:0;border-radius:8px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}.notification-open-incident,.toast-open-incident{background:#ffd21f;color:#312700}.toast .notification-actions{justify-content:flex-end}.toast .notification-actions span{display:inline}.notification-actions svg{flex-shrink:0;width:15px;height:15px}.app-shell.dark .notification-open-incident,.app-shell.dark .toast-open-incident{background:#ffd21f;color:#312700}
+
+/* Overlay pages use a Web Animations timeline for the rail and their offset.
+   Keep the CSS transition disabled only there; ordinary map/list workspaces
+   still need the rail's native width transition while labels fade separately. */
+.app-shell.has-map-overlay .sidebar.is-transitioning,
+.app-shell.has-map-overlay .sidebar.is-transitioning~.page{transition:none!important}
+
+/* Keep planning actions on one stable axis while their label/state changes. */
+.app-shell .map-plan-action,.app-shell .sidebar.expanded~.route-workspace .map-plan-action{left:50%!important;width:250px;min-width:250px;box-sizing:border-box;justify-content:center;white-space:nowrap;transition:opacity .3s cubic-bezier(.2,.75,.25,1),transform .18s ease,box-shadow .18s ease!important;translate:none!important;scale:none!important;transform:translateX(-50%) translateY(0)!important}
+.app-shell .map-plan-action.is-opening,.app-shell .map-plan-action.is-closing{transform:translateX(-50%) translateY(12px) scale(.94)!important}
+.app-shell .map-plan-action.is-open{transform:translateX(-50%) translateY(0) scale(1)!important}
+.app-shell .map-plan-action:hover{transform:translateX(-50%) translateY(-3px) scale(1)!important}.app-shell .map-plan-action:active{transform:translateX(-50%) translateY(0) scale(1)!important}
+.staff-plan-settings-dialog>footer button.primary{width:270px;min-width:270px;box-sizing:border-box;white-space:nowrap;justify-content:center}
+@media(max-width:540px){.app-shell .map-plan-action{width:220px;min-width:220px}.staff-plan-settings-dialog>footer button.primary{width:100%;min-width:0}}

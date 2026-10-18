@@ -1,3 +1,4 @@
+import { ratingName } from './engineerPresentation.js';
 import { createIncidentAnnouncer, publishDispatchMapEvent } from './dispatchMapEvents.js';
 import { createDispatchClockSync } from './dispatchClockSync.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -249,12 +250,12 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   return <section className='emergency-dispatch' aria-label='Решение аварии'>
     <div className='dispatch-heading'><div><small>ОПЕРАТИВНОЕ РЕШЕНИЕ</small><h3>Аварийный выезд</h3></div><AlertTriangle size={24}/></div>
     {item ? <div className={`dispatch-decision-bar${accepted ? ' is-applied' : ''}`}>
-      <div className='dispatch-decision-person'><b>{accepted ? acceptedCandidate?.engineer.name : candidate?.engineer.name || 'Выберите инженера'}</b><strong>{accepted ? acceptedCandidate?.visit.arrival : candidate?.visit.arrival || '—'}<small>прибытие</small></strong></div>
+      <div className='dispatch-decision-person'><b>{accepted ? ratingName(acceptedCandidate?.engineer) : candidate ? ratingName(candidate.engineer) : 'Выберите инженера'}</b><strong>{accepted ? acceptedCandidate?.visit.arrival : candidate?.visit.arrival || '—'}<small>прибытие</small></strong></div>
       {accepted ? <div className='dispatch-applied-title' role='status'><Check size={19}/><b>Направлен на аварию</b></div> : null}
       <p className='dispatch-main-impact'>{accepted ? applied?.summary : impact?.summary || (searching ? 'Проверенные варианты появятся ниже' : 'Выберите вариант ниже, чтобы увидеть последствия')}</p>
       {!terminal(item) ? <div className='dispatch-submit-row'><span className='dispatch-decision-timer'><Clock3 size={17}/>{item.policy?.enabled ? seconds ? `Автовыбор через ${countdown}` : 'Автовыбор: ожидаем готовое решение' : 'Ручное решение'}</span><button type='button' className='primary' disabled={!candidate || item.status !== 'WAITING' || pending} onClick={() => controller.accept(item, candidate)}>{pending ? 'Направляем…' : 'Направить на аварию'}</button></div> : null}
       {candidate ? <>
-        {accepted && !candidateApplied ? <p className='dispatch-preview-label'>Непринятый вариант на карте: {candidate.engineer.name}</p> : null}
+        {accepted && !candidateApplied ? <p className='dispatch-preview-label'>Непринятый вариант на карте: {ratingName(candidate.engineer)}</p> : null}
         <div className='dispatch-inline-key'>{candidate.kind !== 'Выезд из дома' ? <span className='before'>Исходный путь</span> : null}<span className='after'>До аварии</span>{hasContinuation ? <span className='continuation'>После аварии</span> : null}</div>
         <div className='dispatch-scope-controls' role='group' aria-label='Показывать маршрут'>{[{value:'day',label:'Весь оставшийся день'},{value:'next',label:'Ближайшее действие'}].map(option => <button key={option.value} type='button' aria-pressed={(controller.routeScope || 'day') === option.value} onClick={() => controller.changeRouteScope(option.value)}>{option.label}</button>)}</div>
       </> : null}
@@ -262,12 +263,12 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
     {!item ? <div className='dispatch-empty'><p>{controller.session ? 'Сценарная смена готова с начала дня. Нажмите «Воспроизвести» на шкале времени. Авария поступит в 11:17.' : 'При поступлении аварии здесь появятся проверенные варианты всей смены.'}</p><button type='button' className='primary' onClick={controller.startSession}>{controller.session ? 'Новая изолированная сессия' : 'Запустить сценарий с 06:00'}</button><small>17 августа · отдельная смена · событие в 11:17</small></div> : <>
       <div className='dispatch-incident'><b>{item.order.address}</b><span>{item.time} · {accepted ? 'Решение принято' : item.status === 'CANCELLED' ? 'Отменена' : 'Требуется решение'}</span></div>
       {acceptedCandidate && accepted ? <div className='dispatch-result' role='status'>
-        <Check size={24}/><div><b>{acceptedCandidate.engineer.name} направлен на аварию</b><strong>Прибытие {acceptedCandidate.visit.arrival}</strong><span>{item.decision.actor === 'system' ? 'Автовыбор' : 'Решение диспетчера'} · версия {item.decision.revision}</span></div>
+        <Check size={24}/><div><b>{ratingName(acceptedCandidate.engineer)} направлен на аварию</b><strong>Прибытие {acceptedCandidate.visit.arrival}</strong><span>{item.decision.actor === 'system' ? 'Автовыбор' : 'Решение диспетчера'} · версия {item.decision.revision}</span></div>
         {item.confirmation?.routeUpdate ? <p>{item.confirmation.routeUpdate}</p> : null}
         {applied.transferred.length ? <><ul>{applied.transferred.slice(0,3).map(row => <li key={row.orderId}><b>{row.address}</b><span>Передана: {acceptedCandidate.team?.find(engineer => engineer.id === row.after.engineerId)?.name || row.after.engineerId} · {row.after.plannedStart}</span></li>)}</ul>{applied.transferred.length > 3 ? <details className='dispatch-result-more'><summary>Остальные передачи · {applied.transferred.length - 3}</summary><ul>{applied.transferred.slice(3).map(row => <li key={row.orderId}><b>{row.address}</b><span>Передана: {acceptedCandidate.team?.find(engineer => engineer.id === row.after.engineerId)?.name || row.after.engineerId} · {row.after.plannedStart}</span></li>)}</ul></details> : null}</> : <p>Прежние заявки другим инженерам не передавались.</p>}
         {applied.lost.length ? <strong className='dispatch-error'>Без назначения: {applied.lost.length}. Нужен разбор очереди.</strong> : null}
       </div> : null}
-      {pending ? <div className='dispatch-confirming' role='status'><Clock3 size={20}/><div><b>Подтверждаем направление</b><span>{submitting?.engineer.name || item.confirmation?.engineer.name} · проверяем актуальный путь. Выбранный инженер сохраняется.</span></div></div> : null}
+      {pending ? <div className='dispatch-confirming' role='status'><Clock3 size={20}/><div><b>Подтверждаем направление</b><span>{ratingName(submitting?.engineer || item.confirmation?.engineer)} · проверяем актуальный путь. Выбранный инженер сохраняется.</span></div></div> : null}
       {!terminal(item) && !pending ? <div className={`dispatch-search-state ${searching ? 'is-searching' : 'is-ready'}`} role='status'>
         <span className='dispatch-search-icon'><Clock3 size={19}/></span><div><b>{item.status === 'ERROR' ? 'Расчёт прерван' : checkingIntercept ? 'Проверяем перехват в пути' : searching ? 'Поиск продолжается' : resultCountLabel(item.candidates.length)}</b><span>{checkingIntercept ? item.progress.engineerName || 'Ближайшая бригада' : searching ? item.candidates.length ? `Готовых вариантов: ${item.candidates.length} · уже можно выбирать` : 'Проверяем маршруты и окна клиентов' : item.search?.stoppedReason ? 'Поиск остановлен по лимиту' : item.status === 'ERROR' ? 'Можно повторить расчёт' : 'Расчёт завершён'}</span></div>
       </div> : null}
@@ -275,7 +276,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
         const effect = impacts.get(option.id);
         return <button type='button' key={option.id} aria-pressed={option.id === candidate?.id} className={`dispatch-option ${option.id === candidate?.id ? 'selected' : ''}`} onClick={() => controller.preview(option)}>
           <span className='dispatch-option-head'><span className='dispatch-option-kind'>{option.kind}</span>{option.id === item.recommendedId ? <strong>Рекомендуем</strong> : option.responseMinutes === fastest && item.candidates.length > 1 ? <em>Быстрее всех</em> : null}</span>
-          <span className='dispatch-card-person'><b>{option.engineer.name}</b><strong>{option.visit.arrival}<small>прибытие</small></strong></span>
+          <span className='dispatch-card-person'><b>{ratingName(option.engineer)}</b><strong>{option.visit.arrival}<small>прибытие</small></strong></span>
           <span className={`dispatch-card-impact${effect.lost.length || effect.outsideWindow.length ? ' is-risk' : ''}`}>{effect.summary}</span>
           <span className='dispatch-action-counts'><span>Передачи <b>{effect.transferred.length}</b></span><span>Начнутся позже <b>{effect.delayed.length}</b></span><span>Без назначения <b>{effect.lost.length}</b></span></span>
           {option.id === item.recommendedId ? <span className='dispatch-recommendation'>{recommendation}</span> : null}

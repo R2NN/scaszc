@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import './business-select.css';
 
@@ -6,11 +7,13 @@ import './business-select.css';
  * Единый выпадающий список BeeGo с управлением мышью и клавиатурой.
  * @param {{value: string, options: Array<{value: string, label: string, hint?: string, priority?: boolean, disabled?: boolean}>, onChange: (value: string) => void, ariaLabel: string, className?: string, disabled?: boolean}} props
  */
-export function BusinessSelect({ value, options, onChange, ariaLabel, className = '', disabled = false, searchable = false }) {
+export function BusinessSelect({ value, options, onChange, ariaLabel, className = '', disabled = false, searchable = false, portalMenu = false }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef(null);
+  const menuRef = useRef(null);
+  const [menuPosition, setMenuPosition] = useState(null);
   const selectedIndex = Math.max(0, options.findIndex(option => option.value === value));
   const selected = options[selectedIndex] || options[0];
   const visibleOptions = useMemo(() => options.map((option, index) => ({option,index})).filter(({option,index}) => !searchable || !query.trim() || !index || `${option.label} ${option.hint||''}`.toLocaleLowerCase('ru-RU').includes(query.trim().toLocaleLowerCase('ru-RU'))), [options,query,searchable]);
@@ -19,7 +22,7 @@ export function BusinessSelect({ value, options, onChange, ariaLabel, className 
   useEffect(() => {
     if (!open) return undefined;
     const close = event => {
-      if (event.key === 'Escape' || (event.type === 'pointerdown' && !rootRef.current?.contains(event.target))) setOpen(false);
+      if (event.key === 'Escape' || (event.type === 'pointerdown' && !rootRef.current?.contains(event.target) && !menuRef.current?.contains(event.target))) setOpen(false);
     };
     document.addEventListener('pointerdown', close);
     document.addEventListener('keydown', close);
@@ -28,6 +31,21 @@ export function BusinessSelect({ value, options, onChange, ariaLabel, className 
       document.removeEventListener('keydown', close);
     };
   }, [open]);
+  useLayoutEffect(() => {
+    if (!open || !portalMenu) return undefined;
+    const update = () => {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(Math.max(180,rect.width),window.innerWidth - 24);
+      const below = window.innerHeight - rect.bottom - 12, above = rect.top - 12;
+      const up = below < 180 && above > below;
+      const maxHeight = Math.max(60,Math.min(310,up ? above - 7 : below - 7));
+      setMenuPosition({top:up ? rect.top - maxHeight - 7 : rect.bottom + 7,
+        left:Math.max(12,Math.min(rect.left,window.innerWidth - width - 12)),width,maxHeight});
+    };
+    update(); window.addEventListener('resize', update); window.addEventListener('scroll', update, true);
+    return () => { window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); };
+  }, [open, portalMenu]);
 
   const show = () => {
     if (disabled) return;
@@ -36,9 +54,10 @@ export function BusinessSelect({ value, options, onChange, ariaLabel, className 
     setOpen(true);
   };
   const choose = option => {
-    if (option.disabled) return;
+    if (!option || option.disabled) return;
     onChange(option.value);
     setOpen(false);
+    rootRef.current?.querySelector('.business-select-trigger')?.focus();
   };
   const move = direction => {
     if (!enabledIndexes.length) return;
@@ -67,16 +86,17 @@ export function BusinessSelect({ value, options, onChange, ariaLabel, className 
     }
   };
 
+  const menu = open ? <div ref={menuRef} className={`business-select-menu${portalMenu ? ' portal-menu' : ''}`} role="listbox" aria-label={ariaLabel} style={portalMenu && menuPosition ? { position: 'fixed', top: menuPosition.top, left: menuPosition.left, width: menuPosition.width, maxHeight: menuPosition.maxHeight, zIndex: 24000 } : undefined}>
+    {searchable?<input className="business-select-search" value={query} onChange={event=>{setQuery(event.target.value);setActiveIndex(0)}} placeholder="Найти в списке…" aria-label={`Поиск: ${ariaLabel}`} autoFocus/>:null}
+    {visibleOptions.map(({option,index}) => <button type="button" role="option" aria-selected={option.value === value} disabled={option.disabled} className={`${option.value === value ? 'selected' : ''} ${index === activeIndex ? 'focused' : ''} ${option.priority ? 'priority' : ''}`.trim()} key={option.value} onPointerMove={() => !option.disabled && setActiveIndex(index)} onClick={() => choose(option)}>
+      <span><b>{option.label}</b>{option.hint ? <small>{option.hint}</small> : null}</span>{option.value === value ? <Check/> : null}
+    </button>)}
+    {!visibleOptions.length?<p className="business-select-empty">Совпадений нет</p>:null}
+  </div> : null;
   return <div className={`business-select ${open ? 'open' : ''} ${disabled ? 'disabled' : ''} ${className}`.trim()} ref={rootRef} onKeyDown={onKeyDown}>
     <button type="button" className="business-select-trigger" disabled={disabled} onClick={() => open ? setOpen(false) : show()} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open}>
       <span>{selected?.label || 'Выберите значение'}</span><ChevronDown/>
     </button>
-    {open ? <div className="business-select-menu" role="listbox" aria-label={ariaLabel}>
-      {searchable?<input className="business-select-search" value={query} onChange={event=>{setQuery(event.target.value);setActiveIndex(0)}} placeholder="Найти в списке…" aria-label={`Поиск: ${ariaLabel}`} autoFocus/>:null}
-      {visibleOptions.map(({option,index}) => <button type="button" role="option" aria-selected={option.value === value} disabled={option.disabled} className={`${option.value === value ? 'selected' : ''} ${index === activeIndex ? 'focused' : ''} ${option.priority ? 'priority' : ''}`.trim()} key={option.value} onPointerMove={() => !option.disabled && setActiveIndex(index)} onClick={() => choose(option)}>
-        <span><b>{option.label}</b>{option.hint ? <small>{option.hint}</small> : null}</span>{option.value === value ? <Check/> : null}
-      </button>)}
-      {!visibleOptions.length?<p className="business-select-empty">Совпадений нет</p>:null}
-    </div> : null}
+    {portalMenu && open && menuPosition ? createPortal(menu, document.body) : menu}
   </div>;
 }

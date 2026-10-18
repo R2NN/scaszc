@@ -150,7 +150,7 @@ test('confirmation keeps the chosen engineer visible and hides renewed candidate
     const chosen={id:'chosen',engineer:{id:'E',name:'Выговский Сергей'},visit:{orderId:'U',arrival:'11:41'},plan:{routes:[]},changes:[],orders:[],reserve:[],coverage:{after:{assigned:205,total:206}}};
     const item={id:'incident',status:'SEARCHING',time:'11:17',order:{id:'U',address:'Адрес аварии'},candidates:[],policy:{enabled:true},deadlineAt:Date.now()+100000,confirmation:{state:'CHECKING',engineer:chosen.engineer}};
     const html=renderToStaticMarkup(React.createElement(EmergencyDispatchPanel,{controller:{selected:item,acceptingId:item.id,submission:{incidentId:item.id,candidate:chosen}}}));
-    assert.match(html,/Выговский Сергей/);assert.match(html,/Подтверждаем направление/);assert.match(html,/Направляем…/);
+    assert.match(html,/Сергей Выговский/);assert.match(html,/Подтверждаем направление/);assert.match(html,/Направляем…/);
     assert.doesNotMatch(html,/Поиск продолжается|dispatch-options|Выберите инженера|направлен на аварию/);
   }finally{await server.close();}
 });

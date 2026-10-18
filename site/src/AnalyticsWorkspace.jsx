@@ -18,6 +18,8 @@ import { calculateBaseline, hydrateBaselineInputs } from './baselinePlanning.js'
 import { parseReplanningCsv } from './replanningInput.js';
 import { resolveImportedDate } from './importDate.js';
 import { transportLabel } from './transport.js';
+import { ratingName } from './engineerPresentation.js';
+import { portraitForEngineer } from './engineerPortraits.js';
 import './analytics.css';
 import './analytics-polish.css';
 
@@ -53,6 +55,11 @@ const timeLabel = minutes => `${String(Math.floor(minutes / 60)).padStart(2, '0'
 const isValidTimeValue = value => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
 const cleanTimeDraft = value => String(value || '').replace(/[^\d:]/g, '').slice(0, 5);
 const crewInitials = value => String(value || 'Бригада').trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+const analyticsEngineerName = engineer => ratingName(engineer || {});
+function AnalyticsEngineerAvatar({ id, name, className = '' }) {
+  const portrait = portraitForEngineer(id);
+  return <i className={`analytics-engineer-avatar ${portrait ? 'has-portrait' : ''} ${className}`.trim()}>{portrait ? <img src={portrait} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} /> : null}<span>{crewInitials(name)}</span></i>;
+}
 const clusterOf = item => String(item?.cluster || item?.clusterName || item?.zone || item?.zoneName || item?.zoneId || item?.regionName || item?.regionId || 'Без региона').trim();
 const CLUSTER_ORDER = ['Юго-восток', 'Восток', 'Югоцентр'];
 const HACKATHON_PLANNING_DATE = '2026-08-17';
@@ -236,15 +243,17 @@ function buildAnalytics(orders, team, plan, actual = null) {
   const urgentOrders = orders.filter(isUrgentOrder);
   const urgentAssigned = urgentOrders.filter(order => assignedIds.has(String(order.id))).length;
   const routeStats = routes.map(route => {
+    const engineer = team.find(item => String(item.id) === String(route.engineerId));
     const capacity = Math.max(1, minutesFromTime(route.shiftEnd) - minutesFromTime(route.shiftStart));
     const utilization = Math.round((Number(route.workloadMinutes) || 0) / capacity * 100);
-    return { ...route, utilization, capacity };
+    return { ...route, engineerName: analyticsEngineerName(engineer || { id: route.engineerId, name: route.engineerName || route.engineerId }), utilization, capacity };
   }).sort((a, b) => b.utilization - a.utilization);
   const routeTimelines = routes.map(route => {
+    const engineer = team.find(item => String(item.id) === String(route.engineerId));
     const routeGaps = operationalGaps.filter(gap => String(gap.engineerId) === String(route.engineerId));
     return {
       engineerId: route.engineerId,
-      engineerName: route.engineerName || route.engineerId,
+      engineerName: analyticsEngineerName(engineer || { id: route.engineerId, name: route.engineerName || route.engineerId }),
       shiftStart: minutesFromTime(route.shiftStart),
       shiftEnd: minutesFromTime(route.shiftEnd),
       assignments: (route.assignments || []).map((assignment, index) => ({
@@ -443,7 +452,7 @@ function ShiftRecommendationTable({ recommendations = [], appliedIds = new Set()
         setManualTimes({ start: timeLabel(displayedStart), end: timeLabel(displayedEnd) });
       };
       return <article className={applied ? 'applied' : ''} key={item.engineerId}>
-        <div className="shift-engineer"><i>{crewInitials(item.engineerName)}</i><span><b>{item.engineerName}</b><small>{item.assignments} {plural(item.assignments, ['визит', 'визита', 'визитов'])}</small></span></div>
+          <div className="shift-engineer"><AnalyticsEngineerAvatar id={item.engineerId} name={item.engineerName}/><span><b>{item.engineerName}</b><small>{item.assignments} {plural(item.assignments, ['визит', 'визита', 'визитов'])}</small></span></div>
         <div className="shift-time-change"><span>{timeLabel(item.shiftStart)}–{timeLabel(item.shiftEnd)}</span><ArrowRight aria-hidden="true"/><b>{timeLabel(displayedStart)}–{timeLabel(displayedEnd)}</b></div>
         <em>{saved ? `−${saved} мин` : 'Без изменений'}</em>
         <div className="shift-row-actions">{applied ? <><span className="shift-applied-status"><Check/>Предложение</span><button type="button" className="undo" onClick={() => { onRevert?.(item); setEditingId(''); }}>Сбросить</button></> : <><button type="button" className="apply" onClick={() => onApply?.({ ...item, source: 'algorithm' })}>Подготовить</button><button type="button" className={`edit-time ${editing ? 'active' : ''}`} aria-label={editing ? 'Закрыть редактирование времени' : `Задать время вручную для ${item.engineerName}`} title={editing ? 'Закрыть' : 'Задать вручную'} onClick={toggleManualEditor}><Pencil/></button></>}</div>
@@ -765,7 +774,7 @@ function ShiftOptimizationDrawer({ recommendations = [], appliedIds = new Set(),
           setManualTimes({ start: timeLabel(displayedStart), end: timeLabel(displayedEnd) });
         };
         return <article className={applied ? 'applied' : ''} key={item.engineerId}>
-          <div className="resource-shift-drawer-engineer"><i>{crewInitials(item.engineerName)}</i><span><b>{item.engineerName}</b><small>{item.assignments} {plural(item.assignments, ['визит', 'визита', 'визитов'])}</small></span></div>
+          <div className="resource-shift-drawer-engineer"><AnalyticsEngineerAvatar id={item.engineerId} name={item.engineerName}/><span><b>{item.engineerName}</b><small>{item.assignments} {plural(item.assignments, ['визит', 'визита', 'визитов'])}</small></span></div>
           <div className="resource-shift-drawer-time"><span>{timeLabel(item.shiftStart)}–{timeLabel(item.shiftEnd)}</span><ArrowRight/><b>{timeLabel(displayedStart)}–{timeLabel(displayedEnd)}</b></div>
           <em>−{saved} мин</em>
           <div className="resource-shift-drawer-actions"><button type="button" className={`edit ${editing ? 'active' : ''}`} onClick={toggleEditor} aria-label={editing ? `Закрыть редактирование для ${item.engineerName}` : `Изменить смену ${item.engineerName} вручную`} title={editing ? 'Закрыть редактирование' : 'Изменить вручную'}><Pencil/></button>{applied ? <><span><Check/>Предложение</span><button type="button" className="apply" disabled={!isLive} onClick={() => onSend?.(item, appliedValue)}>Точная проверка</button><button type="button" className="revert" onClick={() => { onRevert?.(item); setEditingId(''); }}>Сбросить</button></> : <button type="button" className="apply" onClick={() => onApply?.({ ...item, source: 'algorithm' })}>Подготовить</button>}</div>
@@ -818,7 +827,7 @@ function ResourcesView({ data, record, decisionScope = 'current', viewMode = 'su
   }, [focusNeed]);
   const transport = { CAR: [Car, 'Автомобиль'], WALKING: [Footprints, 'Пешеход'], BICYCLE: [Bike, 'Велосипед'], PUBLIC_TRANSIT: [Bus, 'Общ. транспорт'], TRANSIT: [Bus, 'Общ. транспорт'], UNKNOWN: [Route, 'Транспорт не указан'] };
   const duration = value => { const minutes = Math.max(0, Math.round(Number(value) || 0)); return `${Math.floor(minutes / 60) ? `${Math.floor(minutes / 60)} ч` : ''}${Math.floor(minutes / 60) && minutes % 60 ? ' ' : ''}${minutes % 60 ? `${minutes % 60} мин` : ''}` || '0 мин'; };
-  const crewName = value => `Бригада ${String(value || '').replace(/^бригада\s*/i, '').trim() || 'без имени'}`;
+  const crewName = value => String(value || '').replace(/^бригада\s+/i, '').trim() || 'Без имени';
   const unresolvedOrders = useMemo(() => {
     const ids = new Set((record?.plan?.unassigned || []).map(item => String(item.orderId)));
     return (record?.orders || []).filter(order => ids.has(String(order.id)));
@@ -865,7 +874,7 @@ function ResourcesView({ data, record, decisionScope = 'current', viewMode = 'su
         : team.explanation;
     const source = (record?.team || []).find(engineer => String(engineer.id) === String(team.engineerId));
     const released = /снят со смены|недоступен/i.test(source?.status || '');
-    return { ...team, status: source?.status || '', released, candidates, postVisitFreeMinutes, shiftCanEndEarly, closingStatus, known, suggestedFinish: shiftCanEndEarly ? Math.min(minutesFromTime(route?.shiftEnd || ''), team.lastFinishMinute + 15) : null };
+    return { ...team, engineerName: analyticsEngineerName(source || { id: team.engineerId, name: team.engineerName }), status: source?.status || '', released, candidates, postVisitFreeMinutes, shiftCanEndEarly, closingStatus, known, suggestedFinish: shiftCanEndEarly ? Math.min(minutesFromTime(route?.shiftEnd || ''), team.lastFinishMinute + 15) : null };
   }), [data.teamStats, routeByEngineer, unresolvedOrders, record?.team]);
   const totals = useMemo(() => teams.reduce((sum, team) => ({ capacity: sum.capacity + team.capacityMinutes, busy: sum.busy + team.workMinutes + team.travelMinutes, reserve: sum.reserve + team.idleMinutes, idle: sum.idle + Number(!team.hasRoute) }), { capacity: 0, busy: 0, reserve: 0, idle: 0 }), [teams]);
   const averageLoad = totals.capacity ? Math.round(totals.busy / totals.capacity * 100) : 0;
@@ -1077,7 +1086,7 @@ function ResourcesView({ data, record, decisionScope = 'current', viewMode = 'su
           const hasRegionalUnassigned = unresolvedOrders.some(order => orderZone(order) === team.zone);
           const timeline = timelineByEngineer.get(String(team.engineerId));
            return <div className={`resource-table-row ${team.hasRoute ? '' : 'idle'} ${team.released ? 'is-released' : ''} ${recentlyChangedCrew?.id === String(team.engineerId) && viewMode === 'timeline' ? 'recently-changed' : ''}`} role="row" key={team.engineerId}>
-           <span className="resource-crew"><i>{crewInitials(team.engineerName)}</i><span><b>{crewName(team.engineerName)}</b><small>{team.zone} · <TransportIcon/> {transportLabel}</small>{team.released ? <strong className="resource-released-label">Снят со смены</strong> : <em>{team.skills.map(skill => <span key={skill}>{skill}</span>)}</em>}</span></span>
+           <span className="resource-crew"><AnalyticsEngineerAvatar id={team.engineerId} name={team.engineerName}/><span><b>{team.engineerName}</b><small>{team.zone} · <TransportIcon/> {transportLabel}</small>{team.released ? <strong className="resource-released-label">Снят со смены</strong> : <em>{team.skills.map(skill => <span key={skill}>{skill}</span>)}</em>}</span></span>
           {viewMode === 'summary' ? <span className="resource-summary-cell"><span className="resource-load"><div className="resource-load-bar" aria-label={`Загрузка ${team.utilization}%: работа ${duration(team.workMinutes)}, дорога ${duration(team.travelMinutes)}, простой за смену ${duration(team.idleMinutes)}`} title={`Работа: ${duration(team.workMinutes)} | Дорога: ${duration(team.travelMinutes)} | Простой за смену: ${duration(team.idleMinutes)}`}><i className="work" style={{ width: `${percent(team.workMinutes, team.capacityMinutes)}%` }}/><i className="travel" style={{ width: `${percent(team.travelMinutes, team.capacityMinutes)}%` }}/><i className="idle" style={{ width: `${percent(team.idleMinutes, team.capacityMinutes)}%` }}/></div><b>{team.utilization}%</b><small className="resource-load-legend"><span><i className="work"/>Работа <strong>{duration(team.workMinutes)}</strong></span><span><i className="travel"/>Дорога <strong>{duration(team.travelMinutes)}</strong></span><span><i className="idle"/>Простой <strong>{duration(team.idleMinutes)}</strong></span></small></span><span className="resource-summary-status"><small>{team.hasRoute ? `${team.assignments} ${plural(team.assignments, ['заявка', 'заявки', 'заявок'])} · ${number(team.distanceKm)} км` : 'Без маршрута'}</small><p>{renderKnown(team.known)}</p></span></span> : <span className="resource-team-timeline">{timeline ? <RouteGapTimeline route={timeline} axis={timelineAxis} selectedKey={timelineSelection?.gap?.key || ''} selectedOrderKey={timelineSelection?.assignment?.key || ''} onSelectGap={gap => openTimelineGap(team, gap)} onSelectOrder={(route, assignment, index) => { resetTimelineDraft(); setTimelineSelection({ type: 'order', team, route, assignment, index }); }}/> : <span className="resource-timeline-empty"><Clock3/><b>Свободная смена</b><small>{team.known}</small></span>}</span>}
            <span className="resource-action">{team.released ? <button type="button" className="restore" onClick={() => { setRestoreAction({ team }); setRestorePreview(null); setRestoreError(''); }}><UserRoundPlus/>Вернуть на смену</button> : team.hasRoute ? <button type="button" className="map" onClick={() => onOpenRoute?.(team.engineerId)}><MapPin/>На карте</button> : hasRegionalUnassigned ? <button type="button" className="assign" onClick={() => { const first = unresolvedOrders.find(order => orderZone(order) === team.zone); setManualAction({ team }); setSelectedOrderId(String(first?.id || '')); setManualPreview(null); setManualError(''); }}><UserRoundPlus/>Назначить заявку</button> : <button type="button" className="release" onClick={() => setAction({ type: 'release', team })}><UserX/>Отпустить со смены</button>}</span>
         </div>; })}
@@ -1134,6 +1143,7 @@ function EfficiencyView({ record, rates, onOpenRoutes }) {
   const [selectedRouteId, setSelectedRouteId] = useState('');
   const efficiency = useMemo(() => analyzeShiftEfficiency(record), [record]);
   const economics = useMemo(() => calculateEconomics(record, rates), [record, rates]);
+  const displayNames = useMemo(() => new Map((record?.team || []).map(engineer => [String(engineer.id), analyticsEngineerName(engineer)])), [record?.team]);
   const money = value => `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Number(value) || 0)} ₽`;
   const transport = {
     car: { icon: Car, label: 'Автомобили' },
@@ -1141,7 +1151,7 @@ function EfficiencyView({ record, rates, onOpenRoutes }) {
     bicycle: { icon: Bike, label: 'Велосипеды' },
     walking: { icon: Footprints, label: 'Пешеходы' },
   };
-  const supportedElevatedRoutes = efficiency.elevatedRoutes.filter(route => route.constrainingOrder && route.constraintReason);
+  const supportedElevatedRoutes = efficiency.elevatedRoutes.filter(route => route.constrainingOrder && route.constraintReason).map(route => ({ ...route, engineerName: displayNames.get(String(route.engineerId)) || analyticsEngineerName({ id: route.engineerId, name: route.engineerName }) }));
   return <>
     <section className="analytics-panel fleet-efficiency-panel">
       <SectionHeading eyebrow="ЭФФЕКТИВНОСТЬ ФЛОТА" title="Сравнение способов передвижения" description="Стоимость и логистика рассчитаны из маршрутов выбранной даты, времени смен и действующих тарифов"/>

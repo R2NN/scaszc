@@ -41,3 +41,6 @@ runtime/ui-runs/
 runtime/ui-shared-cache/
 runtime/exact-replans/
 
+
+# Isolated quality/staffing calculations
+runtime/rating-runs/
