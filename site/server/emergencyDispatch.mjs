@@ -4,7 +4,7 @@ import { acquirePlanningSlot } from './planningSlot.mjs';
 import { minuteOf, timeOf } from '../src/shiftDomain.js';
 import { operationalStates } from '../src/operationalState.js';
 import { preservesStartedVisits } from './exactShiftReplan.mjs';
-import { syncDispatchPlayback } from './dispatchPlayback.mjs';
+import { syncDispatchPlayback, holdDispatchClock } from './dispatchPlayback.mjs';
 
 const encode = JSON.stringify;
 const hash = value => createHash('sha256').update(encode(value)).digest('hex');
@@ -25,6 +25,8 @@ export class EmergencyDispatch {
     this.now = now;
     this.busy = false;
     this.controllers = new Map();
+    this.searchTasks = new Map();
+    this.confirmRequests = new Map();
     store.db.exec(`
       CREATE TABLE IF NOT EXISTS dispatch_incidents(id TEXT PRIMARY KEY, shift_id TEXT NOT NULL REFERENCES shifts(id), event_key TEXT NOT NULL, payload TEXT NOT NULL, UNIQUE(shift_id,event_key));
       CREATE TABLE IF NOT EXISTS dispatch_sessions(id TEXT PRIMARY KEY, base_shift_id TEXT NOT NULL, shift_id TEXT NOT NULL, payload TEXT NOT NULL);
@@ -34,7 +36,7 @@ export class EmergencyDispatch {
     store.db.prepare('INSERT OR IGNORE INTO migrations(version) VALUES (3)').run();
     // Interrupted work is requeued on restart; its durable deadline is retained.
     for (const item of this.active()) if (['SEARCHING', 'CHECKING'].includes(item.status)) this.save({ ...item, status: 'QUEUED', error: 'Расчёт продолжится после перезапуска сервера' });
-    for (const row of store.db.prepare('SELECT shift_id FROM dispatch_sessions').all()) syncDispatchPlayback(this,row.shift_id);
+    for (const row of store.db.prepare('SELECT shift_id FROM dispatch_sessions').all()) {holdDispatchClock(this,row.shift_id,false);syncDispatchPlayback(this,row.shift_id);}
   }
 
   all(shiftId) {
@@ -110,7 +112,7 @@ export class EmergencyDispatch {
   currentMinute(item, shift = this.store.get(item.shiftId)) {
     const session = decode(this.store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(item.shiftId));
     const clock = session?.clock;
-    const clockMinute = clock ? clock.minute + (clock.playing ? Math.max(0, this.now()-clock.anchorAt)/60000*clock.speed : 0) : 0;
+    const clockMinute = clock ? clock.minute + (clock.playing && !clock.confirmingDecision ? Math.max(0, this.now()-clock.anchorAt)/60000*clock.speed : 0) : 0;
     return Math.min(1439, Math.floor(Math.max(minuteOf(item.time) + (item.mode === 'live' ? Math.max(0, (this.now()-item.createdAt)/60000) : 0),
       clockMinute, minuteOf(shift?.versions.at(-1)?.effectiveAt) || 0,
       ...(shift?.facts || []).map(fact => minuteOf(fact.time) || 0))));
@@ -135,7 +137,14 @@ export class EmergencyDispatch {
   }
   notification(item, title, message) { item.notifications.push({ id: randomUUID(), type: 'EMERGENCY_INCIDENT', title, message, read: false, createdAt: this.now() }); }
 
-  async search(id) {
+  search(id) {
+    if (this.searchTasks.has(id)) return this.searchTasks.get(id);
+    const task=this.runSearch(id).finally(()=>this.searchTasks.delete(id));
+    this.searchTasks.set(id,task);
+    return task;
+  }
+
+  async runSearch(id) {
     if (this.busy) return this.get(id);
     const item = this.get(id);
     if (!item || terminal(item)) return item;
@@ -170,6 +179,7 @@ export class EmergencyDispatch {
       }});
       const fresh = this.get(id);
       if (terminal(fresh)) return fresh;
+      if (controller.signal.aborted) return fresh;
       if (this.fingerprint(this.store.get(item.shiftId)) !== fingerprint || this.currentMinute(item) !== minute) {
         return this.requeue(fresh);
       }
@@ -192,6 +202,46 @@ export class EmergencyDispatch {
       this.notification(fresh, 'Авария требует внимания', error.message);
       return this.save(fresh);
     } finally { release(); this.busy = false; this.controllers.delete(id); }
+  }
+
+  /** Commit the selected engineer after a fresh exact check, rather than returning to generic search. */
+  confirm(id,candidateId,actor='Диспетчер') {
+    if(this.confirmRequests.has(id)) return this.confirmRequests.get(id);
+    const task=this.confirmSelected(id,candidateId,actor).finally(()=>this.confirmRequests.delete(id));
+    this.confirmRequests.set(id,task);
+    return task;
+  }
+
+  async confirmSelected(id,candidateId,actor) {
+    let item=this.get(id);
+    if(!item || terminal(item)) return item;
+    const selected=item.candidates.find(candidate=>candidate.id===candidateId);
+    if(item.status!=='WAITING' || !selected) throw new Error('Выберите готовый проверенный вариант');
+    holdDispatchClock(this,item.shiftId,true);
+    try {
+      this.save({...item,confirmation:{state:'CHECKING',engineer:selected.engineer,requestedAt:this.now()}});
+      let candidate=selected;
+      const stale=selected.fingerprint!==this.fingerprint(this.store.get(item.shiftId)) || selected.scenarioTime!==timeOf(this.currentMinute(item)) || minuteOf(selected.visit.departureAt)<this.currentMinute(item);
+      if(stale) {
+        this.controllers.get(id)?.abort();
+        await this.searchTasks.get(id);
+        if(terminal(this.get(id))) return this.get(id);
+        const refreshed=await this.search(id);
+        candidate=refreshed.candidates.find(option=>String(option.engineer.id)===String(selected.engineer.id) && option.kind===selected.kind);
+        if(refreshed.status!=='WAITING' || !candidate) throw new Error('Выбранное направление больше недоступно. Решение не применено; выберите другой вариант.');
+        const lost=option=>option.changes.filter(change=>change.before && !change.after).length;
+        if(lost(candidate)>lost(selected) || candidate.coverage.after.unassigned>selected.coverage.after.unassigned
+          || candidate.plan.metrics?.urgentAssigned<selected.plan.metrics?.urgentAssigned) throw new Error('После обновления последствия ухудшились. Решение не применено; сравните новые варианты.');
+      }
+      const accepted=this.accept(id,candidate.id,actor);
+      if(accepted.status!=='ACCEPTED') throw new Error('Подтвердить выбранное направление не удалось. Решение не применено.');
+      return accepted;
+    } catch(error) {
+      item=this.get(id);
+      if(terminal(item)) return item;
+      return this.save({...item,status:'ERROR',candidates:[],recommendedId:null,error:error.message,retryAt:this.now()+30000,
+        confirmation:{state:'FAILED',engineer:selected.engineer,error:error.message}});
+    } finally {holdDispatchClock(this,item.shiftId,false);}
   }
 
   describe(shift, incident, candidate, states, fingerprint, time) {
@@ -261,6 +311,7 @@ export class EmergencyDispatch {
       this.store.completePreview(previewId, { orders: candidate.orders, team: candidate.team, plan: candidate.plan });
       const saved = this.store.publish(item.shiftId, previewId, shift.revision, actor);
       item.status = 'ACCEPTED'; item.decision = { candidateId, actor, at: this.now(), revision: saved.revision, planId: saved.currentPlanId, contentSha256: candidate.contentSha256 };
+      if(item.confirmation) item.confirmation={...item.confirmation,state:'APPLIED'};
       this.notification(item, actor === 'system' ? 'Авария назначена автоматически' : 'Авария назначена', `${candidate.engineer.name} · прибытие ${candidate.visit.arrival}`);
       for (const other of this.active(item.shiftId)) if (other.id !== id) this.requeue(other);
       return this.save(item);
@@ -288,13 +339,13 @@ export class EmergencyDispatch {
   }
   async tick() {
     if (!this.store.db.open) return;
-    for (const item of this.active()) if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { this.accept(item.id,item.recommendedId,'system');return; }
+    for (const item of this.active()) if (!this.confirmRequests.has(item.id) && item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { await this.confirm(item.id,item.recommendedId,'system');return; }
     if (this.busy) return;
     for (const item of this.active().sort((left, right) => left.shiftId === right.shiftId
       ? minuteOf(left.time)-minuteOf(right.time) || left.createdAt-right.createdAt : right.createdAt-left.createdAt)) {
-      if (terminal(item)) continue;
+      if (terminal(item) || this.confirmRequests.has(item.id)) continue;
       if (item.status === 'QUEUED' || (item.status === 'ERROR' && item.retryAt <= this.now())) { await this.search(item.id); return; }
-      if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { this.accept(item.id, item.recommendedId, 'system'); return; }
+      if (item.status === 'WAITING' && item.policy.enabled && item.deadlineAt <= this.now()) { await this.confirm(item.id, item.recommendedId, 'system'); return; }
     }
   }
 }

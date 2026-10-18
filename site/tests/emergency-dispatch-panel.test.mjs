@@ -133,6 +133,7 @@ test('route scope controls stay in the sticky panel before and after acceptance'
         assert.match(result,/Прибытие 11:38/);
         assert.match(result,/Прежний адрес/);
         assert.match(result,/Передана: Получатель · 12:15/);
+        assert.match(html,/<details class="dispatch-alternatives"><summary>Сравнить сохранённые варианты/);
       }
       assert.match(html,/Начнутся позже исходного плана/);
       assert.match(html,/В окне клиента/);
@@ -140,6 +141,18 @@ test('route scope controls stay in the sticky panel before and after acceptance'
       assert.doesNotMatch(html,/Как принять решение|Сравните варианты|Все изменения визитов|dispatch-comparison-legend|dispatch-map-key/);
     }
   } finally {await server.close();}
+});
+
+test('confirmation keeps the chosen engineer visible and hides renewed candidate search until a result exists',async()=>{
+  const server=await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
+  try{
+    const {EmergencyDispatchPanel}=await server.ssrLoadModule('/src/EmergencyDispatch.jsx');
+    const chosen={id:'chosen',engineer:{id:'E',name:'Выговский Сергей'},visit:{orderId:'U',arrival:'11:41'},plan:{routes:[]},changes:[],orders:[],reserve:[],coverage:{after:{assigned:205,total:206}}};
+    const item={id:'incident',status:'SEARCHING',time:'11:17',order:{id:'U',address:'Адрес аварии'},candidates:[],policy:{enabled:true},deadlineAt:Date.now()+100000,confirmation:{state:'CHECKING',engineer:chosen.engineer}};
+    const html=renderToStaticMarkup(React.createElement(EmergencyDispatchPanel,{controller:{selected:item,acceptingId:item.id,submission:{incidentId:item.id,candidate:chosen}}}));
+    assert.match(html,/Выговский Сергей/);assert.match(html,/Подтверждаем направление/);assert.match(html,/Направляем…/);
+    assert.doesNotMatch(html,/Поиск продолжается|dispatch-options|Выберите инженера|направлен на аварию/);
+  }finally{await server.close();}
 });
 
 test('a manual acceptance applies the published shift immediately instead of waiting for polling', async () => {

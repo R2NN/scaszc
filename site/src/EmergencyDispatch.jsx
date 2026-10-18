@@ -23,6 +23,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   const [candidateId, setCandidateId] = useState(''), [error, setError] = useState(''), [policy, setPolicy] = useState(null);
   const [routeScope, setRouteScope] = useState('day');
   const [acceptingId, setAcceptingId] = useState('');
+  const [submission,setSubmission] = useState(null);
   const refs = useRef({});
   refs.current = { shift, onApply, notify, onOpen };
   const notified = useRef(new Set()), initialized = useRef(''), clockSync = useRef(null);
@@ -48,12 +49,12 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
           const fresh = await api('sessions', { baseShiftId: shift.id });
           sessionStorage.setItem(marker, 'active');
           setSession(fresh); refs.current.onApply(fresh.shift);
-          shiftClock.set({ minute: fresh.clock.minute, playing: false, speed: fresh.clock.speed, awaitingDecision:Boolean(fresh.clock.awaitingDecision) });
+          shiftClock.set({ minute: fresh.clock.minute, playing: false, speed: fresh.clock.speed, awaitingDecision:Boolean(fresh.clock.awaitingDecision), confirmingDecision:Boolean(fresh.clock.confirmingDecision) });
           return;
         }
         sessionStorage.setItem(marker, 'active');
         setSession(value); refs.current.onApply(value.shift);
-        shiftClock.set({ minute: value.clock.minute, playing: false, speed: value.clock.speed, awaitingDecision:Boolean(value.clock.awaitingDecision) });
+        shiftClock.set({ minute: value.clock.minute, playing: false, speed: value.clock.speed, awaitingDecision:Boolean(value.clock.awaitingDecision), confirmingDecision:Boolean(value.clock.confirmingDecision) });
       } catch (e) { if (alive) setError(e.message); }
     };
     restore();
@@ -148,13 +149,14 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
       publishDispatchMapEvent(window,'clear');
       sessionStorage.setItem(`beego-dispatch-session:${session?.baseShiftId || shift.id}`, 'active');
       setSession(value); setSelectedId(''); setCandidateId(''); setRouteScope('day'); setIncidents([]); refs.current.onApply(value.shift);
-      shiftClock.set({ minute:360, playing:false, speed:value.clock.speed, awaitingDecision:false, selectedEngineerId:'', follow:false });
+      shiftClock.set({ minute:360, playing:false, speed:value.clock.speed, awaitingDecision:false, confirmingDecision:false, selectedEngineerId:'', follow:false });
       refs.current.onOpen();
     } catch (e) { setError(e.message); }
   };
   const accept = async (incident, candidate) => {
       if (acceptingId) return;
       setAcceptingId(incident.id);
+      setSubmission({incidentId:incident.id,candidate});
       try {
         setError('');
         if (refs.current.shift.regionId.includes(':scenario:')) {
@@ -164,6 +166,8 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
         }
         const result = await api(`incidents/${incident.id}/accept`, { candidateId:candidate.id, actor:'Диспетчер' });
         setIncidents(current => current.map(item => item.id === result.id ? result : item));
+        if(result.status!=='ACCEPTED') throw new Error(result.error || 'Решение не применено. Выбранное направление не удалось подтвердить.');
+        setCandidateId(result.decision.candidateId);
         if (result.status === 'ACCEPTED' && result.decision.revision > refs.current.shift.revision) {
           const response = await fetch(`/api/shifts/${incident.shiftId}`);
           if (!response.ok) throw new Error('Решение сохранено, но обновить план не удалось. Обновите смену.');
@@ -172,7 +176,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
         if (result.status === 'ACCEPTED') clockSync.current?.apply(result.playback);
       }
     catch (e) { setError(e.message); }
-    finally { setAcceptingId(''); }
+    finally { setAcceptingId('');setSubmission(null); }
   };
   const read = async item => {
     try { if (item.incidentId) await api(`incidents/${item.incidentId}/read`, {notificationId:item.id}); }
@@ -191,7 +195,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     catch (e) { setError(e.message); }
   };
   const select = incidents.find(item => item.id === selectedId) || incidents.find(item => !terminal(item)) || incidents.at(-1);
-  return { incidents, selected:select, candidateId, routeScope, acceptingId, changeRouteScope, showChanges, showResult, open, preview, startSession, session, error, serverOffset, policy, accept, read,
+  return { incidents, selected:select, candidateId, routeScope, acceptingId, submission, changeRouteScope, showChanges, showResult, open, preview, startSession, session, error, serverOffset, policy, accept, read,
     retry, cancel, savePolicy };
 }
 
@@ -219,10 +223,11 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const [openedRouteId, setOpenedRouteId] = useState('');
   const accepted = item?.status === 'ACCEPTED';
   const acceptedCandidate = item?.candidates.find(option => option.id === item.decision?.candidateId);
-  const candidate = item?.candidates.find(option => option.id === candidateId) || acceptedCandidate;
+  const submitting=controller.submission?.incidentId===item?.id ? controller.submission.candidate : null;
+  const candidate = (!accepted && submitting) || item?.candidates.find(option => option.id === candidateId) || acceptedCandidate;
   const candidateApplied = accepted && candidate?.id === acceptedCandidate?.id;
   const impacts = useMemo(() => new Map((item?.candidates || []).map(option => [option.id, dispatchConsequences(option)])), [item?.candidates]);
-  const impact = candidate && impacts.get(candidate.id);
+  const impact = candidate && (impacts.get(candidate.id) || dispatchConsequences(candidate));
   const applied = acceptedCandidate && impacts.get(acceptedCandidate.id);
   const decisionKey = accepted ? `${item.id}:${item.decision.at}` : '';
   const previousIncident = useRef({id:item?.id,status:item?.status});
@@ -247,7 +252,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const recommendation = useMemo(() => recommended ? dispatchRecommendation(recommended, item.candidates) : '', [recommended, item?.candidates]);
   const arrivalTimes = (item?.candidates || []).map(option => option.responseMinutes).filter(Number.isFinite);
   const fastest = arrivalTimes.length ? Math.min(...arrivalTimes) : null;
-  const pending = controller.acceptingId === item?.id;
+  const pending = !accepted && (controller.acceptingId === item?.id || item?.confirmation?.state==='CHECKING');
   return <section className='emergency-dispatch' aria-label='Решение аварии'>
     <div className='dispatch-heading'><div><small>ОПЕРАТИВНОЕ РЕШЕНИЕ</small><h3>Аварийный выезд</h3></div><AlertTriangle size={24}/></div>
     {item ? <div className={`dispatch-decision-bar${accepted ? ' is-applied' : ''}`}>
@@ -269,11 +274,12 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
         {applied.lost.length ? <strong className='dispatch-error'>Без назначения: {applied.lost.length}. Нужен разбор очереди.</strong> : null}
         <button type='button' className='dispatch-map-action' onClick={() => controller.showResult(acceptedCandidate)}>Подсветить изменённые маршруты</button>
       </div> : null}
-      {!terminal(item) ? <div className={`dispatch-search-state ${searching ? 'is-searching' : 'is-ready'}`} role='status'>
+      {pending ? <div className='dispatch-confirming' role='status'><Clock3 size={20}/><div><b>Подтверждаем направление</b><span>{submitting?.engineer.name || item.confirmation?.engineer.name} · проверяем актуальный путь. Выбранный инженер сохраняется.</span></div></div> : null}
+      {!terminal(item) && !pending ? <div className={`dispatch-search-state ${searching ? 'is-searching' : 'is-ready'}`} role='status'>
         <span className='dispatch-search-icon'><Clock3 size={19}/></span><div><b>{item.status === 'ERROR' ? 'Расчёт прерван' : checkingIntercept ? 'Проверяем перехват в пути' : searching ? 'Поиск продолжается' : resultCountLabel(item.candidates.length)}</b><span>{checkingIntercept ? item.progress.engineerName || 'Ближайшая бригада' : searching ? item.candidates.length ? `Готовых вариантов: ${item.candidates.length} · уже можно выбирать` : 'Проверяем маршруты и окна клиентов' : item.search?.stoppedReason ? 'Поиск остановлен по лимиту' : item.status === 'ERROR' ? 'Можно повторить расчёт' : 'Расчёт завершён'}</span></div>
       </div> : null}
       {item.error ? <p className='dispatch-error' role='alert'>{item.error}</p> : null}
-      <div className='dispatch-options' role='group' aria-label='Проверенные варианты'>{item.candidates.map(option => {
+      {!pending ? <details className='dispatch-alternatives' open={accepted ? undefined : true} key={accepted ? 'accepted' : 'choosing'}><summary>{accepted ? 'Сравнить сохранённые варианты' : 'Варианты направления'}</summary><div className='dispatch-options' role='group' aria-label='Проверенные варианты'>{item.candidates.map(option => {
         const effect = impacts.get(option.id);
         return <button type='button' key={option.id} aria-pressed={option.id === candidate?.id} className={`dispatch-option ${option.id === candidate?.id ? 'selected' : ''}`} onClick={() => controller.preview(option)}>
           <span className='dispatch-option-head'><span className='dispatch-option-kind'>{option.kind}</span>{option.id === item.recommendedId ? <strong>Рекомендуем</strong> : option.responseMinutes === fastest && item.candidates.length > 1 ? <em>Быстрее всех</em> : null}</span>
@@ -284,8 +290,8 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
           <span className='dispatch-card-meta'>Реакция {option.responseMinutes} мин · резерв {effect.reserveCount}</span>
           <span className='dispatch-card-coverage'>{effect.coverageLabel}</span>
         </button>;
-      })}</div>
-      {candidate ? <div className='dispatch-details'>
+      })}</div></details> : null}
+      {candidate && !pending ? <div className='dispatch-details'>
         <h4 className='dispatch-section-title'>Последствия для прежних заявок</h4>
         <ConsequenceGroup title={candidateApplied ? 'Переданы другим инженерам' : 'Передаются другим инженерам'} rows={impact.transferred} controller={controller} candidate={candidate} accepted={candidateApplied}/>
         <ConsequenceGroup title='Начнутся позже исходного плана' rows={impact.delayed} controller={controller} candidate={candidate} accepted={candidateApplied}/>
@@ -304,7 +310,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
           <b>Остались в резерве: {candidate.reserve.length}</b>{candidate.reserve.map(crew => <p key={crew.engineerId}>{crew.name} · {crew.availableAt}–{crew.until}</p>)}
           <code>{candidate.contentSha256}</code>
         </details>
-      </div> : item.candidates.length ? <p>Выберите инженера, чтобы открыть адреса изменившихся заявок.</p> : null}
+      </div> : !pending && item.candidates.length ? <p>Выберите инженера, чтобы открыть адреса изменившихся заявок.</p> : null}
       {item.progress || item.search?.rejected?.length ? <details className='dispatch-tech-details'><summary>Подробности поиска</summary>{item.progress ? <p>Проверено инженеров: {item.progress.completed} из {item.progress.total} · проверок маршрута: {item.progress.routeChecks ?? '—'}</p> : null}{item.search?.stoppedReason ? <p>Достигнут лимит поиска. Показаны проверенные варианты; оптимальность не доказана.</p> : null}{item.search?.rejected?.map(entry => <p key={entry.engineerId}>{entry.engineerName}: {entry.reason}</p>)}</details> : null}
       {!terminal(item) ? <div className='dispatch-actions'><button type='button' onClick={() => controller.retry(item.id)} disabled={item.status === 'SEARCHING' || pending}><RotateCcw size={16}/>Повторить расчёт</button><button type='button' onClick={() => controller.cancel(item.id)} disabled={pending}><X size={16}/>Отменить аварию</button></div> : <button type='button' className='dispatch-map-action' onClick={controller.startSession}>Новая изолированная сессия</button>}
     </>}

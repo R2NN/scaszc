@@ -5,8 +5,8 @@ export function createDispatchClockSync({clock, send, onValue = () => {}, onErro
     if (!active || !value || (value.version ?? 0) < version) return false;
     version = value.version ?? version;
     const current = clock.getSnapshot();
-    const patch = {speed:value.speed,awaitingDecision:Boolean(value.awaitingDecision)};
-    if (!current.playing || !value.playing) Object.assign(patch,{minute:value.minute,playing:value.playing});
+    const patch = {speed:value.speed,awaitingDecision:Boolean(value.awaitingDecision),confirmingDecision:Boolean(value.confirmingDecision)};
+    if (!current.playing || !value.playing || value.confirmingDecision) Object.assign(patch,{minute:value.minute,playing:value.playing});
     if (Object.entries(patch).every(([key,val]) => current[key] === val)) return true;
     applying = true;
     try {clock.set(patch);} finally {applying = false;}

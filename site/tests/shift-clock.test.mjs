@@ -27,3 +27,19 @@ test('automatic playback accumulates sub-minute frames without rerendering every
     globalThis.cancelAnimationFrame = originalCancel;
   }
 });
+
+test('confirmation holds the scenario without changing play/pause and releases without replaying elapsed wall time',async()=>{
+  const queued=new Map();let next=0;
+  const originalRequest=globalThis.requestAnimationFrame,originalCancel=globalThis.cancelAnimationFrame;
+  globalThis.requestAnimationFrame=fn=>{queued.set(++next,fn);return next;};
+  globalThis.cancelAnimationFrame=id=>queued.delete(id);
+  try{
+    const {shiftClock}=await import(`../src/shiftClock.js?hold=${Date.now()}`);
+    const step=stamp=>{const [id,fn]=queued.entries().next().value;queued.delete(id);fn(stamp);};
+    shiftClock.set({minute:601,speed:1,playing:true,confirmingDecision:true});
+    step(1000);step(61000);assert.equal(shiftClock.getSnapshot().minute,601);assert.equal(shiftClock.getSnapshot().playing,true);
+    shiftClock.set({speed:300,confirmingDecision:false});step(62000);
+    assert.equal(shiftClock.getSnapshot().minute,606);
+    shiftClock.set({playing:false});
+  }finally{globalThis.requestAnimationFrame=originalRequest;globalThis.cancelAnimationFrame=originalCancel;}
+});

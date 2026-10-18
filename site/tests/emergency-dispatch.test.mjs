@@ -49,6 +49,9 @@ for (const automatic of [false,true]) for (const playing of [false,true]) test(`
     assert.equal(current().speed,300);assert.equal(current().playing,playing);assert.equal(current().awaitingDecision,false);
     const tick=await post(`shifts/${session.shiftId}/clock`,{serverTick:true});
     assert.equal(tick.clock.speed,300);assert.equal(tick.clock.playing,playing);
+    const stale=await post(`shifts/${session.shiftId}/clock`,{minute:599,playing,speed:1,awaitingDecision:true,confirmingDecision:true});
+    assert.equal(stale.clock.speed,300,'A delayed pre-acceptance clock request cannot restore ×1');
+    assert.ok(stale.clock.minute>=600,'A delayed temporary-clock snapshot cannot rewind the shift');
   }finally{api.close();f.store.close();}
 });
 
@@ -272,6 +275,55 @@ const setScenarioMinute = (f, minute) => {
   f.store.db.prepare('INSERT OR REPLACE INTO dispatch_sessions VALUES (?,?,?,?)').run('test-clock', f.shift.id, f.shift.id, JSON.stringify(session));
 };
 
+for(const playing of [false,true]) test(`confirming a minute-old selection publishes that engineer once and restores ×300, playing=${playing}`,async()=>{
+  const f=fixture();
+  try{
+    const ready=await f.dispatch.search(f.create().id),chosen=ready.candidates[0];
+    const session={clock:{minute:601,playing,speed:1,anchorAt:100000},preIncidentSpeed:300};
+    f.store.db.prepare('INSERT INTO dispatch_sessions VALUES (?,?,?,?)').run('confirm-clock',f.shift.id,f.shift.id,JSON.stringify(session));
+    const clock=()=>JSON.parse(f.store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=?').get(f.shift.id).payload).clock;
+    const routing=f.dispatch.routing;
+    let refreshes=0;
+    f.dispatch.routing=async payload=>{
+      refreshes++;assert.equal(payload.event.time,'10:01');assert.equal(clock().confirmingDecision,true);
+      f.advance(120);assert.equal(f.dispatch.currentMinute(f.dispatch.get(ready.id)),601,'Scenario time stays anchored throughout the fresh road check');
+      const result=await routing(payload);
+      const plan=result.dispatchCandidates[0].plan;
+      plan.contentSha256='c'.repeat(64);
+      const visit=plan.routes[0].assignments[0];
+      Object.assign(visit,{departureAt:'10:01',arrival:'10:11',plannedStart:'10:11',plannedFinish:'11:31'});
+      return result;
+    };
+    const first=f.dispatch.confirm(ready.id,chosen.id);
+    const duplicate=f.dispatch.confirm(ready.id,chosen.id);
+    assert.equal(first,duplicate);
+    const applied=await first;
+    assert.equal(applied.status,'ACCEPTED',applied.error);
+    assert.equal(applied.confirmation.state,'APPLIED');
+    const accepted=applied.candidates.find(c=>c.id===applied.decision.candidateId);
+    assert.equal(accepted.engineer.id,chosen.engineer.id);
+    assert.equal(accepted.visit.departureAt,'10:01');
+    assert.equal(f.store.get(f.shift.id).revision,2);
+    assert.equal(refreshes,1);assert.equal(clock().speed,300);assert.equal(clock().playing,playing);
+    assert.equal(clock().confirmingDecision,false);
+    assert.equal(clock().minute,601,'Revalidation wall time must not be replayed at ×300');
+    await f.dispatch.tick();assert.equal(f.dispatch.get(ready.id).status,'ACCEPTED');assert.equal(refreshes,1);
+  }finally{f.store.close();}
+});
+
+test('a stale selection cannot silently substitute a different engineer',async()=>{
+  const f=fixture();
+  try{
+    const ready=await f.dispatch.search(f.create().id);
+    setScenarioMinute(f,601);
+    f.dispatch.routing=async()=>({dispatchCandidates:[],dispatchSearch:{complete:true,rejected:[]}});
+    const result=await f.dispatch.confirm(ready.id,ready.candidates[0].id);
+    assert.equal(result.status,'ERROR');assert.equal(result.confirmation.state,'FAILED');
+    assert.match(result.error,/Решение не применено/);
+    assert.equal(f.store.get(f.shift.id).revision,1);
+  }finally{f.store.close();}
+});
+
 test('manual and automatic decisions cannot publish a route from before the scenario clock', async () => {
   for (const automatic of [false, true]) {
     const f = fixture();
@@ -280,7 +332,7 @@ test('manual and automatic decisions cannot publish a route from before the scen
       setScenarioMinute(f, 1380);
       if (automatic) { f.advance(301); await f.dispatch.tick(); }
       else f.dispatch.accept(ready.id, ready.candidates[0].id);
-      assert.equal(f.dispatch.get(ready.id).status, 'QUEUED');
+      assert.equal(f.dispatch.get(ready.id).status, automatic ? 'ERROR' : 'QUEUED');
       assert.equal(f.store.get(f.shift.id).revision, 1);
       assert.equal(f.dispatch.get(ready.id).candidates.length, 0);
     } finally { f.store.close(); }

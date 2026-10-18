@@ -8,7 +8,7 @@ let simulatedMinute = state.minute;
 const notify = () => listeners.forEach(listener => listener());
 const tick = stamp => {
   if (!state.playing) { frame = 0; last = 0; return; }
-  if (last) {
+  if (last && !state.confirmingDecision) {
     simulatedMinute = Math.min(1439, simulatedMinute + (stamp - last) / 60000 * state.speed);
     if (Math.floor(simulatedMinute) !== Math.floor(state.minute) || simulatedMinute === 1439) {
       state = { ...state, minute: simulatedMinute, playing: simulatedMinute < 1439 };

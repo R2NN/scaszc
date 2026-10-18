@@ -15,7 +15,7 @@ export function createDispatchApi(store, options) {
     try {
       for (const row of store.db.prepare('SELECT shift_id,payload FROM dispatch_sessions').all()) {
         const session = JSON.parse(row.payload);
-        if (!session.clock.playing) continue;
+        if (!session.clock.playing || session.clock.confirmingDecision) continue;
         const minute = Math.min(1439, session.clock.minute + (Date.now()-session.clock.anchorAt)/60000*session.clock.speed);
         await handle(new Request(`http://localhost/api/dispatch/shifts/${row.shift_id}/clock`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...session.clock,minute,serverTick:true})}));
       }
@@ -71,8 +71,9 @@ export function createDispatchApi(store, options) {
           const row = store.db.prepare('SELECT id,payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(shiftId);
           if (!row) return json({ incident: null });
           const session = JSON.parse(row.payload), serverTick = input.serverTick === true;
-          const minute = serverTick
-            ? Math.min(1439, session.clock.minute + (Date.now() - session.clock.anchorAt) / 60000 * (Number(session.clock.speed) || 60))
+          const staleOverride = !serverTick && !dispatch.hasPending(shiftId) && (input.awaitingDecision || input.confirmingDecision);
+          const minute = session.clock.confirmingDecision ? session.clock.minute : serverTick || staleOverride
+            ? Math.min(1439, session.clock.minute + (session.clock.playing ? Math.max(0,Date.now() - session.clock.anchorAt) / 60000 * (Number(session.clock.speed) || 60) : 0))
             : Number(input.minute);
           if (!Number.isFinite(minute) || minute < 0 || minute > 1439) throw new Error('Некорректное время смены');
           if (!session.fired && session.lastMinute < 677 && minute >= 677) {
@@ -89,7 +90,7 @@ export function createDispatchApi(store, options) {
           // A request may have crossed the scheduled incident boundary above.
           // Use this request's clock as the anchor before applying the queue override.
           const playing = serverTick ? Boolean(session.clock.playing) : Boolean(input.playing);
-          const requestedSpeed = serverTick ? session.clock.speed : Number(input.speed);
+          const requestedSpeed = serverTick || staleOverride ? session.clock.speed : Number(input.speed);
           session.clock = { ...session.clock, minute, playing:playing && minute < 1439,
             speed:session.preIncidentSpeed != null ? session.clock.speed : [1,30,60,120,300].includes(requestedSpeed) ? requestedSpeed : session.clock.speed,
             anchorAt:Date.now(),version:(session.clock.version || 0)+1 };
@@ -102,7 +103,7 @@ export function createDispatchApi(store, options) {
       if (incidentRoute && request.method === 'POST') {
         const [, id, action] = incidentRoute;
         if (action === 'accept') {
-          const result = dispatch.accept(id, input.candidateId, input.actor);
+          const result = await dispatch.confirm(id, input.candidateId, input.actor);
           const sessionRow = store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(result.shiftId);
           return json({ ...result, playback: sessionRow ? JSON.parse(sessionRow.payload).clock : null });
         }
