@@ -44,3 +44,11 @@ runtime/exact-replans/
 
 # Isolated quality/staffing calculations
 runtime/rating-runs/
+
+runtime/building-preview/
+
+# Local UI audit runs, test databases and operational backups
+output/playwright/
+site/.beego-backups/
+site/.playwright-cli/
+site/audit-snapshot.txt

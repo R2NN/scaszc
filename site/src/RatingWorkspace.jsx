@@ -37,6 +37,16 @@ export function useRatingWorkspace({ active, regionId, date, actor }) {
   const [planSettingsOpen,setPlanSettingsOpen]=useState(false), [proposalOpen,setProposalOpen]=useState(false);
   const [qualityCeiling,setQualityCeiling]=useState(5);
   const [planRouteId,setPlanRouteId] = useState(null), [planFitToken,setPlanFitToken] = useState(0);
+  const [staffingSnapshot,setStaffingSnapshot]=useState(null),[staffingError,setStaffingError]=useState('');
+  const staffingKey=new URLSearchParams({regionId,date,pool,qualityFloor,qualityCeiling}).toString();
+  const staffingContext=staffingSnapshot?.key===staffingKey?staffingSnapshot.value:null;
+  useEffect(()=>{
+    if(!Number.isFinite(qualityFloor)||!Number.isFinite(qualityCeiling)||qualityFloor<1||qualityCeiling>5||qualityFloor>qualityCeiling)return;
+    const controller=new AbortController();
+    ratingRequest(`staffing?${staffingKey}`,{signal:controller.signal}).then(value=>{setStaffingSnapshot({key:staffingKey,value});setStaffingError('');}).catch(issue=>{if(issue.name!=='AbortError')setStaffingError(issue.message);});
+    return()=>controller.abort();
+  },[regionId,date,pool,qualityFloor,qualityCeiling,version,scenario?.id,scenario?.status]);
+
   useEffect(()=>{if(scenario?.status==='READY'){setPlanRouteId(null);setPlanFitToken(Date.now());}},[scenario?.id,scenario?.status]);
   const [caseFocus, setCaseFocus] = useState(null);
   const [closing, setClosing] = useState(false);
@@ -116,11 +126,11 @@ export function useRatingWorkspace({ active, regionId, date, actor }) {
     catch (error) { setError(error.message); }
   };
   return { tab, setTab, full, setFull, closing, setClosing, catalog, version, reloadCatalog, loading, error, setError, selected, select, focus, scenario, setScenario, pool, setPool, scheduled, setScheduled,
-    calculationStartedAt, planSettingsOpen, setPlanSettingsOpen, proposalOpen, setProposalOpen, confirm, planRouteId, setPlanRouteId, planFitToken, setPlanFitToken, qualityFloor, setQualityFloor, qualityCeiling, setQualityCeiling, calculate, save, reassign, caseFocus, setCaseFocus, saving, actor, regionId, date, active, nameForEngineer:ratingName, ready: scenario?.status === 'READY', running: posting || scenario?.status === 'RUNNING' };
+    staffingContext, staffingError, calculationStartedAt, planSettingsOpen, setPlanSettingsOpen, proposalOpen, setProposalOpen, confirm, planRouteId, setPlanRouteId, planFitToken, setPlanFitToken, qualityFloor, setQualityFloor, qualityCeiling, setQualityCeiling, calculate, save, reassign, caseFocus, setCaseFocus, saving, actor, regionId, date, active, nameForEngineer:ratingName, ready: scenario?.status === 'READY', running: posting || scenario?.status === 'RUNNING' };
 }
 
 function Avatar({ name, id, profile }) {
-  const portrait = profile?.avatar ? `/avatars/${profile.avatar}.png` : id ? portraitForEngineer(id) : null;
+  const portrait = profile?.avatar ? `/avatars/${profile.avatar}.webp` : id ? portraitForEngineer(id) : null;
   return <span className={`rating-avatar${profile ? ' is-profile' : ''}`} style={profile ? { backgroundColor: profileAvatarColor(profile) } : undefined}>{portrait ? !profile ? <EngineerPortrait id={id}/> : <img key={portrait} src={portrait} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} /> : null}<span>{initials(name)}</span></span>;
 }
 function InfoPopover({ label = 'Как считается рейтинг', children, placement = 'side' }) {

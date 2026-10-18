@@ -1,0 +1,38 @@
+{
+  "phone": {
+    "width": 329,
+    "scrollWidth": 329,
+    "right": 366.515625,
+    "viewport": 390
+  },
+  "alignment": {
+    "title": 250.296875,
+    "meta": 250.296875
+  },
+  "journalGap": 21.59375,
+  "playback": {
+    "height": 152.625,
+    "segments": 9,
+    "play": true,
+    "follow": true,
+    "range": true
+  },
+  "disclosure": {
+    "display": "flex",
+    "chevron": "\"\""
+  },
+  "select": {
+    "edge": 718,
+    "selectEdge": 703.5
+  },
+  "mobile": {
+    "left": 57.59375,
+    "right": 382.8125,
+    "viewport": 390
+  },
+  "page": {
+    "title": "BeeGo! — умные маршруты выездных команд",
+    "url": "http://127.0.0.1:4186/?object=OBJ-8ddc13833347a724fa&passport=building",
+    "javascriptErrors": []
+  }
+}

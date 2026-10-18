@@ -480,3 +480,30 @@
   .app-shell .rating-engineer-card:not(.embedded){--operational-panel-left:58px;left:58px;right:6px;width:auto;max-height:calc(100dvh - 136px);z-index:230}
 }
 @media(min-width:541px) and (max-width:1100px){.app-shell .rating-engineer-card:not(.embedded){z-index:230}}
+
+/* Compact customer wishes share the workspace's warm accents and typography. */
+.customer-preferences{background:var(--rating-bg,#fff);border-color:var(--rating-line);border-radius:12px;overflow:hidden}
+.customer-preferences>summary{display:flex;align-items:center;gap:9px;list-style:none;padding:9px 11px;min-height:42px;box-sizing:border-box;transition:background .18s ease}
+.customer-preferences>summary::-webkit-details-marker{display:none}
+.customer-preferences>summary:hover{background:#fff9e3}
+.customer-preferences>summary>b{font-size:13px;font-weight:650;flex:1}
+.customer-preference-icon,.customer-request-icon{display:inline-flex;align-items:center;justify-content:center;flex:none;font-style:normal;background:#fff0aa;color:#7b5d08;border-radius:8px;width:27px;height:27px}
+.customer-preferences>summary .customer-preference-count{margin:0;background:#f3f4f6;color:var(--rating-ink);font-size:11px;font-weight:700;border-radius:20px;min-width:23px;text-align:center;padding:3px 6px}
+.customer-preference-chevron{color:var(--rating-muted);transition:transform .2s ease}
+.customer-preferences[open] .customer-preference-chevron{transform:rotate(180deg)}
+.customer-preferences>.customer-preference-note{font-size:11px;line-height:1.55;margin:0;padding:2px 12px 10px;color:var(--rating-muted)}
+.customer-preference-list{max-height:240px;padding:0 10px 9px;display:grid;gap:7px;scrollbar-width:thin}
+.customer-preference-list article{display:flex;gap:9px;padding:10px;border:1px solid var(--rating-line);border-radius:10px;background:var(--rating-soft);line-height:1.45;min-width:0}
+.customer-preference-list .customer-request-copy{flex:1;min-width:0}
+.customer-request-icon{width:25px;height:25px;border-radius:7px;background:#fff1b4}
+.customer-preference-list .is-avoid .customer-request-icon{background:#fcebdc;color:#a56628}
+.customer-preference-list header{gap:6px}.customer-preference-list header>b{font-size:12px;font-weight:700}
+.customer-preference-list header>small{font-size:9px;line-height:1.4;border-radius:4px;padding:2px 4px;background:var(--rating-bg);color:var(--rating-muted)}
+.customer-request-address{display:flex!important;align-items:flex-start;gap:4px;font-size:11px;color:var(--rating-muted);margin-top:5px;line-height:1.5}.customer-request-address>svg{flex:none;margin-top:2px}
+.customer-request-address>span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.customer-preference-list .customer-request-engineer{font-size:11px;line-height:1.5;margin:6px 0 0;color:var(--rating-muted)}.customer-request-engineer>b{font-weight:600;color:var(--rating-ink)}
+.customer-preference-list .preference-status{font-size:11px}.customer-preference-empty{font-size:12px;padding:0 12px 10px!important}
+.app-shell.dark .customer-preferences>summary:hover{background:#353123}.app-shell.dark .customer-preference-icon,.app-shell.dark .customer-request-icon{background:#493e1c;color:#ffe194}.app-shell.dark .customer-preference-count{background:#343a43;color:#eef1f4}.app-shell.dark .customer-preference-list .is-avoid .customer-request-icon{background:#463326;color:#edbf95}
+@media(prefers-reduced-motion:reduce){.customer-preference-chevron,.customer-preferences>summary{transition:none}}
+
+.app-shell.dark .customer-preference-list .preference-status.preferred,.app-shell.dark .customer-preference-list .preference-status.avoided{color:#77d3a1}.app-shell.dark .customer-preference-list .preference-status.unavoidable{color:#f0b784}

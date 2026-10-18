@@ -1,18 +1,29 @@
-import { Clock3, Flame, List, Maximize2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, ChevronDown, Clock3, DoorOpen, Flame, Route } from 'lucide-react';
 import { OBJECT_TIME_LEGEND } from './objectPresentation.js';
 
-/** Keep map display choices beside the existing basemap picker, away from address filters. */
-export function ObjectTimeControls({ enabled, view, onChange, onRoutes, count, onFit }) {
-  return <section className='cx-layer-controls' aria-label='Слои основной карты'>
-    <h4>Что показать</h4>
-    <div className='cx-layer-choices' role='group' aria-label='Слой основной карты'>
-      <button type='button' aria-pressed={!enabled} onClick={onRoutes}><List size={20}/><span>Заявки и маршруты</span></button>
-      <button type='button' aria-pressed={enabled && view === 'markers'} onClick={() => onChange('markers')}><Clock3 size={20}/><span>Метки времени</span></button>
-      <button type='button' aria-pressed={enabled && view !== 'markers'} onClick={() => onChange(view === 'access' ? 'access' : 'heat')}><Flame size={20}/><span>Тепловая карта</span></button>
-    </div>
-    {enabled && view !== 'markers' ? <div className='cx-heat-measures' role='group' aria-label='Показатель тепловой карты'><button type='button' aria-pressed={view === 'heat'} onClick={() => onChange('heat')}>Время визита</button><button type='button' aria-pressed={view === 'access'} onClick={() => onChange('access')}>Задержки доступа</button></div> : null}
-    {enabled ? <div className='cx-layer-extent'><span>Объектов в слое <b>{count}</b></span><button type='button' disabled={!count} onClick={onFit}><Maximize2 size={17}/>Показать весь слой</button></div> : null}
-  </section>;
+/** One map-mode toolbar; heat measures belong to the heat button, never the basemap menu. */
+export function ObjectTimeControls({ enabled, view, onChange, onRoutes }) {
+  const [heatOpen, setHeatOpen] = useState(false);
+  const [measure, setMeasure] = useState(view === 'access' ? 'access' : 'heat');
+  const rootRef = useRef(null), heatButtonRef = useRef(null);
+  useEffect(() => {
+    if (!heatOpen) return;
+    const close = event => {
+      if (event.key === 'Escape') { setHeatOpen(false); heatButtonRef.current?.focus(); }
+      else if (event.type === 'pointerdown' && !rootRef.current?.contains(event.target)) setHeatOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close); };
+  }, [heatOpen]);
+  const choose = value => { setMeasure(value); onChange(value); setHeatOpen(false); heatButtonRef.current?.focus(); };
+  return <div ref={rootRef} className='cx-mode-switch' role='group' aria-label='Режим основной карты'>
+    <button type='button' aria-label='Заявки и маршруты' data-tooltip='Заявки и маршруты' aria-pressed={!enabled} onClick={() => { setHeatOpen(false); onRoutes(); }}><Route size={21}/></button>
+    <button type='button' aria-label='Метки времени' data-tooltip='Метки времени' aria-pressed={enabled && view === 'markers'} onClick={() => { setHeatOpen(false); onChange('markers'); }}><Clock3 size={21}/></button>
+    <button ref={heatButtonRef} type='button' aria-label='Тепловая карта' data-tooltip='Тепловая карта' aria-pressed={enabled && view !== 'markers'} aria-expanded={heatOpen} aria-controls='cx-heat-options' onClick={() => { onChange(measure); setHeatOpen(open => !open); }}><Flame size={21}/><ChevronDown className='cx-heat-chevron' size={11}/></button>
+    {heatOpen ? <section id='cx-heat-options' className='cx-heat-popover' aria-label='Показатель тепловой карты'><b>Тепловая карта</b>{[['heat', 'Время визита', Clock3], ['access', 'Задержки доступа', DoorOpen]].map(([value, label, Icon]) => <button key={value} type='button' aria-pressed={measure === value} onClick={() => choose(value)}><Icon size={18}/><span>{label}</span>{measure === value ? <Check size={17}/> : null}</button>)}</section> : null}
+  </div>;
 }
 
 /** Display an operational legend in the existing map legend popover. */

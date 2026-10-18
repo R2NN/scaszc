@@ -1,0 +1,157 @@
+/* Operational Shift uses one readable scale, independent of report and passport forms. */
+.app-shell .shift-layer.operational-shift .shift-panel{width:min(600px,calc(100vw - var(--operational-panel-left) - 30px));min-height:0}
+.app-shell .shift-layer.operational-shift .shift-panel>header{flex:none;min-height:90px;padding:18px 22px 15px}
+.app-shell .shift-layer.operational-shift .shift-panel>header h2{font-size:26px;line-height:1.2}
+.app-shell .shift-layer.operational-shift .shift-panel>header small{font-size:10px}
+.app-shell .shift-layer.operational-shift .shift-panel>header span{font-size:13px}
+.app-shell .shift-layer.operational-shift .shift-panel nav.shift-tabs{min-height:56px;padding:7px 10px;gap:2px;align-items:center;flex-shrink:0}
+.app-shell .shift-layer.operational-shift .shift-panel nav.shift-tabs button{font-size:15px;line-height:1.3;padding:10px 8px;min-height:40px}
+.app-shell .shift-layer.operational-shift .shift-panel-body{flex:1 1 0;min-height:0;overscroll-behavior:contain;overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;padding:20px 22px 24px;font-size:14px;line-height:1.5}
+.app-shell .shift-layer.operational-shift .shift-list-panel .shift-panel-body{padding:0;overflow:hidden}
+.app-shell .shift-layer.operational-shift .shift-panel-body:has(.dispatch-start-settings[open]){display:block;overflow-y:auto}
+.app-shell .shift-layer.operational-shift .shift-panel-body:has(.dispatch-start-settings[open]) .shift-operational-list{min-height:400px}
+.app-shell .shift-layer.operational-shift .shift-form{gap:16px;min-width:0}
+.app-shell .shift-layer.operational-shift .shift-form label,.app-shell .shift-layer.operational-shift .beego-time-label{font-size:14px;line-height:1.4;font-weight:650;gap:7px}
+.app-shell .shift-layer.operational-shift .shift-form input,.app-shell .shift-layer.operational-shift .shift-form textarea,.app-shell .shift-layer.operational-shift .business-select-trigger,.app-shell .shift-layer.operational-shift .beego-time-trigger{font-size:14px;line-height:1.45;min-height:44px;border-radius:11px}
+.app-shell .shift-layer.operational-shift .shift-form textarea{min-height:86px;font-weight:400}
+.app-shell .shift-layer.operational-shift .shift-form .business-select-trigger,.app-shell .shift-layer.operational-shift .beego-time-trigger{padding:11px 13px}
+.app-shell .shift-layer.operational-shift .business-select-menu{font-size:14px}
+.app-shell .shift-layer.operational-shift .business-select-menu button{font-size:14px;line-height:1.4;padding:10px 12px}
+.app-shell .shift-layer.operational-shift .shift-panel-body h3,.app-shell .shift-layer.operational-shift .shift-panel-body h4{font-size:17px;line-height:1.35;margin:0 0 12px;font-weight:750}
+.app-shell .shift-layer.operational-shift .shift-panel-body summary{font-size:14px;line-height:1.45;font-weight:650;cursor:pointer}
+.app-shell .shift-layer.operational-shift .shift-form p,.app-shell .shift-layer.operational-shift .cx-fact-fields p,.app-shell .shift-layer.operational-shift .shift-pending{font-size:14px;line-height:1.5;margin:0;color:#687381}
+.app-shell .shift-layer.operational-shift .shift-form small,.app-shell .shift-layer.operational-shift .shift-field-hint{font-size:13px;line-height:1.5}
+.app-shell .shift-layer.operational-shift .shift-form>.cx-selected-order{padding:13px 15px;border-radius:12px}
+.app-shell .shift-layer.operational-shift .cx-selected-order strong{font-size:14px;line-height:1.4}
+.app-shell .shift-layer.operational-shift .cx-selected-order span{font-size:13px;line-height:1.4}
+.app-shell .shift-layer.operational-shift .cx-fact-fields{display:grid;gap:14px;padding:17px;border:1px solid #e0e5eb;border-radius:14px;background:#fafbfc}
+.app-shell .shift-layer.operational-shift .cx-fact-fields>h4,.app-shell .shift-layer.operational-shift .cx-engineer-reply-fields h4{font-size:16px;margin:0}
+.app-shell .shift-layer.operational-shift .cx-fact-fields details{padding:12px 0;border-top:1px solid #e1e5eb;border-bottom:1px solid #e1e5eb}
+.app-shell .shift-layer.operational-shift .cx-fact-fields summary{font-size:14px}
+.app-shell .shift-layer.operational-shift .cx-engineer-reply-fields{padding-top:0;border:0;display:grid;gap:14px}
+.app-shell .shift-layer.operational-shift .cx-stage-measurement{gap:12px;margin-top:12px}
+.app-shell .shift-layer.operational-shift .shift-form label:has(>input[type=checkbox]),.app-shell .shift-layer.operational-shift .dispatch-policy label{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px}
+.app-shell .shift-layer.operational-shift input[type=checkbox]{appearance:auto;flex:0 0 20px;width:20px;height:20px;min-height:20px;padding:0;margin:0;accent-color:#ffd21f;box-shadow:none}
+.app-shell .shift-layer.operational-shift .shift-primary,.app-shell .shift-layer.operational-shift .shift-secondary,.app-shell .shift-layer.operational-shift .shift-add-replanning-order,.app-shell .shift-layer.operational-shift .shift-replacement-picker>button{display:flex;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:11px 14px;border-radius:11px;font-size:14px;line-height:1.4;font-weight:700}
+.app-shell .shift-layer.operational-shift .shift-secondary,.app-shell .shift-layer.operational-shift .shift-add-replanning-order,.app-shell .shift-layer.operational-shift .shift-replacement-picker>button{border:1px solid #dce2e9;background:#fff;color:#303943;box-shadow:none}
+.app-shell .shift-layer.operational-shift .shift-add-replanning-order{justify-content:flex-start;text-align:left}
+.app-shell .shift-layer.operational-shift .shift-add-replanning-order svg{color:#8c6a00;flex:none}
+.app-shell .shift-layer.operational-shift .shift-replacement-picker{padding:16px;margin:0 0 18px;background:#f8f9fb;border:1px solid #e0e5eb;border-radius:14px}
+.app-shell .shift-layer.operational-shift .shift-replacement-picker .business-select-trigger{margin:0;background:#fff;border:1px solid #dce2e9;color:#303943;font-weight:650}
+.app-shell .shift-layer.operational-shift .shift-replacement-picker>button{margin-top:12px;width:100%}
+.app-shell .shift-layer.operational-shift .shift-fact-actions{position:sticky;bottom:-24px;background:#fff;padding:12px 0;margin-top:0;gap:8px;border-top:1px solid #e3e7ed;z-index:2}
+.app-shell .shift-layer.operational-shift .shift-fact-actions button{min-height:43px;font-size:14px;line-height:1.3;padding:9px 5px}
+.app-shell .shift-layer.operational-shift .shift-fact-actions button:nth-child(2){background:#ffd21f;border-color:#e0b900;color:#302807}
+.app-shell .shift-layer.operational-shift .dispatch-start-settings{padding:15px 18px;border-bottom:1px solid #e6e9ef;flex:none}
+.app-shell .shift-layer.operational-shift .dispatch-start-settings>summary{font-size:14px}
+.app-shell .shift-layer.operational-shift .dispatch-start-settings .shift-form{margin:14px 0 2px}
+.app-shell .shift-layer.operational-shift .shift-empty-state{display:flex;flex-direction:column;align-items:center;text-align:center;padding:30px 24px;max-width:390px;margin:12px auto}
+.app-shell .shift-layer.operational-shift .shift-empty-state img{width:155px;height:140px;object-fit:contain;margin-bottom:17px}
+.app-shell .shift-layer.operational-shift .shift-empty-state h3{font-size:18px;margin:0 0 8px}
+.app-shell .shift-layer.operational-shift .shift-empty-state p{font-size:14px;color:#74808c;line-height:1.5;margin:0}
+.app-shell .shift-layer.operational-shift .shift-empty-state button{margin-top:18px;border:1px solid #e3c451;background:#fff6c9;color:#54400b;border-radius:10px;padding:10px 14px;font-size:14px;font-weight:650}
+.app-shell .shift-layer.operational-shift .shift-journal-empty{padding:13px 15px;border:1px dashed #dce2e9;border-radius:11px;color:#74808c;font-size:14px;line-height:1.5;background:#fafbfc}
+.app-shell .shift-layer.operational-shift .shift-preview{padding:17px;background:#fffdf4;border-radius:14px;display:grid;gap:14px}
+.app-shell .shift-layer.operational-shift .shift-preview h3{margin:0;font-size:18px}
+.app-shell .shift-layer.operational-shift .shift-preview-status{display:flex;align-items:center;gap:7px;color:#40724c;font-size:13px;margin:0}
+.app-shell .shift-layer.operational-shift .shift-preview-audit{order:3}
+.app-shell .shift-layer.operational-shift .shift-preview-audit p{font-size:13px;margin:9px 0 0}
+.app-shell .shift-layer.operational-shift .shift-preview-metrics{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.app-shell .shift-layer.operational-shift .shift-preview-metrics span{display:grid;gap:5px;padding:12px 9px;background:#fff;border:1px solid #e7e4d6;border-radius:10px;font-size:12px;color:#687381}
+.app-shell .shift-layer.operational-shift .shift-preview-metrics b{font-size:16px;color:#303943}
+.app-shell .shift-layer.operational-shift .shift-preview>.shift-primary{order:5;margin:0}
+.app-shell .shift-layer.operational-shift .shift-saved-draft{background:#f7f8fa;border-color:#e1e5eb;color:#5d6874}
+.app-shell .shift-layer.operational-shift .shift-change-list{margin:0}
+.app-shell .shift-layer.operational-shift .shift-change-list li,.app-shell .shift-layer.operational-shift .shift-change-list summary{font-size:13px}
+.app-shell .shift-layer.operational-shift .emergency-dispatch{font-size:14px;padding:0}
+.app-shell .shift-layer.operational-shift .dispatch-heading{margin-bottom:18px}
+.app-shell .shift-layer.operational-shift .dispatch-heading h3{font-size:18px;margin:3px 0 0}
+.app-shell .shift-layer.operational-shift .dispatch-empty{padding:0;text-align:left}
+.app-shell .shift-layer.operational-shift .dispatch-empty>h4{font-size:18px;margin:0 0 9px}
+.app-shell .shift-layer.operational-shift .dispatch-empty p{font-size:14px;line-height:1.6;color:#687381;margin:0}
+.app-shell .shift-layer.operational-shift .dispatch-scenario{margin-top:22px;padding:17px;border:1px solid #eadba3;background:#fffbea;border-radius:14px;text-align:left}
+.app-shell .shift-layer.operational-shift .dispatch-scenario>small{font-size:12px;font-weight:750;color:#8c6900;letter-spacing:0;margin-bottom:7px}
+.app-shell .shift-layer.operational-shift .dispatch-scenario button{margin-top:14px;width:100%;background:#fff;border:1px solid #e2ca70;color:#54400b;font-size:14px;box-shadow:none}
+.app-shell .shift-layer.operational-shift .dispatch-policy{padding:16px;border:1px solid #e1e5eb;background:#fafbfc;border-radius:13px;margin-top:18px}
+.app-shell .shift-layer.operational-shift .dispatch-policy>summary{font-size:14px}
+.app-shell .shift-layer.operational-shift .dispatch-policy label{margin:16px 0 12px}
+.app-shell .shift-layer.operational-shift .dispatch-policy small{font-size:13px;line-height:1.4}
+.app-shell .shift-layer.operational-shift .dispatch-decision-person b{font-size:17px}
+.app-shell .shift-layer.operational-shift .dispatch-decision-person strong{font-size:24px}
+.app-shell .shift-layer.operational-shift .dispatch-main-impact,.app-shell .shift-layer.operational-shift .dispatch-result p,.app-shell .shift-layer.operational-shift .dispatch-result li{font-size:14px;line-height:1.5}
+.app-shell .shift-layer.operational-shift .dispatch-result{padding:16px;border-radius:13px}
+.app-shell .shift-layer.operational-shift .dispatch-result b{font-size:14px}
+.app-shell .shift-layer.operational-shift .dispatch-scope-controls button,.app-shell .shift-layer.operational-shift .dispatch-actions button{font-size:13px;min-height:40px}
+.app-shell .shift-layer.operational-shift .dispatch-search-state{padding:14px;border-radius:13px}
+.app-shell .shift-layer.operational-shift .dispatch-search-state b{font-size:14px}
+.app-shell .shift-layer.operational-shift .dispatch-search-state span,.app-shell .shift-layer.operational-shift .dispatch-incident span{font-size:13px}
+.app-shell.overlay-shift .order-popup .maplibregl-popup-content{padding:18px 20px;scrollbar-width:thin}
+.app-shell.overlay-shift .order-popup dl{font-size:14px;line-height:1.45}
+.app-shell.dark .shift-layer.operational-shift .cx-fact-fields,.app-shell.dark .shift-layer.operational-shift .shift-replacement-picker,.app-shell.dark .shift-layer.operational-shift .dispatch-policy,.app-shell.dark .shift-layer.operational-shift .shift-journal-empty,.app-shell.dark .shift-layer.operational-shift .shift-saved-draft{background:#282d34;border-color:#414a54;color:#d4d9e0}
+.app-shell.dark .shift-layer.operational-shift .shift-form p,.app-shell.dark .shift-layer.operational-shift .shift-empty-state p,.app-shell.dark .shift-layer.operational-shift .dispatch-empty p,.app-shell.dark .shift-layer.operational-shift .shift-field-hint{color:#bec6d0}
+.app-shell.dark .shift-layer.operational-shift .shift-fact-actions{background:#202329;border-color:#414a54}
+.app-shell.dark .shift-layer.operational-shift .shift-secondary,.app-shell.dark .shift-layer.operational-shift .shift-add-replanning-order,.app-shell.dark .shift-layer.operational-shift .shift-replacement-picker>button,.app-shell.dark .shift-layer.operational-shift .shift-replacement-picker .business-select-trigger{background:#30363e;color:#f1f3f5;border-color:#49535f}
+.app-shell.dark .shift-layer.operational-shift .dispatch-scenario,.app-shell.dark .shift-layer.operational-shift .shift-preview{background:#302d20;border-color:#63582e}
+.app-shell.dark .shift-layer.operational-shift .shift-preview-metrics span{background:#292e35;border-color:#49505b;color:#bec6d0}
+.app-shell.dark .shift-layer.operational-shift .shift-preview-metrics b{color:#f1f3f5}
+.app-shell.dark .shift-layer.operational-shift .shift-preview-status{color:#9bd5ac}
+@media(min-width:1340px){.app-shell:has(.operational-shift) .shift-timeline{left:calc(var(--operational-panel-left) + 606px)}.app-shell.has-map-overlay.overlay-shift .workspace-background-only.calendar-over-overlay .minimal-topbar .date-control{left:calc(50% + (var(--operational-panel-left) + 600px) / 2)!important}}
+@media(max-width:760px){.app-shell .shift-layer.operational-shift .shift-panel nav.shift-tabs button{font-size:14px;padding:9px 10px}.app-shell .shift-layer.operational-shift .shift-panel>header{padding:16px 18px;min-height:90px}.app-shell .shift-layer.operational-shift .shift-panel-body{padding:18px 16px 24px}.app-shell .shift-layer.operational-shift .shift-preview-metrics{grid-template-columns:1fr}.app-shell .shift-layer.operational-shift .shift-preview-metrics span{display:flex;justify-content:space-between;align-items:center}.app-shell .shift-layer.operational-shift .shift-empty-state{padding:22px 12px}}
+
+.app-shell .shift-layer.operational-shift .shift-form textarea{font-family:inherit}
+@media(max-width:760px){.app-shell:has(.operational-shift) .shift-timeline{left:64px;right:8px;bottom:8px}.app-shell:has(.operational-shift):has(.shift-task-rail) .operational-shift .shift-panel{bottom:240px!important}}
+
+/* Keep the selected order's metadata on the same text axis as its main row. */
+.app-shell .shift-layer.operational-shift .shift-order-meta{padding-inline-start:30px}
+.app-shell .shift-layer.operational-shift .shift-journal>h3{margin:24px 0 12px}
+.app-shell .shift-layer.operational-shift .shift-plan-history{margin-bottom:4px}
+
+/* Emergency disclosures share a quiet header; candidate cards retain their design. */
+.app-shell .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives){padding:0;border:1px solid #e1e5eb;border-radius:12px;background:#fff;overflow:visible;margin:0}
+.app-shell .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives)>summary{display:flex;align-items:center;justify-content:space-between;gap:14px;list-style:none;padding:14px 15px;font-size:14px;font-weight:650;line-height:1.4;background:#f8f9fb}
+.app-shell .shift-layer.operational-shift .emergency-dispatch summary::-webkit-details-marker{display:none}
+.app-shell .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives,.dispatch-result-more)>summary::after{content:'';flex:none;width:7px;height:7px;border-right:1.5px solid #87909c;border-bottom:1.5px solid #87909c;transform:rotate(45deg);transition:transform .18s ease;margin:0 3px 4px 6px}
+.app-shell .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives,.dispatch-result-more)[open]>summary::after{transform:rotate(225deg);margin-bottom:-3px}
+.app-shell .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives)[open]>summary{border-bottom:1px solid #e6e9ef}
+.app-shell .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy)>:not(summary){margin:12px 15px}
+.app-shell .shift-layer.operational-shift .emergency-dispatch .dispatch-policy>.business-select{width:calc(100% - 30px);min-width:0}
+.app-shell .shift-layer.operational-shift .emergency-dispatch .dispatch-tech-details p{padding:0;font-size:13px;line-height:1.5}
+.app-shell .shift-layer.operational-shift .emergency-dispatch .dispatch-tech-details p+p{padding-top:10px;border-top:1px solid #eef0f4}
+.app-shell .shift-layer.operational-shift .emergency-dispatch .dispatch-alternatives>.dispatch-options{padding:12px}
+.app-shell .shift-layer.operational-shift .dispatch-choice-hint{padding:12px 15px 0;font-size:13px;color:#75808d}
+.app-shell .shift-layer.operational-shift .dispatch-result-more>summary{display:flex;align-items:center;justify-content:space-between;padding:10px 0;list-style:none;font-size:13px}
+.app-shell .shift-layer.operational-shift .dispatch-result-more[open]>summary{border-bottom:1px solid #dbe7dd;margin-bottom:8px}
+.app-shell .shift-layer.operational-shift .dispatch-consequence-group>summary{list-style:none;display:grid;grid-template-columns:minmax(0,1fr) auto 12px;align-items:center;gap:10px;font-size:14px}
+.app-shell .shift-layer.operational-shift .dispatch-consequence-group>summary::after{content:'';width:7px;height:7px;border-right:1.5px solid #87909c;border-bottom:1.5px solid #87909c;transform:rotate(45deg);margin-bottom:4px}
+.app-shell .shift-layer.operational-shift .dispatch-consequence-group[open]>summary::after{transform:rotate(225deg);margin-bottom:-3px}
+.app-shell .shift-layer.operational-shift .dispatch-search-state{display:grid;grid-template-columns:34px minmax(0,1fr);align-items:center;gap:10px 12px;padding:15px;border:1px solid #e1e5eb;background:#f8f9fb;box-shadow:none}
+.app-shell .shift-layer.operational-shift .dispatch-search-state .dispatch-search-icon{width:34px;height:34px;border-radius:10px;background:#fff0a0;color:#806000;box-shadow:none}
+.app-shell .shift-layer.operational-shift .dispatch-search-state>div:not(.dispatch-search-meta){display:grid;gap:3px;min-width:0}
+.app-shell .shift-layer.operational-shift .dispatch-search-state.is-searching .dispatch-search-icon{animation:dispatch-search-pulse 1.8s ease-in-out infinite}
+.app-shell .shift-layer.operational-shift .dispatch-search-meta{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:9px 16px;flex-wrap:wrap;border-top:1px solid #e2e6ec;padding-top:11px;margin-top:2px}
+.app-shell .shift-layer.operational-shift .dispatch-search-meta span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#717c88;font-weight:500}
+.app-shell .shift-layer.operational-shift .dispatch-search-meta .dispatch-decision-timer{font-size:13px;color:#5f4a0c;font-weight:650}
+.app-shell.dark .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives){background:#262b32;border-color:#424b56}
+.app-shell.dark .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives)>summary{background:#2d333b;color:#eef1f4;border-color:#424b56}
+.app-shell.dark .shift-layer.operational-shift .dispatch-search-state{background:#292f36;border-color:#424b56}
+.app-shell.dark .shift-layer.operational-shift .dispatch-search-meta,.app-shell.dark .shift-layer.operational-shift .emergency-dispatch .dispatch-tech-details p+p{border-color:#424b56}
+.app-shell.dark .shift-layer.operational-shift .dispatch-search-meta span{color:#bdc7d1}
+.app-shell.dark .shift-layer.operational-shift .dispatch-search-meta .dispatch-decision-timer{color:#f5d978}
+@keyframes dispatch-search-pulse{50%{background:#ffe375}}
+@media(prefers-reduced-motion:reduce){.app-shell .shift-layer.operational-shift .dispatch-search-state.is-searching .dispatch-search-icon{animation:none}.app-shell .shift-layer.operational-shift .emergency-dispatch summary::after{transition:none}}
+
+/* Reduce empty vertical space in playback without removing or scaling its controls. */
+.app-shell:has(.operational-shift) .shift-timeline{min-height:84px;padding:8px 14px}
+.app-shell:has(.operational-shift) .shift-timeline:has(.shift-task-rail){min-height:154px}
+.app-shell:has(.operational-shift) .shift-timeline:has(.shift-timeline-task-detail){min-height:176px}
+.app-shell:has(.operational-shift) .shift-playback-controls>button{height:32px}
+.app-shell:has(.operational-shift) .shift-playback-controls .shift-playback-select>button{min-height:32px;height:32px}
+.app-shell:has(.operational-shift) .shift-timeline-crew{margin-top:4px;gap:10px}
+.app-shell:has(.operational-shift) .shift-task-rail{margin:5px 8px 0}
+.app-shell:has(.operational-shift) .shift-timeline>input[type=range]{margin:5px 0 0}
+@media(min-width:761px) and (max-width:1339px){.app-shell:has(.operational-shift):has(.shift-task-rail) .operational-shift .shift-panel{bottom:166px}.app-shell:has(.operational-shift):has(.shift-timeline-task-detail) .operational-shift .shift-panel{bottom:188px}}
+
+.app-shell .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives)>summary{border-radius:11px}
+.app-shell .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives)[open]>summary{border-radius:11px 11px 0 0}
+
+.app-shell.dark .shift-layer.operational-shift .dispatch-scenario>small{color:#f1d56d}

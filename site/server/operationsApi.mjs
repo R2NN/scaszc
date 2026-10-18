@@ -8,6 +8,7 @@ import { seedBaseShift } from './seedBaseShift.mjs';
 import { analyticsHistoryDates, baseHistoryDates, ensureBaseHistoricalShift } from './baseHistoryStore.mjs';
 import { acquirePlanningSlot, planningBusyResponse } from './planningSlot.mjs';
 import { handleComplexity } from './complexityApi.mjs';
+import { handleBuilding } from './buildingApi.mjs';
 import { seedComplexity } from './complexitySeed.mjs';
 import { seedEngineerFeedback } from './engineerFeedbackSeed.mjs';
 import { createRatingApi } from './ratingApi.mjs';
@@ -53,6 +54,8 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
     if (incidentResponse) return incidentResponse;
     const complexityResponse = await handleComplexity(request, store.complexity);
     if (complexityResponse) return complexityResponse;
+    const buildingResponse = await handleBuilding(request, store.complexity);
+    if (buildingResponse) return buildingResponse;
     if (url.pathname === '/api/base-data/status' && request.method === 'GET') {
       const [dates, operationalDates] = await Promise.all([analyticsHistoryDates(), baseHistoryDates()]);
       const storedDays = store.db.prepare("SELECT count(*) AS total FROM shifts WHERE region_id = 'moscow' AND current_plan_id IS NOT NULL").get().total;

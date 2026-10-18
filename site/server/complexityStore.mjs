@@ -130,14 +130,26 @@ export class ComplexityStore {
     if (client) entities.client = client.id;
     return entities;
   }
-  estimate(order, at, persist = false) {
+  /** Reuse the same immutable evidence within one synchronous read request only. */
+  durationReadContext(at, visits = this.visits(at)) {
+    const byObject = new Map();
+    for (const visit of visits) {
+      const id = visit.entities?.object;
+      if (!byObject.has(id)) byObject.set(id, []);
+      byObject.get(id).push(visit);
+    }
+    return { at, visits, byObject, conditions: this.db.prepare('SELECT object_id,payload_json FROM object_conditions').all().map(row => ({ objectId: row.object_id, value: decode(row) })), model: this.model(at) };
+  }
+  estimate(order, at, persist = false, context = null) {
     const entities = this.links(order, persist);
     const object = this.object(entities.object);
     const defaults = object?.orderDefaults?.[String(order.sourceId || order.id)] || {};
     const enriched = { ...order, durationFactors: { ...defaults.durationFactors, ...order.durationFactors }, factorSources: { ...defaults.factorSources, ...order.factorSources } };
-    const conditions = this.conditions(entities.object);
-    const evidence = conditions.some(condition => ['operation', 'client'].includes(condition.scope)) ? this.visits(at) : this.visits(at, entities.object);
-    const forecast = calculateDuration(enriched, { asOf: at, entities, model: this.model(at), visits: evidence, conditions });
+    const read = !persist && context?.at === at ? context : null;
+    const conditions = read ? read.conditions.filter(item => !entities.object || item.objectId == null || item.objectId === entities.object).map(item => item.value) : this.conditions(entities.object);
+    const shared = conditions.some(condition => ['operation', 'client'].includes(condition.scope));
+    const evidence = read ? (shared || !entities.object ? read.visits : read.byObject.get(entities.object) || []) : this.visits(at, shared ? undefined : entities.object);
+    const forecast = calculateDuration(enriched, { asOf: at, entities, model: read?.model || this.model(at), visits: evidence, conditions });
     const id = digest({ orderId: String(order.id), ...forecast });
     const snapshot = { id, orderId: String(order.id), ...forecast };
     if (persist) {

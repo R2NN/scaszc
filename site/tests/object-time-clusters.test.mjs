@@ -44,6 +44,11 @@ const clusterFixture = context => {
     getBoundingClientRect() { return { left: 0, right: 1200, top: 0, bottom: 800, width: 1200, height: 800 }; }
   }
   const priorDocument = globalThis.document;
+  const priorRequest = globalThis.requestAnimationFrame, priorCancel = globalThis.cancelAnimationFrame;
+  let pendingFrame;
+  globalThis.requestAnimationFrame = callback => { pendingFrame = callback; return 1; };
+  globalThis.cancelAnimationFrame = () => { pendingFrame = undefined; };
+  context.after(() => { globalThis.requestAnimationFrame = priorRequest; globalThis.cancelAnimationFrame = priorCancel; });
   globalThis.document = { createElement: () => new Element(), querySelector: () => null };
   context.after(() => { if (priorDocument === undefined) delete globalThis.document; else globalThis.document = priorDocument; });
   const created = [];
@@ -62,9 +67,9 @@ const clusterFixture = context => {
     getContainer: () => container, getSource: () => source, isSourceLoaded: () => true,
     querySourceFeatures: () => [feature, feature], project: () => ({ x: 600, y: 400 }),
     on: (event, handler) => handlers.set(event, handler), off: event => handlers.delete(event),
-    getCanvas: () => ({ focus() {} }), easeTo: value => { map.camera = value; },
+    getCanvas: () => ({ focus() {} }), flyTo: value => { map.camera = value; },
   };
-  return { map, Marker, created, container, handlers, feature, source };
+  return { map, Marker, created, container, handlers, feature, source, flush: () => { const callback = pendingFrame; pendingFrame = undefined; callback?.(); } };
 };
 
 test('tile duplicates produce one chip; source updates replace stale counts and cleanup removes overlays', async context => {
@@ -78,7 +83,8 @@ test('tile duplicates produce one chip; source updates replace stale counts and 
   assert.deepEqual(selection, ['object-A']);
   assert.equal(fixture.map.camera.zoom, 12);
   fixture.feature.properties.point_count = 7;
-  fixture.handlers.get('render')();
+  fixture.handlers.get('sourcedata')({ sourceId: 'cx-objects' });
+  fixture.flush();
   assert.equal(fixture.created.length, 2);
   assert.equal(fixture.created[0].removed, true);
   assert.match(fixture.created[1].element.children[0].attributes['aria-label'], /Объектов: 7/);
@@ -86,6 +92,28 @@ test('tile duplicates produce one chip; source updates replace stale counts and 
   assert.equal(fixture.handlers.size, 0);
   assert.ok(fixture.created.every(marker => marker.removed));
   assert.ok(fixture.container.children.every(tooltip => tooltip.removed));
+});
+
+test('camera and tile notifications are coalesced without a per-render query loop', context => {
+  const fixture = clusterFixture(context);
+  let queries = 0;
+  fixture.map.querySourceFeatures = () => { queries++; return [fixture.feature]; };
+  const cleanup = mountObjectTimeClusters(fixture.map, fixture.Marker, () => {}, () => {});
+  assert.equal(queries, 1);
+  assert.equal(fixture.handlers.has('render'), false);
+  fixture.handlers.get('sourcedata')({ sourceId: 'basemap' });
+  fixture.flush();
+  assert.equal(queries, 1);
+  for (let index = 0; index < 20; index++) fixture.handlers.get('sourcedata')({ sourceId: 'cx-objects' });
+  fixture.handlers.get('moveend')();
+  assert.equal(queries, 1);
+  fixture.flush();
+  assert.equal(queries, 2);
+  assert.equal(fixture.created.length, 1);
+  fixture.handlers.get('moveend')();
+  cleanup();
+  fixture.flush();
+  assert.equal(queries, 2);
 });
 
 test('a pending expansion cannot change camera or selection after switching map mode', async context => {

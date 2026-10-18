@@ -54,9 +54,15 @@ export async function handleComplexity(request, registry) {
       const input = await request.json();
       return json(registry.reviseVisit(decodeURIComponent(visitMatch[1]), input));
     }
+    let readContext;
+    const forecasts = new WeakMap();
+    const estimateFor = order => {
+      if (!forecasts.has(order)) forecasts.set(order, registry.estimate(order, at, false, readContext));
+      return forecasts.get(order);
+    };
     const objectMatch = /^\/api\/complexity\/objects\/([^/]+)$/.exec(url.pathname);
     const originalExampleFor = object => object.examples?.find(example => {
-      try { return allKinds || registry.estimate(example, at).kind === kind; } catch { return false; }
+      try { return allKinds || estimateFor(example).kind === kind; } catch { return false; }
     }) || { id: `PREVIEW-${object.id}-${kind}`, objectId: object.id, serviceEntities: { object: object.id }, workType: WORK_KINDS[allKinds ? 'local' : kind], skill: kind === 'information' ? 'EMERGENCY' : undefined, serviceType: kind === 'information' ? 'Информация' : undefined, sourceData: kind === 'information' ? { bk_type: 'Глобальная проблема', hd_type: 'Информация' } : undefined };
     const exampleFor = object => {
       const example = originalExampleFor(object);
@@ -67,7 +73,7 @@ export async function handleComplexity(request, registry) {
       const object = registry.object(decodeURIComponent(objectMatch[1]));
       if (!object) return json({ error: 'Объект не найден.' }, 404);
       const example = exampleFor(object);
-      const estimate = registry.estimate(example, at);
+      const estimate = estimateFor(example);
       const reviewAt = url.searchParams.get('review') === 'current' ? new Date().toISOString() : at;
       const visits = registry.visits(reviewAt);
       return json({ reviewAt, object, clientLinks: registry.db.prepare('SELECT line_id AS lineId,client_id AS clientId,label FROM service_client_links WHERE object_id=?').all(object.id), feedback: engineerFeedback(registry, object.id).filter(item => Date.parse(item.submittedAt) <= Date.parse(reviewAt)), entities: registry.entities(object.id), estimate, example, visits: visits.filter(visit => visit.entities?.object === object.id && Date.parse(visit.endedAt || visit.startedAt) <= Date.parse(at)).sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt))), conditions: registry.conditions(object.id).filter(condition => Date.parse(condition.knownAt) <= Date.parse(reviewAt)).map(condition => ({ ...condition, closedAt: condition.closedAt && Date.parse(condition.closedAt) > Date.parse(reviewAt) ? null : condition.closedAt, relevant: matchesConditionWork(condition, estimate), evidenceCount: conditionEvidence(condition, visits, reviewAt, registry.model(reviewAt)).length, evidence: (condition.evidenceIds || []).map(id => visits.find(visit => visit.id === id)).filter(Boolean).map(visit => ({ ...visit, id: visit.id, objectId: visit.entities.object, address: registry.object(visit.entities.object)?.address, kind: visit.kind, endedAt: visit.endedAt, orderId: visit.orderId, engineerName: visit.engineerName || visit.engineerId, finding: visit.finding })) })), audit: registry.history(object.id).filter(item => Date.parse(item.at) <= Date.parse(reviewAt)), kinds: WORK_KINDS, reasons: REASONS });
@@ -77,17 +83,18 @@ export async function handleComplexity(request, registry) {
       const zone = url.searchParams.get('zone');
       const region = url.searchParams.get('regionId') || 'moscow';
       const allVisits = registry.visits(at);
+      readContext = registry.durationReadContext(at, allVisits);
       const attentionVisits = url.searchParams.get('review') === 'current' ? registry.visits(new Date().toISOString()) : allVisits;
       const objects = registry.objects().filter(object => object.regionId === region && (!zone || object.zone === zone || object.zoneId === zone || object.district === zone) && `${object.address} ${object.id}`.toLocaleLowerCase('ru-RU').includes(q));
       return json(objects.map(object => {
         const example = exampleFor(object);
-        const estimate = registry.estimate(example, at);
+        const estimate = estimateFor(example);
         const visitCount = allVisits.filter(visit => visit.entities?.object === object.id && visit.kind === estimate.kind).length;
         const visits = allVisits.filter(visit => visit.entities?.object === object.id && visit.endedAt && Date.parse(visit.endedAt) <= Date.parse(at) && visit.eligible && !visit.excluded && visit.kind === estimate.kind && visit.operation === estimate.operation);
         const hasRelevantExample = object.examples?.some(item => item.id === example.id);
         const recurring = visits.filter(visit => !['unknown', 'customer', 'other'].includes(visit.reason) && Math.abs(visit.actualTechnical - visit.factorTechnical) >= 8).length >= 3;
         const state = estimate.observationCount ? 'confirmed' : recurring ? 'review' : 'estimated';
-        return { attention: objectAttention(object, attentionVisits, at, order => registry.estimate(order, at)), id: object.id, address: object.address, coords: object.coords, zone: object.zone, zoneId: object.zoneId, district: object.district, total: estimate.total, delta: estimate.total - estimate.baseTechnical - estimate.documents, coefficient: estimate.coefficient, observations: visits.length, visitCount, state, insufficient: !estimate.observationCount && (!hasRelevantExample || visits.length < 3), kind: estimate.kind, estimate, orderIds: object.examples?.map(item => item.id) || [], entities: estimate.entities };
+        return { attention: objectAttention(object, attentionVisits, at, estimateFor), id: object.id, address: object.address, coords: object.coords, zone: object.zone, zoneId: object.zoneId, district: object.district, total: estimate.total, delta: estimate.total - estimate.baseTechnical - estimate.documents, coefficient: estimate.coefficient, observations: visits.length, visitCount, state, insufficient: !estimate.observationCount && (!hasRelevantExample || visits.length < 3), kind: estimate.kind, estimate, orderIds: object.examples?.map(item => item.id) || [], entities: estimate.entities };
       }));
     }
     return json({ error: 'Неизвестный адрес или метод реестра объектов.' }, 404);

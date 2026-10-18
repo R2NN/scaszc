@@ -1,5 +1,15 @@
 import { OBJECT_TIME_LEGEND, objectTimeCategory } from './objectPresentation.js';
 
+// Retain worker-side clustering when only visibility/theme changes.
+const sourceData = new WeakMap();
+const accessCollections = new WeakMap();
+function updateSource(map, id, data, options = {}) {
+  let source = map.getSource(id);
+  if (!source) { map.addSource(id, { type: 'geojson', data, ...options }); source = map.getSource(id); }
+  else if (sourceData.get(source) !== data) source.setData(data);
+  sourceData.set(source, data);
+}
+
 /** Keep marker deltas and the access layer tied to the same filtered object forecasts. */
 export function objectTimeGeoJSON(objects) {
   return { type: 'FeatureCollection', features: objects.filter(object => Array.isArray(object.coords) && object.coords.length === 2 && object.coords.every(Number.isFinite)).map(object => {
@@ -12,9 +22,10 @@ export function objectTimeGeoJSON(objects) {
 export function syncObjectTimeLayers(map, data, { enabled, view, dark }) {
   // getStyle is available once the style JSON is ready; background tiles may still load.
   if (!map.getStyle()) return;
-  const accessData = { ...data, features: view === 'heat' ? data.features : data.features.filter(feature => feature.properties.access > 0) };
-  if (!map.getSource('cx-objects')) map.addSource('cx-objects', { type: 'geojson', data, cluster: true, clusterMaxZoom: 13, clusterRadius: 88, clusterProperties: { slower: ['+', ['get', 'slower']], unknown: ['+', ['get', 'unknown']] } });
-  if (!map.getSource('cx-access')) map.addSource('cx-access', { type: 'geojson', data: accessData });
+  if (!accessCollections.has(data)) accessCollections.set(data, { ...data, features: data.features.filter(feature => feature.properties.access > 0) });
+  const accessData = view === 'heat' ? data : accessCollections.get(data);
+  updateSource(map, 'cx-objects', data, { cluster: true, clusterMaxZoom: 13, clusterRadius: 88, clusterProperties: { slower: ['+', ['get', 'slower']], unknown: ['+', ['get', 'unknown']] } });
+  updateSource(map, 'cx-access', accessData);
   if (!map.getLayer('cx-access-heat')) map.addLayer({ id: 'cx-access-heat', type: 'heatmap', source: 'cx-access', paint: {
     'heatmap-weight': ['interpolate', ['linear'], ['get', 'access'], 0, 0, 15, 0.7, 30, 1],
     'heatmap-intensity': 2.4,
@@ -32,8 +43,6 @@ export function syncObjectTimeLayers(map, data, { enabled, view, dark }) {
   }
   map.setPaintProperty('cx-access-heat', 'heatmap-weight', view === 'heat' ? ['interpolate', ['linear'], ['get', 'total'], 0, 0, 60, 0.8, 180, 1.8] : ['interpolate', ['linear'], ['get', 'access'], 0, 0, 15, 0.7, 30, 1]);
   map.setLayoutProperty('cx-access-label', 'text-field', ['get', view === 'heat' ? 'label' : 'accessLabel']);
-  map.getSource('cx-objects').setData(data);
-  map.getSource('cx-access').setData(accessData);
   for (const id of ['cx-points', 'cx-point-label']) map.setLayoutProperty(id, 'visibility', enabled && view === 'markers' ? 'visible' : 'none');
   for (const id of ['cx-access-heat', 'cx-access-points', 'cx-access-label']) map.setLayoutProperty(id, 'visibility', enabled && view !== 'markers' ? 'visible' : 'none');
   map.setPaintProperty('cx-access-heat', 'heatmap-opacity', dark ? 0.75 : 0.65);

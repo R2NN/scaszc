@@ -9,12 +9,12 @@ const casePortraits = { 'RATING-0001': 9 };
 /** Return a unique roster portrait, or initials for people without an assigned photo. */
 export function portraitForEngineer(id) {
   const key = engineerIdentity(id);
-  if (casePortraits[key]) return '/engineer-portraits/portrait-' + casePortraits[key] + '.jpg?v=2';
+  if (casePortraits[key]) return '/engineer-portraits/portrait-' + casePortraits[key] + '.webp?v=1';
   const index = primary.indexOf(key);
   if (index < 0 || index >= primaryPortraitNumbers.length) return null;
   const number = primaryPortraitNumbers[index];
-  if (number === 29 || number === 33) return `/engineer-portraits/portrait-${number}-restored.png?v=1`;
-  return '/engineer-portraits/portrait-' + number + '.jpg?v=3';
+  if (number === 29 || number === 33) return `/engineer-portraits/portrait-${number}-restored.webp?v=1`;
+  return '/engineer-portraits/portrait-' + number + '.webp?v=1';
 }
 
 // Retained tiles overlap adjacent portraits. Reassemble their available edges;
@@ -34,5 +34,5 @@ export function portraitFrameForEngineer(id) {
   if (!url) return null;
   const number = Number(url.match(/portrait-(\d+)/)[1]);
   const repaired = repairedFrames[number];
-  return repaired ? { box: repaired.box, tiles: repaired.tiles.map(([tile, x]) => ({ url: `/engineer-portraits/portrait-${tile}.jpg?v=3`, x })) } : null;
+  return repaired ? { box: repaired.box, tiles: repaired.tiles.map(([tile, x]) => ({ url: `/engineer-portraits/portrait-${tile}.webp?v=1`, x })) } : null;
 }

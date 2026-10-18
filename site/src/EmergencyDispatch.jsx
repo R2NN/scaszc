@@ -222,7 +222,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const [openedRouteId, setOpenedRouteId] = useState('');
   const accepted = item?.status === 'ACCEPTED';
   const acceptedCandidate = item?.candidates.find(option => option.id === item.decision?.candidateId);
-  const submitting=controller.submission?.incidentId===item?.id ? controller.submission.candidate : null;
+  const submitting=controller.submission && item && controller.submission.incidentId===item.id ? controller.submission.candidate : null;
   const candidate = (!accepted && submitting) || resolveDispatchCandidate(item, candidateId) || acceptedCandidate;
   const candidateApplied = accepted && candidate?.id === acceptedCandidate?.id;
   const impacts = useMemo(() => new Map((item?.candidates || []).map(option => [option.id, dispatchConsequences(option)])), [item?.candidates]);
@@ -255,7 +255,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const pending = !accepted && (controller.acceptingId === item?.id || item?.confirmation?.state==='CHECKING');
   return <section className='emergency-dispatch' aria-label='Решение аварии'>
     <div className='dispatch-heading'><div><small>ОПЕРАТИВНОЕ РЕШЕНИЕ</small><h3>Аварийный выезд</h3></div><AlertTriangle size={24}/></div>
-    {item ? <div className={`dispatch-decision-bar${accepted ? ' is-applied' : ''}`}>
+    {item && (candidate || accepted || pending) ? <div className={`dispatch-decision-bar${accepted ? ' is-applied' : ''}`}>
       <div className='dispatch-decision-person'><b>{accepted ? ratingName(acceptedCandidate?.engineer) : candidate ? ratingName(candidate.engineer) : 'Выберите инженера'}</b><strong>{accepted ? acceptedCandidate?.visit.arrival : candidate?.visit.arrival || '—'}<small>прибытие</small></strong></div>
       {accepted ? <div className='dispatch-applied-title' role='status'><Check size={19}/><b>Направлен на аварию</b></div> : null}
       <p className='dispatch-main-impact'>{accepted ? applied?.summary : impact?.summary || (searching ? 'Проверенные варианты появятся ниже' : 'Выберите вариант ниже, чтобы увидеть последствия')}</p>
@@ -266,7 +266,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
         <div className='dispatch-scope-controls' role='group' aria-label='Показывать маршрут'>{[{value:'day',label:'Весь оставшийся день'},{value:'next',label:'Ближайшее действие'}].map(option => <button key={option.value} type='button' aria-pressed={(controller.routeScope || 'day') === option.value} onClick={() => controller.changeRouteScope(option.value)}>{option.label}</button>)}</div>
       </> : null}
     </div> : null}
-    {!item ? <div className='dispatch-empty'><p>{controller.session ? 'Сценарная смена готова с начала дня. Нажмите «Воспроизвести» на шкале времени. Авария поступит в 11:17.' : 'При поступлении аварии здесь появятся проверенные варианты всей смены.'}</p><button type='button' className='primary' onClick={controller.startSession}>{controller.session ? 'Новая изолированная сессия' : 'Запустить сценарий с 06:00'}</button><small>17 августа · отдельная смена · событие в 11:17</small></div> : <>
+    {!item ? <div className='dispatch-empty'><h4>Бригада для срочного выезда</h4><p>При поступлении аварии здесь появятся проверенные варианты: кто приедет, какие заявки придётся передать и успеет ли команда закончить день.</p><div className='dispatch-scenario'><small>Демонстрационный сценарий</small><p>{controller.session ? 'Смена готова. Включите воспроизведение: вызов поступит в 11:17.' : 'Отдельная смена 17 августа: старт в 06:00, авария в 11:17. Можно проверить выбор бригады и изменение маршрутов.'}</p><button type='button' className='shift-secondary' onClick={controller.startSession}>{controller.session ? 'Новая изолированная сессия' : 'Запустить сценарий с 06:00'}</button></div></div> : <>
       <div className='dispatch-incident'><b>{item.order.address}</b><span>{item.time} · {accepted ? 'Решение принято' : item.status === 'CANCELLED' ? 'Отменена' : 'Требуется решение'}</span></div>
       {acceptedCandidate && accepted ? <div className='dispatch-result' role='status'>
         <Check size={24}/><div><b>{ratingName(acceptedCandidate.engineer)} направлен на аварию</b><strong>Прибытие {acceptedCandidate.visit.arrival}</strong><span>{item.decision.actor === 'system' ? 'Автовыбор' : 'Решение диспетчера'} · версия {item.decision.revision}</span></div>
@@ -277,8 +277,12 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
       {pending ? <div className='dispatch-confirming' role='status'><Clock3 size={20}/><div><b>Подтверждаем направление</b><span>{ratingName(submitting?.engineer || item.confirmation?.engineer)} · проверяем актуальный путь. Выбранный инженер сохраняется.</span></div></div> : null}
       {!terminal(item) && !pending ? <div className={`dispatch-search-state ${searching ? 'is-searching' : 'is-ready'}`} role='status'>
         <span className='dispatch-search-icon'><Clock3 size={19}/></span><div><b>{item.status === 'ERROR' ? 'Расчёт прерван' : checkingIntercept ? 'Проверяем перехват в пути' : repairingCoverage ? 'Восстанавливаем назначения' : searching ? 'Поиск продолжается' : resultCountLabel(item.candidates.length)}</b><span>{repairingCoverage ? 'Ищем обмены между инженерами · готовые варианты доступны' : checkingIntercept ? item.progress.engineerName || 'Ближайшая бригада' : searching ? item.candidates.length ? `Готовых вариантов: ${item.candidates.length} · уже можно выбирать` : 'Проверяем маршруты и окна клиентов' : item.search?.stoppedReason ? 'Поиск остановлен по лимиту' : item.status === 'ERROR' ? 'Можно повторить расчёт' : 'Расчёт завершён'}</span></div>
+        {!candidate ? <div className='dispatch-search-meta'>
+          {item.progress?.total > 0 ? <span>Проверено инженеров <b>{item.progress.completed ?? 0}/{item.progress.total}</b></span> : null}
+          <span className='dispatch-decision-timer' aria-live='off'><Clock3 size={15}/>{item.policy?.enabled ? seconds ? `Автовыбор через ${countdown}` : 'Автовыбор: ожидаем готовое решение' : 'Ручное решение'}</span>
+        </div> : null}
       </div> : null}
-      {!pending ? <details className='dispatch-alternatives' open={accepted ? undefined : true} key={accepted ? 'accepted' : 'choosing'}><summary>{accepted ? 'Сравнить сохранённые варианты' : 'Варианты направления'}</summary><div className='dispatch-options' role='group' aria-label='Проверенные варианты'>{item.candidates.map(option => {
+      {!pending && item.candidates.length > 0 ? <details className='dispatch-alternatives' open={accepted ? undefined : true} key={accepted ? 'accepted' : 'choosing'}><summary>{accepted ? 'Сравнить сохранённые варианты' : 'Варианты направления'}</summary>{!candidate ? <p className='dispatch-choice-hint'>Выберите карточку инженера для сравнения маршрута и заявок.</p> : null}<div className='dispatch-options' role='group' aria-label='Проверенные варианты'>{item.candidates.map(option => {
         const effect = impacts.get(option.id);
         return <button type='button' key={option.id} aria-pressed={option.id === candidate?.id} className={`dispatch-option ${option.id === candidate?.id ? 'selected' : ''}`} onClick={() => controller.preview(option)}>
           <span className='dispatch-option-head'><span className='dispatch-option-kind'>{option.kind}</span>{option.id === item.recommendedId ? <strong>Рекомендуем</strong> : option.responseMinutes === fastest && item.candidates.length > 1 ? <em>Быстрее всех</em> : null}</span>
@@ -309,7 +313,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
           <b>Остались в резерве: {candidate.reserve.length}</b>{candidate.reserve.map(crew => <p key={crew.engineerId}>{crew.name} · {crew.availableAt}–{crew.until}</p>)}
           <code>{candidate.contentSha256}</code>
         </details>
-      </div> : !pending && item.candidates.length ? <p>Выберите инженера, чтобы открыть адреса изменившихся заявок.</p> : null}
+      </div> : null}
       {item.progress || item.search?.rejected?.length ? <details className='dispatch-tech-details'><summary>Подробности поиска</summary>{item.progress ? <p>Проверено инженеров: {item.progress.completed} из {item.progress.total} · проверок маршрута: {item.progress.routeChecks ?? '—'}</p> : null}{item.search?.stoppedReason ? <p>Достигнут лимит поиска. Показаны проверенные варианты; оптимальность не доказана.</p> : null}{item.search?.rejected?.map(entry => <p key={entry.engineerId}>{entry.engineerName}: {entry.reason}</p>)}</details> : null}
       {!terminal(item) ? <div className='dispatch-actions'><button type='button' onClick={() => controller.retry(item.id)} disabled={item.status === 'SEARCHING' || pending}><RotateCcw size={16}/>Повторить расчёт</button><button type='button' onClick={() => controller.cancel(item.id)} disabled={pending}><X size={16}/>Отменить аварию</button></div> : <button type='button' className='dispatch-map-action' onClick={controller.startSession}>Новая изолированная сессия</button>}
     </>}

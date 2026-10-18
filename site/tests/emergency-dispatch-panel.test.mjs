@@ -5,6 +5,19 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 
+test('emergency tab renders before an incident or submission exists', async () => {
+  const server=await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
+  try {
+    const {EmergencyDispatchPanel}=await server.ssrLoadModule('/src/EmergencyDispatch.jsx');
+    for (const selected of [null, undefined]) for (const submission of [null, undefined]) {
+      const html=renderToStaticMarkup(React.createElement(EmergencyDispatchPanel,{controller:{selected,submission}}));
+      assert.match(html,/Аварийный выезд/);
+      assert.match(html,/При поступлении аварии/);
+      assert.doesNotMatch(html,/Направить на аварию/);
+    }
+  } finally {await server.close();}
+});
+
 test('notification actions occupy their own row before and after reading; playback shows actual values', async()=>{
   const server=await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
   try{
@@ -83,7 +96,7 @@ test('an unaccepted alternative keeps prospective loss wording after another dec
   } finally {await server.close();}
 });
 
-test('searching, completion, search limits and errors have distinct states with a disabled unselected decision', async () => {
+test('searching, completion, search limits and errors retain their status and timer without an empty decision card', async () => {
   const server = await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
   try {
     const { EmergencyDispatchPanel } = await server.ssrLoadModule('/src/EmergencyDispatch.jsx');
@@ -96,7 +109,7 @@ test('searching, completion, search limits and errors have distinct states with 
       const item = {id:'incident',status,search,candidates:[],order:{address:'Адрес'},policy:{enabled:true},deadlineAt:Date.now()+135000};
       const html = renderToStaticMarkup(React.createElement(EmergencyDispatchPanel,{controller:{selected:item,serverOffset:0}}));
       assert.ok(html.includes(label));
-      assert.match(html,/disabled="">Направить на аварию/);
+      assert.doesNotMatch(html,/dispatch-decision-bar|Выберите инженера|Направить на аварию|dispatch-alternatives/);
       assert.match(html,/Автовыбор через 02:15/);
       if (status === 'SEARCHING') assert.doesNotMatch(html,/уже можно выбирать/);
       else assert.doesNotMatch(html,/Поиск продолжается/);

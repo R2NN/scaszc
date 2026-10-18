@@ -40,8 +40,12 @@ import { profileAvatarColor } from "./profileAvatar.js";
 import { ratingName } from './engineerPresentation.js';
 import { portraitForEngineer } from './engineerPortraits.js';
 import "./shift-workspace.css";
+import "./shift-ui.css";
 
 const shiftEngineerName = engineer => ratingName(engineer || {});
+function ShiftEmptyState({title, children, action, onAction, image = 'objects'}) {
+  return <div className="shift-empty-state"><img src={`/mascot-empty-${image}.png`} alt=""/><h3>{title}</h3><p>{children}</p>{action ? <button type="button" onClick={onAction}>{action}</button> : null}</div>;
+}
 function ShiftEngineerAvatar({ engineer, name }) {
   const portrait = portraitForEngineer(engineer?.id);
   return <span className={`person-avatar ${portrait ? 'has-portrait' : ''}`}>{portrait ? <EngineerPortrait id={engineer.id}/> : null}<span>{String(name || shiftEngineerName(engineer)).split(/\s+/).map(part => part[0]).join('').slice(0, 2)}</span></span>;
@@ -171,8 +175,8 @@ export function PlaybackDropdown({ label, value, options, onChange, disabled = f
 }
 
 function ChatAvatar({ role, profile }) {
-  if (role === 'assistant') return <span className="shift-chat-avatar assistant-avatar" aria-label="AI-помощник"><img src="/avatars/robot-static.png" alt=""/></span>;
-  return <span className="shift-chat-avatar user-avatar" aria-label={profile?.name || 'Вы'} style={{ backgroundColor: profileAvatarColor(profile) }}>{profile?.avatar ? <img src={`/avatars/${profile.avatar}.png`} alt=""/> : 'Вы'}</span>;
+  if (role === 'assistant') return <span className="shift-chat-avatar assistant-avatar" aria-label="AI-помощник"><img src="/avatars/robot-static.webp" alt=""/></span>;
+  return <span className="shift-chat-avatar user-avatar" aria-label={profile?.name || 'Вы'} style={{ backgroundColor: profileAvatarColor(profile) }}>{profile?.avatar ? <img src={`/avatars/${profile.avatar}.webp`} alt=""/> : 'Вы'}</span>;
 }
 
 function ReportBars({ title, items, className = '' }) {
@@ -964,7 +968,7 @@ export function ShiftWorkspace({
     }
   };
   return (
-    <div className={`shift-layer${reportOnly ? ' report-layer' : ''}${assistantOnly ? ' assistant-layer' : ''}${standaloneReplanning ? ' replanning-layer' : ''} ${motionClass}`}>
+    <div className={`shift-layer${!reportOnly && !assistantOnly && !standaloneReplanning ? ' operational-shift' : ''}${reportOnly ? ' report-layer' : ''}${assistantOnly ? ' assistant-layer' : ''}${standaloneReplanning ? ' replanning-layer' : ''} ${motionClass}`}>
       <aside className={`shift-panel${!reportOnly && (tab === 'crews' || tab === 'orders') ? ' shift-list-panel' : ''}${standaloneReplanning ? ' replanning-panel' : ''}`}>
         <header>
           {!assistantOnly ? <small>{reportOnly ? 'ИТОГИ СМЕНЫ' : standaloneReplanning ? 'УПРАВЛЕНИЕ ПЛАНОМ' : 'ОПЕРАТИВНОЕ УПРАВЛЕНИЕ'}</small> : null}
@@ -992,6 +996,7 @@ export function ShiftWorkspace({
               onClick={() => {
                 setTab(id);
                 setError("");
+                if (id !== 'orders') onSelectOrder?.(null);
               }}
             >
               {label}
@@ -1036,7 +1041,6 @@ export function ShiftWorkspace({
           ) : null}
           {shift?.plan && tab === "crews" ? (
             <section className="shift-operational-list shift-crews-list" aria-label="Бригады смены">
-              <div className="shift-map-explainer"><b>Что видно на карте</b><span><i className="shift-map-line neutral"/>Серые линии — общий план текущей смены</span><span><i className="shift-map-line selected"/>Жёлтая линия — выбранная бригада</span><span><i className="shift-map-line emergency"/>Фиолетовая/пунктир — сравнение аварийного варианта</span></div>
               <div className="shift-operational-toolbar">
                 <div className="shift-list-actions"><div className="shift-load-filters" role="group" aria-label="Фильтр загрузки бригад"><button type="button" className={crewLoadFilter==='all'?'selected':''} onClick={()=>setCrewLoadFilter('all')}>Все <b>{point?.team?.length || 0}</b></button><button type="button" className={crewLoadFilter==='idle'?'selected':''} onClick={()=>setCrewLoadFilter('idle')}>Без маршрута</button><button type="button" className={crewLoadFilter==='light'?'selected':''} onClick={()=>setCrewLoadFilter('light')}>1–3 заявки</button></div><button type="button" className="manual-add-trigger shift-manual-add" onClick={onOpenIncludeCrew} aria-label="Свободные бригады и инженеры вне смены" title="Свободные бригады"><Plus aria-hidden="true"/></button></div>
                 <div className="shift-search-row panel-search-row"><label className="panel-search"><Search size={17} aria-hidden="true"/><input type="search" value={crewQuery} onChange={event => setCrewQuery(event.target.value)} placeholder="Имя, навык, оборудование…" aria-label="Поиск бригад"/>{crewQuery?<button type="button" onClick={()=>setCrewQuery('')} aria-label="Очистить поиск"><X size={15}/></button>:null}</label><WorkspaceFilters title="Отобрать инженеров" sections={crewSections} value={crewAdvanced} onChange={updateCrewAdvanced} multiKeys={['skill','equipment']}/></div>
@@ -1078,7 +1082,7 @@ export function ShiftWorkspace({
                     </article>
                   );
                 })}
-              {!visibleCrews.length ? <p className="shift-muted">По выбранным фильтрам бригад нет.</p> : null}
+              {!visibleCrews.length ? <ShiftEmptyState title="Бригады не найдены" image="routes" action="Сбросить фильтры" onAction={()=>{setCrewQuery('');setCrewLoadFilter('all');updateCrewAdvanced({skill:[],equipment:[],location:'',transport:'',status:''});}}>Попробуйте другое имя или измените условия поиска.</ShiftEmptyState> : null}
               </div>
             </section>
           ) : null}
@@ -1101,7 +1105,7 @@ export function ShiftWorkspace({
                 </button>
                 {active ? <div className="shift-order-actions"><div className="shift-order-meta"><span>{order.workType || order.skill || 'Вид работ не указан'}</span><span>{route ? `${shiftEngineerName({id:route.engineerId,name:route.engineerName || 'Бригада'})} · ${assignment?.plannedStart || 'в плане'}` : 'Не назначена · требуется решение диспетчера'}</span></div><div className="shift-order-action-buttons"><button type='button' onClick={() => { setDurationMinutes(String(order.duration)); editOrder(order.id, EVENT_TYPES.ORDER_DURATION_CHANGED); }}>Длительность</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.CLIENT_WINDOW_SHIFT)}>Перенести время</button><button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.MANUAL_ASSIGN)}>{route ? 'Сменить бригаду' : 'Назначить бригаду'}</button>{route ? <button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.VISIT_CANCELLED)}>Отменить визит</button> : null}<button type="button" onClick={() => editOrder(order.id, EVENT_TYPES.ORDER_CANCELLED)}>Отменить заявку</button>{route ? <button type="button" onClick={() => { setFactOrderId(String(order.id)); setTab('fact'); }}>Факт визита</button> : null}</div></div> : null}
               </article>;
-            }) : <p className="shift-muted">Заявок в этой группе нет.</p>}
+            }) : <ShiftEmptyState title={orderView === 'unassigned' && !orderQuery && !hasOrderAdvanced ? 'Все заявки назначены' : 'Заявки не найдены'} action={orderQuery || hasOrderAdvanced ? 'Сбросить поиск и фильтры' : 'Показать назначенные'} onAction={()=>{setOrderQuery('');clearOrderAdvanced();setOrderView('assigned');}}>{orderView === 'unassigned' && !orderQuery && !hasOrderAdvanced ? 'Здесь появятся заявки, которым ещё нужна бригада.' : 'Попробуйте другой номер, адрес или условия отбора.'}</ShiftEmptyState>}
             </div>
           </section>:null}
           {shift?.plan && tab === "events" ? (
@@ -1134,9 +1138,7 @@ export function ShiftWorkspace({
                   </div>
                 ))
               ) : (
-                <p className="shift-muted">
-                  Изменений опубликованного плана пока нет.
-                </p>
+                <p className="shift-journal-empty">Изменений пока нет · здесь появятся опубликованные решения.</p>
               )}
               <h3>Фактические отметки</h3>
               {shift.factLog?.length ? (
@@ -1159,14 +1161,14 @@ export function ShiftWorkspace({
                   </div>
                 ))
               ) : (
-                <p className="shift-muted">Отметок ещё нет.</p>
+                <p className="shift-journal-empty">Отметок ещё нет · сохраните начало или результат визита.</p>
               )}
             </div>
           ) : null}
           {shift?.plan && tab === "event" ? (
             <div className="shift-form">
               {standaloneReplanning && !pendingEvent && !preview ? <section className="replanning-intake"><div><small>ИЗМЕНЕНИЯ СОСТАВА И ЗАЯВОК</small><h3>Что изменилось в смене?</h3><p>Добавление откроет форму. После сохранения запись станет черновиком и попадёт в расчёт только после публикации.</p></div><div className="replanning-intake-actions"><button type="button" onClick={() => onOpenManualAdd?.('orders')}><Plus size={18}/>Новая заявка <small>Вручную или из файла</small></button><button type="button" onClick={() => onOpenManualAdd?.('engineers')}><Plus size={18}/>Новый инженер <small>В состав и в план смены</small></button><button type="button" onClick={onOpenIncludeCrew}><Plus size={18}/>Свободные бригады <small>Без заявок или вне смены</small></button></div></section> : null}
-              {preview ? <div className="shift-pending shift-saved-draft"><b>Непубликованный черновик</b><span>Этот расчёт сохранён на сервере, поэтому появляется после обновления страницы. Действующий план и списки не изменились. Чтобы изменить исходные данные, сначала отмените черновик.</span><button type="button" onClick={discardDraft} disabled={busy}><X size={15}/>Отменить черновик</button></div> : null}
+              {preview ? <div className="shift-pending shift-saved-draft"><b>Непубликованный черновик</b><span>Текущий план действует до публикации. Черновик можно отменить.</span><button type="button" onClick={discardDraft} disabled={busy}><X size={15}/>Отменить черновик</button></div> : null}
               <label>
                 Сценарий
                 <BusinessSelect
@@ -1223,7 +1225,7 @@ export function ShiftWorkspace({
                   EVENT_TYPES.ENGINEER_REPLACED,
                 ].includes(eventType) ? (
                 <div className="shift-pending">
-                  Добавьте запись через блок выше. Она станет черновиком изменения плана. Для замены сначала выберите исходную бригаду, затем создайте новую.
+                  {eventType === EVENT_TYPES.ENGINEER_REPLACED ? 'Выберите бригаду выше и создайте замену. Затем рассчитайте черновик.' : 'Добавьте запись выше, затем рассчитайте черновик плана.'}
                 </div>
               ) : eventType !== EVENT_TYPES.RECALCULATE ? (
                 <label>
@@ -1276,9 +1278,10 @@ export function ShiftWorkspace({
               {preview?.status === "READY" ? (
                 <div className="shift-preview">
                   <h3>Было → стало</h3><DurationDraftComparison shift={shift} preview={preview}/>
-                  <p>Событие {preview.event?.time}: {preview.event?.reason}. Независимая проверка расписания пройдена. {preview.result?.plan?.exactRouteChecks != null ? `Проверено вариантов маршрутов: ${preview.result.plan.exactRouteChecks}.` : ''} {preview.result?.plan?.validation?.retainedEstimatedVisits ? `В неизменённой части прежнего плана: ${estimatedLegsLabel(preview.result.plan.validation.retainedEstimatedVisits)}.` : ''}</p>
+                  <p className="shift-preview-status"><Check size={16}/>Расписание проверено · с {preview.event?.time}</p>
+                  <details className="shift-preview-audit"><summary>Подробности изменения</summary><p>{preview.event?.reason}</p>{preview.result?.plan?.exactRouteChecks != null ? <p>Проверено вариантов маршрутов: {preview.result.plan.exactRouteChecks}.</p> : null}{preview.result?.plan?.validation?.retainedEstimatedVisits ? <p>В прежнем плане: {estimatedLegsLabel(preview.result.plan.validation.retainedEstimatedVisits)}.</p> : null}</details>
                   {preview.result?.plan?.validation?.deferredAssignments ? <p className="shift-risk"><b>Требуется назначение:</b> дорожный сервис недоступен, поэтому будущие заявки снятой бригады оставлены в очереди. Снятие со смены можно опубликовать без неподтверждённых маршрутов.</p> : null}
-                  <div>
+                  <div className="shift-preview-metrics">
                     <span>
                       Назначено{" "}
                       <b>
@@ -1299,9 +1302,9 @@ export function ShiftWorkspace({
                     </span>
                   </div>
                   {change.moved.length || change.inserted.length || change.removed.length ? <div className="shift-change-list">
-                    {change.moved.length ? <details open><summary>Изменены бригада или время · {change.moved.length}</summary><ul>{change.moved.map((item, index) => <li key={`moved-${index}`}>{item}</li>)}</ul></details> : null}
-                    {change.inserted.length ? <details open><summary>Добавлены в маршруты · {change.inserted.length}</summary><ul>{change.inserted.map((item, index) => <li key={`inserted-${index}`}>{item}</li>)}</ul></details> : null}
-                    {change.removed.length ? <details open><summary>Убраны из маршрутов · {change.removed.length}</summary><ul>{change.removed.map((item, index) => <li key={`removed-${index}`}>{item}</li>)}</ul></details> : null}
+                    {change.moved.length ? <details><summary>Изменены бригада или время · {change.moved.length}</summary><ul>{change.moved.map((item, index) => <li key={`moved-${index}`}>{item}</li>)}</ul></details> : null}
+                    {change.inserted.length ? <details><summary>Добавлены в маршруты · {change.inserted.length}</summary><ul>{change.inserted.map((item, index) => <li key={`inserted-${index}`}>{item}</li>)}</ul></details> : null}
+                    {change.removed.length ? <details><summary>Убраны из маршрутов · {change.removed.length}</summary><ul>{change.removed.map((item, index) => <li key={`removed-${index}`}>{item}</li>)}</ul></details> : null}
                   </div> : <p>Исполнители и время начала визитов сохранены. Проверьте длительности и окончания выше.</p>}
                   {(preview.result?.team || []).filter(item => { const old = shift.team.find(teamItem => String(teamItem.id) === String(item.id)); return !old || old.shiftStart !== item.shiftStart || old.shiftEnd !== item.shiftEnd || old.status !== item.status; }).length ? <p><b>Часы и состав:</b> {(preview.result.team || []).filter(item => { const old = shift.team.find(teamItem => String(teamItem.id) === String(item.id)); return !old || old.shiftStart !== item.shiftStart || old.shiftEnd !== item.shiftEnd || old.status !== item.status; }).slice(0, 4).map(item => `${item.name || item.id} ${item.shiftStart || '—'}–${item.shiftEnd || '—'}${item.status ? ` · ${item.status}` : ''}`).join('; ')}</p> : null}
                   {change.risky.length ? <p className="shift-risk"><b>Риск по клиентским окнам:</b> запас до конца окна не более 15 минут у {change.risky.slice(0, 4).join(', ')}.</p> : null}
@@ -1332,7 +1335,7 @@ export function ShiftWorkspace({
                     onClick={publish}
                     disabled={busy}
                   >
-                    Опубликовать проверенные изменения
+                    Опубликовать изменения
                   </button>
                 </div>
               ) : null}
@@ -1346,6 +1349,7 @@ export function ShiftWorkspace({
                 <BusinessSelect ariaLabel="Заявка для отметки факта" value={factOrderId} onChange={setFactOrderId} searchable options={[{value:'',label:'Выберите…'},...factOptions]}/>
               </label>
               {selectedFactOption ? <div className='cx-selected-order'><strong>{selectedFactOption.label}</strong><span>{selectedFactOption.hint}</span></div> : null}
+              {factOrderId ? <>
               {selectedFact ? <p className="shift-muted">Последняя отметка: {selectedFact.status === 'completed' ? 'завершено' : selectedFact.status === 'started' ? 'начато' : 'не выполнено'} в {selectedFact.time}.</p> : null}
               <TimePicker label="Время факта" value={factTime} onChange={setFactTime}/>
               {factDrafts[factKey] ? <div className='cx-fact-draft-status'><span>{factChangedOnServer ? 'Сохранённый факт изменился. В форме ваш несохранённый ввод.' : 'Несохранённый ввод этой заявки'}</span><button type='button' onClick={resetFactDraft}>Сбросить ввод</button></div> : null}
@@ -1382,6 +1386,7 @@ export function ShiftWorkspace({
                   Не выполнено
                 </button>
               </div>
+              </> : <ShiftEmptyState title="Выберите заявку">Отметьте начало, завершение или причину невыполнения визита.</ShiftEmptyState>}
             </div>
           ) : null}
           {tab === 'report' && reportSection === 'pdf' ? <div className='daily-report-toolbar'><div><small>ДАТА ОТЧЁТА</small>{reportDateControl || <strong>{displayDate(selectedDate)}</strong>}</div>{!shift?.plan ? <span>Выберите день с сохранённым планом</span> : null}{shift?.plan ? <a className='daily-report-export' href={`/api/shifts/${shift.id}/report-data?download=durations&revision=${shift.revision}`} download aria-label='Скачать длительности в формате JSON'><Download size={16} aria-hidden='true'/><span>Скачать длительности</span><small>JSON</small></a> : null}</div> : null}
@@ -1435,7 +1440,7 @@ export function ShiftWorkspace({
                   <ChatAvatar role={message.role} profile={profile}/>
                   <div className="shift-chat-bubble"><small>{message.role === 'assistant' ? 'AI‑помощник' : 'Вы'}</small><p>{message.text}</p></div>
                 </div>) : <div className="shift-chat-empty">
-                  <span className="shift-chat-empty-icon"><img src="/avatars/robot-static.png" alt="Робот AI-помощника"/></span>
+                  <span className="shift-chat-empty-icon"><img src="/avatars/robot-static.webp" alt="Робот AI-помощника"/></span>
                   <b>{shift?.plan ? 'Что хотите узнать о смене?' : 'Здесь начнётся диалог'}</b>
                   <p>{shift?.plan ? 'Можно начать с готового вопроса или задать свой.' : 'Загрузите заявки и бригады, затем постройте план дня.'}</p>
                   {shift?.plan ? <div className="shift-chat-suggestions">

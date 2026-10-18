@@ -1,3 +1,4 @@
+import { BeeLoadingScene } from './BeeLoader.jsx';
 import { EngineerPortrait } from './EngineerPortrait.jsx';
 import { CustomerPreferenceSummary } from './CustomerPreferenceSummary.jsx';
 import { useEffect, useRef, useState } from 'react';
@@ -25,7 +26,7 @@ export const validRatingRange = model => Number.isFinite(model.qualityFloor) && 
 function BeePlanningLoader({ phase, compact = false }) {
   const current = Math.max(0, phaseSteps.findIndex(([key]) => key === phase));
   return <div className={`bee-planning-loader ${compact ? 'compact' : ''}`} role="status" aria-live="polite">
-    <div className="bee-loader-scene"><span className="bee-loader-glow"/><img src="/beego-mark.png" alt=""/><span className="bee-loader-trail"/></div>
+    <BeeLoadingScene/>
     <div className="bee-loader-copy"><b>{phaseNames[phase] || 'Подбираем состав'}</b><span>{compact ? 'Проверяем данные без изменения рабочей смены' : 'Пчёлка проверяет заявки, навыки, окна и дороги'}</span></div>
     {!compact ? <div className="bee-loader-steps" aria-label="Этапы расчёта">{phaseSteps.map(([key, label], index) => <span key={key} className={index < current ? 'done' : index === current ? 'active' : ''}><i>{index < current ? '✓' : index + 1}</i>{label}</span>)}</div> : null}
   </div>;
@@ -36,7 +37,8 @@ export function StaffingRatingRange({model}) {
 }
 
 export function StaffingPlanControls({ model, footer = false }) {
-  const [context,setContext]=useState(null), [error,setError]=useState(''), [history,setHistory]=useState([]), [clock,setClock]=useState(Date.now());
+  const context=model.staffingContext;
+  const [error,setError]=useState(''), [history,setHistory]=useState([]), [clock,setClock]=useState(Date.now());
   const dialog=useRef(null), scenario=model.scenario;
   const settingsOpen=model.planSettingsOpen, proposalOpen=model.proposalOpen&&scenario?.status==='AWAITING_CONFIRMATION';
   const visible=!footer&&model.active&&model.tab==='plan'&&(settingsOpen||proposalOpen);
@@ -44,7 +46,6 @@ export function StaffingPlanControls({ model, footer = false }) {
   useEffect(()=>{
     if(footer||!validRatingRange(model))return;
     let live=true;
-    api(`staffing?${new URLSearchParams({regionId:model.regionId,date:model.date,pool:model.pool,qualityFloor:model.qualityFloor,qualityCeiling:model.qualityCeiling})}`).then(value=>{if(live){setContext(value);setError('');}}).catch(error=>{if(live)setError(error.message);});
     api(`scenarios?${new URLSearchParams({regionId:model.regionId,date:model.date})}`).then(value=>{if(live)setHistory(value.filter(item=>item.kind==='staffing'&&item.status==='READY'));}).catch(()=>{});
     return()=>{live=false;};
   },[footer,model.regionId,model.date,model.pool,model.qualityFloor,model.qualityCeiling,scenario?.id,scenario?.status,scenario?.saved]);
@@ -61,12 +62,11 @@ export function StaffingPlanControls({ model, footer = false }) {
   const build=async()=>{if(await model.calculate())model.setPlanSettingsOpen(false);};
   if(footer)return <footer className="staff-plan-footer">{model.ready?<button onClick={()=>{model.setPlanRouteId(null);model.setScheduled(true);model.setPlanFitToken(Date.now());}}><MapPin size={15}/>Все маршруты</button>:<span>Отдельный план · рабочая смена сохраняется</span>}</footer>;
   return <div className="staff-plan-controls">
-    <div className="staff-plan-toolbar"><button className="staff-plan-settings-button" onClick={()=>model.setPlanSettingsOpen(true)} disabled={model.running} aria-label="Настройки расчёта состава"><Settings2 size={18}/><b>Условия расчёта</b><span>{number(model.qualityFloor)}–{number(model.qualityCeiling)} <Star size={13}/></span><ChevronRight size={16}/></button><StaffingCoverageInfo model={model}/></div>
-    <CustomerPreferenceSummary items={scenario?.clientPreferences || context?.clientPreferences} results={scenario?.clientPreferenceResults} catalog={model.catalog} nameFor={model.nameForEngineer}/>
-    {model.ready&&stale?<small className="staff-plan-warning">Условия изменены. Для нового расчёта откройте настройки.</small>:null}
+    <div className="staff-plan-toolbar"><button className={`staff-plan-settings-button ${model.ready&&stale?'is-stale':''}`} onClick={()=>model.setPlanSettingsOpen(true)} disabled={model.running} aria-label="Настройки расчёта состава"><Settings2 size={18}/><b>Условия расчёта</b><span>{number(model.qualityFloor)}–{number(model.qualityCeiling)} <Star size={13}/></span><ChevronRight size={16}/></button><StaffingCoverageInfo model={model}/></div>
+    <CustomerPreferenceSummary loading={!scenario?.clientPreferences&&!context} items={scenario?.clientPreferences || context?.clientPreferences} results={scenario?.clientPreferenceResults} catalog={model.catalog} nameFor={model.nameForEngineer}/>
     {model.ready&&!report?.complete?<small className="staff-plan-warning">Не все заявки назначены. Откройте «Не назначены» или измените условия.</small>:null}
     {model.ready&&report?.hypothetical?<small className="staff-plan-warning">Сценарий с условным специалистом · сохранение недоступно</small>:null}
-    {error||model.error||scenario?.status==='FAILED'?<p className="rating-error" role="alert">{error||model.error||scenario.error}</p>:null}
+    {error||model.error||model.staffingError||scenario?.status==='FAILED'?<p className="rating-error" role="alert">{error||model.error||model.staffingError||scenario.error}</p>:null}
     {context?.started?<small className="staff-plan-warning">Смена уже началась. Новый состав рассчитывается до начала работ.</small>:null}
     {!context?.hasPlan&&context&&!context.started?<small className="staff-plan-warning">{context.orders?'Сначала нужен точный план дня в «Заявках».':'На выбранный день нет заявок.'}</small>:null}
     {visible?createPortal(<div className="rating-dialog-shade staff-plan-dialog-shade" onMouseDown={event=>{if(event.target===event.currentTarget)close();}}><section className={`rating-dialog staff-plan-settings-dialog ${!settingsOpen?'is-proposal':''}`} ref={dialog} role="dialog" aria-modal="true" aria-label={settingsOpen?'Условия расчёта состава':'Подтверждение состава'} tabIndex={-1}>
@@ -88,5 +88,5 @@ export function StaffingPlanControls({ model, footer = false }) {
 
 export function StaffingPlanBody({model}) {
   if (model.running) return <div className="staff-plan-empty staff-plan-loading-state"><BeePlanningLoader phase={model.scenario?.progress?.phase}/></div>;
-  return <div className="staff-plan-empty"><Route size={35}/><h3>{model.scenario?.status==='AWAITING_CONFIRMATION'?'Состав готов к проверке':'Состав → маршруты → карта'}</h3><p>{model.scenario?.status==='AWAITING_CONFIRMATION'?'Проверьте предложенных инженеров и подтвердите построение маршрутов.':'Нажмите «Построить план» на карте. Выберите диапазон рейтинга и подтвердите подходящих специалистов.'}</p>{model.scenario?.status==='AWAITING_CONFIRMATION'?<button className="staff-plan-review" onClick={()=>model.setProposalOpen(true)}>Проверить состав<ChevronRight size={17}/></button>:null}</div>;
+  return <div className="staff-plan-empty"><img className="staff-plan-mascots" src="/rating-plan-mascots-v2.webp" alt="Кот и пчёлка прокладывают маршрут на карте" width="280" height="220" decoding="async"/><h3>{model.scenario?.status==='AWAITING_CONFIRMATION'?'Состав готов к проверке':'Состав → маршруты → карта'}</h3><p>{model.scenario?.status==='AWAITING_CONFIRMATION'?'Проверьте предложенных инженеров и подтвердите построение маршрутов.':'Нажмите «Построить план» на карте. Выберите диапазон рейтинга и подтвердите подходящих специалистов.'}</p>{model.scenario?.status==='AWAITING_CONFIRMATION'?<button className="staff-plan-review" onClick={()=>model.setProposalOpen(true)}>Проверить состав<ChevronRight size={17}/></button>:null}</div>;
 }

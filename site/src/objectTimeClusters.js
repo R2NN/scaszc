@@ -21,6 +21,7 @@ export function mountObjectTimeClusters(map, Marker, onExpand, onError) {
   const markers = new Map();
   const container = map.getContainer();
   let disposed = false;
+  let frame = null;
   const remove = entry => { entry.marker.remove(); entry.tooltip.remove(); };
   const create = feature => {
     const summary = objectClusterSummary(feature.properties);
@@ -99,14 +100,14 @@ export function mountObjectTimeClusters(map, Marker, onExpand, onError) {
         const sidebar = document.querySelector('.sidebar');
         const left = Math.max(panel?.getBoundingClientRect().right || 0, sidebar?.getBoundingClientRect().right || 0) - mapBox.left;
         const offset = Math.max(0, left) * container.clientWidth / mapBox.width / 2;
-        map.easeTo({ center: feature.geometry.coordinates, zoom, offset: [Math.max(0, offset - 40), 0], duration: 500 });
+        map.flyTo({ center: feature.geometry.coordinates, zoom, offset: [Math.max(0, offset - 40), 0], duration: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 900, curve: 1.2 });
         map.getCanvas().focus({ preventScroll: true });
       } catch { if (!disposed) onError(); }
       finally { expanding = false; }
     });
     root.append(button);
     const marker = new Marker({ element: root, anchor: 'center' }).setLngLat(feature.geometry.coordinates).addTo(map);
-    return { marker, tooltip, button, signature: summary.description };
+    return { marker, tooltip, button, signature: summary.description, coords: feature.geometry.coordinates.join(','), width: button.offsetWidth, height: button.offsetHeight };
   };
   const update = () => {
     if (!map.getSource('cx-objects') || !map.isSourceLoaded('cx-objects')) return;
@@ -128,26 +129,53 @@ export function mountObjectTimeClusters(map, Marker, onExpand, onError) {
       let entry = markers.get(id);
       if (entry && entry.signature !== objectClusterSummary(feature.properties).description) { remove(entry); entry = null; }
       if (!entry) { entry = create(feature); markers.set(id, entry); }
-      entry.marker.setLngLat(feature.geometry.coordinates);
-      const chipWidth = entry.button.offsetWidth;
-      const chipHeight = entry.button.offsetHeight;
+      const coords = feature.geometry.coordinates.join(',');
+      if (entry.coords !== coords) { entry.marker.setLngLat(feature.geometry.coordinates); entry.coords = coords; }
+      const chipWidth = entry.width;
+      const chipHeight = entry.height;
       // Keep whole labels beside panels and controls, without exposing covered points.
-      entry.button.parentElement.style.visibility = pixel.x < leftEdge ? 'hidden' : '';
-      entry.button.tabIndex = pixel.x < leftEdge ? -1 : 0;
-      entry.marker.setOffset([
+      const hidden = pixel.x < leftEdge;
+      if (entry.hidden !== hidden) {
+        entry.button.parentElement.style.visibility = hidden ? 'hidden' : '';
+        entry.button.tabIndex = hidden ? -1 : 0;
+        entry.hidden = hidden;
+      }
+      const offset = [
         Math.max(leftEdge + chipWidth / 2 + 8, Math.min(pixel.x, width - chipWidth / 2 - 80)) - pixel.x,
         Math.max(chipHeight / 2 + 4, Math.min(pixel.y, height - chipHeight / 2 - 4)) - pixel.y,
-      ]);
+      ];
+      if (!entry.offset || offset.some((value, index) => value !== entry.offset[index])) {
+        entry.marker.setOffset(offset);
+        entry.offset = offset;
+      }
     }
     for (const [id, entry] of markers) if (!active.has(id)) { remove(entry); markers.delete(id); }
   };
   const moving = () => { for (const entry of markers.values()) entry.tooltip.hidden = true; };
-  map.on('render', update);
+  // MapLibre already moves each Marker with the camera. Requerying source
+  // features and mutating markers on every render both forces layout and
+  // schedules another render. Refresh membership only when data or the
+  // viewport changes, coalescing tile notifications into a single frame.
+  const schedule = () => {
+    if (disposed || frame !== null) return;
+    frame = requestAnimationFrame(() => { frame = null; if (!disposed) update(); });
+  };
+  const sourceChanged = event => { if (event.sourceId === 'cx-objects' && !map.isMoving?.()) schedule(); };
+  const resized = () => {
+    for (const entry of markers.values()) { entry.width = entry.button.offsetWidth; entry.height = entry.button.offsetHeight; }
+    schedule();
+  };
+  map.on('sourcedata', sourceChanged);
+  map.on('moveend', schedule);
+  map.on('resize', resized);
   map.on('movestart', moving);
   update();
   return () => {
     disposed = true;
-    map.off('render', update);
+    if (frame !== null) cancelAnimationFrame(frame);
+    map.off('sourcedata', sourceChanged);
+    map.off('moveend', schedule);
+    map.off('resize', resized);
     map.off('movestart', moving);
     for (const entry of markers.values()) remove(entry);
     markers.clear();

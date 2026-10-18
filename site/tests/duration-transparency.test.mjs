@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { durationFormula, durationImpactWeek } from '../src/durationPresentation.js';
+import { durationFormula, durationImpactWeek, orderDurationSummary } from '../src/durationPresentation.js';
 import { fitObjectTimeLayer, hideObjectTimeLayers, objectTimeGeoJSON, syncObjectTimeLayers } from '../src/objectTimeLayers.js';
 import { calculateDuration, DEFAULT_MODEL } from '../server/durationModel.mjs';
 
@@ -111,4 +111,27 @@ test('show the whole layer fits every filtered coordinate with panel padding and
   fitted = null;
   fitObjectTimeLayer(map, []);
   assert.equal(fitted, null);
+});
+
+test('order popup separates authoritative norm, forecast, manual duration and missing data', () => {
+  assert.deepEqual(orderDurationSummary({ duration: 70 }), { norm: null, forecast: null, coefficient: null, manual: false });
+  const snapshot = calculateDuration({ workType: 'Подключение', durationFactors: { line: 'existing' }, durationOverride: { minutes: 90, reason: 'Согласовано' } }, { asOf: at });
+  const original = JSON.stringify(snapshot);
+  assert.deepEqual(orderDurationSummary({ durationSnapshot: snapshot }), { norm: 70, forecast: 45, coefficient: snapshot.coefficient, manual: true });
+  assert.equal(JSON.stringify(snapshot), original);
+});
+
+test('mode/theme switches retain the cluster index; changed data and a replaced basemap refresh it', () => {
+  const sources = new Map(), layers = new Map(); let updates = 0;
+  const map = { getStyle: () => ({}), getSource: id => sources.get(id), addSource: (id, source) => sources.set(id, { ...source, setData(data) { this.data = data; updates++; } }), getLayer: id => layers.get(id), addLayer: layer => layers.set(layer.id, layer), setLayoutProperty() {}, setPaintProperty() {} };
+  const data = objectTimeGeoJSON([{ id: 'one', coords: [55, 37], total: 30, delta: 0 }]);
+  syncObjectTimeLayers(map, data, { enabled: true, view: 'markers', dark: false });
+  for (let n = 0; n < 5; n++) syncObjectTimeLayers(map, data, { enabled: n % 2 === 0, view: 'markers', dark: n % 2 === 1 });
+  assert.equal(updates, 0);
+  const changed = objectTimeGeoJSON([{ id: 'one', coords: [55, 37], total: 50, delta: 20 }]);
+  syncObjectTimeLayers(map, changed, { enabled: true, view: 'markers', dark: false });
+  assert.equal(updates, 2);
+  sources.clear(); layers.clear();
+  syncObjectTimeLayers(map, changed, { enabled: true, view: 'markers', dark: false });
+  assert.equal(sources.get('cx-objects').data.features[0].properties.total, 50);
 });

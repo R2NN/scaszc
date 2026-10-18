@@ -42,3 +42,14 @@ export function durationImpactWeek(visits, at) {
   }
   return { startDate: daily[0].date, endDate: endDay, daily, comparedVisits: rows.length, extendedVisits: extended.length, additionalMinutes: extended.reduce((sum, visit) => sum + visit.forecast.total - visit.forecast.baseTechnical - visit.forecast.documents, 0), preventedLate: null, status: 'NO_COMPARABLE_PLANS', synthetic: rows.some(visit => String(visit.source).includes('synthetic')) };
 }
+
+/** Compare the saved norm and model forecast; a manual override is not a prediction. */
+export function orderDurationSummary(order) {
+  const snapshot = order?.durationSnapshot;
+  return {
+    norm: Number.isFinite(snapshot?.baseTechnical) && Number.isFinite(snapshot?.documents) ? snapshot.baseTechnical + snapshot.documents : null,
+    forecast: Number.isFinite(snapshot?.calculatedTotal) ? snapshot.calculatedTotal : !snapshot?.override && Number.isFinite(snapshot?.total) ? snapshot.total : null,
+    coefficient: Number.isFinite(snapshot?.coefficient) ? snapshot.coefficient : null,
+    manual: Boolean(snapshot?.override),
+  };
+}

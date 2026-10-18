@@ -14,3 +14,17 @@
 
 /* Larger, clearer single-image BeeGo loader artwork. */
 .bee-loader-scene{width:150px;height:112px;margin-bottom:13px}.bee-loader-scene img{width:84px;height:84px}.bee-loader-glow{width:112px;height:70px;filter:blur(18px);opacity:.8}.bee-loader-trail{left:2px;right:2px;bottom:16px}
+
+.staff-plan-empty>.staff-plan-mascots{display:block;width:min(280px,80%);height:220px;object-fit:cover;margin-bottom:2px}.staff-plan-empty h3{font-size:20px;line-height:1.4;max-width:350px;margin:18px 0 10px}.staff-plan-empty p{font-size:15px;line-height:1.75;max-width:350px}
+
+.app-shell .staff-plan-settings-button{position:relative;isolation:isolate;overflow:hidden;min-height:48px;border:1px solid #e2b729;background:linear-gradient(110deg,#fff2ab 0%,#fff7d5 38%,#fffdf1 49%,#fff3ba 65%,#fff2ab 100%);background-size:240% 100%;animation:staffSettingsSheen 7s ease-in-out infinite;box-shadow:0 3px 10px #ba900012;color:#493908;transition:border-color .2s,box-shadow .2s}
+.app-shell .staff-plan-settings-button b{font-weight:700;font-size:14px}.app-shell .staff-plan-settings-button>span{color:#816923;font-weight:600}.app-shell .staff-plan-settings-button>svg:first-child{color:#947411}.app-shell .staff-plan-settings-button>svg:last-child{padding:4px;box-sizing:content-box;border-radius:7px;background:#ffdb4e;color:#59420b;flex:none}
+.app-shell .staff-plan-settings-button:not(:disabled):hover{border-color:#bf930c;box-shadow:0 4px 15px #bd94002b}.app-shell .staff-plan-settings-button:disabled{animation:none}
+.app-shell.dark .staff-plan-settings-button{background:linear-gradient(110deg,#493d19,#55471e,#635526,#493d19);background-size:240% 100%;border-color:#a08632;color:#fff0ad}.app-shell.dark .staff-plan-settings-button>span,.app-shell.dark .staff-plan-settings-button>svg:first-child{color:#efcf73}.app-shell.dark .staff-plan-settings-button>svg:last-child{background:#8c7123;color:#fff0ad}
+@keyframes staffSettingsSheen{0%,20%,100%{background-position:0% 50%}55%,70%{background-position:100% 50%}}
+@media(prefers-reduced-motion:reduce){.app-shell .staff-plan-settings-button{animation:none;transition:none}}
+
+/* Compact, consistent spacing: wishes, settings, assignment filters. */
+.staff-plan-controls{padding-top:8px;padding-bottom:0}
+.staff-plan-controls>.customer-preferences{margin:10px 0 0}
+.staff-plan-controls>.staff-plan-toolbar{margin:0}

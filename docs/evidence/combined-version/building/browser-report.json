@@ -1,0 +1,228 @@
+{
+  "at": "2026-10-18T21:16:27.966Z",
+  "url": "http://127.0.0.1:4187",
+  "isolatedDatabaseRequired": true,
+  "browser": "155.0.8059.80",
+  "objects": 195,
+  "checks": [
+    {
+      "name": "desktop-light",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "mouse-pan-cutaway-no-accidental-selection",
+      "passed": true
+    },
+    {
+      "name": "customer-cutaway",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "customer-floor",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "mouse-pan-floor-no-accidental-selection",
+      "passed": true
+    },
+    {
+      "name": "exact-apartment-floor-keyboard-and-order-navigation",
+      "passed": true
+    },
+    {
+      "name": "customer-correction-persisted",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "unknown-apartment-no-fake-marker-and-explicit-correction-persisted",
+      "passed": true
+    },
+    {
+      "name": "navigator-shared-problem",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "floor-plan",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "floor-plan-overview",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "equipment-selection-keyboard-filter-zoom-footprint-order-navigation",
+      "passed": true
+    },
+    {
+      "name": "exact-visit-navigation",
+      "passed": true
+    },
+    {
+      "name": "desktop-dark",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "compact-desktop",
+      "width": 862,
+      "scrollWidth": 862,
+      "left": 221.484375,
+      "right": 996.921875,
+      "viewport": 1024
+    },
+    {
+      "name": "tablet",
+      "width": 728,
+      "scrollWidth": 728,
+      "left": 221.484375,
+      "right": 876.515625,
+      "viewport": 900
+    },
+    {
+      "name": "narrow",
+      "width": 518,
+      "scrollWidth": 518,
+      "left": 70.28125,
+      "right": 536.515625,
+      "viewport": 560
+    },
+    {
+      "name": "label-basement-overlap",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "high-rise-25",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "long-building-overview",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "long-building-section",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "unequal-sections",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "imported-negative-coordinate-footprint",
+      "passed": true
+    },
+    {
+      "name": "warehouse",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "imported-mixed-building",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    },
+    {
+      "name": "imported-special-floor",
+      "width": 1486,
+      "scrollWidth": 1486,
+      "left": 221.484375,
+      "right": 1558.921875,
+      "viewport": 1586
+    }
+  ],
+  "javascriptErrors": [],
+  "tested": [
+    "выбор оборудования мышью и клавиатурой",
+    "изоляция модельных точек от реальных заявок",
+    "фильтр секций",
+    "масштаб кнопками и колёсиком",
+    "контур в навигаторе без отдельной вкладки",
+    "переход в заявку",
+    "темы и адаптивность",
+    "25-этажный дом",
+    "длинный дом",
+    "проверка JSON-импорта",
+    "разновысотные крылья",
+    "сохранение после перезагрузки",
+    "экспорт JSON",
+    "одноэтажный корпус",
+    "предпросмотр без сохранения",
+    "сохранение черновика формы",
+    "сброс черновика",
+    "переход к конкретному визиту",
+    "контур с отрицательными координатами",
+    "перетаскивание разреза по двум осям без случайного выбора",
+    "перетаскивание плана этажа и отпускание мыши",
+    "одна квартира клиента в разрезе и на нужном этаже",
+    "выбор квартиры клавиатурой и переход в исходную заявку",
+    "неизвестная квартира без выдуманной отметки",
+    "ручная привязка квартиры с сохранением и источником",
+    "подпись подвального узла поверх соседнего оборудования и компактный клавиатурный фокус",
+    "план этажа и выбор узла",
+    "импорт произвольных полигонов помещений",
+    "индивидуальный план шестого этажа",
+    "явная кабельная трасса",
+    "поворот крыла и корпуса разной высоты",
+    "открытие всех секций",
+    "жёлтое выделение секции через навигатор",
+    "общая проблема подсвечивает две секции",
+    "клавиатурная навигация по форме здания",
+    "пульсация и отключение анимации при reduced motion"
+  ]
+}

@@ -3677,10 +3677,10 @@ html[data-theme="dark"]{
 .app-shell .map-plan-action:hover::after{background-size:220% 100%;animation:planActionGradientFlow 1.7s ease-in-out infinite alternate}
 @keyframes planActionGradientFlow{from{background-position:0 50%}to{background-position:100% 50%}}
 @keyframes planActionBorder{to{transform:rotate(360deg)}}
-.map-theme-picker.map-theme-picker-portal{top:18px;right:78px;max-height:calc(100vh - 32px)}
+.map-theme-picker.map-theme-picker-portal{top:var(--map-picker-top,78px);right:78px;max-height:calc(100dvh - var(--map-picker-top,78px) - 14px)}
 @media(max-width:760px){
   .app-shell .map-plan-action,.app-shell .sidebar.expanded~.route-workspace .map-plan-action{bottom:14px!important;min-height:48px;padding:0 17px;font-size:13px}
-  .map-theme-picker.map-theme-picker-portal{top:12px;right:62px;width:min(560px,calc(100vw - 74px));max-height:calc(100vh - 24px)}
+  .map-theme-picker.map-theme-picker-portal{top:var(--map-picker-top,66px);right:10px;width:min(560px,calc(100vw - 20px));max-height:calc(100dvh - var(--map-picker-top,66px) - 10px)}
 }
 @media(prefers-reduced-motion:reduce){.app-shell .map-plan-action::before,.app-shell .map-plan-action:hover::after{animation:none}.app-shell .map-plan-action{transition:none!important;translate:none!important;scale:none!important}}
 
@@ -4161,3 +4161,9 @@ html[data-theme="dark"]{
 .app-shell .map-plan-action:hover{transform:translateX(-50%) translateY(-3px) scale(1)!important}.app-shell .map-plan-action:active{transform:translateX(-50%) translateY(0) scale(1)!important}
 .staff-plan-settings-dialog>footer button.primary{width:270px;min-width:270px;box-sizing:border-box;white-space:nowrap;justify-content:center}
 @media(max-width:540px){.app-shell .map-plan-action{width:220px;min-width:220px}.staff-plan-settings-dialog>footer button.primary{width:100%;min-width:0}}
+
+.map-popup-duration{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:14px 0;padding:13px 14px;border:1px solid var(--bee-border,#e1e5eb);border-radius:12px;background:var(--bee-soft,#f6f7f9)}
+.map-popup-duration>div{display:grid;gap:5px;min-width:0}.map-popup-duration span{font-size:12px;color:var(--bee-muted-text,#727b89)}.map-popup-duration b{font-size:17px;font-weight:700;color:inherit}.map-popup-duration small{grid-column:1/-1;font-size:11px;color:var(--bee-muted-text,#727b89);line-height:1.5}
+[data-theme=dark] .map-popup-duration{background:#30353c;border-color:#48515d}
+
+.map-popup-duration{min-height:100px;align-content:start;box-sizing:border-box}

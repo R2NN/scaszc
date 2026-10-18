@@ -1,11 +1,13 @@
+import { BeeLoader } from './BeeLoader.jsx';
+import { cachedObjectTimeObjects, clearObjectTimeObjects, loadObjectTimeObjects } from './objectTimeData.js';
 import { manualDurationInput, workKind } from './durationKind.js';
 import { changeServiceEntity, resolveServiceEntities } from './serviceLocation.js';
 import { FACT_STAGES, factLearningStatus } from './visitFactDraft.js';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Marker } from 'maplibre-gl';
 import { useDropdownPresence } from './useDropdownPresence.js';
-import { Building2, Check, ChevronRight, Clock3, MapPin, Search, X } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Building2, Check, ChevronDown, ChevronRight, CircleHelp, Clock3, Layers, MapPin, Search, SlidersHorizontal, X } from 'lucide-react';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { cachedObjectPassport, clearObjectPassports, loadObjectPassport } from './objectPassport.js';
 import { objectTimeExplanation, conditionVisitChoices, filterObjectGroup, objectTimeCategory, standardVolumeLabel, summarizeObjectGroup, visibleVisitLimit, visitTimeRows } from './objectPresentation.js';
@@ -16,6 +18,7 @@ import { focusObjectTimeMap } from './objectTimeFocus.js';
 import { WorkspaceFilters } from './WorkspaceFilters.jsx';
 import { DurationErrorChart, DurationImpact } from './DurationCharts.jsx';
 import { EngineerFeedback } from './EngineerFeedback.jsx';
+import { BuildingWorkspace } from './BuildingWorkspace.jsx';
 import './complexity.css';
 import './durationCharts.css';
 
@@ -98,6 +101,14 @@ export function DurationFields({ form, onChange, date }) {
   </div>{error ? <p role='alert' className='cx-error'>{error}</p> : preview && form.durationPreviewKey === JSON.stringify(input) ? <DurationBreakdown snapshot={preview} conditions={previewConditions} compact/> : <p>Считаем длительность…</p>}<details><summary>Изменить время вручную</summary><label>Длительность визита, мин<input type='number' min='1' max='10080' value={form.durationOverride?.minutes ?? ''} onChange={event => onChange('durationOverride', event.target.value ? { minutes: Number(event.target.value), reason: form.durationOverride?.reason || '' } : undefined)}/></label><label>Причина изменения<input value={form.durationOverride?.reason || ''} onChange={event => onChange('durationOverride', { minutes: form.durationOverride?.minutes || Number(form.duration), reason: event.target.value })}/></label></details></section>;
 }
 
+const ObjectTimeRow = memo(function ObjectTimeRow({ object, selected, kind, volume, date, onSelect }) {
+  return <button type='button' className='cx-object-row' data-object-id={object.id} key={object.id} aria-current={selected ? 'true' : undefined} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => onSelect(object)}>
+      <span className='person-avatar cx-object-avatar'><Building2 size={21}/></span>
+      <span className='cx-object-copy'><strong>{object.address}</strong><span className='engineer-list-skills'><small>{KINDS[object.kind]}</small></span>{objectTimeExplanation(object.estimate) ? <span className='cx-time-explanation'>{objectTimeExplanation(object.estimate)}</span> : null}{object.insufficient ? <span className='cx-row-status'>Мало истории</span> : null}</span>
+      <span className='cx-object-duration'><b>{object.total} <small>мин</small></b>{object.delta !== 0 && Number.isFinite(object.delta) ? <span className={`cx-row-delta ${object.delta > 0 ? 'is-increased' : 'is-reduced'}`} title={deltaLabel(object.delta)}>{object.delta > 0 ? '+' : '−'}{Math.abs(object.delta)} мин</span> : null}<ChevronRight size={17}/></span>
+    </button>;
+});
+
 /** Group objects in visit-time mode and locate a building when its address is selected. */
 export function ComplexityMapLayer({ map, enabled, view = 'markers', onLayerReady, date, territory = '', territoryControl, regionId = 'moscow', routeOrderIds = [], panelOpen = true, onClosePanel }) {
   const [kind, setKind] = useState('all');
@@ -116,23 +127,42 @@ export function ComplexityMapLayer({ map, enabled, view = 'markers', onLayerRead
   const [loading, setLoading] = useState(false);
   const [selectedObject, setSelectedObject] = useState(null);
   const selectedMarker = useRef(null);
+  const timeContentRef = useRef(null);
+  const selectedObjectRef = useRef(null);
+  const focusFrameRef = useRef(null);
+  const clearTimeSelection = useCallback((closePassport = true) => {
+    cancelAnimationFrame(focusFrameRef.current);
+    selectedObjectRef.current = null;
+    setSelectedObject(null);
+    if (closePassport) window.dispatchEvent(new Event('beego:object-time-clear'));
+  }, []);
+  const selectTimeObject = useCallback(object => {
+    if (selectedObjectRef.current?.id === object.id) { clearTimeSelection(); return; }
+    selectedObjectRef.current = object;
+    setSelectedObject(object);
+    openObjectPassport(passportTarget(object, kind, volume));
+  }, [kind, volume, clearTimeSelection]);
+  useEffect(() => {
+    const closed = () => clearTimeSelection(false);
+    window.addEventListener('beego:passport-closed', closed);
+    return () => window.removeEventListener('beego:passport-closed', closed);
+  }, [clearTimeSelection]);
   const closePanelRef = useRef(onClosePanel); closePanelRef.current = onClosePanel;
   const panelPresence = useDropdownPresence(enabled && panelOpen, 280);
   const panelMotionClass = panelPresence.visible ? 'is-open' : enabled && panelOpen ? 'is-opening' : 'is-closing';
   const panelHost = map?.getContainer().closest('.workspace-grid');
   useEffect(() => {
     if (!map) return;
-    let frame;
     const focus = event => {
       const object = event.detail;
-      cancelAnimationFrame(frame);
+      cancelAnimationFrame(focusFrameRef.current);
       // Wait for the passport to mount so the house is placed beside it.
-      frame = requestAnimationFrame(() => {
-        if (focusObjectTimeMap(map, object?.coords, { onClosePanel: enabled ? closePanelRef.current : undefined }) && enabled) setSelectedObject(object);
+      focusFrameRef.current = requestAnimationFrame(() => {
+        if (focusObjectTimeMap(map, object?.coords, { onClosePanel: enabled ? closePanelRef.current : undefined, minZoom: enabled ? 14.5 : map.getZoom(), maxZoom: enabled ? 15 : map.getZoom() }) && enabled) { selectedObjectRef.current = object; setSelectedObject(object); }
       });
     };
     window.addEventListener('beego:focus-object', focus);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener('beego:focus-object', focus); };
+    return () => { cancelAnimationFrame(focusFrameRef.current); window.removeEventListener('beego:focus-object', focus); };
   }, [map, enabled]);
   useEffect(() => {
     if (!map || !enabled || !selectedObject) { selectedMarker.current?.remove(); selectedMarker.current = null; return; }
@@ -147,37 +177,51 @@ export function ComplexityMapLayer({ map, enabled, view = 'markers', onLayerRead
     selectedMarker.current.setLngLat([selectedObject.coords[1], selectedObject.coords[0]]).addTo(map);
   }, [map, enabled, selectedObject]);
   useEffect(() => () => { selectedMarker.current?.remove(); selectedMarker.current = null; }, [map]);
-  useEffect(() => { const refresh = () => setVersion(value => value + 1); window.addEventListener('beego:complexity-changed', refresh); return () => window.removeEventListener('beego:complexity-changed', refresh); }, []);
+  useEffect(() => { const refresh = () => { clearObjectTimeObjects(); setVersion(value => value + 1); }; window.addEventListener('beego:complexity-changed', refresh); return () => window.removeEventListener('beego:complexity-changed', refresh); }, []);
   const zone = territory.split(':').slice(1).join(':') || territory;
   useEffect(() => {
-    if (!enabled) return;
     let live = true;
-    setLoading(true);
-    setObjects([]);
-    const load = async () => { try { const result = await requestJson(`/api/complexity/objects?kind=${kind}&volume=${volume}&at=${encodeURIComponent(asOf(date))}&regionId=${encodeURIComponent(regionId)}&zone=${encodeURIComponent(zone)}&q=${encodeURIComponent(query)}`); if (live) { setObjects(result); setError(''); } } catch (issue) { if (live) setError(issue.message); } finally { if (live) setLoading(false); } };
-    const timer = setTimeout(load, 150);
-    return () => { live = false; clearTimeout(timer); };
-  }, [enabled, kind, volume, day(date), zone, regionId, query, version]);
-  const routeIds = new Set(routeOrderIds.map(String));
-  const locatedObjects = objects.filter(object => Array.isArray(object.coords) && object.coords.length === 2 && object.coords.every(Number.isFinite));
-  const filtered = locatedObjects.filter(object => filter === 'review' ? object.state === 'review' : filter === 'route' ? object.orderIds.some(id => routeIds.has(String(id))) : filter === 'repeat' ? object.observations >= 3 && ['faster', 'slower'].includes(objectTimeCategory(object)) : true);
-  const availableObjects = view === 'access' ? filtered.filter(object => object.estimate?.access > 0) : filtered;
-  const categorized = filterObjectGroup(availableObjects, category);
-  const grouped = groupIds ? categorized.filter(object => groupIds.includes(object.id)) : categorized;
-  const groupSummary = groupIds ? summarizeObjectGroup(grouped) : [];
+    const url=`/api/complexity/objects?kind=${kind}&volume=${volume}&at=${encodeURIComponent(asOf(date))}&regionId=${encodeURIComponent(regionId)}&zone=${encodeURIComponent(zone)}&q=${encodeURIComponent(query)}`;
+    const cached=cachedObjectTimeObjects(url);
+    setObjects(cached||[]);setLoading(!cached);
+    const load=()=>loadObjectTimeObjects(url,requestJson).then(result=>{if(live){setObjects(result);setError('');}}).catch(issue=>{if(live)setError(issue.message);}).finally(()=>{if(live)setLoading(false);});
+    // Prefetch the selected day's default layer while the ordinary map is open.
+    // Only typed searches need a debounce; identical requests share their result.
+    const timer=query?setTimeout(load,150):null;
+    if(!query)load();
+    return()=>{live=false;if(timer)clearTimeout(timer);};
+  }, [kind, volume, day(date), zone, regionId, query, version]);
+
+  const routeIds = useMemo(() => new Set(routeOrderIds.map(String)), [routeOrderIds.join(',')]);
+  const locatedObjects = useMemo(() => objects.filter(object => Array.isArray(object.coords) && object.coords.length === 2 && object.coords.every(Number.isFinite)), [objects]);
+  const filtered = useMemo(() => locatedObjects.filter(object => filter === 'review' ? object.state === 'review' : filter === 'route' ? object.orderIds.some(id => routeIds.has(String(id))) : filter === 'repeat' ? object.observations >= 3 && ['faster', 'slower'].includes(objectTimeCategory(object)) : true), [locatedObjects, filter, routeIds]);
+  const availableObjects = useMemo(() => view === 'access' ? filtered.filter(object => object.estimate?.access > 0) : filtered, [view, filtered]);
+  const categorized = useMemo(() => filterObjectGroup(availableObjects, category), [availableObjects, category]);
+  const grouped = useMemo(() => groupIds ? categorized.filter(object => groupIds.includes(object.id)) : categorized, [groupIds, categorized]);
+  const groupSummary = useMemo(() => groupIds ? summarizeObjectGroup(grouped) : [], [groupIds, grouped]);
   const selectedComposition = groupSummary.find(group => `${group.kind}/${group.operation || 'unspecified'}` === groupComposition);
-  const selectedGroup = filterObjectGroup(grouped, groupCategory, groupComposition);
+  const selectedGroup = useMemo(() => filterObjectGroup(grouped, groupCategory, groupComposition), [grouped, groupCategory, groupComposition]);
   const scopedObjects = groupIds ? selectedGroup : categorized;
-  const accessObjects = scopedObjects.filter(object => object.estimate?.access > 0);
+  const accessObjects = useMemo(() => scopedObjects.filter(object => object.estimate?.access > 0), [scopedObjects]);
   const mapObjects = view === 'access' ? accessObjects : scopedObjects;
   const visible = mapObjects;
-  const fitObjects = view === 'access' ? categorized.filter(object => object.estimate?.access > 0) : categorized;
+  useLayoutEffect(() => {
+    if (!enabled || !panelOpen || !selectedObject?.id) return;
+    const content = timeContentRef.current;
+    const row = content?.querySelector(`[data-object-id="${CSS.escape(String(selectedObject.id))}"]`);
+    if (!row) return;
+    const viewport = content.getBoundingClientRect(), bounds = row.getBoundingClientRect();
+    if (bounds.top >= viewport.top + 8 && bounds.bottom <= viewport.bottom - 8) return;
+    const scale = viewport.height / content.offsetHeight || 1;
+    content.scrollTo({ top: content.scrollTop + (bounds.top - viewport.top - Math.max(8, (viewport.height - bounds.height) / 2)) / scale, behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+  }, [enabled, panelOpen, selectedObject?.id, visible]);
+  const fitObjects = useMemo(() => view === 'access' ? categorized.filter(object => object.estimate?.access > 0) : categorized, [view, categorized]);
   useEffect(() => {
     if (!map || !enabled) { onLayerReady?.(null); return; }
     const fit = () => { clearGroup(); fitObjectTimeLayer(map, fitObjects); };
     onLayerReady?.({ count: fitObjects.length, fit });
     return () => onLayerReady?.(null);
-  }, [map, enabled, view, JSON.stringify(fitObjects), onLayerReady]);
+  }, [map, enabled, view, fitObjects, onLayerReady]);
   useEffect(() => {
     if (!enabled) return;
     let live = true;
@@ -189,7 +233,7 @@ export function ComplexityMapLayer({ map, enabled, view = 'markers', onLayerRead
     }, 250);
     return () => { live = false; clearTimeout(timer); };
   }, [enabled, visible.slice(0, 6).map(object => object.id).join(','), kind, volume, day(date), version]);
-  const data = useMemo(() => objectTimeGeoJSON(mapObjects), [JSON.stringify(mapObjects)]);
+  const data = useMemo(() => objectTimeGeoJSON(mapObjects), [mapObjects]);
   useEffect(() => {
     if (!map) return;
     const container = map.getContainer();
@@ -212,19 +256,19 @@ export function ComplexityMapLayer({ map, enabled, view = 'markers', onLayerRead
       if (object) loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {});
     };
     const leave = () => { map.getCanvas().style.cursor = ''; };
-    const click = async event => {
+    const click = event => {
+      const target = event.originalEvent?.target;
+      if (target?.closest?.('.maplibregl-marker,.maplibregl-popup,.maplibregl-ctrl')) return;
       const layers = (view !== 'markers' ? ['cx-access-points', 'cx-access-label'] : ['cx-points', 'cx-point-label']).filter(id => map.getLayer(id));
-      if (!layers.length) return;
-      const features = map.queryRenderedFeatures(event.point, { layers });
-      const feature = features[0];
-      if (!feature) return;
-      const object = objects.find(item => item.id === feature.properties.id);
-      if (object) openObjectPassport(passportTarget(object, kind, volume));
+      const feature = layers.length ? map.queryRenderedFeatures(event.point, { layers })[0] : null;
+      const object = feature && objects.find(item => item.id === feature.properties.id);
+      if (object) selectTimeObject(object);
+      else if (selectedObjectRef.current) clearTimeSelection();
     };
     map.on('click', click);
     for (const layer of ['cx-points', 'cx-access-points']) { map.on('mousemove', layer, hover); map.on('mouseleave', layer, leave); }
     return () => { map.off('click', click); for (const layer of ['cx-points', 'cx-access-points']) { map.off('mousemove', layer, hover); map.off('mouseleave', layer, leave); } leave(); };
-  }, [map, enabled, objects, kind, volume, view]);
+  }, [map, enabled, objects, kind, volume, view, selectTimeObject, clearTimeSelection]);
   if (!panelPresence.present || !panelHost) return null;
   return createPortal(<section className={`orders-panel route-list-panel cx-time-panel workspace-panel-enter ${panelMotionClass}`} aria-label='Время на объектах'>
     <div className='panel-heading'><div><h3>Время на объектах</h3><b className='engineer-count' aria-label='Объектов на карте'>{visible.length}</b></div><div className='panel-heading-actions'><button type='button' className='panel-close' aria-label='Скрыть панель времени на объектах' data-tooltip='Скрыть панель' onClick={onClosePanel}><X/></button></div></div>
@@ -240,23 +284,28 @@ export function ComplexityMapLayer({ map, enabled, view = 'markers', onLayerRead
         ['filter', 'Дополнительно', [['', 'Все объекты'], ['repeat', 'Отклонение от норматива от 10 мин'], ['review', 'Нужно проверить время'], ['route', 'Объекты выбранного маршрута']]],
       ]} value={{ kind: kind === 'all' ? '' : kind, volume: volume === 'order' ? '' : volume, filter: filter === 'all' ? '' : filter }} onChange={change => { const next = typeof change === 'function' ? change({ kind: kind === 'all' ? '' : kind, volume: volume === 'order' ? '' : volume, filter: filter === 'all' ? '' : filter }) : change; setKind(next.kind || 'all'); setVolume(next.volume || 'order'); setFilter(next.filter || 'all'); }}/></div>
     </div>
-    <div className='cx-time-content'>
+    <div className='cx-time-content' ref={timeContentRef}>
     {groupIds ? <section className='cx-group-summary' aria-label='Состав группы объектов'>
-      <header><strong>Группа · {grouped.length}</strong><button type='button' aria-label='Сбросить выбранную группу' onClick={clearGroup}><X size={16}/></button></header>
-      <div className='cx-group-filters' aria-label='Отобрать адреса группы'>
-        {[['all', 'Все', grouped.length], ['slower', 'Увеличенное время', grouped.filter(object => objectTimeCategory(object) === 'slower').length], ['faster', 'Меньше времени', grouped.filter(object => objectTimeCategory(object) === 'faster').length], ['unknown', 'Мало сведений', grouped.filter(object => objectTimeCategory(object) === 'unknown').length]].map(([value, label, count]) => <button type='button' key={value} aria-pressed={groupCategory === value && !groupComposition} onClick={() => { setGroupCategory(value); setGroupComposition(''); }}>{label}<b>{count}</b></button>)}
+      <header><div className='cx-group-heading'><i><Layers size={17}/></i><strong>Группа объектов</strong><b>{grouped.length}</b></div><button type='button' aria-label='Сбросить выбранную группу' onClick={clearGroup}><X size={17}/></button></header>
+      <div className='cx-group-filters' role='group' aria-label='Отобрать адреса группы'>
+        {[
+          ['all', 'Все', grouped.length, Building2],
+          ['slower', 'Дольше', grouped.filter(object => objectTimeCategory(object) === 'slower').length, ArrowUpRight],
+          ['faster', 'Быстрее', grouped.filter(object => objectTimeCategory(object) === 'faster').length, ArrowDownRight],
+          ['unknown', 'Мало истории', grouped.filter(object => objectTimeCategory(object) === 'unknown').length, CircleHelp],
+        ].map(([value, label, count, Icon]) => <button type='button' key={value} data-category={value} aria-pressed={groupCategory === value && !groupComposition} onClick={() => { setGroupCategory(current => current === value && value !== 'all' ? 'all' : value); setGroupComposition(''); }}><Icon size={14}/><span>{label}</span><b>{count}</b></button>)}
       </div>
-      <details><summary>{selectedComposition ? `${KINDS[selectedComposition.kind]} · ${selectedComposition.composition}` : `По видам и составу работ · ${groupSummary.length}`}</summary><div className='cx-group-compositions'>{groupSummary.map(group => {
-        const key = `${group.kind}/${group.operation || 'unspecified'}`;
-        return <button type='button' key={key} aria-pressed={groupComposition === key} onClick={() => { setGroupComposition(key); setGroupCategory('all'); }}><span><b>{KINDS[group.kind]}</b><small>{group.composition}</small></span><strong>{group.count}</strong></button>;
-      })}</div></details>
+      <details className='cx-group-work-types'><summary><SlidersHorizontal size={17}/><span><b>Виды и состав работ</b><small>{selectedComposition ? `Выбрано: ${KINDS[selectedComposition.kind]}` : 'Все виды работ'}</small></span><b className='cx-composition-count'>{groupSummary.length}</b><ChevronDown size={16}/></summary>
+        <div className='cx-group-compositions' role='group' aria-label='Выбрать состав работ'>{groupSummary.map(group => {
+          const key = `${group.kind}/${group.operation || 'unspecified'}`, selected = groupComposition === key;
+          return <button type='button' key={key} aria-pressed={selected} onClick={() => { setGroupComposition(current => current === key ? '' : key); setGroupCategory('all'); }}>
+            <i className='cx-composition-icon'>{selected ? <Check size={16}/> : <Building2 size={16}/>}</i><span className='cx-composition-copy'><b>{KINDS[group.kind]}</b><span className='cx-composition-tags'>{group.composition.split(' · ').map((part, index) => <small key={index}>{part}</small>)}</span></span><strong>{group.count}</strong>
+          </button>;
+        })}</div>
+      </details>
     </section> : null}
     {error ? <p role='alert' className='cx-error'>{error}</p> : null}
-    <div className='cx-object-list' aria-busy={loading}>{loading ? <p role='status'>Загружаем объекты…</p> : visible.length ? visible.map(object => <button type='button' className='cx-object-row' key={object.id} aria-current={selectedObject?.id === object.id ? 'true' : undefined} onMouseEnter={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onFocus={() => { loadObjectPassport(object.id, asOf(date), object.kind, volume).catch(() => {}); }} onClick={() => { openObjectPassport(passportTarget(object, kind, volume)); window.dispatchEvent(new CustomEvent('beego:focus-object', { detail: object })); }}>
-      <span className='person-avatar cx-object-avatar'><Building2 size={21}/></span>
-      <span className='cx-object-copy'><strong>{object.address}</strong><span className='engineer-list-skills'><small>{KINDS[object.kind]}</small></span>{objectTimeExplanation(object.estimate) ? <span className='cx-time-explanation'>{objectTimeExplanation(object.estimate)}</span> : null}{object.insufficient ? <span className='cx-row-status'>Мало истории</span> : null}</span>
-      <span className='cx-object-duration'><b>{object.total} <small>мин</small></b>{object.delta !== 0 && Number.isFinite(object.delta) ? <span className={`cx-row-delta ${object.delta > 0 ? 'is-increased' : 'is-reduced'}`} title={deltaLabel(object.delta)}>{object.delta > 0 ? '+' : '−'}{Math.abs(object.delta)} мин</span> : null}<ChevronRight size={17}/></span>
-    </button>) : <p className='cx-empty'>{view === 'access' ? 'Подтверждённых задержек доступа по выбранным фильтрам нет.' : 'Объектов не найдено. Измените фильтры или найдите адрес.'}</p>}</div>
+    <div className='cx-object-list' aria-busy={loading}>{loading ? <BeeLoader/> : visible.length ? visible.map(object => <ObjectTimeRow key={object.id} object={object} selected={selectedObject?.id === object.id} kind={kind} volume={volume} date={day(date)} onSelect={selectTimeObject}/>) : <p className='cx-empty'>{view === 'access' ? 'Подтверждённых задержек доступа по выбранным фильтрам нет.' : 'Объектов не найдено. Измените фильтры или найдите адрес.'}</p>}</div>
     </div>
   </section>, panelHost);
 }
@@ -271,8 +320,21 @@ function VisitTiming({ visit }) {
 }
 
 /** One passport drawer bound to stable object and infrastructure IDs. */
-export function ComplexityPassport({ date, onOpen, actor = 'Диспетчер' }) {
+export function ComplexityPassport({ date, onOpen, onOrder, orders = [], actor = 'Диспетчер' }) {
   const [target, setTarget] = useState(null);
+  const [passportOpen, setPassportOpen] = useState(false);
+  const passportPresence = useDropdownPresence(passportOpen, 220);
+  const passportMotionClass = !passportOpen ? 'is-closing' : passportPresence.visible ? 'is-open' : 'is-opening';
+  useEffect(() => { if (!passportOpen && !passportPresence.present) setTarget(null); }, [passportOpen, passportPresence.present]);
+  const closePassport = useCallback(() => {
+    setPassportOpen(false);
+    window.dispatchEvent(new Event('beego:passport-closed'));
+  }, []);
+  useEffect(() => {
+    const clear = () => setPassportOpen(false);
+    window.addEventListener('beego:object-time-clear', clear);
+    return () => window.removeEventListener('beego:object-time-clear', clear);
+  }, []);
   const [data, setData] = useState(null);
   const [detailsLoaded, setDetailsLoaded] = useState(false);
   const [tab, setTab] = useState('overview');
@@ -293,6 +355,10 @@ export function ComplexityPassport({ date, onOpen, actor = 'Диспетчер' 
   const [notice, setNotice] = useState('');
   const bodyRef = useRef(null);
   const onOpenRef = useRef(onOpen); onOpenRef.current = onOpen;
+  useLayoutEffect(() => {
+    const object = target?.passportSummary?.object || target;
+    if (Array.isArray(object?.coords)) window.dispatchEvent(new CustomEvent('beego:focus-object', { detail: object }));
+  }, [target]);
   useEffect(() => { setVisitId(target?.visitId || ''); setEditingCondition(''); setReason(''); setUntil(''); setNotice(''); }, [kind, target]);
   useEffect(() => {
     const condition = data?.conditions?.find(item => item.id === editingCondition);
@@ -312,8 +378,8 @@ export function ComplexityPassport({ date, onOpen, actor = 'Диспетчер' 
     });
     return () => cancelAnimationFrame(frame);
   }, [tab, detailsLoaded, target, kind]);
-  useEffect(() => { const open = event => { const next = event.detail.target; setTarget(next); setTab(event.detail.tab === 'calculation' ? 'overview' : event.detail.tab === 'audit' ? 'conditions' : event.detail.tab || 'overview'); setCalculationOpen(event.detail.tab === 'calculation'); setVisitLimit(5); setKind(next?.passportKind || next?.durationSnapshot?.kind || 'local'); setError(''); setData(next?.passportSummary || (next?.durationSnapshot ? { object: { address: next.address }, estimate: next.durationSnapshot, fromOrder: true } : null)); setDetailsLoaded(false); setVisitId(next?.visitId || ''); setEditingCondition(''); setReason(''); setUntil(''); setNotice(''); onOpenRef.current?.(); }; window.addEventListener('beego:passport', open); return () => window.removeEventListener('beego:passport', open); }, []);
-  useEffect(() => { if (!target) return; const key = event => { if (event.key === 'Escape') setTarget(null); }; document.addEventListener('keydown', key); return () => document.removeEventListener('keydown', key); }, [target]);
+  useEffect(() => { const open = event => { const next = event.detail.target; setTarget(next); setPassportOpen(true); setTab(event.detail.tab === 'calculation' ? 'overview' : event.detail.tab === 'audit' ? 'conditions' : event.detail.tab || 'overview'); setCalculationOpen(event.detail.tab === 'calculation'); setVisitLimit(5); setKind(next?.passportKind || next?.durationSnapshot?.kind || 'local'); setError(''); setData(next?.passportSummary || (next?.durationSnapshot ? { object: { address: next.address }, estimate: next.durationSnapshot, fromOrder: true } : null)); setDetailsLoaded(false); setVisitId(next?.visitId || ''); setEditingCondition(''); setReason(''); setUntil(''); setNotice(''); onOpenRef.current?.(); }; window.addEventListener('beego:passport', open); const params = new URLSearchParams(window.location.search); const objectId = params.get('object'); if (objectId) open({ detail: { target: { objectId }, tab: params.get('passport') === 'building' ? 'building' : 'overview' } }); return () => window.removeEventListener('beego:passport', open); }, []);
+  useEffect(() => { if (!passportOpen) return; const key = event => { if (event.key === 'Escape') closePassport(); }; document.addEventListener('keydown', key); return () => document.removeEventListener('keydown', key); }, [passportOpen, closePassport]);
   useEffect(() => {
     if (!target) return;
     let live = true;
@@ -340,7 +406,7 @@ export function ComplexityPassport({ date, onOpen, actor = 'Диспетчер' 
     return result;
   };
   const act = async action => { setBusy(true); setError(''); try { await action(); setNotice('Изменение сохранено'); setVersion(value => value + 1); changed(); setReason(''); } catch (issue) { setError(issue.message); } finally { setBusy(false); } };
-  if (!target) return null;
+  if (!target || (!passportOpen && !passportPresence.present)) return null;
   const currentCondition = data?.conditions?.find(item => item.id === editingCondition);
   const visitChoices = conditionVisitChoices(data?.visits || [], currentCondition, kind);
   const visit = visitChoices.find(item => item.id === visitId);
@@ -352,7 +418,8 @@ export function ComplexityPassport({ date, onOpen, actor = 'Диспетчер' 
   const moment = new Date().toISOString();
   const location = condition => { const entity = data?.entities?.find(item => item.id === condition.entityId); return entity ? `${entity.label}${entity.location ? ' · ' + entity.location : ''}` : condition.scope === 'object' ? data?.object.address : condition.scope === 'operation' ? KINDS[condition.kind] : SCOPES[condition.scope]; };
   const stateLabel = item => item.excluded ? 'Ошибочное измерение исключено' : ({ confirmed: 'Перенос подтверждён', pending: 'Причина уточнена, ожидает решения', visit: 'Разовый случай', rejected: 'Перенос отклонён' })[item.learningDecision] || (item.eligible ? 'Измерение учтено в статистике' : 'Неполное измерение');
-  return <aside className='cx-passport' role='dialog' aria-label='Паспорт объекта'><header><Building2 size={23}/><div><small>ОБЪЕКТ</small><h2>{data?.object.address || target.address || 'Объект'}</h2></div><button type='button' onClick={() => setTarget(null)} aria-label='Закрыть паспорт объекта'><X size={20}/></button></header><nav aria-label='Разделы паспорта'>{[['overview', 'Обзор'], ['visits', 'Визиты'], ['conditions', 'Особенности']].map(([key, label]) => <button type='button' key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>)}</nav><div className='cx-passport-body' ref={bodyRef}><label className='cx-filter-label'>Вид работ<BusinessSelect ariaLabel='Вид работ в паспорте' value={kind} onChange={value => { setKind(value); setData(null); setDetailsLoaded(false); }} options={options(KINDS)}/></label>{error ? <div className='cx-error' role='alert'>{error}<button type='button' className='cx-action' onClick={() => setVersion(value => value + 1)}>Повторить загрузку</button></div> : null}{notice ? <p role='status' className='cx-saved'>{notice}</p> : null}{data ? <>
+  return <aside className={`cx-passport ${passportMotionClass} ${tab === 'building' ? 'cx-passport-building' : ''}`} role='dialog' aria-label='Паспорт объекта' aria-hidden={!passportOpen || undefined} inert={!passportOpen || undefined}><header><Building2 size={23}/><div><small>{tab === 'building' ? 'Паспорт объекта' : 'ОБЪЕКТ'}</small><h2>{tab === 'building' ? String(data?.object.address || target.address || 'Объект').replace(/^(?:г\.\s*)?(?:Город\s+)?Москва,\s*/i, '').replace(/д\.\s*/g, '').replace(/(ул|пр-кт|пр-д|пер|ш)\.(?=\S)/g, '$1. ') : data?.object.address || target.address || 'Объект'}</h2></div><button type='button' onClick={closePassport} aria-label='Закрыть паспорт объекта'><X size={20}/></button></header><nav aria-label='Разделы паспорта'>{[['overview', 'Обзор'], ['building', 'Схема объекта'], ['visits', 'Визиты'], ['conditions', 'Особенности']].map(([key, label]) => <button type='button' key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>)}</nav><div className='cx-passport-body' ref={bodyRef}>{tab !== 'building' ? <label className='cx-filter-label'>Вид работ<BusinessSelect ariaLabel='Вид работ в паспорте' value={kind} onChange={value => { setKind(value); setData(null); setDetailsLoaded(false); }} options={options(KINDS)}/></label> : null}{error ? <div className='cx-error' role='alert'>{error}<button type='button' className='cx-action' onClick={() => setVersion(value => value + 1)}>Повторить загрузку</button></div> : null}{notice ? <p role='status' className='cx-saved'>{notice}</p> : null}{data ? <>
+    {tab === 'building' ? detailsLoaded ? <BuildingWorkspace data={data} initialOrderId={target.orderId || target.id} date={day(date)} orders={orders} actor={actor} onOrder={order => { closePassport(); onOrder?.(order); }} onVisit={visit => { setTarget(current => ({ ...current, visitId: visit.id })); setKind(visit.kind); setTab('visits'); }}/> : <p role='status' className='cx-muted'>Загружаем сведения об объекте…</p> : null}
     {tab === 'overview' ? <>
       <p className='cx-context-label'>{data.fromOrder ? 'Время в сохранённой заявке' : target.passportVolume === 'standard' ? `Стандартный объём · ${standardVolumeLabel(kind)}` : (detailsLoaded && !data.object.examples?.some(example => example.id === data.example?.id) ? 'Стандартный визит' : 'Объём работ по заявке')}{!data.fromOrder && provisional ? ' · предварительная оценка' : ''}</p>
       <DurationBreakdown snapshot={data.estimate} conditions={data.conditions} compact expanded={calculationOpen}/>
@@ -414,7 +481,7 @@ export function DurationAccuracy({ date, zone = '', regionId = 'moscow' }) {
 }
 
 /** Persist duration norms, factor hypotheses and conservative history policy on the server. */
-export function DurationSettings() {
+export function DurationSettings({ preview = false }) {
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState(null);
   const [reason, setReason] = useState('');
@@ -422,15 +489,15 @@ export function DurationSettings() {
   const [saved, setSaved] = useState('');
   const [effective, setEffective] = useState('2026-08-17T07:00');
   useEffect(() => { let live = true; const load = async () => { try { const result = await requestJson('/api/complexity/model'); if (live) { setData(result); setDraft(result.model); } } catch (issue) { if (live) setError(issue.message); } }; load(); return () => { live = false; }; }, []);
-  const save = async () => { try { const result = await send('/api/complexity/model', { ...draft, expectedVersion: data.model.version, effectiveAt: `${effective}:00+03:00`, reason }); setData(current => ({ ...current, model: result, versions: [result, ...current.versions] })); setDraft(result); setSaved(`Сохранено: ${result.version}`); setError(''); changed(); } catch (issue) { setSaved(''); setError(issue.message); } };
-  return <section className='cx-settings'>
+  const save = async () => { if(preview){setSaved('Черновик обновлён. Расчёты не изменены.');return;} try { const result = await send('/api/complexity/model', { ...draft, expectedVersion: data.model.version, effectiveAt: `${effective}:00+03:00`, reason }); setData(current => ({ ...current, model: result, versions: [result, ...current.versions] })); setDraft(result); setSaved(`Сохранено: ${result.version}`); setError(''); changed(); } catch (issue) { setSaved(''); setError(issue.message); } };
+  return <section className={`cx-settings ${preview?'is-preview':''}`}>
     <div className='cx-section-heading'><Clock3 size={19}/><h3>Нормативы времени</h3></div>
     {draft ? <>
       <div className='cx-norm-head'><span>Вид работ</span><span>Работа, мин</span><span>Оформление, мин</span></div>{Object.entries(KINDS).map(([kind, label]) => <div className='cx-norm-row' key={kind}><b>{label}</b>{[0, 1].map(index => <input key={index} type='number' min={index ? 0 : 1} max={index ? 120 : 600} aria-label={`${label}: ${index ? 'оформление' : 'технические минуты'}`} value={draft.norms[kind][index]} onChange={event => setDraft(current => ({ ...current, norms: { ...current.norms, [kind]: current.norms[kind].map((value, at) => at === index ? Number(event.target.value) : value) } }))}/>)}</div>)}
       <details><summary>Нормативы по подтипам работ · {data.workRules.length}</summary>{data.workRules.map(rule => <p key={`${rule.workType}-${rule.serviceType}`}>{rule.workType} · {rule.serviceType}: работа {rule.technical} мин, оформление {rule.documents} мин</p>)}</details>
       <details><summary>Поправки за объём работ, мин</summary><div className='cx-field-grid'>{Object.entries(draft.weights).filter(([key]) => key !== 'shortCable').map(([key, value]) => <label key={key}>{({ existingLine: 'Пригодная линия', shortCable: 'Малый объём кабеля', longCable: 'Значительный объём кабеля', device: 'Дополнительное устройство', point: 'Дополнительная точка', site: 'Площадка', knownFault: 'Известная неисправность', intermittent: 'Периодические сбои', segment: 'Сегмент диагностики', replacement: 'Замена устройства', firmware: 'Обновление устройства', searchNode: 'Поиск узла', damage: 'Элемент восстановления', readyConfig: 'Готовая конфигурация', stairs: 'Этаж подъёма' })[key]}<input type='number' value={value} onChange={event => setDraft(current => ({ ...current, weights: { ...current.weights, [key]: Number(event.target.value) } }))}/></label>)}</div></details>
       <details><summary>Учёт истории визитов</summary>{Object.entries(draft.history).map(([key, value]) => <label key={key}>{({ minimum: 'Минимум визитов для поправки', shrinkage: 'Сглаживание малой выборки', maxAgeDays: 'Актуальность истории, дней', outlierMinutes: 'Отклонение для дополнительной проверки, мин' })[key]}<input type='number' value={value} onChange={event => setDraft(current => ({ ...current, history: { ...current.history, [key]: Number(event.target.value) } }))}/></label>)}</details>
-      <label>Действует с<input type='datetime-local' value={effective} onChange={event => setEffective(event.target.value)}/></label><label>Причина изменения<input value={reason} onChange={event => setReason(event.target.value)}/></label><button type='button' className='primary' disabled={!reason.trim()} onClick={save}><Check size={17}/>Сохранить нормативы</button>{saved ? <p role='status'>Нормативы сохранены</p> : null}
+      <label>Действует с<input type='datetime-local' value={effective} onChange={event => setEffective(event.target.value)}/></label><label>Причина изменения<input value={reason} onChange={event => setReason(event.target.value)}/></label><button type='button' className='primary' disabled={!reason.trim()} onClick={save}><Check size={17}/>{preview?'Сохранить в предпросмотре':'Сохранить нормативы'}</button>{saved ? <p role='status'>{saved}</p> : null}
       <details><summary>История версий · {data.versions.length}</summary>{data.versions.map(model => <p key={model.version}>{dateLabel(model.effectiveAt)}</p>)}</details>
     </> : <p>Загружаем настройки…</p>}{error ? <p className='cx-error' role='alert'>{error}</p> : null}
   </section>;
