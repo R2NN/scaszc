@@ -3,7 +3,9 @@ import { AlertCircle, ArrowDownToLine, Building2, Cable, ChevronRight, CircleHel
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { buildingAssets, buildingScene, linkedBuildingOrders, validateBuildingModel } from './buildingModel.js';
 import { floorPlanAt, syntheticFloorPlans } from './buildingInterior.js';
-import { sectionOutline, sectionPlanPoint } from './buildingGeometry.js';
+import { BuildingFloorPlan } from './BuildingFloorPlan.jsx';
+import { BuildingNavigator } from './BuildingNavigator.jsx';
+import { buildingAttention } from './buildingAttention.js';
 import './building.css';
 
 const points = values => values.map(point => point.map(value => value.toFixed(2)).join(',')).join(' ');
@@ -44,37 +46,6 @@ function FloorInterior({ section, floor, project }) {
     })}
     {plan.walls.flatMap((wall, index) => wall.slice(1).map((point, segment) => <polygon key={`${index}-${segment}`} className='building-survey-wall' points={points([p(wall[segment][0], floor, wall[segment][1]), p(point[0], floor, point[1]), p(point[0], floor + .9, point[1]), p(wall[segment][0], floor + .9, wall[segment][1])])} fill='#d4d7d7' stroke='#aab1b5' strokeWidth='.7' opacity='.72'/>))}
   </g>;
-}
-
-function BuildingPlan({ model, sectionId, onSection }) {
-  const polygons = model.sections.map(sectionOutline), all = [...model.footprint, ...polygons.flat()];
-  const xs = all.map(point => point[0]), zs = all.map(point => point[1]);
-  const bounds = [Math.min(...xs) - 5, Math.min(...zs) - 5, Math.max(...xs) - Math.min(...xs) + 10, Math.max(...zs) - Math.min(...zs) + 10];
-  return <div className='building-plan-inset'><span>Форма здания</span><svg viewBox={bounds.join(' ')} aria-label='План расположения секций'>{model.footprint.length ? <polygon className='building-plan-outline' points={points(model.footprint)}/> : null}{model.sections.map((section, index) => <polygon key={section.id} className={sectionId === section.id ? 'selected' : ''} points={points(polygons[index])} role='button' tabIndex='0' aria-label={`На плане: ${section.label}`} onClick={() => onSection(section.id)} onKeyDown={event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); onSection(section.id); } }}><title>{section.label} · {section.floors} эт.</title></polygon>)}</svg><small>Секции разреза · вид сверху</small></div>;
-}
-
-function BuildingFloorPlan({ model, assets, selectedId, onSelect, floor, sectionId, zoom }) {
-  const sections = model.sections.filter(section => (sectionId === 'all' || section.id === sectionId) && (floor === -1 ? section.basement : section.floors >= floor));
-  const outlines = sections.map(sectionOutline), all = outlines.flat();
-  if (!all.length) return <div className='building-load-state'><p>На этом уровне нет помещений выбранной секции.</p></div>;
-  const xs = all.map(point => point[0]), zs = all.map(point => point[1]);
-  const bounds = [Math.min(...xs) - 4, Math.min(...zs) - 6, Math.max(...xs) - Math.min(...xs) + 8, Math.max(...zs) - Math.min(...zs) + 12];
-  const colors = { apartment: '#eae5db', office: '#e5e8da', technical: '#d6e7f1', storage: '#e1e3e5', lobby: '#eff0e9', hall: '#f1ece4', corridor: '#f5f6f8', stairs: '#d7dde0', lift: '#bacbd5' };
-  return <svg className='building-floor-plan' style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%`, minWidth: `${zoom * 100}%`, minHeight: `${zoom * 100}%` }} viewBox={bounds.join(' ')} aria-label={`План этажа: ${floor < 0 ? 'подвал' : floor}`}>
-    {sections.map((section, index) => {
-      const p = ([x, z]) => sectionPlanPoint(section, x, z), plan = floorPlanAt(section, floor);
-      const caption = p([section.width / 2, section.depth + 2]);
-      return <g key={section.id}><polygon points={points(outlines[index])} className='building-floor-shell'/><text x={caption[0]} y={caption[1]} className='building-floor-caption' textAnchor='middle'>{section.label}</text>{plan.spaces.map(space => {
-        const center = space.polygon.reduce(([x, z], point) => [x + point[0] / space.polygon.length, z + point[1] / space.polygon.length], [0, 0]), [cx, cy] = p(center);
-        const labels = { apartment: 'Кв.', office: 'Пом.', technical: 'Тех.', storage: 'Хоз.', lobby: 'Вестибюль', stairs: 'Лестница', lift: 'Лифт', hall: 'Зал', corridor: 'Холл' };
-        return <g key={space.id} data-floor-space={space.id}><polygon points={points(space.polygon.map(p))} fill={colors[space.kind]} stroke='#b5bdc2' strokeWidth='.14'/><text x={cx} y={cy} textAnchor='middle' dominantBaseline='middle'>{labels[space.kind]}</text><title>{space.label}</title></g>;
-      })}{plan.walls.map((wall, index) => <polyline key={index} points={points(wall.map(p))} fill='none' stroke='#65727d' strokeWidth='.25'/>)}</g>;
-    })}
-    {assets.filter(asset => asset.floor === floor && sections.some(section => section.id === asset.sectionId)).map(asset => {
-      const section = sections.find(item => item.id === asset.sectionId), [x, y] = sectionPlanPoint(section, section.width * asset.x, section.depth * asset.z);
-      return <g key={asset.id} className={`building-floor-asset ${asset.id === selectedId ? 'selected' : ''}`} role='button' tabIndex='0' aria-label={`На плане: ${asset.label}, ${asset.location}`} onClick={() => onSelect(asset.id)} onKeyDown={event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); onSelect(asset.id); } }}><circle cx={x} cy={y} r='1.1'/><title>{asset.label}</title></g>;
-    })}
-  </svg>;
 }
 
 /** Procedural cutaway. All floors, sections and equipment positions come from the model. */
@@ -245,25 +216,47 @@ export function BuildingWorkspace({ data, date, orders = [], actor, onOrder, onV
   const [payload, setPayload] = useState(null), [error, setError] = useState(''), [version, setVersion] = useState(0);
   const [previewModel, setPreviewModel] = useState(null);
   const [selectedId, setSelectedId] = useState(''), [sectionId, setSectionId] = useState('all'), [view, setView] = useState('scheme'), [zoom, setZoom] = useState(1), [editing, setEditing] = useState(false), [floor, setFloor] = useState(1);
-  const canvasRef = useRef(null), lastZoom = useRef(1);
+  const canvasRef = useRef(null), lastZoom = useRef(1), zoomAnchor = useRef(null), zoomRef = useRef(1);
   const objectId = data.object.id;
   useEffect(() => {
     let live = true; setPayload(null); setPreviewModel(null); setError(''); setSectionId('all'); setZoom(1); setSelectedId(''); setEditing(false); setView('scheme'); setFloor(1);
-    const load = async () => { try { const response = await fetch(`/api/buildings/${encodeURIComponent(objectId)}`); const result = await response.json(); if (!response.ok) throw new Error(result.error); if (live) { setPayload(result); if (result.model.sections.length > 6) setSectionId(result.model.placements[0]?.sectionId || result.model.sections[0].id); } } catch (issue) { if (live) setError(issue.message); } };
+    const load = async () => { try { const response = await fetch(`/api/buildings/${encodeURIComponent(objectId)}`); const result = await response.json(); if (!response.ok) throw new Error(result.error); if (live) setPayload(result); } catch (issue) { if (live) setError(issue.message); } };
     load(); return () => { live = false; };
   }, [objectId, version]);
   useEffect(() => { if (!editing) setPreviewModel(null); }, [editing]);
   useLayoutEffect(() => {
+    zoomRef.current = zoom;
     const canvas = canvasRef.current;
-    if (canvas) { const ratio = zoom / lastZoom.current; canvas.scrollLeft = zoom === 1 ? 0 : (canvas.scrollLeft + canvas.clientWidth / 2) * ratio - canvas.clientWidth / 2; canvas.scrollTop = zoom === 1 ? 0 : (canvas.scrollTop + canvas.clientHeight / 2) * ratio - canvas.clientHeight / 2; }
-    lastZoom.current = zoom;
+    if (canvas) {
+      const ratio = zoom / lastZoom.current;
+      const anchor = zoomAnchor.current || { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
+      canvas.scrollLeft = zoom === 1 ? 0 : (canvas.scrollLeft + anchor.x) * ratio - anchor.x;
+      canvas.scrollTop = zoom === 1 ? 0 : (canvas.scrollTop + anchor.y) * ratio - anchor.y;
+    }
+    zoomAnchor.current = null; lastZoom.current = zoom;
   }, [zoom]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const wheel = event => {
+      if (!event.deltaY) return;
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      zoomAnchor.current = { x: (event.clientX - rect.left) * canvas.clientWidth / rect.width, y: (event.clientY - rect.top) * canvas.clientHeight / rect.height };
+      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? canvas.clientHeight : 1);
+      const next = Math.max(.5, Math.min(4, zoomRef.current * Math.exp(-delta * .0015)));
+      zoomRef.current = next; setZoom(next);
+    };
+    canvas.addEventListener('wheel', wheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', wheel);
+  }, [payload?.model.objectId, view]);
   const model = editing && previewModel ? previewModel : payload?.model;
   const activeSectionId = model?.sections.some(section => section.id === sectionId) ? sectionId : 'all';
   const assets = useMemo(() => model ? buildingAssets(model, data.entities) : [], [model, data.entities]);
   const at = `${String(date).slice(0, 10)}T23:59:59+03:00`;
   const conditions = (data.conditions || []).filter(condition => isActive(condition, at));
-  const attentionIds = new Set(assets.filter(asset => !asset.schematic && conditions.some(condition => asset.entityIds.includes(condition.entityId) || data.entities.some(entity => entity.kind === 'line' && entity.id === condition.entityId && asset.entityIds.includes(entity.nodeId)))).map(asset => asset.id));
+  const attention = buildingAttention(model, data.entities, conditions, at);
+  const attentionIds = new Set(attention.assetConditions.keys());
   const visibleSections = model?.sections.filter(section => activeSectionId === 'all' || section.id === activeSectionId) || [];
   const viewedFloor = Math.min(floor, Math.max(1, ...visibleSections.map(section => section.floors)));
   const visibleAssets = assets.filter(asset => (activeSectionId === 'all' || asset.sectionId === activeSectionId) && (view !== 'floor' || asset.floor === viewedFloor));
@@ -276,24 +269,27 @@ export function BuildingWorkspace({ data, date, orders = [], actor, onOrder, onV
   });
   const requestCounts = new Map(assets.filter(asset => !asset.schematic).map(asset => [asset.id, linkedBuildingOrders(asset, currentOrders, objectId, data.entities).length]));
   const related = linkedBuildingOrders(selected, currentOrders, objectId, data.entities);
-  const relatedConditions = selected && !selected.schematic ? conditions.filter(condition => selected.entityIds.includes(condition.entityId) || data.entities.some(entity => entity.kind === 'line' && entity.id === condition.entityId && selected.entityIds.includes(entity.nodeId))) : [];
+  const relatedConditions = attention.assetConditions.get(selected?.id) || [];
   const visits = selected && !selected.schematic ? (data.visits || []).filter(visit => selected.entityIds.includes(visit.entities?.node) || data.entities.some(entity => entity.id === visit.entities?.line && selected.entityIds.includes(entity.nodeId))).slice(0, 2) : [];
   if (error) return <div className='building-load-state'><AlertCircle size={32}/><p role='alert'>{error}</p><button className='building-secondary' type='button' onClick={() => setVersion(value => value + 1)}>Повторить загрузку</button></div>;
   if (!model) return <div className='building-load-state' role='status'><LoaderCircle className='building-spin' size={30}/><p>Строим схему объекта…</p></div>;
   const minFloors = Math.min(...model.sections.map(section => section.floors)), maxFloors = Math.max(...model.sections.map(section => section.floors));
   const activeFloor = viewedFloor;
   const floorOptions = [...(visibleSections.some(section => section.basement) ? [{ value: '-1', label: 'Подвал' }] : []), ...Array.from({ length: Math.max(1, ...visibleSections.map(section => section.floors)) }, (_, index) => ({ value: String(index + 1), label: `${index + 1} этаж` }))];
-  const contourX = model.footprint.map(point => point[0]), contourY = model.footprint.map(point => point[1]);
-  const contourBounds = model.footprint.length ? [Math.min(...contourX) - 10, Math.min(...contourY) - 10, Math.max(...contourX) - Math.min(...contourX) + 20, Math.max(...contourY) - Math.min(...contourY) + 20].join(' ') : '';
   return <div className='building-workspace'>
     <div className='building-main'>
-      <div className='building-toolbar'><div className='building-view-switch'><button type='button' className={view === 'scheme' ? 'active' : ''} onClick={() => setView('scheme')}><Layers3 size={17}/>Схема</button><button type='button' className={view === 'floor' ? 'active' : ''} onClick={() => setView('floor')}><Layers3 size={17}/>План этажа</button><button type='button' className={view === 'footprint' ? 'active' : ''} onClick={() => setView('footprint')}><Building2 size={17}/>Контур</button></div><BusinessSelect ariaLabel='Секция здания' value={activeSectionId} onChange={value => { setSectionId(value); setSelectedId(''); setZoom(1); }} options={[{ value: 'all', label: 'Все секции' }, ...model.sections.map(section => ({ value: section.id, label: section.label }))]} searchable portalMenu/><button className='building-icon-button building-edit-toggle' type='button' onClick={() => setEditing(value => !value)} aria-label='Изменить параметры здания' aria-expanded={editing}><Settings2 size={19}/></button></div>
-      <div className='building-meta'><span>{kindLabels[model.type]}</span><i/><span>{minFloors === maxFloors ? maxFloors : `${minFloors}–${maxFloors}`} эт.</span><i/><span>{model.sections.length} секц.</span>{model.year ? <><i/><span>{model.year} г.</span></> : null}<span className='building-source-chip'><span/>{editing ? 'Предпросмотр изменений' : model.dataClass === 'synthetic' ? 'Синтетическая модель' : model.source.kind === 'osm' ? 'OSM + синтетическая модель' : model.source.kind === 'operator' ? 'Уточнённая модель' : 'По параметрам объекта'}</span></div>
+      <div className='building-toolbar'><div className='building-view-switch'><button type='button' className={view === 'scheme' ? 'active' : ''} onClick={() => { setView('scheme'); setZoom(1); }}><Layers3 size={17}/>Схема</button><button type='button' className={view === 'floor' ? 'active' : ''} onClick={() => { setView('floor'); setZoom(1); }}><Layers3 size={17}/>План этажа</button></div><BusinessSelect ariaLabel='Секция здания' value={activeSectionId} onChange={value => { setSectionId(value); setSelectedId(''); setZoom(1); }} options={[{ value: 'all', label: 'Все секции' }, ...model.sections.map(section => ({ value: section.id, label: section.label }))]} searchable portalMenu/><button className='building-icon-button building-edit-toggle' type='button' onClick={() => setEditing(value => !value)} aria-label='Изменить параметры здания' aria-expanded={editing}><Settings2 size={19}/></button></div>
+      <div className='building-meta'><span>{kindLabels[model.type]}</span><i/><span>{minFloors === maxFloors ? maxFloors : `${minFloors}–${maxFloors}`} эт.</span><i/><span>{model.sections.length} секц.</span>{model.year ? <><i/><span>{model.year} г.</span></> : null}{editing ? <span className='building-source-chip'>Предпросмотр изменений</span> : null}</div>
       {view === 'floor' ? <div className='building-floor-toolbar'><BusinessSelect ariaLabel='Этаж на плане' value={String(activeFloor)} onChange={value => setFloor(Number(value))} options={floorOptions} searchable/><span>{model.sections.every(section => section.floorPlans.source === 'model') ? 'Демонстрационные планы помещений' : 'Планы по загруженным данным'}</span></div> : null}
-      <div className='building-stage' data-building-stage>
-        {view === 'scheme' ? <div className='building-canvas-scroll' ref={canvasRef}><BuildingCutaway model={model} assets={assets} selectedId={selected?.id} onSelect={id => { setSelectedId(id); setEditing(false); }} sectionId={activeSectionId} attentionIds={attentionIds} requestCounts={requestCounts} zoom={zoom}/></div> : view === 'floor' ? <div className='building-canvas-scroll' ref={canvasRef}><BuildingFloorPlan model={model} assets={assets} selectedId={selected?.id} onSelect={id => setSelectedId(id)} floor={activeFloor} sectionId={activeSectionId} zoom={zoom}/></div> : <div className='building-footprint-view'>{model.footprint.length ? <svg viewBox={contourBounds} aria-label='Контур здания из OpenStreetMap'><polygon points={points(model.footprint)} fill='#ffe99a' stroke='#aa8514' strokeWidth='.7'/></svg> : <><Building2 size={60}/><p>Точный контур здания пока не добавлен.</p><span>Схема строится по размерам секций.</span></>}<p>Контур участка здания{model.source.url ? <a href={model.source.url} target='_blank' rel='noreferrer'>Открыть в OpenStreetMap<ChevronRight size={15}/></a> : null}</p></div>}
-        {view === 'scheme' ? <BuildingPlan model={model} sectionId={activeSectionId} onSection={id => { setSectionId(id); setSelectedId(''); setZoom(1); }}/> : null}
-        {view !== 'footprint' ? <div className='building-zoom'><button type='button' className='building-icon-button' disabled={zoom <= .75} onClick={() => setZoom(value => Math.max(.75, value - .25))} aria-label='Уменьшить схему'><Minus size={17}/></button><span>{Math.round(zoom * 100)}%</span><button type='button' className='building-icon-button' disabled={zoom >= 3} onClick={() => setZoom(value => Math.min(3, value + .25))} aria-label='Увеличить схему'><Plus size={17}/></button><button type='button' className='building-icon-button' onClick={() => setZoom(1)} aria-label='Показать всю схему'><Expand size={17}/></button></div> : null}
+      <div className={`building-stage ${view === 'floor' ? 'is-floor-view' : ''}`} data-building-stage>
+        <div className='building-viewport'>
+          <div className='building-canvas-scroll' ref={canvasRef}>
+            {view === 'scheme' ? <BuildingCutaway model={model} assets={assets} selectedId={selected?.id} onSelect={id => { setSelectedId(id); setEditing(false); }} sectionId={activeSectionId} attentionIds={attentionIds} requestCounts={requestCounts} zoom={zoom}/> : <BuildingFloorPlan model={model} assets={assets} selectedId={selected?.id} onSelect={id => setSelectedId(id)} floor={activeFloor} sectionId={activeSectionId} zoom={zoom} attentionIds={attentionIds}/>}
+          </div>
+          {view === 'floor' ? <div className='building-floor-key'><span><i className='room'/>Помещения</span><span><i className='common'/>Общие зоны</span><span><i className='technical'/>Технические</span></div> : null}
+          <div className='building-zoom'><button type='button' className='building-icon-button' disabled={zoom <= .5} onClick={() => setZoom(value => Math.max(.5, value - .25))} aria-label='Уменьшить схему'><Minus size={17}/></button><span>{Math.round(zoom * 100)}%</span><button type='button' className='building-icon-button' disabled={zoom >= 4} onClick={() => setZoom(value => Math.min(4, value + .25))} aria-label='Увеличить схему'><Plus size={17}/></button><button type='button' className='building-icon-button' onClick={() => { setZoom(1); canvasRef.current?.scrollTo(0, 0); }} aria-label='Показать всю схему'><Expand size={17}/></button></div>
+        </div>
+        <BuildingNavigator model={model} sectionId={activeSectionId} currentSectionId={activeSectionId === 'all' ? selected?.sectionId : activeSectionId} sectionConditions={attention.sectionConditions} onSection={id => { setSectionId(id); setSelectedId(''); setZoom(1); canvasRef.current?.scrollTo(0, 0); }}/>
       </div>
       <div className='building-legend'><span><span className='building-legend-cabinet'/>Оборудование</span><span><i className='building-legend-line'/>Стояк</span><span><span className='building-legend-count'>1</span>Заявки</span><span><AlertCircle size={15} color='#d17b24'/>Особенности</span><span className='building-legend-note'>Внутреннее устройство и размещение условные</span></div>
       <details className='building-provenance'><summary><CircleHelp size={15}/>Источники данных и точность схемы<ChevronRight size={15}/></summary><div>{Object.values(model.provenance).map((label, index) => <p key={index}>{String(label)}</p>)}{model.source.url ? <a href={model.source.url} target='_blank' rel='noreferrer'>{payload.attribution.label} · {timestamp(payload.attribution.fetchedAt)}</a> : null}<p>Схема стояков и этажные коробки — модельные. Состояние сети в реальном времени не подключено.</p></div></details>
