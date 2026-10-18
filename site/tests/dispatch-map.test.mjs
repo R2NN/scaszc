@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { attachDispatchMap } from '../src/dispatchMap.js';
+import { publishDispatchMapEvent,createIncidentAnnouncer,savedDispatchFocus } from '../src/dispatchMapEvents.js';
 
-const setup = () => {
+const setup = ({preFocus = null,readyInitially = true} = {}) => {
   const sources = new Map(), layers = new Map(), handlers = new Map(), timers = new Map(), fits = [];
   const events = new EventTarget();
-  let ready = true, sequence = 0;
+  let ready = readyInitially, sequence = 0;
+  if (preFocus) publishDispatchMapEvent(events,'incident-focus',{coords:preFocus});
   const map = {
     isStyleLoaded:() => ready,
     getSource:id => sources.get(id),getLayer:id => layers.get(id),
@@ -19,14 +21,56 @@ const setup = () => {
     on:(event,fn) => handlers.set(event,fn),once:(event,fn) => handlers.set(event,fn),
     off(event,fn) {if(handlers.get(event)===fn)handlers.delete(event);},
   };
-  const markerFactory=()=>({setLngLat(){return this;},addTo(){return this;},remove(){}});
+  const markers=[];
+  const markerFactory=element=>{const marker={element,setLngLat(coords){this.coords=coords;return this;},addTo(){return this;},remove(){this.removed=true;}};markers.push(marker);return marker;};
   const cleanup = attachDispatchMap(map,{events,dom:{querySelector:() => null,createElement:()=>({setAttribute(){}})},markerFactory,schedule:fn => {timers.set(++sequence,fn);return sequence;},cancel:id => timers.delete(id)});
   const fire = (type,detail) => events.dispatchEvent(new CustomEvent(`beego:${type}`,{detail}));
   const loaded = event => {ready=true;const fn=handlers.get(event);if(event==='idle')handlers.delete(event);fn?.();};
   const after = {routes:[{engineerId:'E',assignments:[{orderId:'U',departureAt:'11:17',arrival:'11:38',plannedStart:'11:38',geometry:[[55.7,37.6],[55.71,37.61]]}]}]};
   const preview = {before:{routes:[]},after,ids:['E'],scope:'day',focusRoute:false,current:{engineerId:'E',time:'11:17',emergencyOrderId:'U'}};
-  return {map,sources,layers,handlers,timers,fits,fire,loaded,preview,cleanup};
+  return {map,sources,layers,handlers,timers,fits,fire,loaded,preview,cleanup,markers,events};
 };
+
+test('a newly received emergency marks and focuses the map before any notification click, once per incident',()=>{
+  const f=setup();
+  try{
+    const announce=createIncidentAnnouncer(f.events);
+    const incident={id:'I',status:'SEARCHING',order:{coords:[55.71,37.61]}};
+    announce([incident]);
+    assert.deepEqual(f.markers.at(-1).coords,[37.61,55.71]);
+    assert.equal(f.markers.at(-1).element.className,'dispatch-map-incident');
+    assert.deepEqual(f.fits.at(-1)[0],[[37.61,55.71],[37.61,55.71]]);
+    const count=f.fits.length;
+    announce([{...incident,status:'WAITING'}]);
+    assert.equal(f.fits.length,count,'Polling must not keep recentering the camera');
+    announce([{id:'accepted',status:'ACCEPTED',order:{coords:[55,37]}}]);
+    assert.equal(f.fits.length,count);
+    publishDispatchMapEvent(f.events,'clear');
+    assert.equal(savedDispatchFocus(f.events),undefined);
+    assert.equal(f.markers.at(-1).removed,true);
+  }finally{f.cleanup();}
+});
+
+test('incident focus received before map readiness is retained and restored after style loading',()=>{
+  const f=setup({preFocus:[55.71,37.61],readyInitially:false});
+  try{
+    assert.equal(f.markers.length,1);
+    assert.equal(f.fits.length,0);
+    f.loaded('style.load');
+    assert.deepEqual(f.fits.at(-1)[0],[[37.61,55.71],[37.61,55.71]]);
+    f.loaded('idle');
+    assert.deepEqual(f.fits.at(-1)[0],[[37.61,55.71],[37.61,55.71]]);
+  }finally{f.cleanup();publishDispatchMapEvent(f.events,'clear');}
+});
+
+test('selecting an alternative displays the emergency marker even if its opening notification was missed',()=>{
+  const f=setup();
+  try{
+    f.fire('dispatch-preview',{...f.preview,focusRoute:true,current:{...f.preview.current,emergencyCoords:[55.75,37.65]}});
+    assert.deepEqual(f.markers[0].coords,[37.65,55.75]);
+    assert.equal(f.markers[0].element.className,'dispatch-map-incident');
+  }finally{f.cleanup();}
+});
 
 for (const scope of ['day','next']) test(`${scope} scope retains the engineer checkpoint and emergency even when neither is a route endpoint`,()=>{
   const f=setup();

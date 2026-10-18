@@ -1,3 +1,4 @@
+import { createIncidentAnnouncer, publishDispatchMapEvent } from './dispatchMapEvents.js';
 import { createDispatchClockSync } from './dispatchClockSync.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, Clock3, Route, RotateCcw, X } from 'lucide-react';
@@ -26,6 +27,8 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   refs.current = { shift, onApply, notify, onOpen };
   const notified = useRef(new Set()), initialized = useRef(''), clockSync = useRef(null);
   const [serverOffset, setServerOffset] = useState(0);
+  const announcer = useRef(null);
+  const announce = items => {announcer.current ||= createIncidentAnnouncer(window);announcer.current(items);};
   useEffect(() => {
     if (!shift?.id || shift.regionId.includes(':scenario:') || initialized.current === shift.id) return;
     initialized.current = shift.id;
@@ -66,6 +69,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
         if (value.clock && clockSync.current && !clockSync.current.apply(value.clock)) return;
         setServerOffset(value.serverNow-Date.now());
         setIncidents(value.incidents);
+        announce(value.incidents);
         for (const incident of value.incidents) {
           for (const notice of incident.notifications) {
             if (notified.current.has(notice.id)) continue;
@@ -87,7 +91,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     if (!shift?.regionId.includes(':scenario:')) return;
     const bridge = createDispatchClockSync({clock:shiftClock,
       send:snapshot => api(`shifts/${shift.id}/clock`,snapshot),
-      onValue:value => setIncidents(value.incidents || []),onError:e => setError(e.message)});
+      onValue:value => {setIncidents(value.incidents || []);announce(value.incidents || []);},onError:e => setError(e.message)});
     clockSync.current = bridge;
     return () => {bridge.close();if (clockSync.current === bridge) clockSync.current=null;};
   }, [shift?.id]);
@@ -103,8 +107,8 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
         refs.current.onApply(saved);
       }
       setSelectedId(id); setCandidateId(''); setRouteScope('day'); refs.current.onOpen(item,saved);
-      window.dispatchEvent(new CustomEvent('beego:dispatch-clear'));
-      requestAnimationFrame(()=>window.dispatchEvent(new CustomEvent('beego:incident-focus', { detail: { coords: item.order.coords } })));
+      publishDispatchMapEvent(window,'clear');
+      requestAnimationFrame(()=>publishDispatchMapEvent(window,'incident-focus',{coords:item.order.coords}));
     } catch (e) {setError(e.message);}
   };
   const preview = (candidate, scope = routeScope, engineerId = candidate.engineer.id, focusRoute = true) => {
@@ -135,7 +139,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   const startSession = async () => {
     try {
       const value = await api('sessions', { baseShiftId: session?.baseShiftId || shift.id, speed: shiftClock.getSnapshot().speed });
-      window.dispatchEvent(new CustomEvent('beego:dispatch-clear'));
+      publishDispatchMapEvent(window,'clear');
       sessionStorage.setItem(`beego-dispatch-session:${session?.baseShiftId || shift.id}`, 'active');
       setSession(value); setSelectedId(''); setCandidateId(''); setRouteScope('day'); setIncidents([]); refs.current.onApply(value.shift);
       shiftClock.set({ minute:360, playing:false, speed:value.clock.speed, awaitingDecision:false, selectedEngineerId:'', follow:false });

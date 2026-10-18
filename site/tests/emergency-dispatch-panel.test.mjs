@@ -27,7 +27,7 @@ test('notification actions occupy their own row before and after reading; playba
     assert.match(html,/<span>1<\/span>/);assert.doesNotMatch(html,/×30/);
     shiftClock.set({minute:600,speed:1,playing:false,awaitingDecision:true});
     const bar=renderToStaticMarkup(React.createElement(ShiftPlaybackBar));
-    assert.match(bar,/×1/);assert.match(bar,/Ожидаем решения · реальное время ×1/);
+    assert.match(bar,/×1/);assert.doesNotMatch(bar,/Ожидаем решения|shift-decision-wait/);
     assert.match(bar,/disabled="" aria-label="Скорость воспроизведения"/);
     shiftClock.set({awaitingDecision:false,speed:60});
   }finally{await server.close();}
