@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ShiftStore } from '../server/shiftStore.mjs';
 import { calculateDuration, DEFAULT_MODEL, WORK_RULES } from '../server/durationModel.mjs';
@@ -133,7 +133,7 @@ test('immutable snapshots, manual override reasons, and server plan receipts rej
 });
 
 test('SQLite migration, immutable history revisions, restart and model versioning preserve old forecasts', () => {
-  const directory = mkdtempSync(fileURLToPath(new URL('../../runtime/qa/migration-', import.meta.url)));
+  const directory = mkdtempSync(join(tmpdir(), 'beego-migration-'));
   const file = join(directory, 'shifts.sqlite3');
   let store = new ShiftStore(file);
   const original = store.complexity.prepareOrders([order], at)[0];

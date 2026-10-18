@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'vite';
 
 test('parallel SSR imports do not open or seed a shared operational SQLite file', async () => {
-  const directory = await mkdtemp(fileURLToPath(new URL('../../runtime/qa/ssr-db-', import.meta.url)));
+  const directory = await mkdtemp(path.join(tmpdir(), 'beego-ssr-db-'));
   const file = path.join(directory, 'must-not-be-created.sqlite3');
   const original = process.env.BEEGO_DB_PATH;
   process.env.BEEGO_DB_PATH = file;

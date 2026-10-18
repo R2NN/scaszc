@@ -19,7 +19,9 @@ runtime/baseline
 runtime/candidate*
 data/original_extract
 data/screening
-data/traffic4cast
+data/traffic4cast/*
+!data/traffic4cast/moscow-2019.json
+!data/traffic4cast/moscow-2019.bin
 data/transit/*.sqlite
 algorithm/work
 source_materials

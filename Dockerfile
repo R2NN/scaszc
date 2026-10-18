@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates python3 python3-pip python3-venv build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 WORKDIR /app
 
 COPY algorithm/requirements-full.txt algorithm/requirements-full.txt
@@ -20,6 +20,7 @@ COPY algorithm algorithm
 COPY data/dataset data/dataset
 COPY data/object-complexity data/object-complexity
 COPY data/transit data/transit
+COPY data/traffic4cast data/traffic4cast
 COPY runtime runtime
 COPY site site
 RUN cd site && pnpm run build \

@@ -1,0 +1,144 @@
+{
+  "regionId": "moscow",
+  "planningDate": "2026-08-18",
+  "orders": [
+    {
+      "id": "READY-NEW-JOB-1",
+      "sourceId": "READY-NEW-JOB-1",
+      "name": "Новая проверочная заявка 1",
+      "address": "Город Москва, пр-кт.Волгоградский, д. 128 к 5",
+      "coords": [
+        55.700846,
+        37.7822191
+      ],
+      "start": "10:00",
+      "end": "18:00",
+      "duration": 30,
+      "priority": "NORMAL",
+      "workType": "Локальные работы",
+      "skill": "LOCAL",
+      "equipment": "DIAG_SET",
+      "transport": "ANY",
+      "zone": "Восток",
+      "zoneId": "EAST",
+      "regionId": "moscow",
+      "status": "PENDING"
+    },
+    {
+      "id": "READY-NEW-JOB-2",
+      "sourceId": "READY-NEW-JOB-2",
+      "name": "Новая проверочная заявка 2",
+      "address": "Город Москва, пер.Маяковского, д. 2",
+      "coords": [
+        55.7397743,
+        37.6599082
+      ],
+      "start": "10:00",
+      "end": "18:00",
+      "duration": 30,
+      "priority": "NORMAL",
+      "workType": "Локальные работы",
+      "skill": "LOCAL",
+      "equipment": "DIAG_SET",
+      "transport": "ANY",
+      "zone": "Восток",
+      "zoneId": "EAST",
+      "regionId": "moscow",
+      "status": "PENDING"
+    },
+    {
+      "id": "READY-NEW-JOB-3",
+      "sourceId": "READY-NEW-JOB-3",
+      "name": "Новая проверочная заявка 3",
+      "address": "Город Москва, ул.Грайвороновская, д. 10 к 2",
+      "coords": [
+        55.7183547,
+        37.7319259
+      ],
+      "start": "10:00",
+      "end": "18:00",
+      "duration": 30,
+      "priority": "NORMAL",
+      "workType": "Локальные работы",
+      "skill": "LOCAL",
+      "equipment": "DIAG_SET",
+      "transport": "ANY",
+      "zone": "Восток",
+      "zoneId": "EAST",
+      "regionId": "moscow",
+      "status": "PENDING"
+    },
+    {
+      "id": "READY-NEW-JOB-4",
+      "sourceId": "READY-NEW-JOB-4",
+      "name": "Новая проверочная заявка 4",
+      "address": "Город Москва, ул.Михайлова, д. 14",
+      "coords": [
+        55.7270299,
+        37.7659603
+      ],
+      "start": "10:00",
+      "end": "18:00",
+      "duration": 30,
+      "priority": "NORMAL",
+      "workType": "Локальные работы",
+      "skill": "LOCAL",
+      "equipment": "DIAG_SET",
+      "transport": "ANY",
+      "zone": "Восток",
+      "zoneId": "EAST",
+      "regionId": "moscow",
+      "status": "PENDING"
+    }
+  ],
+  "engineers": [
+    {
+      "id": "READY-NEW-ENG-1",
+      "sourceId": "READY-NEW-ENG-1",
+      "name": "Проверочный инженер 1",
+      "skills": [
+        "LOCAL"
+      ],
+      "shiftStart": "10:00",
+      "shiftEnd": "22:00",
+      "transport": "CAR",
+      "equipment": [
+        "DIAG_SET"
+      ],
+      "startAddress": "Москва, Юных Ленинцев улица, 83к4",
+      "startCoords": [
+        55.7022013,
+        37.7739593
+      ],
+      "zone": "Восток",
+      "zoneId": "EAST",
+      "regionId": "moscow",
+      "status": "Доступен сегодня"
+    },
+    {
+      "id": "READY-NEW-ENG-2",
+      "sourceId": "READY-NEW-ENG-2",
+      "name": "Проверочный инженер 2",
+      "skills": [
+        "LOCAL"
+      ],
+      "shiftStart": "10:00",
+      "shiftEnd": "22:00",
+      "transport": "PUBLIC_TRANSIT",
+      "equipment": [
+        "DIAG_SET"
+      ],
+      "startAddress": "Москва, Юных Ленинцев улица, 83к4",
+      "startCoords": [
+        55.7022013,
+        37.7739593
+      ],
+      "zone": "Восток",
+      "zoneId": "EAST",
+      "regionId": "moscow",
+      "status": "Доступен сегодня"
+    }
+  ],
+  "sharedInventory": [],
+  "recompute": true
+}
