@@ -43,3 +43,19 @@ def test_archive_cannot_escape_checkout(tmp_path):
 @pytest.mark.parametrize('path',['/tmp/escape','../escape','C:/escape','folder\\escape'])
 def test_portable_paths_reject_absolute_and_parent_targets(tmp_path,path):
  with pytest.raises(ValueError):runtime.inside(tmp_path,path)
+
+
+def test_docker_staging_preserves_public_index_identity_and_excludes_operations(tmp_path):
+ root,bundle,_=fixture(tmp_path);runtime.install(root,bundle)
+ for suffix in ['.manifest.json','.surface_walk_transfers.json','.walk_transfers.json']:
+  (root/('data/transit/moscow_2026-08-17'+suffix)).write_text('{}')
+ (root/'site/.beego-data').mkdir(parents=True);(root/'site/.beego-data/private.sqlite').write_bytes(b'private')
+ roads,transit,sources=[tmp_path/name for name in ['roads','transit','sources']]
+ runtime.stage_docker_resources(root,roads,transit,sources)
+ original=root/runtime.TARGETS['transit-index'];copy=transit/original.name
+ assert copy.read_bytes()==original.read_bytes()
+ assert copy.stat().st_mtime_ns==original.stat().st_mtime_ns
+ assert (sources/'gtfs/routes.txt').read_bytes()==b'route_id\nR1\n'
+ assert not list(tmp_path.glob('roads/**/private.sqlite'))
+ before=copy.stat().st_mtime_ns;runtime.stage_docker_resources(root,roads,transit,sources)
+ assert copy.stat().st_mtime_ns==before

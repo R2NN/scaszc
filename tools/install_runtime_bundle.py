@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -137,10 +138,38 @@ def install(root, bundle):
     print(json.dumps({'status':'READY','runtime':manifest['id'],'operationalDatabasesCopied':False}),flush=True)
     return manifest
 
+def stage_docker_resources(root, roads, transit, sources):
+    """Use Linux volumes for mmap/SQLite reads; Windows bind mounts are much slower."""
+    def copy(source, destination):
+        if source.is_symlink(): raise ValueError('Symlinks are not public runtime files')
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.is_file() and source.stat().st_size == destination.stat().st_size and digest(source) == digest(destination):
+            os.utime(destination, ns=(source.stat().st_atime_ns, source.stat().st_mtime_ns)); return
+        with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as temp:
+            temporary = Path(temp.name)
+        try:
+            shutil.copy2(source, temporary)
+            if digest(source) != digest(temporary): raise ValueError('Docker routing copy checksum mismatch')
+            os.replace(temporary, destination)
+        finally:
+            if temporary.exists(): temporary.unlink()
+    copy(root / TARGETS['roads'], roads / 'valhalla_tiles.tar')
+    for suffix in ['.sqlite', '.manifest.json', '.surface_walk_transfers.json', '.walk_transfers.json']:
+        copy(root / ('data/transit/moscow_2026-08-17' + suffix), transit / ('moscow_2026-08-17' + suffix))
+    source_root = root / 'offline-assets/transit-sources'
+    for directory in ['gtfs', 'metro', 'rail']:
+        for source in sorted((source_root / directory).rglob('*')):
+            if source.is_file(): copy(source, sources / source.relative_to(source_root))
+    print('Docker Linux routing volumes: copied and verified (no operational database)', flush=True)
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__); parser.add_argument('--root', type=Path, default=ROOT); parser.add_argument('--bundle', type=Path)
+    parser.add_argument('--stage-docker-volumes', action='store_true')
     args = parser.parse_args(); root = args.root.resolve(); bundle = (args.bundle or root/'data/runtime-bundle').resolve()
-    try: install(root,bundle)
+    try:
+        install(root,bundle)
+        if args.stage_docker_volumes:
+            stage_docker_resources(root, Path('/portable-roads'), Path('/portable-transit'), Path('/portable-sources'))
     except (OSError, ValueError, sqlite3.Error, tarfile.TarError, subprocess.CalledProcessError) as issue:
         print(json.dumps({'status':'UNAVAILABLE','error':str(issue)}),flush=True); return 2
     return 0

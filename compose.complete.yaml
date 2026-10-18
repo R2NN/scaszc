@@ -6,7 +6,10 @@ services:
     working_dir: /workspace
     volumes:
       - .:/workspace
-    command: [python, tools/install_runtime_bundle.py]
+      - complete-roads:/portable-roads
+      - complete-transit:/portable-transit
+      - complete-sources:/portable-sources
+    command: [python, tools/install_runtime_bundle.py, --stage-docker-volumes]
     restart: 'no'
 
   valhalla:
@@ -16,7 +19,7 @@ services:
         condition: service_completed_successfully
     entrypoint: [python3, /opt/beego/start-valhalla.py]
     volumes:
-      - ./docker-data/valhalla:/custom_files:ro
+      - complete-roads:/custom_files:ro
       - ./runtime/start_complete_valhalla.py:/opt/beego/start-valhalla.py:ro
     healthcheck:
       test: [CMD, curl, --fail, --silent, http://127.0.0.1:8002/status]
@@ -47,8 +50,8 @@ services:
       - complete-runs:/app/runtime/ui-runs
       - complete-cache:/app/runtime/ui-shared-cache
       - complete-replans:/app/runtime/exact-replans
-      - ./data/transit:/app/data/transit:ro
-      - ./offline-assets/transit-sources:/app/offline-assets/transit-sources:ro
+      - complete-transit:/app/data/transit:ro
+      - complete-sources:/app/offline-assets/transit-sources:ro
     healthcheck:
       test: [CMD, node, -e, 'fetch("http://127.0.0.1:8787/api/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
       interval: 10s
@@ -60,3 +63,6 @@ volumes:
   complete-runs:
   complete-cache:
   complete-replans:
+  complete-roads:
+  complete-transit:
+  complete-sources:
