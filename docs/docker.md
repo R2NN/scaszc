@@ -1,3 +1,5 @@
+> Для ветки `codex/beego-complete-runtime` актуальный запуск на новом устройстве и промпт агенту находятся в [RUN-COMPLETE.md](RUN-COMPLETE.md). Используйте `compose.complete.yaml`; инструкции ниже описывают прежний этап/ручную конфигурацию.
+
 # Локальный запуск через Docker
 
 [Документация](README.md) · [Главный README](../README.md) · [Лицензии компонентов](../THIRD_PARTY_LICENSES.md)

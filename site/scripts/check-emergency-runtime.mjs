@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
-const base=process.env.BEEGO_QA_URL || 'http://127.0.0.1:4190';
+const base=process.env.BEEGO_QA_URL || 'http://127.0.0.1:4191';
 if(!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(base)||process.env.BEEGO_QA_ISOLATED!=='1')throw new Error('Use an isolated local database and BEEGO_QA_ISOLATED=1.');
 const request=async(url,input)=>{const response=await fetch(base+url,{method:input?'POST':'GET',headers:{'content-type':'application/json'},body:input?JSON.stringify(input):undefined,signal:AbortSignal.timeout(960000)});const value=await response.json();if(!response.ok)throw new Error(JSON.stringify(value));return value;};
 const readiness=await request('/api/runtime/readiness');assert.equal(readiness.ready,true,JSON.stringify(readiness));
