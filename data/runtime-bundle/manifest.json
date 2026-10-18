@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "id": "moscow-runtime-2026-10-19",
+  "description": "Public road graph, original transit sources and SQL source export of the canonical timetable index; no operational SQLite, credentials or route substitutions.",
+  "resources": [
+    {
+      "id": "roads",
+      "kind": "file",
+      "target": "docker-data/valhalla/valhalla_tiles.tar",
+      "bytes": 959170560,
+      "contentSha256": "709bef746203824171d416c7c3c9e960b10a7bef22453b130ab400df58dfa2b6",
+      "parts": [
+        {
+          "file": "roads.part-000",
+          "bytes": 41943040,
+          "sha256": "add2249fdaefcba7f29fb57ebab43af1e91c4033a8ec7821b2d7e3df6d717ceb"
+        },
+        {
+          "file": "roads.part-001",
+          "bytes": 41943040,
+          "sha256": "d4a2b102bc31098810b27136e0cb69a3e45593ddb71e740cc86064e5e7baac2f"
+        },
+        {
+          "file": "roads.part-002",
+          "bytes": 41943040,
+          "sha256": "3f54c134df410d94333e17f25e680784ebae1a07a1807027bc1c4aa7e3caf590"
+        },
+        {
+          "file": "roads.part-003",
+          "bytes": 41943040,
+          "sha256": "459d125f9f8043d7bae349330a2a0e1b36c36c42df0c7035fbf54e752ede3690"
+        },
+        {
+          "file": "roads.part-004",
+          "bytes": 41943040,
+          "sha256": "97b2f8e9de32d0b5295e4d2570295d44f349deb86b84bb946e7ea276e2a23fab"
+        },
+        {
+          "file": "roads.part-005",
+          "bytes": 41943040,
+          "sha256": "3e35da883a8c96381833269f0d2b01da27519d13a8a71e75806517dd4726a739"
+        },
+        {
+          "file": "roads.part-006",
+          "bytes": 41943040,
+          "sha256": "8aeb08cab0227a3af81f51e9a457e9b26f8a5ef5e3000ba24a78df686d7ebb03"
+        },
+        {
+          "file": "roads.part-007",
+          "bytes": 41943040,
+          "sha256": "bdb68cdbe813f94c7b77ffd7cc70098061d32d0bbbcc0ed676af05a98be2d11f"
+        },
+        {
+          "file": "roads.part-008",
+          "bytes": 35237444,
+          "sha256": "f350de701dfe11cb53f656f90c6abf8452a767c72879446007833219348b664c"
+        }
+      ],
+      "compressedBytes": 370781764,
+      "sha256": "3bc9942da337827d4c49d51cad6a769ded3b7e0d2d810c11fbe8b29014a8e98e",
+      "mtime": 1789568206
+    },
+    {
+      "id": "transit-index",
+      "kind": "sqlite-sql",
+      "target": "data/transit/moscow_2026-08-17.sqlite",
+      "bytes": 292152291,
+      "contentSha256": "22cd549ec3e79654ecbdf24887aea7a9929dcc85949c217f89155f034204c3b7",
+      "tableCounts": {
+        "stops": 18338,
+        "trips": 74547,
+        "connections": 1699050,
+        "transfers": 342,
+        "metadata": 23,
+        "network_station_ids": 448,
+        "metro_paths": 77006,
+        "walk_transfers": 16763
+      },
+      "parts": [
+        {
+          "file": "transit-index.part-000",
+          "bytes": 19898359,
+          "sha256": "002cce005ba87359da251fb9b75a27954230ef04a7cdb7e67e9eff76b8eda59f"
+        }
+      ],
+      "compressedBytes": 19898359,
+      "sha256": "002cce005ba87359da251fb9b75a27954230ef04a7cdb7e67e9eff76b8eda59f",
+      "sourceDatabaseSha256": "4f0351e28bf490038a1edcb11f9d87b76bdd79a05b753b5cd5fe6e96681abd00"
+    },
+    {
+      "id": "transit-sources",
+      "kind": "tar",
+      "target": ".",
+      "parts": [
+        {
+          "file": "transit-sources.part-000",
+          "bytes": 41943040,
+          "sha256": "cebcc05114a8b4efaa7cbb840d5e814ac984a789b2a72954fbcef5f5728a0c9d"
+        },
+        {
+          "file": "transit-sources.part-001",
+          "bytes": 26745878,
+          "sha256": "3d5bda3049915544a253dea7b5fe6b688206a037ccdbadfb856e3fbe8febd79f"
+        }
+      ],
+      "compressedBytes": 68688918,
+      "sha256": "013edf985994bc61a70b42e744525646b64d6aa42e29ca30c2225f6fb37e11b2"
+    }
+  ],
+  "provenance": {
+    "roads": "Existing Moscow OSM/Valhalla graph, Valhalla 3.8.3; attribution in THIRD_PARTY_LICENSES.md",
+    "transit": "Original GTFS and Moscow metro schema, canonical 2026-08-17 index and independently measured walk transfers; provenance in data/transit/moscow_2026-08-17.manifest.json",
+    "rail": "Existing checksummed weekly-rail-snapshots-2026-09-29.zip in Git"
+  }
+}

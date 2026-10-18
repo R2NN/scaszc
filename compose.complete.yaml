@@ -1,0 +1,62 @@
+# A complete checkout contains the exact road graph and portable transit sources.
+# Only Git and Docker Compose are required on the host.
+services:
+  runtime-setup:
+    image: python:3.13-slim
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: [python, tools/install_runtime_bundle.py]
+    restart: 'no'
+
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted@sha256:bc7c22f054c26effa5222a55a9d7a840369f254d314989f9040505342dc7ab84
+    depends_on:
+      runtime-setup:
+        condition: service_completed_successfully
+    entrypoint: [python3, /opt/beego/start-valhalla.py]
+    volumes:
+      - ./docker-data/valhalla:/custom_files:ro
+      - ./runtime/start_complete_valhalla.py:/opt/beego/start-valhalla.py:ro
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://127.0.0.1:8002/status]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  app:
+    build: .
+    init: true
+    depends_on:
+      runtime-setup:
+        condition: service_completed_successfully
+      valhalla:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:${BEEGO_HTTP_PORT:-8787}:8787'
+    environment:
+      VALHALLA_ROUTE_ENDPOINT: http://valhalla:8002/route
+      GEOAPIFY_API_KEY: ${GEOAPIFY_API_KEY:-}
+      YANDEX_AI_API_KEY: ${YANDEX_AI_API_KEY:-}
+      YANDEX_AI_FOLDER_ID: ${YANDEX_AI_FOLDER_ID:-}
+      YANDEX_RASP_API_KEY: ${YANDEX_RASP_API_KEY:-}
+    volumes:
+      - complete-db:/app/site/.beego-data
+      - complete-runs:/app/runtime/ui-runs
+      - complete-cache:/app/runtime/ui-shared-cache
+      - complete-replans:/app/runtime/exact-replans
+      - ./data/transit:/app/data/transit:ro
+      - ./offline-assets/transit-sources:/app/offline-assets/transit-sources:ro
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:8787/api/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 10s
+      timeout: 10s
+      start_period: 30s
+    restart: unless-stopped
+volumes:
+  complete-db:
+  complete-runs:
+  complete-cache:
+  complete-replans:

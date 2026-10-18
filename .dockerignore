@@ -33,3 +33,7 @@ valhalla-data
 credentials
 *.env
 !site/.dev.vars.example
+# Runtime resources are installed by the setup container through its checkout mount.
+data/runtime-bundle
+
+runtime/runtime-installation.json

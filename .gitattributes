@@ -58,3 +58,5 @@ source_materials/prepared_dataset/README.md text eol=crlf
 source_materials/prepared_dataset/stress/dataset.json text eol=crlf
 source_materials/prepared_dataset/stress/shared_inventory.csv text eol=crlf
 source_materials/prepared_dataset/validation_report.json text eol=crlf
+# Checksummed compressed runtime resource parts must remain byte-identical.
+data/runtime-bundle/*.part-* -text

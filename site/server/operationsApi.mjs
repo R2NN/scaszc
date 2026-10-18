@@ -1,3 +1,4 @@
+import { planningRuntimeStatus } from './runtimeReadiness.mjs';
 import { ShiftStore } from './shiftStore.mjs';
 import { eventModel, normalizeDataAdditionEvent } from '../src/shiftDomain.js';
 import { exactShiftReplan } from './exactShiftReplan.mjs';
@@ -49,6 +50,7 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
   async function handle(request) {
     await seedPromise;
     const url = new URL(request.url);
+    if (url.pathname === '/api/runtime/readiness' && request.method === 'GET') return json(await planningRuntimeStatus());
     if (url.pathname.startsWith('/api/ratings/')) return ratingApi(request);
     const incidentResponse = await dispatchApi.handle(request);
     if (incidentResponse) return incidentResponse;

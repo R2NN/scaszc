@@ -18,7 +18,8 @@
     "test:algorithm": "node scripts/verify-algorithm-integration.mjs",
     "test:analytics-history": "node --test tests/analytics-history.test.mjs tests/analytics-insights.test.mjs tests/analytics-advanced.test.mjs tests/ml-demand-forecast.test.mjs",
     "test:ml-forecast": "node --test tests/ml-demand-forecast.test.mjs",
-    "test:map": "node --test tests/map-design.test.mjs"
+    "test:map": "node --test tests/map-design.test.mjs",
+    "doctor": "node scripts/check-runtime.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "5.0.4",
