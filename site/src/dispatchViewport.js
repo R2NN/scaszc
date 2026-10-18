@@ -1,5 +1,22 @@
 const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 
+const textContexts = new WeakMap();
+const labelClearance = (dom, labels) => {
+  if (!textContexts.has(dom)) textContexts.set(dom,dom.createElement?.('canvas')?.getContext?.('2d') || null);
+  const context = textContexts.get(dom);
+  let horizontal = 0, top = 0;
+  for (const {text,size,maxWidth,offset,halo} of labels) {
+    if (!text) continue;
+    if (context) context.font = `${size}px "Open Sans", "Arial Unicode MS", sans-serif`;
+    const measured = context?.measureText(String(text)).width ?? [...String(text)].length * size;
+    const width = Math.min(measured,maxWidth*size);
+    const lines = Math.max(1,Math.ceil(measured/(maxWidth*size)));
+    horizontal = Math.max(horizontal,width/2+halo+12);
+    top = Math.max(top,lines*size*1.2+offset*size+halo+12);
+  }
+  return {horizontal,top};
+};
+
 /** Find the largest visible rectangle between the actual panel/control footprints. */
 export function dispatchViewport(bounds, obstacles, clearance = {left:36,right:80,top:56,bottom:36}) {
   const clipped = obstacles.filter(box => box && box.width !== 0 && box.height !== 0 && intersects(bounds,box))
@@ -18,12 +35,21 @@ export function dispatchViewport(bounds, obstacles, clearance = {left:36,right:8
 }
 
 /** Measure rendered BeeGo surfaces, retaining room for marker rings and stop labels. */
-export function measureDispatchViewport(map, dom) {
-  const bounds = map.getContainer().getBoundingClientRect();
+export function measureDispatchViewport(map, dom, labels = []) {
+  const container = map.getContainer(), screen = container.getBoundingClientRect();
+  // MapLibre sizes its camera from clientWidth/clientHeight, while DOM rects
+  // include the app's CSS zoom. Never use the canvas bitmap size (device DPR).
+  const width = container.clientWidth || screen.width, height = container.clientHeight || screen.height;
+  if (!(width > 0 && height > 0 && screen.width > 0 && screen.height > 0)) return null;
+  const x = width/screen.width, y = height/screen.height;
+  const bounds = {left:0,top:0,right:width,bottom:height,width,height};
+  const local = box => ({left:(box.left-screen.left)*x,right:(box.right-screen.left)*x,
+    top:(box.top-screen.top)*y,bottom:(box.bottom-screen.top)*y,width:box.width*x,height:box.height*y});
   const selectors = ['.sidebar','.shift-panel','.orders-panel','.map-control-stack','.shift-timeline','.minimal-topbar .date-switch','.map-theme-picker','.map-hierarchy-panel'];
   const boxes = selectors.flatMap(selector => [...(dom.querySelectorAll?.(selector) || [dom.querySelector(selector)].filter(Boolean))]
-    .filter(element => element.getClientRects?.().length !== 0).map(element => element.getBoundingClientRect()));
-  const markerBoxes = ['.dispatch-map-incident','.dispatch-map-origin'].flatMap(selector => [...(dom.querySelectorAll?.(selector) || [])].map(element => element.getBoundingClientRect()));
+    .filter(element => element.getClientRects?.().length !== 0).map(element => local(element.getBoundingClientRect())));
+  const markerBoxes = ['.dispatch-map-incident','.dispatch-map-origin'].flatMap(selector => [...(dom.querySelectorAll?.(selector) || [])].map(element => local(element.getBoundingClientRect())));
   const radius = Math.max(24,...markerBoxes.map(box => Math.max(box.width,box.height)/2+10));
-  return dispatchViewport(bounds,boxes,{left:radius+12,right:Math.max(80,radius+12),top:Math.max(56,radius+28),bottom:radius+12});
+  const text = labelClearance(dom,labels);
+  return dispatchViewport(bounds,boxes,{left:Math.max(radius+12,text.horizontal),right:Math.max(80,radius+12,text.horizontal),top:Math.max(56,radius+28,text.top),bottom:radius+12});
 }

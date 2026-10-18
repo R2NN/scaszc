@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Marker } from 'maplibre-gl';
 import { renderDispatchRoutes, renderDispatchImpact, renderDispatchHighlight } from './dispatchComparison.js';
 import { measureDispatchViewport } from './dispatchViewport.js';
+import { DISPATCH_STOP_LABEL, DISPATCH_IMPACT_LABEL } from './dispatchLabelStyle.js';
 
 /** Draw a comparison on the existing map, starting both lines at the current position. */
 export function attachDispatchMap(map, {events = window, dom = document, markerFactory = element => new Marker({element}), schedule = setTimeout, cancel = clearTimeout} = {}) {
@@ -12,6 +13,7 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
   let impactNeedsFocus = false;
   let routeNeedsFocus = false;
   let latestPreview;
+  let routeLabels = [];
   let incidentCoords;
   const hiddenLayers = new Map();
   const hideBackgroundRoutes = () => {
@@ -34,6 +36,7 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
   };
   const clear = () => {
     latestPreview = null;
+    routeLabels = [];
     incidentCoords = null;
     map.off('idle', restore);
     cancel(highlightTimer);
@@ -62,6 +65,7 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
       return;
     }
     const rendered = renderDispatchRoutes(map, latestPreview);
+    routeLabels = [rendered.before,rendered.after].flatMap(data => data.features.filter(feature => !feature.properties.movement).map(feature => ({...DISPATCH_STOP_LABEL,text:feature.properties.label})));
     hideBackgroundRoutes();
     renderDispatchImpact(map, impactFeatures);
     if (impactNeedsFocus) {
@@ -94,7 +98,7 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
     const anchors = [latestPreview?.current?.origin,latestPreview?.current?.emergencyCoords || incidentCoords].filter(Boolean).map(([lat,lon]) => [lon,lat]);
     const visible = [...points,...anchors];
     if (!visible.length) return;
-    const padding = measureDispatchViewport(map,dom);
+    const padding = measureDispatchViewport(map,dom,[...routeLabels,...impactFeatures.map(feature => ({...DISPATCH_IMPACT_LABEL,text:feature.properties.address}))]);
     if (!padding) return;
     map.fitBounds([[Math.min(...visible.map(p => p[0])),Math.min(...visible.map(p => p[1]))],[Math.max(...visible.map(p => p[0])),Math.max(...visible.map(p => p[1]))]],{padding,retainPadding:false,maxZoom:15,duration:650});
   };

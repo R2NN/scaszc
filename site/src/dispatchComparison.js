@@ -1,5 +1,6 @@
 import { minuteOf } from './shiftDomain.js';
 import { MAP_UI } from './mapDesign.js';
+import { DISPATCH_STOP_LABEL, DISPATCH_IMPACT_LABEL } from './dispatchLabelStyle.js';
 
 /** Resolve comparisons against the candidate's immutable source revision. */
 export function dispatchPreviewDetail(shift, candidate, { engineerId = candidate.engineer.id, scope = 'day' } = {}) {
@@ -132,8 +133,8 @@ export function renderDispatchRoutes(map, detail) {
   if (!map.getLayer('dispatch-stop-points')) map.addLayer({ id: 'dispatch-stop-points', type: 'circle', source: 'dispatch-stops',
     paint: { 'circle-radius': 6, 'circle-color': ['get', 'color'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
   if (!map.getLayer('dispatch-stop-labels')) map.addLayer({ id: 'dispatch-stop-labels', type: 'symbol', source: 'dispatch-stops',
-    layout: { 'text-field': ['get', 'label'], 'text-size': 13, 'text-anchor': 'bottom', 'text-offset': [0, -1], 'text-allow-overlap': false },
-    paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#fff', 'text-halo-width': 2 } });
+    layout: { 'text-field': ['get', 'label'], 'text-size': DISPATCH_STOP_LABEL.size, 'text-max-width':DISPATCH_STOP_LABEL.maxWidth, 'text-anchor': 'bottom', 'text-offset': [0, -DISPATCH_STOP_LABEL.offset], 'text-allow-overlap': false },
+    paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#fff', 'text-halo-width': DISPATCH_STOP_LABEL.halo } });
   map.moveLayer('dispatch-stop-points');
   map.moveLayer('dispatch-stop-labels');
   return rendered;
@@ -147,8 +148,8 @@ export function renderDispatchImpact(map, features) {
   if (!map.getLayer('dispatch-impact-points')) map.addLayer({id:'dispatch-impact-points',type:'circle',source:'dispatch-impact',
     paint:{'circle-radius':12,'circle-color':'#ffd21f','circle-stroke-color':'#6d28d9','circle-stroke-width':3}});
   if (!map.getLayer('dispatch-impact-labels')) map.addLayer({id:'dispatch-impact-labels',type:'symbol',source:'dispatch-impact',
-    layout:{'text-field':['get','address'],'text-size':14,'text-anchor':'bottom','text-offset':[0,-1.5],'text-max-width':18},
-    paint:{'text-color':'#482477','text-halo-color':'#fff','text-halo-width':2}});
+    layout:{'text-field':['get','address'],'text-size':DISPATCH_IMPACT_LABEL.size,'text-anchor':'bottom','text-offset':[0,-DISPATCH_IMPACT_LABEL.offset],'text-max-width':DISPATCH_IMPACT_LABEL.maxWidth},
+    paint:{'text-color':'#482477','text-halo-color':'#fff','text-halo-width':DISPATCH_IMPACT_LABEL.halo}});
   map.moveLayer('dispatch-impact-points');
   map.moveLayer('dispatch-impact-labels');
   return data;
