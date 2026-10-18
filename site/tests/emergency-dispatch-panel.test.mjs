@@ -5,6 +5,34 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 
+test('an unaccepted alternative keeps prospective loss wording after another decision is accepted', async () => {
+  const server = await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
+  try {
+    const { EmergencyDispatchPanel } = await server.ssrLoadModule('/src/EmergencyDispatch.jsx');
+    const engineer = {id:'E',name:'Выбранный инженер',skills:[],equipment:[]};
+    const base = {engineer,visit:{orderId:'U',arrival:'11:38'},plan:{routes:[{engineerId:'E',assignments:[{orderId:'U'}]}]},
+      changes:[{orderId:'lost',address:'Прежний адрес',before:{engineerId:'E',plannedStart:'16:00'},after:null}],
+      team:[engineer],orders:[{id:'U',workType:'Аварийные работы'},{id:'lost',workType:'Подключение'}],
+      coverage:{after:{assigned:1,total:2}},reserve:[],loads:[],kind:'Перехват в пути'};
+    const acceptedOption = {...base,id:'applied'};
+    const alternative = {...base,id:'alternative',engineer:{...engineer,name:'Другой инженер'}};
+    const item = {id:'incident',status:'ACCEPTED',order:{id:'U',address:'Адрес аварии'},candidates:[acceptedOption,alternative],
+      decision:{candidateId:'applied',actor:'Диспетчер',revision:2,at:Date.now()}};
+    for (const candidateId of ['applied','alternative']) {
+      const html = renderToStaticMarkup(React.createElement(EmergencyDispatchPanel,{controller:{selected:item,candidateId}}));
+      const details = html.slice(html.indexOf('dispatch-details'));
+      assert.match(details, candidateId === 'applied' ? /Осталась без назначения/ : /Останется без назначения/);
+      if (candidateId === 'alternative') {
+        assert.doesNotMatch(details,/Осталась без назначения/);
+        assert.match(html,/Непринятый вариант на карте: Другой инженер/);
+      }
+      assert.match(html,/Аварии 1\/1 · всего 1\/2/);
+      assert.match(html,/Выбранный инженер направлен на аварию/);
+      assert.doesNotMatch(html,/Другой инженер направлен на аварию/);
+    }
+  } finally {await server.close();}
+});
+
 test('searching, completion, search limits and errors have distinct states with a disabled unselected decision', async () => {
   const server = await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
   try {

@@ -1,4 +1,5 @@
 import { minuteOf } from './shiftDomain.js';
+import { isEmergencyWorkOrder } from './workTypes.js';
 
 const minute = value => minuteOf(String(value || '').match(/(?:T|^)(\d{1,2}:\d{2})/)?.[1]);
 const same = (a, b) => String(a) === String(b);
@@ -14,7 +15,7 @@ export function dispatchConsequences(candidate) {
     const start = minute(change.after?.plannedStart), arrival = minute(change.after?.arrival);
     const from = minute(order?.start), until = minute(order?.end);
     const knownWindow = from != null && until != null && start != null && arrival != null;
-    const outsideWindow = Boolean(change.after && knownWindow && (start < from || start > until || arrival < from || arrival > until));
+    const outsideWindow = Boolean(change.after && knownWindow && (start < from || start > until || arrival > until));
     const oldStart = minute(change.before?.plannedStart);
     const row = {...change, address:change.address || order?.address || 'Адрес не указан', coords:order?.coords,
       windowStart:order?.start, windowEnd:order?.end, windowStatus:outsideWindow ? 'outside' : knownWindow ? 'inside' : 'unknown',
@@ -45,7 +46,19 @@ export function dispatchConsequences(candidate) {
   return {...groups, usesReserve, summary,
     withinWindow:groups.delayed.filter(row => row.windowStatus === 'inside'),
     reserveCount:(candidate.reserve || []).length,
-    assigned:candidate.coverage?.after?.assigned ?? null};
+    assigned:candidate.coverage?.after?.assigned ?? null,
+    coverageLabel:dispatchCoverage(candidate)};
+}
+
+/** Compare assigned emergencies and total jobs without counting urgent ordinary work as an emergency. */
+export function dispatchCoverage(candidate) {
+  const orders = new Map((candidate.orders || []).map(order => [String(order.id), order]));
+  const assignedIds = new Set((candidate.plan?.routes || []).flatMap(route => (route.assignments || []).map(visit => String(visit.orderId))));
+  const emergencies = [...orders.values()].filter(isEmergencyWorkOrder);
+  const emergencyAssigned = emergencies.filter(order => assignedIds.has(String(order.id))).length;
+  const total = candidate.coverage?.after?.total ?? orders.size;
+  const assigned = candidate.coverage?.after?.assigned ?? [...orders.keys()].filter(id => assignedIds.has(id)).length;
+  return `Аварии ${emergencyAssigned}/${emergencies.length} · всего ${assigned}/${total}`;
 }
 
 /** Explain a recommendation with measured differences against an available alternative. */

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dispatchConsequences, dispatchRecommendation, dispatchImpactPoints } from '../src/dispatchConsequences.js';
+import { dispatchConsequences, dispatchRecommendation, dispatchImpactPoints, dispatchCoverage } from '../src/dispatchConsequences.js';
 
 const candidate = (id, name, arrival, reserve = 0) => ({id,engineer:{id,name},scenarioTime:'11:17',kind:'Свободный инженер',state:{status:'idle'},
   visit:{orderId:'U',arrival},plan:{routes:[]},orders:[],changes:[],reserve:Array.from({length:reserve},(_,i) => ({engineerId:`reserve-${i}`})),coverage:{after:{assigned:10}}});
@@ -39,11 +39,41 @@ test('delays within windows, real violations and unknown windows stay distinct',
   ];
   const impact = dispatchConsequences(option);
   assert.equal(impact.delayed.length,3);
-  assert.deepEqual(impact.outsideWindow.map(row => row.orderId),['late','arrival']);
-  assert.equal(impact.withinWindow.length,0);
+  assert.deepEqual(impact.outsideWindow.map(row => row.orderId),['late']);
+  assert.equal(impact.withinWindow.length,1);
   assert.equal(impact.unknownWindow.length,1);
   assert.equal(impact.unknownWindow[0].windowStatus,'unknown');
   assert.equal(dispatchImpactPoints(impact.delayed).length,0,'Never invent missing map coordinates');
+});
+
+test('early arrival can wait for the client window while early work and late arrival remain violations', () => {
+  const option = candidate('E','Инженер','11:38');
+  option.orders = ['wait','early','late','boundary'].map(id => ({id,start:'16:00',end:'18:00'}));
+  option.changes = [
+    change('wait',visit('E','16:00'),visit('E','16:00',{arrival:'14:23'})),
+    change('early',visit('E','16:00'),visit('E','15:59',{arrival:'14:23'})),
+    change('late',visit('E','16:00'),visit('E','18:01',{arrival:'18:01'})),
+    change('boundary',visit('E','16:00'),visit('E','18:00',{arrival:'14:23',plannedFinish:'19:00'})),
+  ];
+  const impact = dispatchConsequences(option);
+  assert.deepEqual(impact.outsideWindow.map(row => row.orderId),['early','late']);
+  assert.equal(impact.unknownWindow.length,0);
+  assert.equal(impact.withinWindow[0].orderId,'boundary');
+});
+
+test('compact coverage counts unique emergency jobs and includes all jobs separately', () => {
+  const option = candidate('E','Инженер','11:38');
+  option.orders = [
+    {id:'U',workType:'Аварийные работы'},
+    {id:'E2',workType:'Аварийные работы'},
+    {id:'normal',workType:'Подключение',priority:'URGENT'},
+    {id:'ordinary',workType:'Подключение'},
+  ];
+  option.plan.routes = [{assignments:[{orderId:'U'},{orderId:'normal'},{orderId:'ordinary'}]},{assignments:[{orderId:'U'}]}];
+  option.coverage.after = {assigned:3,total:4,urgentAssigned:2};
+  assert.equal(dispatchCoverage(option),'Аварии 1/2 · всего 3/4');
+  delete option.coverage;
+  assert.equal(dispatchCoverage(option),'Аварии 1/2 · всего 3/4');
 });
 
 test('a real source route distinguishes a reserve departure from an idle engineer with future work', () => {

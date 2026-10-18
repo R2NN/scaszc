@@ -216,6 +216,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const accepted = item?.status === 'ACCEPTED';
   const acceptedCandidate = item?.candidates.find(option => option.id === item.decision?.candidateId);
   const candidate = item?.candidates.find(option => option.id === candidateId) || acceptedCandidate;
+  const candidateApplied = accepted && candidate?.id === acceptedCandidate?.id;
   const impacts = useMemo(() => new Map((item?.candidates || []).map(option => [option.id, dispatchConsequences(option)])), [item?.candidates]);
   const impact = candidate && impacts.get(candidate.id);
   const applied = acceptedCandidate && impacts.get(acceptedCandidate.id);
@@ -251,7 +252,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
       <p className='dispatch-main-impact'>{accepted ? applied?.summary : impact?.summary || (searching ? 'Проверенные варианты появятся ниже' : 'Выберите вариант ниже, чтобы увидеть последствия')}</p>
       {!terminal(item) ? <div className='dispatch-submit-row'><span className='dispatch-decision-timer'><Clock3 size={17}/>{item.policy?.enabled ? seconds ? `Автовыбор через ${countdown}` : 'Автовыбор: ожидаем готовое решение' : 'Ручное решение'}</span><button type='button' className='primary' disabled={!candidate || item.status !== 'WAITING' || pending} onClick={() => controller.accept(item, candidate)}>{pending ? 'Направляем…' : 'Направить на аварию'}</button></div> : null}
       {candidate ? <>
-        {accepted && candidate.id !== acceptedCandidate?.id ? <p className='dispatch-preview-label'>На карте вариант: {candidate.engineer.name}</p> : null}
+        {accepted && !candidateApplied ? <p className='dispatch-preview-label'>Непринятый вариант на карте: {candidate.engineer.name}</p> : null}
         <div className='dispatch-inline-key'>{candidate.kind !== 'Выезд из дома' ? <span className='before'>Исходный путь</span> : null}<span className='after'>До аварии</span>{hasContinuation ? <span className='continuation'>После аварии</span> : null}</div>
         <div className='dispatch-scope-controls' role='group' aria-label='Показывать маршрут'>{[{value:'day',label:'Весь оставшийся день'},{value:'next',label:'Ближайшее действие'}].map(option => <button key={option.value} type='button' aria-pressed={(controller.routeScope || 'day') === option.value} onClick={() => controller.changeRouteScope(option.value)}>{option.label}</button>)}</div>
       </> : null}
@@ -277,16 +278,17 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
           <span className='dispatch-action-counts'><span>Передачи <b>{effect.transferred.length}</b></span><span>Начнутся позже <b>{effect.delayed.length}</b></span><span>Без назначения <b>{effect.lost.length}</b></span></span>
           {option.id === item.recommendedId ? <span className='dispatch-recommendation'>{recommendation}</span> : null}
           <span className='dispatch-card-meta'>Реакция {option.responseMinutes} мин · резерв {effect.reserveCount}</span>
+          <span className='dispatch-card-coverage'>{effect.coverageLabel}</span>
         </button>;
       })}</div>
       {candidate ? <div className='dispatch-details'>
         <h4 className='dispatch-section-title'>Последствия для прежних заявок</h4>
-        <ConsequenceGroup title={accepted && candidate.id === acceptedCandidate?.id ? 'Переданы другим инженерам' : 'Передаются другим инженерам'} rows={impact.transferred} controller={controller} candidate={candidate} accepted={accepted && candidate.id === acceptedCandidate?.id}/>
-        <ConsequenceGroup title='Начнутся позже исходного плана' rows={impact.delayed} controller={controller} candidate={candidate} accepted={accepted}/>
+        <ConsequenceGroup title={candidateApplied ? 'Переданы другим инженерам' : 'Передаются другим инженерам'} rows={impact.transferred} controller={controller} candidate={candidate} accepted={candidateApplied}/>
+        <ConsequenceGroup title='Начнутся позже исходного плана' rows={impact.delayed} controller={controller} candidate={candidate} accepted={candidateApplied}/>
         {impact.delayed.length ? <p className='dispatch-window-note'>В окне клиента: {impact.withinWindow.length} · вне окна: {impact.delayed.filter(row => row.windowStatus === 'outside').length}{impact.delayed.some(row => row.windowStatus === 'unknown') ? ` · окно не проверено: ${impact.delayed.filter(row => row.windowStatus === 'unknown').length}` : ''}</p> : null}
-        <ConsequenceGroup title='Теряют назначение' rows={impact.lost} controller={controller} candidate={candidate} accepted={accepted}/>
-        {impact.outsideWindow.length ? <ConsequenceGroup title='Вне окна клиента' rows={impact.outsideWindow} controller={controller} candidate={candidate} accepted={accepted}/> : null}
-        {impact.restored.length ? <ConsequenceGroup title='Получают назначение из очереди' rows={impact.restored} controller={controller} candidate={candidate} accepted={accepted}/> : null}
+        <ConsequenceGroup title='Теряют назначение' rows={impact.lost} controller={controller} candidate={candidate} accepted={candidateApplied}/>
+        {impact.outsideWindow.length ? <ConsequenceGroup title='Вне окна клиента' rows={impact.outsideWindow} controller={controller} candidate={candidate} accepted={candidateApplied}/> : null}
+        {impact.restored.length ? <ConsequenceGroup title='Получают назначение из очереди' rows={impact.restored} controller={controller} candidate={candidate} accepted={candidateApplied}/> : null}
         <details className='dispatch-tech-details'><summary>Маршруты затронутых инженеров</summary>{candidate.loads.map(load => <div key={load.engineerId}><button className='dispatch-route' type='button' onClick={() => {setOpenedRouteId(current => current === load.engineerId ? '' : load.engineerId);onRoute(candidate.plan.routes.find(route => route.engineerId === load.engineerId), candidate);}}><Route size={17}/><span>{load.name}<small>Загрузка {load.before} → {load.after} мин</small></span></button>{openedRouteId === load.engineerId ? <ol className='dispatch-route-visits'>{candidate.plan.routes.find(route => route.engineerId === load.engineerId)?.assignments.map(visit => <li key={visit.orderId}><b>{candidate.orders.find(order => order.id === visit.orderId)?.address || visit.orderId}</b><span>Прибытие {visit.arrival} · работа {visit.plannedStart}–{visit.plannedFinish}</span></li>)}</ol> : null}</div>)}</details>
         <details className='dispatch-tech-details'><summary>Допуск, проверка и резерв</summary>
           <p>Вся смена проверена · исходная версия {candidate.baseRevision} · положение на {candidate.scenarioTime}.</p>
