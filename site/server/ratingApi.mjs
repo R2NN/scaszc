@@ -1,4 +1,5 @@
 import { RatingStore, ratingFingerprint } from './ratingStore.mjs';
+import { ratingPlanningShift } from './ratingProfiles.mjs';
 import { calculateRatingPlan, reassignRatingPlan } from './ratingPlanning.mjs';
 import { ensureBaseHistoricalShift } from './baseHistoryStore.mjs';
 import { acquirePlanningSlot } from './planningSlot.mjs';
@@ -22,8 +23,8 @@ export function createRatingApi(shiftStore, { calculate = calculateRatingPlan, c
       if (target === 'staffing' && request.method === 'GET') {
         const regionId = url.searchParams.get('regionId') || 'moscow', date = url.searchParams.get('date');
         const settings = staffingOptions({ qualityFloor: url.searchParams.get('qualityFloor') ?? 4.2, qualityCeiling: url.searchParams.get('qualityCeiling') ?? 5, pool: url.searchParams.get('pool') || 'staff' });
-        const shift = shiftStore.byDate(regionId, date), catalog = ratings.catalog(regionId,date), forecast = await loadStaffingForecast();
-        const calibration = shiftStore.byDate(regionId, forecast.training.historyEnd);
+        const shift = ratingPlanningShift(shiftStore.byDate(regionId, date)), catalog = ratings.catalog(regionId,date), forecast = await loadStaffingForecast();
+        const calibration = ratingPlanningShift(shiftStore.byDate(regionId, forecast.training.historyEnd));
         return json({ date, settings, version: ratings.version(), orders: shift?.orders.length || 0,
           hasPlan: shift?.plan?.status === 'EXACT_VALID', started: Boolean(shift?.facts?.some(item => ['started','completed'].includes(item.status))),
           sourceRevision: shift?.revision, sourceHash: shift?.plan?.contentSha256,
@@ -48,7 +49,7 @@ export function createRatingApi(shiftStore, { calculate = calculateRatingPlan, c
       if (target === 'scenarios' && request.method === 'POST') {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date || '')) throw new Error('Выберите дату планирования.');
         if (!['all', 'staff'].includes(input.pool)) throw new Error('Выберите состав для расчёта.');
-        const shift = input.regionId === 'moscow' ? await ensureBaseHistoricalShift(shiftStore, input.date) : shiftStore.byDate(input.regionId, input.date);
+        const shift = ratingPlanningShift(input.regionId === 'moscow' ? await ensureBaseHistoricalShift(shiftStore, input.date) : shiftStore.byDate(input.regionId, input.date));
         if (!shift?.plan) throw new Error('Для выбранного дня сначала постройте точный план заявок.');
         const baseline = input.baselineId ? ratings.scenario(input.baselineId) : null;
         if (input.baselineId && (!baseline || baseline.kind !== 'staffing' || baseline.status !== 'READY' || baseline.regionId !== shift.regionId || baseline.date !== shift.date || baseline.sourceHash !== shift.plan.contentSha256 || baseline.sourceRevision !== shift.revision || baseline.ratingVersion !== ratings.version() || baseline.settings.qualityFloor !== Number(input.settings?.qualityFloor) || (baseline.settings.qualityCeiling ?? 5) !== Number(input.settings?.qualityCeiling ?? 5) || baseline.settings.pool !== input.pool)) throw new Error('Исходный состав изменился. Сначала пересчитайте его для сравнения.');
@@ -78,7 +79,7 @@ export function createRatingApi(shiftStore, { calculate = calculateRatingPlan, c
         if (!scenarioMatch[2] && request.method === 'GET') return json(scenario);
         if (scenarioMatch[2] === 'confirm' && request.method === 'POST') {
           if (scenario.kind !== 'staffing' || scenario.status !== 'AWAITING_CONFIRMATION') throw new Error('Сначала подберите состав для подтверждения.');
-          const shift = shiftStore.byDate(scenario.regionId, scenario.date);
+          const shift = ratingPlanningShift(shiftStore.byDate(scenario.regionId, scenario.date));
           if (!shift || shift.revision !== scenario.sourceRevision || shift.plan?.contentSha256 !== scenario.sourceHash || scenario.ratingVersion !== ratings.version() || scenario.inputFingerprint !== inputFingerprint(shift)) throw new Error('Заявки, состав или оценки изменились. Подберите состав заново.');
           const catalog = ratings.catalog(scenario.regionId,scenario.date);
           const current = proposeStaffingTeam(shift, catalog, scenario.settings);
@@ -114,7 +115,7 @@ export function createRatingApi(shiftStore, { calculate = calculateRatingPlan, c
           return json(next, 202);
         }
         if (scenarioMatch[2] === 'save' && request.method === 'POST') {
-          const shift = shiftStore.byDate(scenario.regionId, scenario.date);
+          const shift = ratingPlanningShift(shiftStore.byDate(scenario.regionId, scenario.date));
           if (shift?.revision !== scenario.sourceRevision || shift?.plan.contentSha256 !== scenario.sourceHash || scenario.inputFingerprint && scenario.inputFingerprint !== inputFingerprint(shift)) throw new Error('Основной план изменился. Пересчитайте сценарий.');
           return json(ratings.saveScenario(scenario.id));
         }

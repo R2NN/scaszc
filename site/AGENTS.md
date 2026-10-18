@@ -1,5 +1,7 @@
 # Prototype Instructions
 
+- Rating staffing uses the selected shift's stored engineer profiles and validated historical membership, not the later roster seed date or another day's shifts. Normalize retained territory/equipment formatting without rewriting published inputs. Preserve rating bounds, explicit unavailability and current/future roster periods; never adapt reserve home origins or shifts just to make them eligible.
+
 - Preserve access to retained historical operational days in Orders, Engineers and Shift through the shared date selector. Load saved independently validated orders, crews and road geometry from the full history archive; never generate replacement history or fabricate completion facts from analytics summaries. Preserve existing shift revisions and dispatch sessions when restoring missing days.
 
 - Engineer comments are short natural first-person explanations of why a visit was faster or slower, suited to the actual work and recorded context. Never append archive IDs, plan/actual reports, work/paperwork minute breakdowns, or model-review language to their messages. Show plan versus actual as the whole visit in the feedback card. Keep repeatability and future-transfer decisions in the separate operator/system controls. Correct only untouched synthetic fixture prose; retain human replies, measured facts, model inputs and published calculations.

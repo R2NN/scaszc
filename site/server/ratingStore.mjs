@@ -4,6 +4,7 @@ import path from 'node:path';
 import { canonicalDemoInput } from '../src/canonicalDemo.js';
 import { engineerIdentity } from '../src/engineerPresentation.js';
 import { staffActiveOn } from '../src/staffRoster.js';
+import { ratingPlanningShift } from './ratingProfiles.mjs';
 
 const json = value => JSON.stringify(value);
 const parse = value => value ? JSON.parse(value) : null;
@@ -207,6 +208,12 @@ export class RatingStore {
     });
   }
   catalog(regionId = 'moscow', date = null) {
+    const saved = date ? this.db.prepare('SELECT team_json,orders_json,current_plan_id FROM shifts WHERE region_id=? AND service_date=?').get(regionId, date) : null;
+    const plan = saved?.current_plan_id ? parse(this.db.prepare('SELECT plan_json FROM plan_versions WHERE id=?').get(saved.current_plan_id)?.plan_json) : null;
+    const shift = saved ? ratingPlanningShift({ date, plan, team: parse(saved.team_json), orders: parse(saved.orders_json) }) : null;
+    const members = new Map((shift?.team || []).map(member => [engineerIdentity(member), member]));
+    const historical = plan?.status === 'EXACT_VALID' && plan.validation?.status === 'VALID'
+      && plan.provenance?.dataKind === 'SYNTHETIC_INPUT_EXACT_PLAN' && plan.provenance?.plan === 'INDEPENDENTLY_VALIDATED_EXACT';
     const summaries = new Map();
     const seenSynthetic = new Set();
     for (const row of this.db.prepare('SELECT engineer_id,score,included,payload_json FROM rating_reviews').all()) {
@@ -220,7 +227,13 @@ export class RatingStore {
     }
     return this.db.prepare('SELECT * FROM rating_engineers WHERE region_id=?').all(regionId).map(row => {
       const profile = parse(row.payload_json);
-      return {...profile,available:profile.available !== false && (!date || !profile.rosterPeriods || staffActiveOn(profile,date)),rating:ratingSummary(summaries.get(row.id) || [])};
+      const member = profile.kind === 'staff' ? members.get(row.id) : null;
+      // A checked archive records membership on that day; a later roster seed
+      // is not a historical hiring date. Current and future days retain periods.
+      const available = profile.available !== false && member?.available !== false
+        && (historical && Boolean(member) || !date || !profile.rosterPeriods || staffActiveOn(profile,date));
+      return { ...profile, ...member, id: profile.id, sourceId: profile.sourceId, templateId: profile.templateId,
+        available, rating: ratingSummary(summaries.get(row.id) || []) };
     }).sort((a, b) => b.rating.score - a.rating.score || b.rating.count - a.rating.count || a.id.localeCompare(b.id));
   }
   engineer(id) {

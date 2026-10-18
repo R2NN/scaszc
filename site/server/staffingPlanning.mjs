@@ -1,4 +1,5 @@
 import { engineerIdentity } from '../src/engineerPresentation.js';
+import { ratingPlanningShift } from './ratingProfiles.mjs';
 import { spawn } from 'node:child_process';
 import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -25,6 +26,7 @@ export function staffingOptions(input = {}) {
 }
 
 export function staffingBreakdown(shift, catalog, options = {}, missing = null) {
+  shift = ratingPlanningShift(shift);
   const settings = staffingOptions(options);
   const roster = new Map(shift.team.map(item => [id(item), item]));
   const candidates = catalog.filter(item => (settings.pool === 'all' || item.kind === 'staff') && item.available !== false && item.rating.score >= settings.qualityFloor && item.rating.score <= settings.qualityCeiling);
@@ -124,6 +126,7 @@ export function staffingForecast(shift, catalog, forecast, options = {}) {
 // This proposal uses the checked day's profile demand. It does not build roads
 // or promise a smaller crew; the exact solver runs only after confirmation.
 export function proposeStaffingTeam(shift, catalog, input = {}) {
+  shift = ratingPlanningShift(shift);
   const settings = staffingOptions(input);
   if (shift.facts?.some(item => ['started', 'completed'].includes(item.status))) throw new Error('Смена уже исполняется. Состав рассчитывается до начала работ.');
   if (shift.plan?.status !== 'EXACT_VALID') throw new Error('Сначала постройте проверенный план выбранного дня.');
@@ -159,6 +162,7 @@ export function proposeStaffingTeam(shift, catalog, input = {}) {
 }
 
 export async function calculateStaffingPlan(shift, catalog, scenario, onProgress = () => {}, root = projectRoot()) {
+  shift = ratingPlanningShift(shift);
   const startedAt = Date.now(), deadlineAt = startedAt + 150_000;
   onProgress({phase:'PREPARING_INPUTS'});
   if (shift.facts?.some(item => ['started', 'completed'].includes(item.status))) throw new Error('Смена уже исполняется. Состав рассчитывается до начала работ; фактические визиты защищены.');

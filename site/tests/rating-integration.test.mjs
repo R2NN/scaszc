@@ -12,8 +12,60 @@ import {createDispatchApi} from '../server/dispatchApi.mjs';
 import {createRatingApi} from '../server/ratingApi.mjs';
 import {RatingStore} from '../server/ratingStore.mjs';
 import {calculateRatingPlan} from '../server/ratingPlanning.mjs';
+import {baseHistoryDates,ensureBaseHistoricalShift} from '../server/baseHistoryStore.mjs';
+import {ratingPlanningShift} from '../server/ratingProfiles.mjs';
 
 const root=path.resolve(import.meta.dirname,'../..');
+
+test('historical staffing uses the selected day profiles and recorded membership instead of the later roster seed',async context=>{
+  if(!(await baseHistoryDates()).includes('2026-08-14'))return context.skip('Optional operational archive is not installed.');
+  const store=new ShiftStore(':memory:');
+  try {
+    await seedBaseShift(store);
+    const historical=await ensureBaseHistoricalShift(store,'2026-08-14');
+    const before=JSON.stringify(historical);
+    const rosterBefore=JSON.stringify(store.roster('moscow'));
+    const extra={...store.roster('moscow')[0],id:'FUTURE-HIRE',sourceId:'FUTURE-HIRE',name:'Future hire'};
+    store.addStaff(extra,'2026-08-18');
+    const api=createRatingApi(store);
+    const catalog=await(await api(new Request('http://localhost/api/ratings/engineers?regionId=moscow&date=2026-08-14'))).json();
+    const normalized=ratingPlanningShift(historical);
+    const verified=spawnSync(process.env.BEEGO_PYTHON||'python',['-c',`import json,sys
+from pathlib import Path
+from beeline_planning import load_planning_dataset
+from rating_inputs import validate_rating_inputs
+validate_rating_inputs(load_planning_dataset(Path('history/2026-08-14/dataset'),'core'),json.load(sys.stdin))
+`],{cwd:root,input:JSON.stringify({orders:normalized.orders,team:normalized.team}),encoding:'utf8',windowsHide:true,env:{...process.env,PYTHONPATH:path.join(root,'algorithm/src')+path.delimiter+path.join(root,'algorithm/tools'),PYTHONUTF8:'1'},timeout:30000});
+    assert.equal(verified.status,0,verified.stderr);
+    const modified=structuredClone(historical);modified.team[0].startCoords[0]+=.01;
+    assert.throws(()=>ratingPlanningShift(modified),/Профиль архивного инженера/);
+    for(const member of normalized.team){
+      const candidate=catalog.engineers.find(item=>item.id===engineerIdentity(member));
+      assert.equal(candidate.available,true);
+      assert.deepEqual(candidate.startCoords,member.startCoords);
+      assert.equal(candidate.shiftStart,member.shiftStart);
+      assert.equal(candidate.shiftEnd,member.shiftEnd);
+      assert.equal(candidate.zoneId,member.zoneId);
+      assert.deepEqual(candidate.equipment,member.equipment);
+    }
+    assert.equal(catalog.engineers.find(item=>item.id==='FUTURE-HIRE').available,false);
+    const post=body=>api(new Request('http://localhost/api/ratings/scenarios',{method:'POST',body:JSON.stringify(body)}));
+    const response=await post({regionId:'moscow',date:historical.date,pool:'staff',kind:'staffing',settings:{qualityFloor:1,qualityCeiling:5}});
+    assert.equal(response.status,201);
+    const proposal=(await response.json()).proposal;
+    assert.ok(proposal.available>=historical.team.length);
+    assert.equal(proposal.team.length,historical.plan.routes.filter(route=>route.assignments.length).length);
+    assert.equal(proposal.missing.length,0);
+    const excluded=await(await post({regionId:'moscow',date:historical.date,pool:'staff',kind:'staffing',settings:{qualityFloor:5,qualityCeiling:5}})).json();
+    assert.equal(excluded.proposal.team.length,0);
+    assert.equal(JSON.stringify(store.byDate('moscow',historical.date)),before);
+    assert.equal(JSON.stringify(store.roster('moscow').filter(item=>item.id!=='FUTURE-HIRE')),rosterBefore);
+    const current=store.byDate('moscow','2026-08-17');
+    store.changeStaffAvailability(store.roster('moscow')[0].id,'moscow','2026-08-17','archive');
+    const currentCatalog=await(await api(new Request('http://localhost/api/ratings/engineers?regionId=moscow&date='+current.date))).json();
+    assert.equal(currentCatalog.engineers.find(item=>item.id===engineerIdentity(store.roster('moscow')[0])).available,false);
+  }finally{store.close();}
+});
 
 test('engineer presentation preserves scoped identities and assigns each portrait once',async()=>{
   const input=JSON.parse(await readFile(new URL('../public/data/beego-complexity-plan.json',import.meta.url),'utf8'));

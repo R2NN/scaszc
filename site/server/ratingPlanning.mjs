@@ -1,4 +1,5 @@
 import { engineerIdentity } from '../src/engineerPresentation.js';
+import { ratingPlanningShift } from './ratingProfiles.mjs';
 import { spawn } from 'node:child_process';
 import { readFile, readdir, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -40,6 +41,7 @@ export async function findRatingSource(shift, root) {
 }
 
 export async function calculateRatingPlan(shift, catalog, scenario, onProgress = () => {}, root = projectRoot()) {
+  shift = ratingPlanningShift(shift);
   if (shift.facts?.some(item => ['started', 'completed'].includes(item.status))) throw new Error('Смена уже исполняется. Рейтинг рассчитывается отдельным сценарием до начала работ; фактические визиты не переназначаются.');
   if (!shift.plan || shift.plan.status !== 'EXACT_VALID') throw new Error('Сначала нужен проверенный план заявок выбранного дня.');
   const source = await findRatingSource(shift, root);
