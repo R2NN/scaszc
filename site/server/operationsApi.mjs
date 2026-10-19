@@ -1,3 +1,4 @@
+import { createServiceContextApi } from './serviceContextApi.mjs';
 import { planningRuntimeStatus } from './runtimeReadiness.mjs';
 import { ShiftStore } from './shiftStore.mjs';
 import { eventModel, normalizeDataAdditionEvent } from '../src/shiftDomain.js';
@@ -20,6 +21,7 @@ const bodyOf = async request => request.json().catch(() => ({}));
 const errorStatus = error => /устарел|уже изменился/.test(error.message) ? 409 : /не найден/.test(error.message) ? 404 : 422;
 
 export function createOperationsApi({ store = new ShiftStore(), routing = exactShiftReplan, routingOptions = {}, ai = askShiftAi, aiOptions = {}, seedFromBase = false } = {}) {
+  const serviceContextApi = createServiceContextApi(store);
   const dispatchApi = createDispatchApi(store);
   const ratingApi = createRatingApi(store);
   const seedPromise = seedFromBase ? (async () => { await seedComplexity(store.complexity); seedEngineerFeedback(store.complexity); await seedBaseShift(store); })() : Promise.resolve();
@@ -50,6 +52,8 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
   async function handle(request) {
     await seedPromise;
     const url = new URL(request.url);
+    const serviceContextResponse = await serviceContextApi(request);
+    if (serviceContextResponse) return serviceContextResponse;
     if (url.pathname === '/api/runtime/readiness' && request.method === 'GET') return json(await planningRuntimeStatus());
     if (url.pathname.startsWith('/api/ratings/')) return ratingApi(request);
     const incidentResponse = await dispatchApi.handle(request);

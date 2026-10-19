@@ -277,6 +277,8 @@ export function ShiftWorkspace({
   standaloneReplanning = false,
   recalculateRequest = 0,
   manualAssignmentRequest = null,
+  servicePreparation = null,
+  onConsumeServicePreparation,
   onAlgorithmJob,
   onSelectOrder,
   selectedOrderId,
@@ -457,6 +459,16 @@ export function ShiftWorkspace({
     const frame = requestAnimationFrame(reveal);
     return () => cancelAnimationFrame(frame);
   }, [reportOnly, tab, clock.selectedEngineerId, crewQuery, crewLoadFilter, crewSkillFilter, crewEquipmentFilter, crewTerritoryFilter, crewTransportFilter, crewStatusFilter]);
+  useEffect(() => {
+    if (!servicePreparation || pendingEvent) return;
+    setEventType(EVENT_TYPES.CLIENT_WINDOW_SHIFT);
+    setTargetId(String(servicePreparation.orderId));
+    setEventStart(servicePreparation.start || ''); setEventEnd(servicePreparation.end || '');
+    setReason(servicePreparation.reason || '');
+    setTime(timeOf(Math.max(Math.floor(shiftClock.getSnapshot().minute), minuteOf(shift?.versions?.at(-1)?.effectiveAt) || 0)));
+    setPreview(null); setTab('event');
+    onConsumeServicePreparation?.();
+  }, [servicePreparation?.token]);
   useEffect(() => {
     if (!pendingEvent) return;
     setEventType(pendingEvent.type);

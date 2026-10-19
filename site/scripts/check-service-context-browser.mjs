@@ -1,0 +1,42 @@
+import {createRequire} from 'node:module';import {mkdir} from 'node:fs/promises';import {resolve} from 'node:path';import assert from 'node:assert/strict';
+if(process.env.BEEGO_QA_ISOLATED!=='1')throw new Error('Запустите отдельный сервер с тестовым BEEGO_DB_PATH и задайте BEEGO_QA_ISOLATED=1.');
+const require=createRequire(process.env.BEEGO_QA_MODULES?resolve(process.env.BEEGO_QA_MODULES,'package.json'):new URL('../package.json',import.meta.url));const {chromium}=require('playwright');
+const b=await chromium.launch({channel:'chrome',headless:true});const p=await b.newPage({viewport:{width:1920,height:1080}});const errors=[];p.on('pageerror',e=>errors.push(e.message));
+const note=`QA: проверка ${Date.now()}`,title=`QA: питание ${Date.now()}`;const base=process.env.BEEGO_QA_URL||'http://127.0.0.1:4192';
+if(!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(base))throw new Error('Нужен локальный тестовый сервер.');
+const output=resolve(process.env.BEEGO_QA_OUTPUT||'../docs/evidence/service-context');await mkdir(output,{recursive:true});const shot=name=>p.screenshot({path:resolve(output,`${name}.png`),animations:'disabled'});
+const before=await(await fetch(`${base}/api/shifts?regionId=moscow&date=2026-08-17`)).json();
+const endpoint=`${base}/api/service-context?shiftId=${encodeURIComponent(before.id)}`;
+const initial=await(await fetch(endpoint)).json();
+const reset=async data=>{const current=await(await fetch(endpoint)).json();const response=await fetch(endpoint,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({revision:current.revision,shiftId:before.id,date:before.date,data,actor:'Изолированная браузерная проверка'})});assert.ok(response.ok,await response.text());};
+await reset({cases:[],incidents:[],components:[]});
+try {
+ await p.goto(base);await p.getByRole('button',{name:/Алексей Волков.*11 ч/}).waitFor({timeout:60000});await p.waitForTimeout(1000);
+ await p.getByRole('button',{name:'Сеть: влияние на заявки',exact:true}).click();await p.getByRole('button',{name:'Показать демонстрационный пример',exact:true}).click();await p.locator('.network-event').first().click();
+ await p.waitForTimeout(1200);assert.equal(await p.locator('.service-order-focus>button').count(),2);assert.equal(await p.locator('.network-map-marker.request').count(),2);
+ await p.getByLabel('Показать связи с заявками',{exact:true}).check();
+ const markersVisible=await p.locator('.network-map-marker.request').evaluateAll(es=>es.every(e=>{const r=e.getBoundingClientRect();return document.elementsFromPoint(r.x+r.width/2,r.y+r.height/2).some((top,index)=>index<2&&top===e);}));assert.ok(markersVisible,'Номера связанных заявок должны быть видны и доступны поверх исходных маркеров');
+ await p.waitForTimeout(1200);await shot('service-network-final');
+ await p.getByRole('button',{name:'Причина',exact:true}).click();await p.getByRole('button',{name:'Статус сетевого события',exact:true}).click();await p.getByRole('option',{name:'Подтверждено',exact:true}).click();
+ await p.locator('.network-panel').getByLabel('Следующий шаг',{exact:true}).fill('Проверить питание и доступ к узлу');await p.locator('.network-panel').getByLabel('Ответственный',{exact:true}).fill('Ирина');
+ await p.getByRole('button',{name:'Доступ: подготовка',exact:true}).click();await p.getByRole('option',{name:'Готово',exact:true}).click();
+ await p.locator('.network-panel').getByRole('button',{name:'Сохранить подготовку',exact:true}).click();await p.getByText('Подготовка сохранена',{exact:true}).waitFor();
+ await p.getByRole('button',{name:'История',exact:true}).click();await p.getByLabel('Добавить результат проверки',{exact:true}).fill(note);await p.getByRole('button',{name:'Добавить в историю',exact:true}).click();await p.locator('.service-history').getByText(note,{exact:true}).waitFor();
+ await p.getByRole('button',{name:'Заявки · 2',exact:true}).click();await p.locator('.network-order').first().getByRole('button',{name:'Открыть заявку',exact:true}).click();
+ await p.getByRole('button',{name:'Паспорт объекта',exact:true}).click();await p.getByRole('button',{name:'Обращения',exact:true}).click();await p.getByRole('heading',{name:'Обращения клиента',exact:true}).waitFor();
+ assert.ok((await p.locator('.repeat-cases').innerText()).includes('Демонстрационные данные'));
+ await p.getByRole('button',{name:'Связать обращения по лицевому счёту',exact:true}).click();
+ await p.getByLabel('Лицевой счёт / ID подключения',{exact:true}).fill('QA-ACCOUNT-29');await p.getByLabel('Одинаковый симптом',{exact:true}).fill('QA: повторные обрывы');await p.getByLabel('Основание связи',{exact:true}).fill('Изолированный тест: проверено по тестовому лицевому счёту');
+ await p.getByRole('button',{name:'Найти прошлые обращения по счёту',exact:true}).click();await p.getByText('Прошлых обращений по этому счёту не найдено.',{exact:true}).waitFor();
+ await p.getByLabel('Проверены один лицевой счёт и одна проблема у всех выбранных заявок',{exact:true}).check();await p.getByRole('button',{name:'Сохранить связь',exact:true}).click();await p.getByRole('heading',{name:'QA: повторные обрывы',exact:true}).waitFor();
+
+ await p.locator('.service-case').first().getByLabel('Следующий шаг',{exact:true}).fill('Проверить линию после восстановления узла');await p.locator('.service-case').first().getByLabel('Ответственный',{exact:true}).fill('Ирина');await p.locator('.service-case').first().getByRole('button',{name:'Сохранить подготовку',exact:true}).click();await p.getByText('Подготовка сохранена',{exact:true}).waitFor();await p.locator('.cx-passport-body').evaluate(el=>el.scrollTop=0);await shot('service-repeat-final');
+ await p.getByRole('button',{name:'Подготовить повторный выезд',exact:true}).first().click();await p.getByText('Начало нового окна',{exact:true}).waitFor();console.log('PREPARATION editable',await p.getByText('Начало нового окна',{exact:true}).count());await shot('service-prepare-final');
+ await p.goto(base);await p.getByRole('button',{name:/Алексей Волков.*11 ч/}).waitFor({timeout:60000});await p.getByRole('button',{name:'Сеть: влияние на заявки',exact:true}).click();await p.getByText('Данные: импорт и экспорт',{exact:true}).click();
+ const download=p.waitForEvent('download');await p.getByRole('button',{name:'Экспорт JSON',exact:true}).click();const d=await download;const exportPath=resolve(output,'service-export.json');await d.saveAs(exportPath);await p.getByLabel('Импорт контекста JSON',{exact:true}).setInputFiles(exportPath);await p.waitForTimeout(500);assert.equal(await p.locator('.service-error').count(),0);
+ await p.getByRole('button',{name:'Зарегистрировать проблему',exact:true}).click();await p.getByLabel('Что произошло',{exact:true}).fill(title);await p.getByRole('button',{name:'Тип общей проблемы',exact:true}).click();await p.getByRole('option',{name:'Питание',exact:true}).click();await p.getByLabel('Компонент / площадка',{exact:true}).fill('Щит питания, площадка 17');await p.getByLabel('Основание связи с заявками',{exact:true}).fill('Сообщение ответственного площадки; заявок пока нет');await p.getByRole('button',{name:'Зарегистрировать',exact:true}).click();await p.getByText(title,{exact:true}).waitFor();await p.getByRole('button',{name:'Все события',exact:true}).click();assert.ok(await p.locator('.network-event').count()>=2);
+ await p.getByRole('button',{name:'Закрыть сетевые инциденты',exact:true}).click();await p.locator('.theme-switch').click();await p.getByRole('button',{name:'Сеть: влияние на заявки',exact:true}).click();await shot('service-dark-final');
+ await p.setViewportSize({width:390,height:844});await p.waitForTimeout(600);await shot('service-mobile-final');
+ console.log('BROWSER PASS',JSON.stringify({errors}));assert.deepEqual(errors,[]);
+const after=await(await fetch(`${base}/api/shifts?regionId=moscow&date=2026-08-17`)).json();assert.deepEqual(after,before,'Опубликованная смена должна остаться неизменной');
+} finally {try{await reset({cases:initial.cases,incidents:initial.incidents,components:initial.components});}finally{await b.close();}}
