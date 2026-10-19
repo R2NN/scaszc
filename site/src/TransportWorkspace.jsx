@@ -112,7 +112,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     }catch(e){setError(`План сохранён. ${e.message}; продолжить воспроизведение можно кнопкой на шкале времени.`);}
   };
   const calculate=async(options={})=>{
-    if(!shift?.plan)return;
+    if(!shift?.plan||shiftClock.getSnapshot().restartDay)return;
     const own=++calculationRequest.current;clearTimeout(retryRef.current);
     setError('');
     try {

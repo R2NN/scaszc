@@ -32,6 +32,16 @@ export function createDispatchApi(store, options) {
     const row = store.db.prepare('SELECT payload FROM dispatch_sessions WHERE base_shift_id=? ORDER BY rowid DESC LIMIT 1').get(baseId);
     return row ? JSON.parse(row.payload) : null;
   };
+  const createSession = input => {
+    const base = store.get(input.baseShiftId);
+    if (!base?.plan) throw new Error('Исходная смена не найдена');
+    const id = randomUUID(), first = homeStartScenario(base);
+    const shift = store.ensure({regionId:`${base.regionId.split(':')[0]}:scenario:${id}`,date:base.date,orders:first.orders,team:first.team,plan:first.plan});
+    const requestedSpeed=Number(input.speed),speed=[1,30,60,120,300].includes(requestedSpeed)?requestedSpeed:60;
+    const session={id,baseShiftId:input.baseShiftId,shiftId:shift.id,clock:{minute:360,playing:false,speed,anchorAt:Date.now(),awaitingDecision:false,confirmingDecision:false,version:1},lastMinute:360,fired:false};
+    store.db.prepare('INSERT INTO dispatch_sessions VALUES (?,?,?,?)').run(id,input.baseShiftId,shift.id,JSON.stringify(session));
+    return {...session,shift};
+  };
   async function handle(request) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/dispatch/')) return null;
@@ -44,16 +54,7 @@ export function createDispatchApi(store, options) {
         return json(session ? { ...session, shift: store.get(session.shiftId) } : null);
       }
       if (url.pathname === '/api/dispatch/sessions' && request.method === 'POST') {
-        const base = store.get(input.baseShiftId);
-        if (!base?.plan) throw new Error('Исходная смена не найдена');
-        const id = randomUUID();
-        const first = homeStartScenario(base);
-        const shift = store.ensure({ regionId: `${base.regionId.split(':')[0]}:scenario:${id}`, date: base.date, orders: first.orders, team: first.team, plan: first.plan });
-        const requestedSpeed = Number(input.speed);
-        const speed = [1, 30, 60, 120, 300].includes(requestedSpeed) ? requestedSpeed : 60;
-        const session = { id, baseShiftId: input.baseShiftId, shiftId: shift.id, clock: { minute: 360, playing: false, speed, anchorAt: Date.now(), awaitingDecision:false, version:1 }, lastMinute: 360, fired: false };
-        store.db.prepare('INSERT INTO dispatch_sessions VALUES (?,?,?,?)').run(id, input.baseShiftId, shift.id, JSON.stringify(session));
-        return json({ ...session, shift }, 201);
+        return json(createSession(input),201);
       }
       const route = /^\/api\/dispatch\/shifts\/([^/]+)\/(incidents|policy|clock|states)$/.exec(url.pathname);
       if (route) {
@@ -71,6 +72,23 @@ export function createDispatchApi(store, options) {
           const row = store.db.prepare('SELECT id,payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(shiftId);
           if (!row) return json({ incident: null });
           const session = JSON.parse(row.payload), serverTick = input.serverTick === true;
+          if(session.restartedAs){
+            let next=session;const seen=new Set();
+            while(next.restartedAs&&!seen.has(next.id)){seen.add(next.id);next=JSON.parse(store.db.prepare('SELECT payload FROM dispatch_sessions WHERE id=?').get(next.restartedAs).payload);}
+            return json({...next,shift:store.get(next.shiftId),restarted:true});
+          }
+          if(!serverTick&&input.restartDay&&input.mode==='plan'&&Number(input.minute)===360&&session.lastMinute>360){
+            const speed=session.preIncidentSpeed??input.speed??session.clock.speed;
+            for(const incident of dispatch.all(shiftId))if(!['ACCEPTED','CANCELLED'].includes(incident.status))dispatch.cancel(incident.id);
+            options?.onRestart?.(shiftId);
+            const next=store.db.transaction(()=>{
+              const value=createSession({baseShiftId:session.baseShiftId,speed});
+              session.restartedAs=value.id;session.clock={...session.clock,playing:false,awaitingDecision:false,confirmingDecision:false,anchorAt:Date.now(),version:(session.clock.version||0)+1};
+              store.db.prepare('UPDATE dispatch_sessions SET payload=? WHERE id=?').run(JSON.stringify(session),row.id);
+              return value;
+            }).immediate();
+            return json({...next,restarted:true});
+          }
           // A scenario jump can overtake an already queued browser clock write.
           // Return the authoritative revision instead of rewinding its minute.
           if(!serverTick&&Number.isInteger(input.serverClockVersion)&&input.serverClockVersion!==session.clock.version)return json({...session,incidents:dispatch.all(shiftId)});

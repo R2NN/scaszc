@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import { TransportStore } from '../server/transportApi.mjs';
+import { TransportStore,createTransportApi } from '../server/transportApi.mjs';
+import { createDispatchApi } from '../server/dispatchApi.mjs';
 import { transportStatus, transportConsequences } from '../src/transportDomain.js';
 import { ShiftStore } from '../server/shiftStore.mjs';
 
@@ -9,6 +10,23 @@ const shift={id:'shift',regionId:'moscow',date:'2026-08-17',plan:{},orders:[],te
 const segment={id:'road:1',kind:'road',edgeId:'1',opposingEdgeId:'2',geometry:[[55.75,37.62],[55.751,37.62]],fromId:'a',toId:'b',heading:0,midpoint:[55.7505,37.62]};
 const input={id:'e',title:'Ремонт дороги',kind:'road',direction:'both',startsAt:'2026-08-17T14:25:00+03:00',endsAt:'2026-08-17T15:00:00+03:00',segmentIds:['road:1']};
 const setup=()=>{const db=new Database(':memory:');const store=new TransportStore({db});store.segments([segment]);return store;};
+
+test('late requests cannot start transport searches or add waves to a retired run',async()=>{
+  const store=new ShiftStore(':memory:'),dispatch=createDispatchApi(store),transport=createTransportApi(store);dispatch.close();
+  const base=store.ensure({regionId:'moscow',date:shift.date,orders:[],team:[],plan:{status:'EXACT_VALID',publicationAllowed:true,contentSha256:'fixture',validation:{status:'VALID'},routes:[],unassigned:[],metrics:{}}});
+  const request=(handler,path,body)=>handler.handle(new Request('http://localhost/api/'+path,{method:'POST',body:JSON.stringify(body)}));
+  try{
+    const first=await (await request(dispatch,'dispatch/sessions',{baseShiftId:base.id,speed:300})).json();
+    await request(dispatch,`dispatch/shifts/${first.shiftId}/clock`,{minute:600,playing:false,speed:300});
+    await request(dispatch,`dispatch/shifts/${first.shiftId}/clock`,{minute:360,mode:'plan',restartDay:'seek',playing:false,speed:300});
+    for(const [path,body] of [['previews',{expectedRevision:1,time:'06:00'}],['scenario/tick',{minute:865}],['events',{event:input}]]){
+      const response=await request(transport,'transport/'+path,{shiftId:first.shiftId,...body});assert.equal(response.status,409,await response.text());
+    }
+    assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM transport_previews').get().n,0);
+    assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM transport_events').get().n,0);
+    const read=await transport.handle(new Request('http://localhost/api/transport/events?shiftId='+first.shiftId));assert.equal(read.status,200,'Historical reads remain available');
+  }finally{store.close();}
+});
 
 test('overnight and unknown-end events reach subsequent shifts with one shared publication context',()=>{
   const store=new ShiftStore(':memory:'),s=new TransportStore(store);

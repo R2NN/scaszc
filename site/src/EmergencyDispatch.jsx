@@ -1,6 +1,6 @@
 import { ratingName } from './engineerPresentation.js';
 import { createIncidentAnnouncer, publishDispatchMapEvent } from './dispatchMapEvents.js';
-import { createDispatchClockSync } from './dispatchClockSync.js';
+import { createDispatchClockSync,adoptDispatchClock } from './dispatchClockSync.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, Clock3, Route, RotateCcw, X } from 'lucide-react';
 import { shiftClock } from './shiftClock.js';
@@ -19,14 +19,14 @@ const api = async (path, body) => {
 const terminal = item => ['ACCEPTED', 'CANCELLED'].includes(item.status);
 
 /** Bridge durable incidents to BeeGo's existing notifications and playback clock. */
-export function useEmergencyDispatch({ shift, active = false, onApply, notify, onOpen }) {
+export function useEmergencyDispatch({ shift, active = false, onApply, notify, onOpen, onRestart }) {
   const [incidents, setIncidents] = useState([]), [session, setSession] = useState(null), [selectedId, setSelectedId] = useState('');
   const [candidateId, setCandidateId] = useState(''), [error, setError] = useState(''), [policy, setPolicy] = useState(null);
   const [routeScope, setRouteScope] = useState('day');
   const [acceptingId, setAcceptingId] = useState('');
   const [submission,setSubmission] = useState(null);
   const refs = useRef({});
-  refs.current = { shift, active, onApply, notify, onOpen };
+  refs.current = { shift, active, onApply, notify, onOpen, onRestart };
   const notified = useRef(new Set()), initialized = useRef(''), clockSync = useRef(null);
   const [serverOffset, setServerOffset] = useState(0);
   const announcer = useRef(null);
@@ -48,7 +48,7 @@ export function useEmergencyDispatch({ shift, active = false, onApply, notify, o
         const marker = `beego-dispatch-session:${shift.id}`;
         sessionStorage.setItem(marker, 'active');
         setSession(value); refs.current.onApply(value.shift);
-        shiftClock.set({ minute: value.clock.minute, playing: false, speed: value.clock.speed, awaitingDecision:Boolean(value.clock.awaitingDecision), confirmingDecision:Boolean(value.clock.confirmingDecision) });
+        shiftClock.set({ minute: value.clock.minute, playing: false, speed: value.clock.speed, awaitingDecision:Boolean(value.clock.awaitingDecision), confirmingDecision:Boolean(value.clock.confirmingDecision), restartDay:null, restartFromMinute:null });
       } catch (e) { if (alive) setError(e.message); }
     };
     restore();
@@ -66,7 +66,7 @@ export function useEmergencyDispatch({ shift, active = false, onApply, notify, o
     const poll = async () => {
       try {
         const value = await api(`shifts/${shift.id}/incidents`);
-        if (!alive) return;
+        if (!alive || refs.current.shift?.id!==shift.id) return;
         if (value.clock && clockSync.current && !clockSync.current.apply(value.clock)) return;
         setServerOffset(value.serverNow-Date.now());
         setIncidents(value.incidents);
@@ -79,7 +79,7 @@ export function useEmergencyDispatch({ shift, active = false, onApply, notify, o
           }
           if (incident.decision && incident.decision.revision > refs.current.shift.revision) {
             const response = await fetch(`/api/shifts/${shift.id}`);
-            if (alive && response.ok) refs.current.onApply(await response.json());
+            if (alive && response.ok) {const saved=await response.json();if(alive&&refs.current.shift?.id===shift.id)refs.current.onApply(saved);}
           }
         }
       } catch (e) { if (alive) setError(e.message); }
@@ -92,7 +92,23 @@ export function useEmergencyDispatch({ shift, active = false, onApply, notify, o
     if (!shift?.regionId.includes(':scenario:')) return;
     const bridge = createDispatchClockSync({clock:shiftClock,scope:shift.id,
       send:snapshot => api(`shifts/${shift.id}/clock`,snapshot),
-      onValue:value => {setIncidents(value.incidents || []);announce(value.incidents || []);},onError:e => setError(e.message)});
+      onValue:value => {
+        if(value.restarted){
+          bridge.close();if(clockSync.current===bridge)clockSync.current=null;
+          publishDispatchMapEvent(window,'clear');
+          setSession(value);setSelectedId('');setCandidateId('');setRouteScope('day');setIncidents([]);setError('');setSubmission(null);setAcceptingId('');
+          const clock={...value.clock,restartDay:null,restartFromMinute:null,selectedEngineerId:'',follow:false};
+          if(!adoptDispatchClock(value.shiftId,clock))shiftClock.set(clock);
+          refs.current.onApply(value.shift);
+          refs.current.onRestart?.();
+          return;
+        }
+        setIncidents(value.incidents || []);announce(value.incidents || []);
+      },onError:e => {
+        const clock=shiftClock.getSnapshot();
+        if(clock.restartDay)shiftClock.set({minute:clock.restartFromMinute,restartDay:null,restartFromMinute:null,playing:false});
+        setError(e.message);
+      }});
     clockSync.current = bridge;
     return () => {bridge.close();if (clockSync.current === bridge) clockSync.current=null;};
   }, [shift?.id]);
@@ -137,7 +153,7 @@ export function useEmergencyDispatch({ shift, active = false, onApply, notify, o
       publishDispatchMapEvent(window,'clear');
       sessionStorage.setItem(`beego-dispatch-session:${session?.baseShiftId || shift.id}`, 'active');
       setSession(value); setSelectedId(''); setCandidateId(''); setRouteScope('day'); setIncidents([]); refs.current.onApply(value.shift);
-      shiftClock.set({ minute:360, playing:false, speed:value.clock.speed, awaitingDecision:false, confirmingDecision:false, selectedEngineerId:'', follow:false });
+      shiftClock.set({ minute:360, playing:false, speed:value.clock.speed, awaitingDecision:false, confirmingDecision:false, selectedEngineerId:'', follow:false, restartDay:null, restartFromMinute:null });
       refs.current.onOpen();
     } catch (e) { setError(e.message); }
   };
@@ -149,22 +165,25 @@ export function useEmergencyDispatch({ shift, active = false, onApply, notify, o
         setError('');
         if (refs.current.shift.regionId.includes(':scenario:')) {
           await clockSync.current?.flush();
+          if(refs.current.shift?.id!==incident.shiftId)return;
           const synchronized = await api(`shifts/${incident.shiftId}/clock`,shiftClock.getSnapshot());
           clockSync.current?.apply(synchronized.clock);
         }
         const result = await api(`incidents/${incident.id}/accept`, { candidateId:candidate.id, actor:'Диспетчер' });
+        if(refs.current.shift?.id!==incident.shiftId)return;
         setIncidents(current => current.map(item => item.id === result.id ? result : item));
         if(result.status!=='ACCEPTED') return;
         setCandidateId(result.decision.candidateId);
         if (result.status === 'ACCEPTED' && result.decision.revision > refs.current.shift.revision) {
           const response = await fetch(`/api/shifts/${incident.shiftId}`);
           if (!response.ok) throw new Error('Решение сохранено, но обновить план не удалось. Обновите смену.');
-          refs.current.onApply(await response.json());
+          const saved=await response.json();if(refs.current.shift?.id!==incident.shiftId)return;
+          refs.current.onApply(saved);
         }
         if (result.status === 'ACCEPTED') clockSync.current?.apply(result.playback);
       }
-    catch (e) { setError(e.message); }
-    finally { setAcceptingId('');setSubmission(null); }
+    catch (e) { if(refs.current.shift?.id===incident.shiftId)setError(e.message); }
+    finally { setAcceptingId(current=>current===incident.id?'':current);setSubmission(current=>current?.incidentId===incident.id?null:current); }
   };
   const read = async item => {
     try { if (item.incidentId) await api(`incidents/${item.incidentId}/read`, {notificationId:item.id}); }

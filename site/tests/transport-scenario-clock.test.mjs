@@ -9,6 +9,16 @@ test('a transport problem notification never claims routes are already built',()
     {kind:'alert',title:'Проблема на маршруте'});
 });
 
+test('a pending rewind suppresses late scenario events and cannot adopt an old clock',async()=>{
+  let value={minute:865},release,listener,calls=0;
+  const controller=createTransportScenarioClock({clock:{getSnapshot:()=>value,subscribe:fn=>{listener=fn;return()=>{};}},getShift:()=>({id:'old',regionId:'moscow:scenario:old'}),
+    request:async()=>{calls++;return new Promise(resolve=>{release=resolve;});},adopt:()=>assert.fail(),onEvent:()=>assert.fail(),onError:()=>assert.fail()});
+  try{
+    value={minute:360,restartDay:'seek'};listener();release({index:-1,waves:[{time:'09:30'}]});await controller.flush();
+    listener();await controller.flush();assert.equal(calls,1);
+  }finally{controller.close();}
+});
+
 test('application-level clock fires while Orders is open, pauses, and does not duplicate a wave',async()=>{
   let value={minute:864,playing:true},listener,tab='orders';
   const shift={id:'s',regionId:'moscow:scenario:ordinary-emergency-day',revision:2};

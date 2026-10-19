@@ -24,6 +24,17 @@ test('every new saved problem triggers calculation outside the five-wave scenari
   }finally{controller.close();}
 });
 
+test('a pending rewind owns the clock and drops late transport reads',async()=>{
+  const c=clock();let release,calls=0;
+  const controller=createTransportImpactClock({clock:c,getShift:()=>shift,
+    request:async()=>{calls++;return new Promise(resolve=>{release=resolve;});},
+    pause:()=>assert.fail(),onEvents:()=>assert.fail(),onPreview:()=>assert.fail(),onWaiting:()=>assert.fail(),onError:error=>assert.fail(error.message)});
+  try{
+    c.set({minute:360,restartDay:'seek'});release({events:[road]});await controller.flush();
+    c.set({minute:360});await controller.flush();assert.equal(calls,1,'Transport must not write a clock or start old calculations while restarting');
+  }finally{controller.close();}
+});
+
 test('a busy planner retries with paused clocks without an immediate request loop',async()=>{
   const c=clock();let attempts=0,pauses=0;const notices=[];
   const controller=createTransportImpactClock({retryMs:20,clock:c,getShift:()=>shift,

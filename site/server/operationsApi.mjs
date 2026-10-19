@@ -21,8 +21,8 @@ const bodyOf = async request => request.json().catch(() => ({}));
 const errorStatus = error => /устарел|уже изменился|Транспортные ограничения изменились/.test(error.message) ? 409 : /не найден/.test(error.message) ? 404 : 422;
 
 export function createOperationsApi({ store = new ShiftStore(), routing = exactShiftReplan, routingOptions = {}, ai = askShiftAi, aiOptions = {}, seedFromBase = false } = {}) {
-  const dispatchApi = createDispatchApi(store);
   const transportApi = createTransportApi(store);
+  const dispatchApi = createDispatchApi(store,{onRestart:shiftId=>transportApi.cancelShift(shiftId)});
   const ratingApi = createRatingApi(store);
   const seedPromise = seedFromBase ? (async () => { await seedComplexity(store.complexity); seedEngineerFeedback(store.complexity); await seedBaseShift(store); })() : Promise.resolve();
   const aiCalls = new Map();

@@ -25,8 +25,8 @@ export function createTransportImpactClock({clock,getShift,request,pause,onEvent
     running=(async()=>{
       while(active&&queued){
         queued=false;
-        const shift=getShift();if(!shift?.plan||!shift.date)continue;
-        const owns=()=>active&&getShift()?.id===shift.id;
+        const shift=getShift();if(!shift?.plan||!shift.date||clock.getSnapshot().restartDay)continue;
+        const owns=()=>active&&getShift()?.id===shift.id&&!clock.getSnapshot().restartDay;
         try{
           const {events}=await request(`events?shiftId=${encodeURIComponent(shift.id)}`);
           if(!owns())continue;

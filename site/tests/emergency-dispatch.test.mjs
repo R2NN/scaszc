@@ -28,6 +28,31 @@ const fixture = (file=':memory:') => {
   return {store,shift,dispatch,create,advance:seconds=>{clock+=seconds*1000;}};
 };
 
+test('rewinding a demonstration starts a clean durable day once and retains the previous facts and history',async()=>{
+  const f=fixture(),cancelled=[],api=createDispatchApi(f.store,{routing:f.dispatch.routing,onRestart:id=>cancelled.push(id)});api.close();
+  const base=f.store.ensure({regionId:'replay',date:f.shift.date,orders:[{...order,address:'Адрес повторного показа',zoneId:'SOUTHCENTER',zone:'Югоцентр'}],team:[engineer],plan:initial});
+  const post=async(path,body)=>{const r=await api.handle(new Request(`http://localhost/api/dispatch/${path}`,{method:'POST',body:JSON.stringify(body)}));const value=await r.json();assert.ok(r.ok,JSON.stringify(value));return value;};
+  try{
+    const first=await post('sessions',{baseShiftId:base.id,speed:300});
+    await post(`shifts/${first.shiftId}/clock`,{minute:600,playing:false,speed:300});
+    f.store.recordFact(first.shiftId,{orderId:'J1',engineerId:'E1',status:'started',time:'12:00'});
+    const previous=f.store.get(first.shiftId),incident=api.dispatch.create(first.shiftId,{order:{...order,id:'U1',start:'10:00'},time:'10:00'});
+    const next=await post(`shifts/${first.shiftId}/clock`,{minute:360,playing:false,speed:1,mode:'plan',restartDay:'seek-1',serverClockVersion:0});
+    assert.equal(next.restarted,true);assert.notEqual(next.shiftId,first.shiftId);assert.equal(next.baseShiftId,base.id);
+    assert.equal(next.clock.minute,360);assert.equal(next.clock.speed,300);assert.equal(next.clock.playing,false);assert.equal(next.fired,false);
+    assert.equal(next.shift.revision,1);assert.deepEqual(next.shift.facts,[]);assert.deepEqual(next.shift.orders,first.shift.orders);
+    assert.equal(next.shift.plan.contentSha256,first.shift.plan.contentSha256);assert.deepEqual(f.store.get(first.shiftId),previous);
+    assert.equal(api.dispatch.get(incident.id).status,'CANCELLED');assert.deepEqual(cancelled,[first.shiftId]);
+    const duplicate=await post(`shifts/${first.shiftId}/clock`,{minute:360,mode:'plan',restartDay:'seek-1'});
+    assert.equal(duplicate.shiftId,next.shiftId);assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM dispatch_sessions').get().n,2);
+    const late=await post(`shifts/${first.shiftId}/clock`,{minute:865,playing:true,speed:300});assert.equal(late.shiftId,next.shiftId);
+    const again=await post(`shifts/${next.shiftId}/clock`,{minute:677,playing:false,speed:300});
+    assert.equal(again.incidents.length,1);assert.notEqual(again.incidents[0].id,incident.id);
+    await post(`shifts/${next.shiftId}/clock`,{minute:360,playing:false,speed:300,mode:'fact',restartDay:'fact-scrub'});
+    assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM dispatch_sessions').get().n,2,'Factual viewing cannot restart a scenario');
+  }finally{f.store.close();}
+});
+
 test('an improved offer retains the original receipt and can be accepted through either selection', async () => {
   const f = fixture();
   try {

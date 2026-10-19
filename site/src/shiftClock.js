@@ -5,6 +5,7 @@ const listeners = new Set();
 let frame = 0;
 let last = 0;
 let simulatedMinute = state.minute;
+let seekSequence = 0;
 const notify = () => listeners.forEach(listener => listener());
 const tick = stamp => {
   if (!state.playing) { frame = 0; last = 0; return; }
@@ -21,6 +22,12 @@ const tick = stamp => {
 export const shiftClock = {
   subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
   getSnapshot() { return state; },
+  /** An explicit seek to the start can request a fresh demonstration without reloading. */
+  seek(minute, { restartDay = false } = {}) {
+    if (state.restartDay) return;
+    const restart = restartDay && state.mode === 'plan' && minute === 360 && state.minute > 360;
+    shiftClock.set({ minute, playing:false, ...(restart ? { restartDay:`${Date.now()}:${++seekSequence}`, restartFromMinute:state.minute } : {}) });
+  },
   set(patch) {
     const wasPlaying = state.playing;
     state = { ...state, ...patch };

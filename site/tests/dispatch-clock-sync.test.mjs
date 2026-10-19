@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createDispatchClockSync,adoptDispatchClock} from '../src/dispatchClockSync.js';
+import {shiftClock} from '../src/shiftClock.js';
 
 const fixture=(scope)=>{
   let state={minute:600,playing:false,speed:300,awaitingDecision:false}, writes=0;
@@ -53,4 +54,25 @@ test('a new session consumes an adopted server minute before it can echo old loc
   assert.equal(adoptDispatchClock('new-transport',{version:1,minute:420,speed:60,playing:false}),false);
   const f=fixture('new-transport');
   try{assert.equal(f.clock.getSnapshot().minute,420);assert.equal(f.requests.length,0);}finally{f.sync.close();}
+});
+
+test('a restarted session is delivered even though its clock version begins at one',async()=>{
+  let state={minute:865,playing:false,speed:300},listener,received;
+  const clock={getSnapshot:()=>state,set:patch=>{state={...state,...patch};listener?.();},subscribe:fn=>{listener=fn;return()=>{listener=null;};}};
+  const sync=createDispatchClockSync({clock,send:async()=>({restarted:true,shiftId:'new-day',clock:{minute:360,playing:false,speed:300,version:1}}),onValue:value=>{received=value;}});
+  try{
+    sync.apply({minute:865,playing:false,speed:300,version:100});
+    clock.set({minute:360,restartDay:'seek'});await sync.flush();
+    assert.equal(received.shiftId,'new-day');assert.equal(received.clock.version,1);
+  }finally{sync.close();}
+});
+
+test('only an explicit demonstration seek to 06:00 requests a restart',()=>{
+  shiftClock.set({minute:865,mode:'plan',playing:false,restartDay:null});
+  shiftClock.seek(600,{restartDay:true});assert.equal(shiftClock.getSnapshot().restartDay,null);
+  shiftClock.seek(360,{restartDay:true});assert.ok(shiftClock.getSnapshot().restartDay);assert.equal(shiftClock.getSnapshot().restartFromMinute,600);
+  shiftClock.seek(500,{restartDay:true});assert.equal(shiftClock.getSnapshot().minute,360,'Scrubbing is locked until the new day is adopted');
+  shiftClock.set({minute:865,mode:'fact',restartDay:null});shiftClock.seek(360,{restartDay:true});assert.equal(shiftClock.getSnapshot().restartDay,null);
+  shiftClock.set({minute:865,mode:'plan'});shiftClock.seek(360);assert.equal(shiftClock.getSnapshot().restartDay,null);
+  shiftClock.seek(360,{restartDay:true});assert.equal(shiftClock.getSnapshot().restartDay,null,'Initial 06:00 is not a repeated reset');
 });

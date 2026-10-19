@@ -139,6 +139,10 @@ export function createTransportApi(store) {
     return catalogPromise;
   };
   const requireShift = id => { const shift=store.get(id); if(!shift?.plan) throw new Error('Смена не найдена'); return shift; };
+  const requireActiveRun = id => {
+    const row=store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(id);
+    if(row&&JSON.parse(row.payload).restartedAs)throw new Error('Сценарий устарел: показ начат заново. Используйте текущую смену');
+  };
   const comparisonShift=async shift=>{
     const root=projectRoot(),sha=shift.plan.contentSha256;
     for(const file of [path.join(root,'runtime/exact-replans',`${sha}.json`),path.join(root,'algorithm/artifacts/complexity/initial-exact.json'),path.join(root,'algorithm/artifacts/current/initial-exact-205-of-205-retimed.json')]){
@@ -175,6 +179,7 @@ export function createTransportApi(store) {
         // Reading durable state remains available during network inspection.
         if(action==='scenario')return json(await scenario.handle(action,input,url));
         const key=input.shiftId || input.baseShiftId || url.searchParams.get('shiftId');
+        if(input.shiftId)requireActiveRun(input.shiftId);
         if(scenarioLocks.has(key))return json({error:'Подготавливаем транспортное событие. Подождите завершения.'},429);
         scenarioLocks.add(key);
         try{return json(await scenario.handle(action,input,url));}finally{scenarioLocks.delete(key);}
@@ -185,7 +190,7 @@ export function createTransportApi(store) {
         const segment=await transportNetwork({action:'snap',coords:input.coords}); transport.segments([segment]); return json(segment);
       }
       if(action==='events' && request.method==='GET') { const shift=requireShift(url.searchParams.get('shiftId')); return json({events:transport.list(shift)}); }
-      if(action==='events' && request.method==='POST') { await loadCatalog(); return json(transport.save(input.event,requireShift(input.shiftId)),201); }
+      if(action==='events' && request.method==='POST') { requireActiveRun(input.shiftId);await loadCatalog();requireActiveRun(input.shiftId);return json(transport.save(input.event,requireShift(input.shiftId)),201); }
       if(action==='previews/latest' && request.method==='GET') {
         const shift=requireShift(url.searchParams.get('shiftId'));
         const row=store.db.prepare('SELECT payload FROM transport_previews WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(shift.id);
@@ -194,6 +199,7 @@ export function createTransportApi(store) {
       if(action==='history' && request.method==='GET') return json(transport.db.prepare('SELECT payload FROM transport_history WHERE event_id=? ORDER BY revision DESC').all(url.searchParams.get('eventId')).map(r=>JSON.parse(r.payload)));
       if(action==='previews' && request.method==='POST') {
         const shift=requireShift(input.shiftId);
+        requireActiveRun(shift.id);
         if(input.expectedRevision!==shift.revision) throw new Error('План устарел. Обновите смену');
         if(minuteOf(input.time)==null) throw new Error('Укажите время расчёта');
         const nowMinute=minuteNow(shift);
@@ -203,6 +209,7 @@ export function createTransportApi(store) {
           await loadCatalog(); const draft=transport.normalize(input.draft,shift);
           const index=events.findIndex(e=>e.id===draft.id); if(index<0) events.push(draft); else events[index]=draft;
         }
+        requireActiveRun(shift.id);
         const release=acquirePlanningSlot(); if(!release) return planningBusyResponse();
         const controller=new AbortController(),deadlineAt=Date.now()+PLANNING_DEADLINE_MS;
         let previewId;
@@ -247,6 +254,7 @@ export function createTransportApi(store) {
         }
         if(previewMatch[2]==='apply') {
           const shift=requireShift(item.shiftId);
+          requireActiveRun(shift.id);
           if(item.status!=='READY') throw new Error('Дождитесь проверенного решения');
           if(contextHash(transport.list(shift))!==item.contextSha256) throw new Error('Ограничения изменились или ещё не сохранены. Повторите расчёт');
           const currentMinute=minuteNow(shift);
@@ -258,5 +266,5 @@ export function createTransportApi(store) {
       return json({error:'Неизвестный адрес транспорта'},404);
     } catch(error) { return json({error:error.message},/устарел|изменил|ещё не сохранены/.test(error.message)?409:422); }
   }
-  return {handle,transport};
+  return {handle,transport,cancelShift(shiftId){for(const [id,controller] of running)if(transport.preview(id)?.shiftId===shiftId)controller.abort();}};
 }

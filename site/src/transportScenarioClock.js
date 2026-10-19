@@ -11,8 +11,8 @@ export function createTransportScenarioClock({clock,getShift,request,adopt,onEve
       while(active&&queued){
         queued=false;
         const shift=getShift(),minute=Math.floor(clock.getSnapshot().minute);
-        if(!shift?.regionId?.includes(':scenario:'))continue;
-        const owns=()=>active&&getShift()?.id===shift.id;
+        if(!shift?.regionId?.includes(':scenario:')||clock.getSnapshot().restartDay)continue;
+        const owns=()=>active&&getShift()?.id===shift.id&&!clock.getSnapshot().restartDay;
         try{
           let state=await request(`scenario?shiftId=${encodeURIComponent(shift.id)}`);
           if(!owns()||!state)continue;

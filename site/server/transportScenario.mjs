@@ -27,6 +27,10 @@ async function rawPlan(shift) {
 
 /** An isolated, durable road/metro demonstration over real current routes. */
 export function createTransportScenario(store,transport,network) {
+  const requireActiveRun=shiftId=>{
+    const row=store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=?').get(shiftId);
+    if(row&&JSON.parse(row.payload).restartedAs)throw new Error('Сценарий устарел: показ начат заново');
+  };
   store.db.exec('CREATE TABLE IF NOT EXISTS transport_scenarios(shift_id TEXT PRIMARY KEY,payload TEXT NOT NULL)');
   const put=state=>store.db.prepare('INSERT INTO transport_scenarios VALUES (?,?) ON CONFLICT(shift_id) DO UPDATE SET payload=excluded.payload').run(state.shiftId,JSON.stringify(state));
   const get=id=>{
@@ -88,6 +92,7 @@ export function createTransportScenario(store,transport,network) {
         if(!choice)throw new Error('В оставшемся плане не найден используемый участок для совместного показа');
         transport.segments([choice.segment]);
         const end=Math.max(15*60+10,(minuteOf(choice.usedAt.slice(11,16))||865)+20);
+        requireActiveRun(shift.id);
         const event=transport.save({id:`transport-dual-${shift.id}-${kind}`,kind,direction:'both',title:kind==='road'?'Одновременно: перекрыта дорога':'Одновременно: закрыт участок метро',
           startsAt:`${shift.date}T14:25:00+03:00`,endsAt:`${shift.date}T${timeOf(Math.min(1439,end))}:00+03:00`,segmentIds:[choice.segment.id],source:'Изолированный одновременный сценарий',externalId:`dual-${kind}`},shift);
         events.push(event);state.waves.push({time:'14:25',kind,index,eventId:event.id,title:event.title,status:'OPEN',targetEngineer:choice.engineerId,targetOrder:choice.orderId});
@@ -114,6 +119,7 @@ export function createTransportScenario(store,transport,network) {
     if(state.variant!=='simultaneous')state.waves.forEach((wave,i)=>{if(!wave.eventId)Object.assign(wave,waves[i]);});
     const shift=store.get(shiftId);
     if(action==='scenario/next'||action==='scenario/tick') {
+      requireActiveRun(shiftId);
       const previous=state.waves[state.index];
       if(previous?.eventId) {
         const applied=store.db.prepare("SELECT payload FROM transport_previews WHERE shift_id=? AND json_extract(payload,'$.status')='APPLIED' ORDER BY rowid DESC LIMIT 1").get(shiftId);
@@ -137,6 +143,7 @@ export function createTransportScenario(store,transport,network) {
       if(!choice)throw new Error(`В текущем оставшемся плане не найден используемый участок для «${wave.title}». Текущий план сохранён`);
       transport.segments([choice.segment]);
       const endMinute=wave.end?Math.max(minuteOf(wave.end),(minuteOf(choice.usedAt.slice(11,16))||minute)+20):null;
+      requireActiveRun(shiftId);
       const event=transport.save({id:`transport-wave-${state.shiftId}-${index}`,title:wave.kind==='road'?`Перекрытие дороги · ${choice.segment.name}`:wave.title,reason:`Сценарное событие · ${choice.segment.name}`,kind:wave.kind,direction:wave.direction,
         startsAt:`${shift.date}T${wave.time}:00+03:00`,endsAt:endMinute==null?null:`${shift.date}T${timeOf(Math.min(1439,endMinute))}:00+03:00`,segmentIds:[choice.segment.id],
         source:'Изолированный транспортный сценарий',externalId:`wave-${index}`},shift);

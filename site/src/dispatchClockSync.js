@@ -33,6 +33,7 @@ export function createDispatchClockSync({clock, scope, send, onValue = () => {},
           const result = await send({...clock.getSnapshot(),...(version>=0?{serverClockVersion:version}:{})});
           if (!active) return;
           if(requestEpoch!==epoch)continue;
+          if(result.restarted){onValue(result);return;}
           version=Math.max(version,result.clock?.version ?? version);
           if (!queued && apply(result.clock)) onValue(result);
         } catch (error) {if (active) onError(error);}
