@@ -60,6 +60,14 @@ test('transport events retain history, optimistic revision and idempotent retrie
   }finally{s.db.close();}
 });
 
+test('a long drawn road can save more than twenty proven connected edges',()=>{
+  const s=setup();try{
+    const segments=Array.from({length:30},(_,index)=>({...segment,id:`road:draw-${index}`,edgeId:String(index),opposingEdgeId:String(index+1000),geometry:[[55.7,37.6+index*.001],[55.7,37.6+(index+1)*.001]]}));
+    s.segments(segments);const event=s.save({...input,segmentIds:segments.map(item=>item.id)},shift);assert.equal(event.segments.length,30);
+    assert.throws(()=>s.save({...input,id:'too-many',segmentIds:Array.from({length:501},()=>segment.id)},shift),/допустимой длины/);
+  }finally{s.db.close();}
+});
+
 test('movement totals separate model waiting from travel instead of charging it as movement',()=>{
   const visit={orderId:'a',departureAt:'14:00',arrival:'14:20',plannedStart:'15:00',plannedFinish:'15:20',travelMinutes:20,distanceM:1000,geometry:[[55.7,37.6],[55.8,37.7]],travelSteps:[{mode:'metro_wait_model',seconds:600,distanceM:0},{mode:'metro',seconds:600,distanceM:1000}]};
   const route={engineerId:'x',assignments:[visit]},s={orders:[{id:'a',end:'16:00'}],team:[{id:'x',shiftEnd:'18:00'}],plan:{routes:[route]}};

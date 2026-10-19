@@ -1,6 +1,7 @@
 """Read-only network selections/catalog and independent transport route audit."""
 from __future__ import annotations
 import json
+import math
 import os
 import sys
 from datetime import datetime, timedelta
@@ -42,7 +43,9 @@ def snap(payload):
     edges = [e for e in edges if e.get('edge', {}).get('access', {}).get('car') and e.get('distance', 999) <= 35]
     if not edges:
         raise ValueError('Рядом нет доступной автомобильной дороги. Приблизьте карту и выберите проезжую часть.')
-    edge = min(edges, key=lambda e: e['distance'])
+    edge = next((e for e in edges if str(e['edge_id']['value']) == str(payload.get('edgeId'))), None) if payload.get('edgeId') else min(edges, key=lambda e: e['distance'])
+    if edge is None:
+        raise ValueError('Не удалось однозначно подтвердить выбранную дорогу. Уточните линию ближе к середине проезжей части.')
     shape = [list(p) for p in _decode_polyline6(edge['edge_info']['shape'])]
     if not edge['edge']['forward']:
         shape.reverse()
@@ -71,6 +74,64 @@ def snap(payload):
             'lengthM': edge['edge']['geo_attributes']['length'], 'bridge': edge['edge']['bridge'],
             'tunnel': edge['edge']['tunnel'], 'fromId': str(shape[0]), 'toId': str(shape[-1]),
             'correlationProof':correlation_proof, 'graphRevision':graph_revision, 'source': 'Valhalla 3.8.3 / OpenStreetMap'}
+
+
+def draw_road(payload):
+    """Resolve an operator's line into proven, connected car-network edges."""
+    points = payload.get('points')
+    if not isinstance(points, list) or not 2 <= len(points) <= 150:
+        raise ValueError('Отметьте начало и конец участка; для поворотов добавьте промежуточные точки.')
+    if any(not isinstance(p, list) or len(p) != 2 or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in p)
+           or not 54 <= p[0] <= 57 or not 35 <= p[1] <= 40 for p in points):
+        raise ValueError('Выберите дорогу в Московском регионе.')
+    def distance(a, b):
+        return math.hypot((a[0]-b[0])*111195, (a[1]-b[1])*62500)
+    drawn_length = sum(distance(a, b) for a, b in zip(points, points[1:]))
+    if drawn_length < 5 or drawn_length > 50000:
+        raise ValueError('Выделите участок длиной от 5 м до 50 км; более длинные перекрытия добавляйте отдельно.')
+    locations = [{'lat': p[0], 'lon': p[1], 'radius': 25, 'search_cutoff': 40} for p in points]
+    if payload.get('mode') == 'brush':
+        result = raw_valhalla(ENDPOINT, 'trace_attributes', {
+            'shape': locations, 'costing': 'auto', 'shape_match': 'map_snap',
+            'trace_options': {'search_radius': 35, 'breakage_distance': 1000},
+            'filters': {'action': 'include', 'attributes': ['shape', 'edge.id', 'edge.begin_shape_index', 'edge.end_shape_index']},
+        })
+        geometry = [list(p) for p in _decode_polyline6(result.get('shape', ''))]
+        edges = result.get('edges', [])
+    else:
+        for location in locations[1:-1]:
+            location['type'] = 'through'
+        result = raw_valhalla(ENDPOINT, 'route', {'locations': locations, 'costing': 'auto', 'units': 'kilometers'})
+        geometry = []
+        for leg in result.get('trip', {}).get('legs', []):
+            shape = [list(p) for p in _decode_polyline6(leg['shape'])]
+            geometry.extend(shape[1:] if geometry and shape and geometry[-1] == shape[0] else shape)
+        edges = trace_edges(ENDPOINT, geometry)
+    if len(geometry) < 2 or not edges or len(edges) > 500:
+        raise ValueError('Не удалось собрать непрерывный участок. Добавьте точку на дороге перед перекрёстком.')
+    length = sum(distance(a, b) for a, b in zip(geometry, geometry[1:]))
+    if length > max(250, drawn_length*2.5) or length > 50000:
+        raise ValueError('Между точками получается большой объезд. Уточните линию промежуточными точками или начните с другого конца дороги.')
+    segments, seen = [], set()
+    from beeline_planning.dispatch import split_geometry
+    for edge in edges:
+        begin, end = edge.get('begin_shape_index'), edge.get('end_shape_index')
+        if not isinstance(begin, int) or not isinstance(end, int) or not 0 <= begin < end < len(geometry):
+            raise ValueError('Дорожный сервис не подтвердил геометрию всего участка. Уточните границы линии.')
+        _, middle = split_geometry(geometry[begin:end+1], .5)
+        segment = snap({'coords': list(middle), 'edgeId': str(edge['id'])})
+        if segment['edgeId'] != str(edge['id']):
+            raise ValueError('Линия попала на соседнюю проезжую часть. Приблизьте карту и уточните точки.')
+        if segment['edgeId'] in seen or segment.get('opposingEdgeId') in seen:
+            continue
+        if segments and distance(segments[-1]['geometry'][-1], segment['geometry'][0]) > 4:
+            raise ValueError('Линия прерывается или пересекает разные уровни дороги. Уточните точку соединения.')
+        seen.add(segment['edgeId'])
+        segments.append(segment)
+    if not segments:
+        raise ValueError('Выделите начало и конец на одной связной дороге.')
+    return {'segments': segments, 'lengthM': round(sum(s['lengthM'] for s in segments)),
+            'names': list(dict.fromkeys(s['name'] for s in segments)), 'points': points}
 
 
 def audit(payload):
@@ -224,7 +285,7 @@ if __name__ == '__main__':
     try:
         payload = json.load(sys.stdin)
         action = payload.pop('action')
-        result = catalog() if action == 'catalog' else snap(payload) if action == 'snap' else candidates(payload) if action == 'candidates' else audit(payload)
+        result = catalog() if action == 'catalog' else snap(payload) if action == 'snap' else draw_road(payload) if action == 'draw' else candidates(payload) if action == 'candidates' else audit(payload)
         print(json.dumps(result, ensure_ascii=False))
     except Exception as error:
         print(json.dumps({'error': str(error)}, ensure_ascii=False))

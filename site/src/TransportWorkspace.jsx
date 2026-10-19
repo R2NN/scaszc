@@ -8,6 +8,8 @@ import { transportPlaybackClock } from './transportPlaybackClock.js';
 import { minuteOf, timeOf } from './shiftDomain.js';
 import { ratingName } from './engineerPresentation.js';
 import { EngineerPortrait } from './EngineerPortrait.jsx';
+import { BusinessSelect } from './BusinessSelect.jsx';
+import { DateTimePicker } from './DateTimePicker.jsx';
 import './transport.css';
 
 const sessions=new Map();
@@ -24,10 +26,11 @@ const keepInputVisible=element=>{
   if(rect.top<top)scroller.scrollTop+=(rect.top-top)/scale;
   else if(rect.bottom>bottom)scroller.scrollTop+=(rect.bottom-bottom)/scale;
 };
+const sectionCount=count=>`${count} ${count%100>=11&&count%100<=14?'участков':count%10===1?'участок':count%10>=2&&count%10<=4?'участка':'участков'}`;
 const signed=value=>`${value>0?'+':''}${value}`;
 const showResult=element=>{const target=window.innerWidth<=1100?element?.querySelector('.transport-affected-crews')||element:element;target?.scrollIntoView({block:'start',behavior:'instant'});};
-const api=async(path,body)=>{
-  const response=await fetch(`/api/transport/${path}`,body?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}:undefined);
+const api=async(path,body,signal)=>{
+  const response=await fetch(`/api/transport/${path}`,body?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal}:undefined);
   const value=await response.json();if(!response.ok){const error=new Error(value.error || 'Транспортный сервис недоступен');error.status=response.status;throw error;}return value;
 };
 const inputOf=(event,actor)=>({id:event.id,expectedRevision:event.revision,title:event.title,reason:event.reason,kind:event.kind,direction:event.direction,
@@ -69,25 +72,35 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   useEffect(()=>{if(shift?.id)sessions.set(`${shift.id}:${live}`,{draft});},[draft,shift?.id,live]);
   const begin=(kind='road')=>{
     if(!shift?.plan){setError('Выберите день с опубликованным планом');return;}
-    roadRequest.current++;clearPreview();setSelected(null);setSearch('');setError('');setStationFrom('');
-    setDraft({id:crypto.randomUUID(),title:'',reason:'',kind,direction:'both',startsAt:`${date}T${live?timeOf(minute):'09:30'}:00+03:00`,endsAt:`${date}T${live?timeOf(Math.min(1439,minute+45)):'10:15'}:00+03:00`,segments:[],source:'Диспетчер',actor,status:'OPEN'});
+    roadRequest.current++;clearPreview();setSelected(null);setSearch('');setError('');setStationFrom('');setBusy(false);
+    setDraft({id:crypto.randomUUID(),title:'',reason:'',kind,direction:'both',startsAt:`${date}T${live?timeOf(minute):'09:30'}:00+03:00`,endsAt:`${date}T${live?timeOf(Math.min(1439,minute+45)):'10:15'}:00+03:00`,segments:[],roadPoints:[],roadMode:'points',source:'Диспетчер',actor,status:'OPEN'});
     setWhenMode(live?'now':'planned');setDrawing(true);
   };
   const clearPreview=()=>{generation.current++;calculationRequest.current++;clearTimeout(retryRef.current);const old=previewRef.current;previewRef.current=null;setPreview(null);if(old&&['RUNNING','READY'].includes(old.status))api(`previews/${old.id}/cancel`,{}).catch(()=>{});};
-  const change=patch=>{if(patch.kind)roadRequest.current++;clearPreview();setError('');setDraft(value=>({...value,...patch}));};
+  const change=patch=>{if(patch.kind){roadRequest.current++;setBusy(false);}clearPreview();setError('');setDraft(value=>({...value,...patch}));};
   const selectSegment=segment=>{
     if(!segment)return;
     const value=segment.kind?segment:{...segment,kind:'entry',fromId:segment.id,toId:null,geometry:[segment.coords]};
     setDraft(current=>current&&!current.segments.some(s=>s.id===value.id)?{...current,segments:[...current.segments,value]}:current);
     clearPreview();setError('');
   };
-  const roadRequest=useRef(0),roadSequence=useRef(0),roadPending=useRef(0);
-  const selectRoad=async coords=>{
-    const id=roadRequest.current,formId=draft?.id,sequence=roadSequence.current++;roadPending.current++;setBusy(true);setError('');setPreview(null);
-    try{const segment=await api('snap',{coords});if(id===roadRequest.current)setDraft(current=>current?.id===formId&&current.kind==='road'&&!current.segments.some(s=>s.id===segment.id)?{...current,segments:[...current.segments,{...segment,selectionOrder:sequence}].sort((a,b)=>(a.selectionOrder||0)-(b.selectionOrder||0))}:current);}
-    catch(e){if(id===roadRequest.current)setError(e.message);}
-    finally{roadPending.current--;if(!roadPending.current)setBusy(false);}
+  const roadRequest=useRef(0),roadAbort=useRef(null);
+  useEffect(()=>()=>{roadRequest.current++;roadAbort.current?.abort();},[draft?.id,draft?.kind]);
+  const drawRoad=async(points,mode='points')=>{
+    const form=refs.current.draft;if(!form||form.kind!=='road')return;
+    const id=++roadRequest.current;roadAbort.current?.abort();const controller=new AbortController();roadAbort.current=controller;clearPreview();setError('');setBusy(points.length>1);
+    const next={...form,roadPoints:points,roadMode:mode,segments:[],roadLengthM:0};
+    refs.current.draft=next;setDraft(next);
+    if(points.length<2)return;
+    try{
+      const selection=await api('draw',{points,mode},controller.signal);
+      if(id===roadRequest.current)setDraft(current=>current?.id===form.id?{...current,segments:selection.segments,roadLengthM:selection.lengthM}:current);
+    }catch(error){if(id===roadRequest.current&&error.name!=='AbortError')setError(error.message);}
+    finally{if(id===roadRequest.current)setBusy(false);}
   };
+  const selectRoad=coords=>drawRoad([...(refs.current.draft?.roadPoints||[]),coords]);
+  const undoRoad=()=>{const form=refs.current.draft;if(form?.kind==='road'&&form.roadPoints?.length)drawRoad(form.roadPoints.slice(0,-1),form.roadMode);else change({segments:form?.segments.slice(0,-1)||[]});};
+  const cancelDraft=()=>{roadRequest.current++;roadAbort.current?.abort();setDraft(null);setDrawing(false);clearPreview();setBusy(false);};
   const selectStation=id=>{
     if(!stationFrom){setStationFrom(id);return;}
     const segment=catalog?.segments.find(s=>s.kind===draft?.kind&&((s.fromId===stationFrom&&s.toId===id)||(s.bidirectional&&s.toId===stationFrom&&s.fromId===id)));
@@ -130,10 +143,10 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   refs.current={calculate,shift,active,draft};
   const draftSignature=JSON.stringify(draft);
   useEffect(()=>{
-    if(!draft?.title.trim()||!draft.segments.length)return;
+    if(!draft?.title.trim()||!draft.segments.length||drawing||busy)return;
     const timer=setTimeout(()=>refs.current.calculate(),900);
     return()=>{clearTimeout(timer);generation.current++;if(previewRef.current?.status==='RUNNING')api(`previews/${previewRef.current.id}/cancel`,{}).catch(()=>{});};
-  },[draftSignature]);
+  },[draftSignature,drawing,busy]);
   useEffect(()=>{
     if(preview?.status!=='RUNNING')return;
     setElapsed(Math.floor((Date.now()-preview.startedAt)/1000));
@@ -150,9 +163,9 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     const scoped=transportSelectedConsequences(preview?.result?.consequences,preview?.result?.eventImpacts,selected?.id);
     transportMap.set({enabled:live||active,management:active,catalog,events,draft:active?draft:null,editingId:active&&draft?.expectedRevision?draft.id:null,preview:active?preview:null,date,minute,showEnded:active&&showEnded,engineerId,
       impactOrderIds:scoped?.orders.map(order=>order.orderId),comparison,
-      drawing:active&&drawing,kind:draft?.kind,onRoad:selectRoad,onSegment:selectSegment,onStation:selectStation,onSelect:event=>{onScenarioEvent?.();selectEvent(event);},onGroup:items=>{onScenarioEvent?.();openGroup(items);},onOpen:onScenarioEvent,onNew:()=>begin(),
-      onUndo:()=>change({segments:draft?.segments.slice(0,-1)||[]}),onKind:kind=>{if(!draft)begin(kind);else{change({kind,segments:[]});setDrawing(true);}}});
-  },[active,catalog,events,draft,preview,date,minute,drawing,showEnded,engineerId,stationFrom,selected?.id,comparison]);
+      drawing:active&&drawing,kind:draft?.kind,roadMode:draft?.roadMode||'points',roadBusy:busy,onRoad:selectRoad,onRoadStroke:points=>drawRoad(points,'brush'),onRoadPointMove:(index,coords)=>drawRoad(draft.roadPoints.map((point,i)=>i===index?coords:point)),onSegment:selectSegment,onStation:selectStation,onSelect:event=>{onScenarioEvent?.();selectEvent(event);},onGroup:items=>{onScenarioEvent?.();openGroup(items);},onOpen:onScenarioEvent,onNew:()=>begin(),
+      onUndo:undoRoad,onFinish:()=>setDrawing(false),onRoadMode:roadMode=>change({roadMode}),onKind:kind=>{if(!draft)begin(kind);else{change({kind,segments:[],roadPoints:[]});setDrawing(true);}}});
+  },[active,catalog,events,draft,preview,date,minute,drawing,busy,showEnded,engineerId,stationFrom,selected?.id,comparison]);
   const save=async()=>{
     setBusy(true);setError('');
     try{const event=await api('events',{shiftId:shift.id,event:{...inputOf({...draft,revision:draft.expectedRevision},actor),expectedRevision:draft.expectedRevision}});
@@ -213,10 +226,9 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const ready=preview?.status==='READY'&&!draft;
   const routeSummary=engineer?<div className='transport-route-summary'><label className='transport-engineer'>{engineer.transport==='CAR'?<Car size={18}/>:<TrainFront size={18}/>}<select aria-label='Затронутый инженер' value={engineer.engineerId} onChange={event=>focusEngineer(event.target.value)}>{consequences.engineers.map(person=><option key={person.engineerId} value={person.engineerId}>{ratingName(shift.team.find(member=>member.id===person.engineerId)||{name:person.name})}</option>)}</select><span>{engineer.transport==='CAR'?'Авто':'Общественный транспорт'}</span></label>{firstOrder?<div className='transport-eta'><div><small>Было прибытие</small><b>{firstOrder.before}</b></div><ArrowRight/><div><small>Новое прибытие</small><b>{firstOrder.after}</b></div><strong>{signed(firstOrder.delta)} мин</strong></div>:null}</div>:null;
   return <div className={`transport-panel-frame ${live?'live':''} ${ready?'has-decision':''}`}><div onFocusCapture={event=>{const element=event.target;requestAnimationFrame(()=>keepInputVisible(element));}} className={`transport-panel-content ${live?'live':''} ${consequences?'has-result':''} ${draft?'editing':''}`}>
-    {selected&&!draft?<section className='transport-problem-context' aria-label='Влияние выбранной проблемы'><span className='transport-type-icon'>{restrictionIcon(selected.kind)}</span><div><small>ВЛИЯНИЕ НА БРИГАДЫ</small><b>{selected.title}</b><p>{preview?.status==='RUNNING'?'Вычисляем влияние и новый путь от текущего положения…':waitingForPlanner?'Ожидаем расчёт. Проблема остаётся видна на карте.':consequences?`Проверено на ${preview.time} · ${consequences.engineers.length} бригад`:'Готовим сравнение исходного пути и объезда…'}</p></div></section>:null}
+    {selected&&!draft?<section className='transport-problem-context' aria-label='Влияние выбранной проблемы'><span className='transport-type-icon'>{restrictionIcon(selected.kind)}</span><div><small>ВЛИЯНИЕ НА БРИГАДЫ</small><b>{selected.title}</b><p>{preview?.status==='RUNNING'?'Вычисляем влияние и новый путь от текущего положения…':waitingForPlanner?'Ожидаем расчёт. Проблема остаётся видна на карте.':consequences?`Затронуто бригад: ${consequences.engineers.length}`:'Готовим сравнение исходного пути и объезда…'}</p></div></section>:null}
     {eventGroup.length&&!draft?<section ref={groupRef} className='transport-event-group'><div className='transport-section-title'><h3>Ограничения в точке ({eventGroup.length})</h3><button onClick={()=>setEventGroup([])} aria-label='Закрыть группу ограничений'><X size={18}/></button></div>{eventGroup.map(event=><button key={event.id} onClick={()=>{setEventGroup([]);selectEvent(event);}}>{restrictionIcon(event.kind)}<span><b>{event.title}</b><small>{kindLabel[event.kind]} · {event.startsAt.slice(11,16)}–{endLabel(event)}</small></span><ChevronRight size={16}/></button>)}</section>:null}
-    {consequences&&!draft?<button className='transport-browse' onClick={()=>setBrowse(value=>!value)}>{browse?'Скрыть поиск':'Найти или добавить ограничение'}</button>:null}
-    {!draft&&(!consequences||browse)?<div className='transport-intro'><div><b>{live?'Движение в течение смены':'Доступность дорог и метро'}</b><p>{live?'Закрытия, проверенные объезды и последствия для заявок':'Планируйте перекрытия на выбранный день'}</p></div><button className='transport-add' onClick={()=>begin()} aria-label='Добавить транспортное ограничение'><Plus size={18}/></button></div>:null}
+    {!draft?<div className='transport-intro'><div><b>{live?'Движение в течение смены':'Доступность дорог и метро'}</b><p>{live?'Закрытия, проверенные объезды и последствия для заявок':'Планируйте перекрытия на выбранный день'}</p></div>{consequences?<button className='transport-add transport-search-toggle' aria-label='Поиск ограничений' aria-pressed={browse} onClick={()=>setBrowse(value=>!value)}><Search size={18}/></button>:null}<button className='transport-add' onClick={()=>begin()} aria-label='Добавить транспортное ограничение'><Plus size={18}/></button></div>:null}
     {refreshNotice?<div className='transport-clock-notice' role='status'><Clock3 size={16}/><span>Время изменилось: обновляем решение из текущего положения. Проверьте обновлённый результат перед применением.</span></div>:null}
     {waitingForPlanner?<div className='transport-clock-notice' role='status'><Clock3 size={16}/><span>Событие уже на карте. Ожидаем свободный расчёт — проверка запустится автоматически.</span></div>:null}
     {error?<div className='transport-error' role='alert'><AlertTriangle size={18}/><span>{error}</span><button onClick={()=>setError('')} aria-label='Закрыть сообщение'><X size={15}/></button></div>:null}
@@ -228,18 +240,19 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
       {selected?<section className='transport-detail'><div className='transport-section-title'><h3>{kindLabel[selected.kind]}</h3><button onClick={()=>setSelected(null)} aria-label='Закрыть карточку ограничения'><X size={18}/></button></div><p>{selected.reason}</p><dl><div><dt>Участок</dt><dd>{selected.segments.map(s=>s.name).join(', ')}</dd></div><div><dt>Направление</dt><dd>{directionLabel(selected)}</dd></div><div><dt>Источник</dt><dd>{selected.source}</dd></div><div><dt>Действует</dt><dd>{selected.startsAt.slice(0,10)} · {selected.startsAt.slice(11,16)}–{endLabel(selected)}</dd></div><div><dt>Транспорт</dt><dd>{selected.kind==='road'?'Автомобили · пешеходам проход открыт':'Общественный транспорт'}</dd></div></dl><div className='transport-actions'><button onClick={()=>transportMap.focusProblem([selected])}><MapPin size={16}/>Приблизить проблему</button><button onClick={()=>editEvent(selected)}>Изменить / продлить</button></div><div className='transport-actions'><button disabled={busy||selected.status!=='OPEN'||transportStatus(selected,date,minute)==='Запланировано'} onClick={()=>endEvent('ENDED')}>Завершить событие</button><button disabled={busy||selected.status!=='OPEN'} onClick={()=>endEvent('CANCELLED')}>Отменить событие</button></div><button className='transport-primary full' onClick={()=>calculate({force:true})} disabled={preview?.status==='RUNNING'}><Route size={17}/>Проверить последствия</button></section>:null}
     </>:<>
       <div className='transport-modes'><button className={draft.kind==='road'?'active':''} onClick={()=>change({kind:'road',segments:[]})}><Car/>Авто</button><button className={draft.kind!=='road'?'active':''} onClick={()=>change({kind:'metro',segments:[]})}><b>M</b>Метро</button>{draft.kind==='road'?<span><Footprints size={20}/>Проход открыт</span>:null}</div>
-      <section className='transport-form'><div className='transport-section-title'><h3>{draft.expectedRevision?'Изменить ограничение':'Новое перекрытие'}</h3><button onClick={()=>{roadRequest.current++;setDraft(null);setDrawing(false);clearPreview();}} aria-label='Отменить ввод ограничения'><X size={18}/></button></div>
+      <section className='transport-form'><div className='transport-section-title'><h3>{draft.expectedRevision?'Изменить ограничение':'Новое перекрытие'}</h3><button onClick={cancelDraft} aria-label='Отменить ввод ограничения'><X size={18}/></button></div>
         <label>Название<input value={draft.title} placeholder={draft.kind==='road'?'Например, ремонт проезжей части':'Например, закрыт участок линии'} onChange={e=>change({title:e.target.value})} maxLength={160}/></label>
-        {draft.kind!=='road'?<label>Что закрыто<select value={draft.kind} onChange={e=>{change({kind:e.target.value,segments:[]});setSearch('');}}><option value='metro'>Движение между станциями</option><option value='transfer'>Пересадка между линиями</option><option value='entry'>Вход и выход станции</option></select></label>:null}
+        {draft.kind!=='road'?<label>Что закрыто<BusinessSelect ariaLabel='Что закрыто' value={draft.kind} onChange={kind=>{change({kind,segments:[]});setSearch('');}} portalMenu options={[{value:'metro',label:'Движение между станциями'},{value:'transfer',label:'Пересадка между линиями'},{value:'entry',label:'Вход и выход станции'}]}/></label>:null}
         <div className='transport-when'><button className={whenMode==='planned'?'active':''} onClick={()=>{setWhenMode('planned');change({startsAt:`${date}T${live?timeOf(Math.min(1439,minute+30)):'09:30'}:00+03:00`,endsAt:live&&minute>=1350?null:`${date}T${live?timeOf(minute+90):'10:15'}:00+03:00`});}}><Clock3 size={17}/>Запланировано</button><button className={whenMode==='now'?'active':''} onClick={()=>{setWhenMode('now');change({startsAt:`${date}T${timeOf(Math.floor(clock.minute))}:00+03:00`,endsAt:null});}}>Сейчас</button></div>
-        <div className='transport-time-grid'><label>Начало<input aria-label='Начало ограничения' type='datetime-local' value={draft.startsAt.slice(0,16)} onChange={e=>change({startsAt:`${e.target.value}:00+03:00`})}/></label><label>Окончание<input aria-label='Окончание ограничения' disabled={!draft.endsAt} type='datetime-local' value={draft.endsAt?.slice(0,16)||''} onChange={e=>change({endsAt:`${e.target.value}:00+03:00`})}/></label></div>
+        <div className='transport-time-grid'><DateTimePicker label='Начало ограничения' value={draft.startsAt} onChange={startsAt=>change({startsAt})}/><DateTimePicker label='Окончание ограничения' disabled={!draft.endsAt} value={draft.endsAt} onChange={endsAt=>change({endsAt})}/></div>
         <label className='transport-check'><input type='checkbox' checked={!draft.endsAt} onChange={e=>change({endsAt:e.target.checked?null:`${date}T${timeOf(Math.min(1439,(minuteOf(draft.startsAt.slice(11,16))||0)+60))}:00+03:00`})}/>Окончание неизвестно</label>
-        {draft.kind!=='entry'?<label>Направление движения<select value={draft.direction} onChange={e=>change({direction:e.target.value})}><option value='both'>↕ В обоих направлениях</option><option value='forward'>→ По выбранному направлению</option>{draft.kind==='road'?<option value='reverse'>← В обратном направлении</option>:null}</select></label>:null}
+        {draft.kind!=='entry'?<label>Направление движения<BusinessSelect ariaLabel='Направление движения' value={draft.direction} onChange={direction=>change({direction})} portalMenu options={[{value:'both',label:'В обоих направлениях'},{value:'forward',label:'От начала к концу участка'},...(draft.kind==='road'?[{value:'reverse',label:'От конца к началу участка'}]:[])]}/></label>:null}
         <details className='transport-extra'><summary>Причина и источник</summary><label>Причина<input value={draft.reason} placeholder='Краткое пояснение для диспетчера' onChange={e=>change({reason:e.target.value})}/></label><label>Источник<input value={draft.source} maxLength={160} onChange={e=>change({source:e.target.value})}/></label></details>
         <div className='transport-mode-note'>{draft.kind==='road'?<Car size={18}/>:<TrainFront size={18}/>}<span>{draft.kind==='road'?'Автомобили · пешеходам проход открыт':draft.kind==='entry'?'Вход и выход закрыты · движение поездов сохраняется':draft.kind==='transfer'?'Закрыта только выбранная пересадка':'Закрыто движение на выбранных связях'}</span></div>
       </section>
       {draft.kind!=='road'?<><div className='transport-search'><Search size={17}/><input aria-label='Поиск станции или участка метро' placeholder='Название станции или пересадки' value={search} onChange={e=>setSearch(e.target.value)}/></div>{results.length?<div className='transport-station-results'>{results.map(s=><button key={s.id} onClick={()=>{selectSegment(s);setSearch('');}}><b>M</b><span>{s.name}<small>{catalog?.lines?.[s.lineId]?.name || ''}</small></span><Plus size={15}/></button>)}</div>:null}</>:null}
-      <div className='transport-selection'><span><strong>{draft.segments.length?`Выбрано ${draft.segments.length} ${draft.kind==='entry'?'станций':'участков'}`:'Участок ещё не выбран'}</strong><small>{busy?'Привязываем к дорожной сети…':draft.segments.map(s=>s.name).join(' → ')||'Выберите на карте; координаты вводить не нужно'}</small></span><button disabled={!draft.segments.length} onClick={()=>change({segments:draft.segments.slice(0,-1)})} aria-label='Отменить выбор последнего участка'><Undo2 size={18}/></button><button onClick={()=>setDrawing(v=>!v)}>{drawing?'Готово':'Изменить участок'}</button></div>
+      <div className='transport-selection'><span><strong>{draft.segments.length?draft.kind==='road'?`${(draft.roadLengthM||draft.segments.reduce((sum,item)=>sum+item.lengthM,0)).toLocaleString('ru-RU')} м · ${sectionCount(draft.segments.length)}`:`Выбрано ${draft.segments.length} ${draft.kind==='entry'?'станций':'участков'}`:draft.roadPoints?.length?draft.roadPoints.length===1?'Отмечено начало участка':'Уточните линию на карте':'Участок ещё не выбран'}</strong>{busy||draft.segments.length?<small>{busy?'Привязываем линию к дороге…':[...new Set(draft.segments.map(s=>s.name))].join(' → ')}</small>:null}</span><button disabled={!draft.segments.length&&!draft.roadPoints?.length} onClick={undoRoad} aria-label='Отменить выбор последней точки'><Undo2 size={18}/></button><button disabled={busy||drawing&&!draft.segments.length} onClick={()=>setDrawing(value=>!value)}>{drawing?'Готово':'Изменить участок'}</button></div>
+      {draft.kind==='road'&&(draft.roadPoints?.length||draft.segments.length)?<button className='transport-clear-selection' onClick={()=>{drawRoad([],draft.roadMode);setDrawing(true);}}>Очистить участок</button>:null}
       {stationFrom?<p className='transport-source-note'>Выбрана первая станция. Нажмите соседнюю станцию.</p>:null}
     </>}
     {preview?.status==='RUNNING'?<section className='transport-calculating' role='status'><i className='spinner'/><div><b>Рассчитываем новый маршрут</b><p>{preview.phase}</p><p>Факты и опубликованный план сохранены · {elapsed} с{preview.progress?.routeChecks>0?` · проверок маршрута: ${preview.progress.routeChecks}`:''}</p></div><button onClick={async()=>{await api(`previews/${preview.id}/cancel`,{});setPreview(null);}}>Отмена</button></section>:null}
@@ -257,12 +270,10 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
       {consequences.orders.length?<div className='transport-impacts'><h4>Затронутые заявки ({consequences.orders.length})</h4>{consequences.orders.map(o=><button key={o.orderId} aria-pressed={o.orderId===firstOrder?.orderId} onClick={()=>{setEngineerId(o.engineerId);setOrderId(o.orderId);if(o.geometryAfter)transportMap.focus(transportFocusSegments({orders:[o],events,draft,selected,date,minute,transport:shift.team.find(person=>person.id===o.engineerId)?.transport}));}}><span>{o.address || o.orderId}</span><b>{o.lost?'Нет назначения':`${signed(o.delta)} мин`}</b><small className={o.lost||o.lateMinutes>0?'warning':''}>{o.lost?'Нужно решение':o.lateMinutes==null?'Окно неизвестно':o.lateMinutes>0?`Опоздание ${o.lateMinutes} мин`:'В окне'}</small></button>)}</div>:null}
 
       {engineer&&(engineer.beforeWaitingMinutes||engineer.afterWaitingMinutes)?<p className='transport-source-note'>Ожидание транспорта отдельно: {engineer.beforeWaitingMinutes} → {engineer.afterWaitingMinutes} мин</p>:null}
-      <details><summary>Что проверено</summary><p>Независимый валидатор плана: {preview.result.plan.validation.status}. Запреты сети: {preview.result.audit.status}. Территории, навыки, оснащение, транспорт и история визитов сохраняются. Метро использует модель ожидания поезда из локального индекса.</p></details>
     </section>:null}
-    <p className='transport-source-note'>Europe/Moscow · дата {date?.split('-').reverse().join('.')} · источник сети: OpenStreetMap / Московский метрополитен</p>
     </div>
-    {ready?<footer className='transport-decision-bar'>{compact?routeSummary:null}<span>{preview.requiresSave?'Сохраните ограничение и повторите проверку':`Проверено на ${preview.time} · версия ${preview.baseRevision}`}</span><button className='transport-primary full' disabled={busy||preview.requiresSave} onClick={apply}>Применить изменения плана</button></footer>:null}
-    {draft?<footer className='transport-form-footer'><button className='transport-primary' disabled={busy||!draft.title.trim()||!draft.segments.length} onClick={save}>Сохранить ограничение</button><button onClick={()=>{setDraft(null);clearPreview();setDrawing(false);}}>Отмена</button></footer>:null}
+    {ready?<footer className='transport-decision-bar'>{compact?routeSummary:null}{preview.requiresSave?<span>Сохраните ограничение и повторите проверку</span>:null}<button className='transport-primary full' disabled={busy||preview.requiresSave} onClick={apply}>Применить изменения плана</button></footer>:null}
+    {draft?<footer className='transport-form-footer'><button className='transport-primary' disabled={busy||drawing||!draft.title.trim()||!draft.segments.length} onClick={save}>Сохранить ограничение</button><button onClick={cancelDraft}>Отмена</button></footer>:null}
   </div>;
 }
 

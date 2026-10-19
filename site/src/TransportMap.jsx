@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import * as maplibregl from 'maplibre-gl';
-import { Car, TrainFront, Undo2, Crosshair, Layers3, Plus, DoorOpen, ArrowLeftRight, Footprints } from 'lucide-react';
+import { Car, TrainFront, Undo2, Layers3, Plus, DoorOpen, ArrowLeftRight, Footprints, Pencil, MousePointer2, Check } from 'lucide-react';
+import { sampleRoadStroke } from './roadDrawing.js';
 import { groupTransportPins,transportBoxClear,transportUsesSidePanel,transportRouteStations,clipTransportSegment } from './transportMapLayout.js';
 import { transportStatus,transportCrewOrders } from './transportDomain.js';
 
@@ -47,6 +48,27 @@ export function TransportMapLayer({map,theme}) {
   const statuses=[...(state.events || []),...(state.draft?[state.draft]:[])].map(event=>transportStatus(event,state.date,state.minute || 0)).join('|');
   const impactKey=JSON.stringify(state.impactOrderIds||null);
   useEffect(()=>{liveMap=map;return()=>{if(liveMap===map)liveMap=null;};},[map]);
+  useEffect(()=>{
+    if(!map||!state.enabled||!state.drawing||state.kind!=='road'||state.roadMode!=='brush')return;
+    const canvas=map.getCanvas(),container=map.getContainer(),wasEnabled=map.dragPan.isEnabled();
+    map.dragPan.disable();const previousTouch=canvas.style.touchAction;canvas.style.touchAction='none';
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),line=document.createElementNS(svg.namespaceURI,'polyline');
+    svg.classList.add('transport-road-stroke');line.setAttribute('fill','none');line.setAttribute('stroke','#7f13ff');line.setAttribute('stroke-width','8');line.setAttribute('stroke-linecap','round');line.setAttribute('stroke-linejoin','round');svg.append(line);container.append(svg);
+    let points=[],pixels=[],pointer=null;
+    const append=event=>{const rect=canvas.getBoundingClientRect(),x=(event.clientX-rect.left)*container.clientWidth/rect.width,y=(event.clientY-rect.top)*container.clientHeight/rect.height,last=pixels.at(-1);if(last&&Math.hypot(x-last[0],y-last[1])<8)return;const p=map.unproject([x,y]);pixels.push([x,y]);points.push([p.lat,p.lng]);line.setAttribute('points',pixels.map(p=>p.join(',')).join(' '));};
+    const down=event=>{if(event.button!==0||!event.target.closest('canvas,.transport-road-anchor,.transport-map-pin,.transport-map-caption'))return;event.preventDefault();event.stopPropagation();pointer=event.pointerId;points=[];pixels=[];append(event);canvas.setPointerCapture(pointer);};
+    const move=event=>{if(event.pointerId!==pointer)return;event.preventDefault();event.stopPropagation();append(event);};
+    const up=event=>{if(event.pointerId!==pointer)return;append(event);event.preventDefault();event.stopPropagation();pointer=null;line.setAttribute('points','');const selected=sampleRoadStroke(points);if(selected.length>1)current.current.onRoadStroke?.(selected);};
+    const cancel=()=>{pointer=null;points=[];pixels=[];line.setAttribute('points','');};
+    container.addEventListener('pointerdown',down,true);container.addEventListener('pointermove',move,true);container.addEventListener('pointerup',up,true);container.addEventListener('pointercancel',cancel,true);
+    return()=>{container.removeEventListener('pointerdown',down,true);container.removeEventListener('pointermove',move,true);container.removeEventListener('pointerup',up,true);container.removeEventListener('pointercancel',cancel,true);svg.remove();canvas.style.touchAction=previousTouch;if(wasEnabled)map.dragPan.enable();};
+  },[map,state.enabled,state.drawing,state.kind,state.roadMode]);
+  useEffect(()=>{
+    if(!map||!state.enabled||state.draft?.kind!=='road')return;
+    const points=state.draft.roadPoints||[],items=state.roadMode==='brush'?points.map((coords,index)=>({coords,index})).filter(({index})=>index===0||index===points.length-1):points.map((coords,index)=>({coords,index}));
+    const markers=items.map(({coords,index})=>{const element=document.createElement('div');element.className='transport-road-anchor';element.textContent=state.roadMode==='brush'?(index===0?'А':'Б'):String(index+1);element.setAttribute('aria-label',`Точка участка ${index+1}`);element.addEventListener('click',event=>event.stopPropagation());const marker=new maplibregl.Marker({element,draggable:state.drawing&&state.roadMode!=='brush'}).setLngLat([coords[1],coords[0]]).addTo(map);marker.on('dragend',()=>{const p=marker.getLngLat();current.current.onRoadPointMove?.(index,[p.lat,p.lng]);});return marker;});
+    return()=>markers.forEach(marker=>marker.remove());
+  },[map,state.enabled,state.draft?.roadPoints,state.roadMode,state.drawing]);
   useEffect(()=>{
     if(!map)return;
     let markers=[];
@@ -218,13 +240,13 @@ export function TransportMapLayer({map,theme}) {
         if(status==='Завершено'&&!state.showEnded)continue;
         for(const segment of event.segments){
           if(segment.geometry.length>1)closures.push(line(event.direction==='reverse'?[...segment.geometry].reverse():segment.geometry,{id:event.id,kind:event.kind,direction:event.kind==='road'&&!segment.opposingEdgeId?'forward':event.direction,ended:status==='Завершено'}));
-          for(const p of [segment.geometry[0],...(segment.geometry.length>1?[segment.geometry.at(-1)]:[])])pinItems.push({coords:[p[1],p[0]],event,status});
+          if(!(event.id==='draft'&&state.draft?.roadPoints?.length))for(const p of [segment.geometry[0],...(segment.geometry.length>1?[segment.geometry.at(-1)]:[])])pinItems.push({coords:[p[1],p[0]],event,status});
 
         }
         const selected=event.segments[0];
         if(selected){const p=selected.geometry[Math.floor(selected.geometry.length/2)],element=document.createElement('button');
           element.className='transport-map-caption';element.type='button';element.textContent=`${({road:'⊘ Авто',metro:'▣ Движение метро',entry:'↪ Вход',transfer:'⇄ Пересадка'})[event.kind]} · ${event.title}`;
-          const time=document.createElement('small');time.textContent=`${status} · ${event.startsAt?.slice(11,16)}–${event.endsAt?.slice(11,16)||'срок неизвестен'}`;element.append(time);
+          const time=document.createElement('small');time.textContent=`${status} · ${event.startsAt?.slice(11,16)}–${event.endsAt?`${event.endsAt.slice(0,10)!==event.startsAt?.slice(0,10)?event.endsAt.slice(5,10).split('-').reverse().join('.')+' ':''}${event.endsAt.slice(11,16)}`:'срок неизвестен'}`;element.append(time);
           element.onclick=()=>current.current.onSelect?.(event);
           const marker=new maplibregl.Marker({element,anchor:'top-left'}).setLngLat([p[1],p[0]]).addTo(map);
           markers.push(marker);captionsToPlace.push({marker,coords:[p[1],p[0]]});
@@ -251,7 +273,7 @@ export function TransportMapLayer({map,theme}) {
       const closure=hit.find(f=>f.layer.id==='beego-transport-closed');
       if(closure&&!state.drawing){state.onSelect?.((state.events || []).find(e=>e.id===closure.properties.id));return;}
       if(!state.drawing)return;
-      if(state.kind==='road'){state.onRoad?.([event.lngLat.lat,event.lngLat.lng]);return;}
+      if(state.kind==='road'){if(state.roadMode!=='brush')state.onRoad?.([event.lngLat.lat,event.lngLat.lng]);return;}
       const station=hit.find(f=>f.layer.id==='beego-transport-stations');
       if(state.kind==='entry'&&station){state.onSegment?.((state.catalog.stations || []).find(s=>s.id===station.properties.id));return;}
       const link=hit.find(f=>f.layer.id==='beego-transport-links'&&f.properties.kind===state.kind);
@@ -270,9 +292,9 @@ export function TransportMapLayer({map,theme}) {
       <button className={state.drawing&&state.kind==='road'?'active':''} onClick={()=>state.onKind?.('road')}><Car size={18}/>Участок дороги</button>
       <button className={state.drawing&&state.kind!=='road'?'active':''} onClick={()=>state.onKind?.('metro')}><TrainFront size={18}/>Метро</button>
       <button onClick={()=>transportMap.set({metro:!state.metro})} aria-pressed={state.metro} title='Показать станции и схему связей метро'><Layers3 size={18}/></button>
-      {state.drawing?<button onClick={state.onUndo} aria-label='Отменить последний участок'><Undo2 size={18}/></button>:<button onClick={state.onNew}><Plus size={18}/>Ограничение</button>}
+      {state.drawing?<button onClick={state.onUndo} aria-label='Отменить последнюю точку'><Undo2 size={18}/></button>:<button onClick={state.onNew}><Plus size={18}/>Ограничение</button>}
     </div>:null}
-    {state.drawing?<div className='transport-map-hint'>{state.kind==='road'?'Нажмите на проезжую часть — привяжем участок к дорожной сети':state.kind==='entry'?'Выберите станцию на карте или найдите по названию':'Выберите связь метро или две соседние станции'}{state.kind==='road'?<button onClick={()=>{const p=map.getCenter();state.onRoad?.([p.lat,p.lng]);}} aria-label='Выбрать дорогу в центре карты'><Crosshair size={15}/></button>:null}</div>:null}
+    {state.drawing&&state.kind==='road'?<div className='transport-draw-tools' aria-label='Рисование перекрытия'><div><button aria-pressed={state.roadMode!=='brush'} onClick={()=>state.onRoadMode?.('points')}><MousePointer2 size={16}/>По точкам</button><button aria-pressed={state.roadMode==='brush'} onClick={()=>state.onRoadMode?.('brush')}><Pencil size={16}/>Кисть</button><button disabled={state.roadBusy||!state.draft?.segments?.length} onClick={state.onFinish}><Check size={16}/>Готово</button></div><p role='status'>{state.roadBusy?'Проверяем линию и привязываем к проезжей части…':state.roadMode==='brush'?'Проведите линию вдоль дороги. По точкам — для перемещения карты.':state.draft?.roadPoints?.length?'Добавляйте точки на поворотах. Точки можно перетаскивать.':'Отметьте начало и конец участка. Между ними построим линию по дороге.'}</p></div>:state.drawing?<div className='transport-map-hint'>{state.kind==='entry'?'Выберите станцию на карте или найдите по названию':'Выберите связь метро или две соседние станции'}</div>:null}
     {state.management!==false?<details className='transport-map-legend' open={legendOpen} onToggle={event=>setLegendOpen(event.currentTarget.open)}><summary>Легенда</summary><div><span><i className='closure'/>Закрыто для авто</span><span><TrainFront size={16}/>Движение метро</span><span><DoorOpen size={16}/>Вход</span><span><ArrowLeftRight size={16}/>Пересадка</span><span><i className='before'/>Прежний путь</span><span><i className='after'/>Новый путь</span><span><Footprints size={15}/><i className='walking'/>Пешком / пересадка</span></div></details>:null}
   </>;
 }

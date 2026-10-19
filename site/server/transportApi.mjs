@@ -80,7 +80,7 @@ export class TransportStore {
     const validTime = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+03:00$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(Date.parse(value)+180*60_000).toISOString().slice(0,16)===value.slice(0,16);
     if (!validTime(input.startsAt) || input.startsAt.slice(0,10) !== (prior?.date || shift.date)) throw new Error('Дата начала должна совпадать с выбранной сменой (Москва)');
     if (input.endsAt !== null && (!validTime(input.endsAt) || Date.parse(input.endsAt) < Date.parse(input.startsAt) || input.endsAt===input.startsAt && input.status!=='ENDED')) throw new Error('Окончание должно быть позже начала; для неизвестного срока выберите соответствующую отметку');
-    if (!Array.isArray(input.segmentIds) || input.segmentIds.length < 1 || input.segmentIds.length > 20) throw new Error('Выберите от 1 до 20 участков сети');
+    if (!Array.isArray(input.segmentIds) || input.segmentIds.length < 1 || input.segmentIds.length > (input.kind==='road'?500:20)) throw new Error('Выберите связный участок сети допустимой длины');
     const segments = [...new Set(input.segmentIds)].map(id => {
       const row = this.db.prepare('SELECT payload FROM transport_segments WHERE id=?').get(id);
       if (!row) throw new Error('Участок не подтверждён сетью. Выберите его на карте заново');
@@ -186,6 +186,11 @@ export function createTransportApi(store) {
         try{return json(await scenario.handle(action,input,url));}finally{scenarioLocks.delete(key);}
       }
       if(action==='catalog' && request.method==='GET') return json(await loadCatalog());
+      if(action==='draw' && request.method==='POST') {
+        if(!['points','brush'].includes(input.mode)||!Array.isArray(input.points)||input.points.length<2||input.points.length>150||input.points.some(point=>!Array.isArray(point)||point.length!==2||!point.every(Number.isFinite)||point[0]<54||point[0]>57||point[1]<35||point[1]>40))throw new Error('Отметьте начало и конец дороги в Московском регионе');
+        const selection=await transportNetwork({action:'draw',points:input.points,mode:input.mode},{signal:request.signal});
+        transport.segments(selection.segments);return json(selection);
+      }
       if(action==='snap' && request.method==='POST') {
         if(!Array.isArray(input.coords)||input.coords.length!==2||!input.coords.every(Number.isFinite)||input.coords[0]<54||input.coords[0]>57||input.coords[1]<35||input.coords[1]>40) throw new Error('Выберите дорогу в Московском регионе');
         const segment=await transportNetwork({action:'snap',coords:input.coords}); transport.segments([segment]); return json(segment);

@@ -2,6 +2,66 @@ from algorithm.tools import transport_network as network
 import pytest
 
 
+def drawing_fixture(monkeypatch, count=3):
+    geometry = [[55.7, 37.6 + i*.0001] for i in range(count+1)]
+    edges = [{'id': str(i), 'begin_shape_index': i, 'end_shape_index': i+1} for i in range(count)]
+    calls = []
+    def raw(endpoint, action, body):
+        calls.append((action, body))
+        return {'shape': 'verified', 'edges': edges} if action == 'trace_attributes' else {'trip': {'legs': [{'shape': 'verified'}]}}
+    monkeypatch.setattr(network, 'raw_valhalla', raw)
+    monkeypatch.setattr(network, '_decode_polyline6', lambda shape: geometry)
+    monkeypatch.setattr(network, 'trace_edges', lambda *args: edges)
+    def snap(payload):
+        index = int(payload['edgeId'])
+        return {'id': f'road:{index}', 'edgeId': str(index), 'opposingEdgeId': str(index+1000),
+                'geometry': geometry[index:index+2], 'lengthM': 10, 'name': 'Проверенная улица'}
+    monkeypatch.setattr(network, 'snap', snap)
+    return geometry, calls
+
+
+def test_drawing_connects_more_than_twenty_network_edges_without_random_selection(monkeypatch):
+    geometry, calls = drawing_fixture(monkeypatch, 25)
+    result = network.draw_road({'points': [geometry[0], geometry[-1]], 'mode': 'points'})
+    assert len(result['segments']) == 25
+    assert result['lengthM'] == 250
+    assert result['names'] == ['Проверенная улица']
+    assert calls[0][0] == 'route'
+
+
+def test_brush_uses_map_matching_and_rejects_a_wrong_carriageway(monkeypatch):
+    geometry, calls = drawing_fixture(monkeypatch)
+    assert len(network.draw_road({'points': geometry, 'mode': 'brush'})['segments']) == 3
+    assert calls[0][0] == 'trace_attributes'
+    assert calls[0][1]['shape_match'] == 'map_snap'
+    monkeypatch.setattr(network, 'snap', lambda payload: {'edgeId': 'wrong'})
+    with pytest.raises(ValueError, match='соседнюю'):
+        network.draw_road({'points': geometry, 'mode': 'brush'})
+
+
+def test_drawing_rejects_disconnected_levels_and_large_automatic_detours(monkeypatch):
+    geometry, calls = drawing_fixture(monkeypatch)
+    original = network.snap
+    def disconnected(payload):
+        result = original(payload)
+        if payload['edgeId'] == '1':
+            result['geometry'] = [[55.8,37.8], [55.801,37.801]]
+        return result
+    monkeypatch.setattr(network, 'snap', disconnected)
+    with pytest.raises(ValueError, match='прерывается'):
+        network.draw_road({'points': [geometry[0],geometry[-1]], 'mode': 'points'})
+    monkeypatch.setattr(network, 'snap', original)
+    monkeypatch.setattr(network, '_decode_polyline6', lambda shape: [geometry[0], [55.8,37.8], geometry[-1]])
+    with pytest.raises(ValueError, match='большой объезд'):
+        network.draw_road({'points': [geometry[0],geometry[-1]], 'mode': 'points'})
+
+
+@pytest.mark.parametrize('points', [[], [[55.7,37.6]], [[55.7,37.6],[55.7,37.6]], [[0,0],[55.7,37.6]], [[True,37.6],[55.7,37.6]]])
+def test_drawing_rejects_incomplete_or_out_of_region_strokes(points):
+    with pytest.raises(ValueError):
+        network.draw_road({'points': points, 'mode': 'points'})
+
+
 def test_audit_attributes_metro_conflict_to_the_matching_event(monkeypatch):
     a, b, c = [55.7,37.6], [55.71,37.61], [55.72,37.62]
     monkeypatch.setattr(network,'catalog',lambda:{'stations':[{'id':'m:1','coords':a},{'id':'m:2','coords':b},{'id':'m:3','coords':c}]})
