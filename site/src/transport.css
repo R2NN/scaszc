@@ -78,11 +78,11 @@
 .app-shell .transport-result header p,.app-shell .transport-result details,.app-shell .transport-outcome{font-size:13px}.app-shell .transport-source-note{font-size:12px!important}.app-shell .transport-metrics span,.app-shell .transport-eta small{font-size:12px}.app-shell .transport-event em{font-size:13px}
 .app-shell .transport-result>.transport-outcome{margin-top:10px}.app-shell .transport-decision-bar{bottom:0;padding:10px 0 12px}.app-shell .transport-decision-bar>span{font-size:12px}
 @media(max-width:760px){.app-shell .transport-map-legend{left:12px;right:65px;font-size:10px;padding:8px;gap:5px 9px}.app-shell .transport-map-tools,.app-shell .transport-map-hint{left:12px;right:65px;max-width:none}.app-shell .transport-map-caption{max-width:180px;font-size:12px}.app-shell .transport-map-caption small{font-size:11px}.app-shell .transport-panel-content.has-result>.transport-result{order:-1}.app-shell .transport-engineer select{font-size:14px}.app-shell .transport-eta{padding-top:8px;padding-bottom:8px}}
-@media(max-width:760px){.app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live){height:54vh;bottom:auto!important}.overlay-shift .transport-map-legend{bottom:130px}.overlay-shift .transport-map-hint{bottom:180px}.transport-form-footer{bottom:0}}
+@media(max-width:760px){.app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live){height:54vh;bottom:auto!important}.overlay-shift .transport-map-legend{bottom:130px}.overlay-shift .transport-map-hint{bottom:180px}.transport-form-footer{bottom:0}}
 @media(min-width:761px) and (max-width:1250px){.transport-map-tools,.transport-map-hint{left:calc(var(--operational-panel-left) + 430px);max-width:calc(100% - var(--operational-panel-left) - 520px)}}
 @media(max-width:760px){.overlay-shift .transport-map-tools,.overlay-shift .transport-map-hint{left:12px;max-width:none}.overlay-shift .transport-map-tools{top:62px}.overlay-shift .transport-map-hint{top:auto;bottom:130px}.overlay-shift .transport-map-legend{bottom:75px}}
 .app-shell .map-canvas .transport-map-legend{bottom:var(--transport-corridor-bottom,25px)}
-@media(max-width:760px){.app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live)>header{padding:12px 14px}.app-shell .transport-result>header{padding:10px 12px}.app-shell .transport-result>header p{display:none}.app-shell .transport-result>.transport-outcome{font-size:12px;padding:9px;margin-bottom:8px}.app-shell .transport-engineer{padding:6px 8px}.app-shell .transport-engineer>span{margin-left:24px;font-size:11px}}
+@media(max-width:760px){.app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live)>header{padding:12px 14px}.app-shell .transport-result>header{padding:10px 12px}.app-shell .transport-result>header p{display:none}.app-shell .transport-result>.transport-outcome{font-size:12px;padding:9px;margin-bottom:8px}.app-shell .transport-engineer{padding:6px 8px}.app-shell .transport-engineer>span{margin-left:24px;font-size:11px}}
 @media(max-width:760px){.app-shell .transport-map-caption{max-width:285px;width:max-content}.app-shell .transport-engineer>span{display:none}.app-shell .transport-result>.transport-outcome{padding:7px}}
 @media(max-width:760px){.app-shell .transport-result>header{padding:8px 10px}.app-shell .transport-result h3{font-size:16px;margin:0}.app-shell .transport-check-icon{width:26px;height:26px}.app-shell .transport-result>.transport-outcome{margin:6px 8px;padding:6px 8px;line-height:1.3}.app-shell .transport-engineer{margin:0 8px 4px;padding:3px 6px}.app-shell .transport-engineer select{min-height:24px;padding:2px;font-size:14px}.app-shell .transport-eta{padding:6px 10px}.app-shell .transport-eta b{font-size:24px}.app-shell .transport-eta small{font-size:11px;margin-bottom:3px}.app-shell .transport-eta>strong{font-size:12px;padding:7px}}
 
@@ -105,12 +105,12 @@
  .app-shell:has(.transport-map-tools)>.sidebar nav{padding:8px 4px}
  .app-shell:has(.transport-map-tools)>.sidebar nav button,.app-shell:has(.transport-map-tools)>.sidebar .sidebar-bottom button{padding:0!important;justify-content:center}
  .app-shell:has(.transport-map-tools)>.sidebar .brand-row{padding:0 4px!important}
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live){top:113px!important;left:64px!important;right:8px!important;width:auto!important;height:min(44dvh,360px,max(220px,calc(100dvh - 372px)))!important;bottom:auto!important;min-height:0}
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live)>header{min-height:0;padding:10px 14px}
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live)>header h2{font-size:22px;margin:4px 0}
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live)>header small{display:none}
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live) nav.shift-tabs{min-height:43px;padding:3px 8px}
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live) nav.shift-tabs button{min-height:34px;font-size:13px;padding:7px 10px}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live){top:113px!important;left:64px!important;right:8px!important;width:auto!important;height:min(44dvh,360px,max(220px,calc(100dvh - 372px)))!important;bottom:auto!important;min-height:0}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live)>header{min-height:0;padding:10px 14px}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live)>header h2{font-size:22px;margin:4px 0}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live)>header small{display:none}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live) nav.shift-tabs{min-height:43px;padding:3px 8px}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live) nav.shift-tabs button{min-height:34px;font-size:13px;padding:7px 10px}
  .app-shell:has(.transport-map-tools) .shift-timeline{left:64px!important;right:8px!important;bottom:8px!important;min-height:74px;padding:7px 10px}
  .app-shell .transport-workspace{left:64px;right:8px;top:113px;bottom:auto;width:auto;height:min(44dvh,360px,max(220px,calc(100dvh - 372px)))}
  .app-shell .transport-workspace-panel>header{padding:10px 14px}.app-shell .transport-workspace-panel h2{font-size:22px}
@@ -140,9 +140,65 @@
 }
 
 @media(max-width:1100px) and (max-height:650px){
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live)>header{padding:6px 14px}
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live)>header span{display:none}
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live)>header h2{font-size:19px;margin:2px 0}
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live) nav.shift-tabs{min-height:34px}
- .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-content.live) nav.shift-tabs button{min-height:28px;padding:5px 9px}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live)>header{padding:6px 14px}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live)>header span{display:none}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live)>header h2{font-size:19px;margin:2px 0}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live) nav.shift-tabs{min-height:34px}
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body > div:not([hidden]) > .transport-panel-frame.live) nav.shift-tabs button{min-height:28px;padding:5px 9px}
+}
+
+/* The decision dock is outside the scroll viewport, so it cannot cover its summary. */
+.transport-panel-frame{height:100%;min-height:0;display:flex;flex-direction:column;color:var(--transport-ink,#202c3b)}
+.transport-panel-frame>.transport-panel-content{flex:1 1 0;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.app-shell .shift-layer.operational-shift .shift-panel-body:has(> div:not([hidden])>.transport-panel-frame){padding:0;overflow:hidden;display:flex;flex-direction:column}
+.app-shell .shift-layer.operational-shift .shift-panel-body>div:not([hidden]):has(>.transport-panel-frame){flex:1 1 0;min-height:0;overflow:hidden}
+.transport-workspace-scroll:has(>.transport-panel-frame){overflow:hidden}
+.transport-panel-frame>.transport-panel-content.live{padding:16px 20px}
+.app-shell .transport-panel-frame>.transport-decision-bar,.app-shell .transport-panel-frame>.transport-form-footer{position:relative;bottom:auto;flex:none;margin:0;padding:10px 20px 12px;background:var(--transport-surface,#fff);border-top:1px solid var(--transport-border,#e2e6ed)}
+.transport-panel-frame>.transport-form-footer{display:flex;gap:8px}
+.transport-map-caption{z-index:1000!important}
+.maplibre-host[data-transport-active='true'] .maplibregl-marker:not(.transport-map-pin):not(.transport-map-caption):not(.transport-stop),.maplibre-host[data-transport-active='true'] .maplibregl-marker:not(.transport-map-pin):not(.transport-map-caption):not(.transport-stop) *{visibility:hidden!important;pointer-events:none!important}
+@media(max-width:1100px){
+ .transport-panel-frame>.transport-panel-content.live{padding:10px 14px 14px}
+ .app-shell .transport-panel-frame>.transport-decision-bar,.app-shell .transport-panel-frame>.transport-form-footer{padding:8px 14px 10px;gap:5px}
+ .transport-decision-bar .transport-route-summary{border:1px solid var(--transport-purple-border,#e7dcfe);border-radius:10px;background:var(--transport-purple-soft,#f6f1ff)}
+ .app-shell .transport-decision-bar .transport-engineer{border:0;margin:0;padding:3px 8px;background:transparent}
+ .app-shell .transport-decision-bar .transport-eta{padding:3px 9px 6px}
+ .app-shell .transport-decision-bar .transport-eta b{font-size:21px}
+ .app-shell .transport-decision-bar .transport-eta small{font-size:10px;margin-bottom:2px}
+ .app-shell .transport-decision-bar>span{font-size:11px;line-height:1.3}
+ .app-shell .transport-decision-bar>.transport-primary{padding:9px 10px;min-height:38px}
+}
+@media(max-width:1100px) and (max-height:520px) and (orientation:landscape){
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body>div:not([hidden])>.transport-panel-frame.live){top:8px!important;left:64px!important;right:auto!important;width:min(340px,44vw)!important;height:auto!important;bottom:8px!important}
+ .app-shell .transport-workspace{top:8px;left:64px;right:auto;width:min(340px,44vw);bottom:8px;height:auto}
+ .app-shell:has(.transport-map-tools) .shift-timeline{left:calc(64px + min(340px,44vw) + 8px)!important;min-height:68px;padding:5px 8px}
+ .app-shell:has(.transport-map-tools) .shift-task-rail,.app-shell:has(.transport-map-tools) .shift-timeline-task-detail{display:none}
+ .app-shell .transport-map-tools{left:var(--transport-corridor-left)!important;right:58px!important;font-size:11px}
+ .app-shell .transport-map-tools>button{padding:7px;font-size:11px;gap:4px}
+ .app-shell .transport-map-legend{left:var(--transport-corridor-left);font-size:10px;padding:5px 8px}
+ .app-shell .transport-panel-frame>.transport-decision-bar{padding:5px 10px 7px}
+ .app-shell .transport-decision-bar .transport-eta b{font-size:19px}
+ .app-shell .transport-panel-frame>.transport-panel-content.live{padding:8px 10px}
+ .app-shell .transport-workspace-panel>header{padding:8px 12px}
+ .app-shell .transport-workspace-panel>header p,.app-shell .transport-workspace-panel>header small{display:none}
+}
+
+@media(max-width:1100px){
+ .app-shell .transport-decision-bar>.transport-primary{height:40px;min-height:40px;max-height:40px;padding:6px 9px;font-size:13px;line-height:1.2}
+ .app-shell .transport-decision-bar .transport-eta b{line-height:1.15}
+ .app-shell .transport-decision-bar .transport-eta small{line-height:1.15}
+ .app-shell .transport-decision-bar .transport-eta>strong{padding:6px 7px;line-height:1.15;font-size:12px}
+}
+@media(max-width:1100px) and (max-height:520px) and (orientation:landscape){
+ .app-shell.has-map-overlay.overlay-shift .workspace-background-only.calendar-over-overlay .minimal-topbar .date-control{left:calc(50% + (64px + min(340px,44vw))/2)!important}
+}
+
+.transport-panel-frame>.transport-panel-content>*{flex-shrink:0}
+
+@media(min-width:600px) and (max-width:1100px) and (min-height:521px){
+ .app-shell .transport-panel-frame>.transport-decision-bar:has(.transport-route-summary){display:grid;grid-template-columns:minmax(240px,1fr) minmax(180px,.65fr);gap:5px 12px;align-items:center}
+ .transport-decision-bar>.transport-route-summary{grid-column:1;grid-row:1 / 3}
+ .transport-decision-bar>.transport-route-summary~span{grid-column:2;align-self:end}
+ .transport-decision-bar>.transport-route-summary~button{grid-column:2;align-self:start}
 }
