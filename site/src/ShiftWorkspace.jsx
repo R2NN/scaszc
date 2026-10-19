@@ -467,7 +467,7 @@ export function ShiftWorkspace({
     setTargetId(String(servicePreparation.orderId));
     setEventStart(servicePreparation.start || ''); setEventEnd(servicePreparation.end || '');
     setReason(servicePreparation.reason || '');
-    setTime(timeOf(Math.max(Math.floor(shiftClock.getSnapshot().minute), minuteOf(shift?.versions?.at(-1)?.effectiveAt) || 0)));
+    setTime(timeOf(Math.max(420, Math.floor(shiftClock.getSnapshot().minute), minuteOf(shift?.versions?.at(-1)?.effectiveAt) || 0)));
     setPreview(null); setTab('event');
     onConsumeServicePreparation?.();
   }, [servicePreparation?.token]);
