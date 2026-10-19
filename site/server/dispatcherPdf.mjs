@@ -89,7 +89,7 @@ export async function createDispatcherPdf(shift, options = {}) {
     m.risks.length ? [m.risks[0].level.toUpperCase(), `Окно ${sid(m.risks[0].order)} · запас ${m.risks[0].slack} мин`, 'Следить за предыдущим визитом и переездом, предупредить клиента до каскадного сдвига.', `Диспетчер · до ${val(m.risks[0].assignment.plannedStart)}`] : ['КОНТРОЛЬ', 'Рисков по окнам не найдено', 'Сверить новые факты с планом.', 'Диспетчер · в смену'],
     m.mode !== 'full' ? ['ДАННЫЕ', m.mode === 'plan' ? 'Факт визитов не внесён' : `Без итоговой отметки: ${m.summary.counts.withoutFact}`, 'Запросить итоговые статусы; план нельзя трактовать как выполнение.', 'Диспетчер · после смены'] : ['ДАННЫЕ', 'Итоговые статусы внесены', 'Проверить причины неуспеха и полноту временных меток.', 'Диспетчер · при закрытии'],
   ];
-  actions.forEach((row, i) => { const y = 346 + i * 51; box(L, y, CW, 46, i === 0 && m.critical ? C.pink : C.white); label(row[0], L + 10, y + 8, 80, i === 0 && m.critical ? C.red : C.blue); drawText(row[1], L + 91, y + 7, 182, 9, C.ink, true); drawText(row[2], L + 91, y + 22, 285, 7.8, C.muted); drawText(row[3], R - 137, y + 8, 126, 7.8, C.ink, true, { align: 'right' }); });
+  actions.forEach((row, i) => { const y = 346 + i * 51; box(L, y, CW, 46, i === 0 && m.critical ? C.pink : C.white); label(row[0], L + 10, y + 8, 80, i === 0 && m.critical ? C.red : C.blue); drawText(row[1], L + 91, y + 7, CW - 239, 9, C.ink, true, { height: 12, ellipsis: true }); drawText(row[2], L + 91, y + 22, 285, 7.8, C.muted); drawText(row[3], R - 137, y + 8, 126, 7.8, C.ink, true, { align: 'right' }); });
   section('02', 'Критическая заявка и территория', 510);
   box(L, 535, 321, 249, C.white);
   if (criticalOrder) {
@@ -103,7 +103,7 @@ export async function createDispatcherPdf(shift, options = {}) {
       ['Причина', val(m.critical.item.reason)],
     ];
     let yy = 576;
-    fields.forEach(([name, value]) => { label(name, L + 12, yy, 90); const end = drawText(value, L + 107, yy - 1, 202, 8.2, C.ink); yy = Math.max(yy + 19, end + 4); });
+    fields.forEach(([name, value]) => { const labelEnd = drawText(name.toLocaleUpperCase('ru-RU'), L + 12, yy, 90, 7.4, C.muted, true, { characterSpacing: 0.35 }); const end = drawText(value, L + 107, yy - 1, 202, 8.2, C.ink); yy = Math.max(yy + 19, labelEnd + 4, end + 4); });
     drawText('Контакты/договор: данные отсутствуют в карточке заявки.', L + 12, 722, 296, 7.8, C.muted);
     drawText('Действие: проверить доступных по навыку, затем согласовать решение с клиентом до окна.', L + 12, 740, 296, 8.1, C.ink, true);
     if (m.url) { box(L + 11, 764, 148, 18, C.pale, C.yellow, 5); drawText('Открыть заявку в BeeGo  ↗', L + 17, 768, 138, 7.7, C.ink, true, { link: m.url }); doc.link(L + 11, 764, 148, 18, m.url); }
