@@ -5,9 +5,16 @@ import { projectRoot } from '../scripts/project-root.mjs';
 import { minuteOf, timeOf } from '../src/shiftDomain.js';
 
 const waves=[
-  {time:'09:30',end:'11:00',kind:'road',direction:'both',title:'Перекрытие дороги в обоих направлениях'},
+  {time:'09:30',end:'11:00',kind:'road',direction:'both',title:'Перекрытие дороги'},
   {time:'14:25',end:'15:10',kind:'metro',direction:'both',title:'Закрыт участок метро'},
 ];
+
+// Curated only for these sealed demo plans; candidates still come from the
+// actual used network edges. Other data retains the ordinary dynamic choice.
+const roadShowcasePlans=new Set([
+  '44b01c4be2a40deb34e3c4518a7cd9fa5730e335619a2a64a9d19f9a408df3e9',
+  'b6d4119bc6043cdce1b241ca02d6dc4996ed2780ea440a695c64616dce61a6e5',
+]);
 
 async function rawPlan(shift) {
   const root=projectRoot(),sha=shift.plan.contentSha256;
@@ -117,15 +124,20 @@ export function createTransportScenario(store,transport,network) {
       const minute=action==='scenario/next'?minuteOf(wave.time):Number(input.minute);
       if(minute<minuteOf(wave.time))return {state};
       const time=timeOf(Math.floor(minute));
-      const choices=await network({action:'candidates',raw:await rawPlan(shift),team:shift.team,date:shift.date,time,kind:wave.kind,direction:wave.direction},{timeout:120_000});
+      const raw=await rawPlan(shift);
+      const showcase=wave.kind==='road'&&roadShowcasePlans.has(raw.content_sha256)&&shift.team.some(person=>person.id==='EAST-ENG-02');
+      const candidateRaw=showcase?{...raw,plan:{...raw.plan,engineer_plans:raw.plan.engineer_plans.filter(route=>route.engineer_id==='EAST-ENG-02')}}:raw;
       const priorIds=new Set(transport.list(shift).flatMap(e=>e.segments.map(s=>s.id)));
-      const choice=choices.filter(c=>!priorIds.has(c.segment.id)).sort((a,b)=>wave.kind==='road'
+      let choices=await network({action:'candidates',raw:candidateRaw,team:shift.team,date:shift.date,time,kind:wave.kind,direction:wave.direction},{timeout:120_000});
+      if(showcase&&!choices.some(c=>!priorIds.has(c.segment.id)))choices=await network({action:'candidates',raw,team:shift.team,date:shift.date,time,kind:wave.kind,direction:wave.direction},{timeout:120_000});
+      const eligible=choices.filter(c=>!priorIds.has(c.segment.id));
+      const choice=(showcase&&eligible.find(c=>c.engineerId==='EAST-ENG-02'&&c.orderId==='EAST-50219'))||eligible.sort((a,b)=>wave.kind==='road'
         ?Number(Boolean(b.segment.opposingEdgeId))-Number(Boolean(a.segment.opposingEdgeId))||Number(b.segment.lengthM||0)-Number(a.segment.lengthM||0)||Date.parse(a.usedAt)-Date.parse(b.usedAt)
         :Date.parse(a.usedAt)-Date.parse(b.usedAt))[0];
       if(!choice)throw new Error(`В текущем оставшемся плане не найден используемый участок для «${wave.title}». Текущий план сохранён`);
       transport.segments([choice.segment]);
       const endMinute=wave.end?Math.max(minuteOf(wave.end),(minuteOf(choice.usedAt.slice(11,16))||minute)+20):null;
-      const event=transport.save({id:`transport-wave-${state.shiftId}-${index}`,title:wave.kind==='road'&&!choice.segment.opposingEdgeId?'Перекрытие автомобильного проезда':wave.title,reason:`Сценарное событие · ${choice.segment.name}`,kind:wave.kind,direction:wave.direction,
+      const event=transport.save({id:`transport-wave-${state.shiftId}-${index}`,title:wave.kind==='road'?`Перекрытие дороги · ${choice.segment.name}`:wave.title,reason:`Сценарное событие · ${choice.segment.name}`,kind:wave.kind,direction:wave.direction,
         startsAt:`${shift.date}T${wave.time}:00+03:00`,endsAt:endMinute==null?null:`${shift.date}T${timeOf(Math.min(1439,endMinute))}:00+03:00`,segmentIds:[choice.segment.id],
         source:'Изолированный транспортный сценарий',externalId:`wave-${index}`},shift);
       wave.eventId=event.id;wave.status='OPEN';wave.targetEngineer=choice.engineerId;wave.targetOrder=choice.orderId;state.index=index;put(state);

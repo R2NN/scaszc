@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile,mkdtemp,mkdir,writeFile,rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import Database from 'better-sqlite3';
 import { createTransportScenario } from '../server/transportScenario.mjs';
 import { TransportStore,transportNetwork } from '../server/transportApi.mjs';
@@ -94,6 +95,38 @@ test('scheduled events keep their times without requiring previous route publica
     const duplicate=await scenario.handle('scenario/tick',{shiftId:'scenario',minute:865},url);
     assert.equal(duplicate.event,undefined);
     assert.equal(transport.list(shifts.get('scenario')).length,2);
+  }finally{db.close();}
+});
+
+test('the sealed road showcase selects the first East visit and falls back if that crew has no future edge',async()=>{
+  const raw=JSON.parse(gunzipSync(await readFile(path.join(projectRoot(),'algorithm/artifacts/tz3/home-starts/initial-exact.json.gz'))).toString('utf8'));
+  const db=new Database(':memory:');db.exec('CREATE TABLE dispatch_sessions(id TEXT,base_shift_id TEXT,shift_id TEXT,payload TEXT)');
+  const base={id:'base',regionId:'moscow',date:'2026-08-17',orders:[],team:[{id:'EAST-ENG-02'}],plan:{contentSha256:raw.content_sha256}};
+  const shifts=new Map([[base.id,base]]);let sequence=0,emptyPreferred=false;
+  const store={db,get:id=>shifts.get(id),byDate:()=>base,ensure:input=>{const shift={...input,id:`show-${++sequence}`};shifts.set(shift.id,shift);return shift;}};
+  const calls=[];
+  const segment={kind:'road',edgeId:'1',name:'Проверенный участок',geometry:[[55.75,37.62],[55.751,37.62]],lengthM:69};
+  const scenario=createTransportScenario(store,new TransportStore(store),async input=>{
+    calls.push(input.raw.plan.engineer_plans.map(route=>route.engineer_id));
+    if(emptyPreferred&&calls.at(-1).length===1)return [];
+    return [
+      {engineerId:'EAST-ENG-02',orderId:'EAST-68476',usedAt:'2026-08-17T10:51:00+03:00',segment:{...segment,id:'later',lengthM:300,opposingEdgeId:'2'}},
+      {engineerId:'EAST-ENG-02',orderId:'EAST-50219',usedAt:'2026-08-17T10:00:00+03:00',segment:{...segment,id:'first'}},
+    ];
+  });
+  try{
+    const url=new URL('http://localhost');
+    const start=await scenario.handle('scenario/start',{baseShiftId:base.id},url);
+    const road=await scenario.handle('scenario/tick',{shiftId:start.shift.id,minute:570},url);
+    assert.deepEqual(calls,[['EAST-ENG-02']]);
+    assert.equal(road.event.segments[0].id,'first');
+    assert.equal(road.state.waves[0].targetOrder,'EAST-50219');
+    assert.ok(raw.plan.engineer_plans.length>1,'Selecting demo candidates never edits the real source plan');
+    emptyPreferred=true;calls.length=0;
+    const fallback=await scenario.handle('scenario/start',{baseShiftId:base.id},url);
+    const alternate=await scenario.handle('scenario/tick',{shiftId:fallback.shift.id,minute:570},url);
+    assert.equal(calls[0].length,1);assert.ok(calls[1].length>1);
+    assert.ok(alternate.event);
   }finally{db.close();}
 });
 
