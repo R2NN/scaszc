@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTransportImpactClock,transportPreviewMatches } from '../src/transportImpactClock.js';
+import { createTransportImpactClock,transportPreviewMatches,transportPreviewReusable } from '../src/transportImpactClock.js';
 import { transportEventImpacts,transportSelectedConsequences,transportCrewOrders } from '../src/transportDomain.js';
 
 const road={id:'road',revision:1,kind:'road',direction:'forward',status:'OPEN',startsAt:'2026-08-17T09:30:00+03:00',endsAt:null,segments:[{id:'edge-1'}]};
@@ -55,6 +55,44 @@ test('fresh preview matching includes revisions, all restrictions and applied pl
   assert.equal(transportPreviewMatches(p,shift,[{...road,revision:2}]),false);
   assert.equal(transportPreviewMatches(p,{...shift,revision:2},[road]),false);
   assert.equal(transportPreviewMatches({...p,status:'APPLIED',appliedRevision:2},{...shift,revision:2},[road]),true);
+});
+
+test('an explicit recalculation starts a fresh variant, but cannot duplicate a running search',()=>{
+  const p={baseRevision:1,events:[road],status:'READY',time:'09:30',result:{eventImpacts:[]}};
+  assert.equal(transportPreviewReusable(p,shift,[road],'09:30',{selection:true}),true);
+  assert.equal(transportPreviewReusable(p,shift,[road],'09:30',{force:true}),false);
+  assert.equal(transportPreviewReusable({...p,status:'RUNNING'},shift,[road],'09:30',{force:true}),true);
+  assert.equal(transportPreviewReusable(p,shift,[road],'09:31'),false);
+  assert.equal(transportPreviewReusable(p,shift,[{...road,revision:2}],'09:30'),false);
+  assert.equal(transportPreviewReusable({...p,status:'APPLIED',appliedRevision:1},shift,[road],'09:31',{selection:true}),true);
+  assert.equal(transportPreviewReusable({...p,status:'APPLIED',appliedRevision:1},shift,[road],'09:31',{force:true}),false);
+});
+
+test('a planned restriction is broadcast on appearance without polling camera updates each minute',async()=>{
+  const c=clock(),seen=[];c.set({minute:569});
+  const controller=createTransportImpactClock({clock:c,getShift:()=>shift,
+    request:async path=>path.startsWith('events?')?{events:[road]}:{status:'READY',baseRevision:1,events:[road],result:{eventImpacts:[]}},
+    pause:()=>assert.fail(),onEvents:()=>seen.push(c.getSnapshot().minute),onPreview:()=>assert.fail(),onWaiting:()=>{},onError:error=>assert.fail(error.message)});
+  try{
+    await controller.flush();c.set({minute:570});await controller.flush();c.set({minute:571});await controller.flush();
+    assert.deepEqual(seen,[569,570]);
+  }finally{controller.close();}
+});
+
+test('the actual start of a saved future problem creates a new variant from the current position',async()=>{
+  const c=clock();c.set({minute:569});let starts=0,previous={id:'future',status:'READY',baseRevision:1,time:'09:29',events:[road],result:{eventImpacts:[]}};
+  const controller=createTransportImpactClock({clock:c,getShift:()=>shift,
+    request:async(path,body)=>{
+      if(path.startsWith('events?'))return {events:[road]};
+      if(path.startsWith('previews/latest'))return previous;
+      if(path==='previews'){starts++;previous={id:'active',status:'RUNNING',baseRevision:1,time:body.time,events:[road]};return previous;}
+      assert.fail(path);
+    },pause:async()=>c.set({playing:false}),onEvents:()=>{},onPreview:()=>{},onWaiting:()=>{},onError:error=>assert.fail(error.message)});
+  try{
+    await controller.flush();assert.equal(starts,0);
+    c.set({minute:570});await controller.flush();assert.equal(starts,1);assert.equal(previous.time,'09:30');
+    c.set({minute:571});await controller.flush();assert.equal(starts,1,'Subsequent minutes must not restart the solver');
+  }finally{controller.close();}
 });
 
 test('an event shows its directly affected crew and later jobs, excluding an unrelated metro crew',()=>{

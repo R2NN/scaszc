@@ -1,10 +1,18 @@
-import { timeOf } from './shiftDomain.js';
+import { minuteOf,timeOf } from './shiftDomain.js';
 import { transportContextSignature,transportStatus } from './transportDomain.js';
 
 /** Match the entire restriction context and publication, never just one event ID. */
 export function transportPreviewMatches(preview,shift,events) {
   return Boolean(preview&&transportContextSignature(preview.events||[])===transportContextSignature(events)
     && (preview.status==='APPLIED'?preview.appliedRevision===shift.revision:preview.baseRevision===shift.revision));
+}
+
+/** Reuse a current search, but an explicit recalculation never reuses a finished answer. */
+export function transportPreviewReusable(preview,shift,events,time,{force=false,selection=false}={}) {
+  if(!transportPreviewMatches(preview,shift,events))return false;
+  if(preview.status==='RUNNING')return preview.time===time;
+  if(force)return false;
+  return Boolean(preview.result?.eventImpacts&&((preview.status==='READY'&&preview.time===time)||(selection&&preview.status==='APPLIED')));
 }
 
 /** Keep every new saved restriction ready for exact review, including non-demo events. */
@@ -23,13 +31,14 @@ export function createTransportImpactClock({clock,getShift,request,pause,onEvent
           const {events}=await request(`events?shiftId=${encodeURIComponent(shift.id)}`);
           if(!owns())continue;
           const signature=transportContextSignature(events),minute=Math.floor(clock.getSnapshot().minute);
-          const scope=`${shift.id}:${signature}`;
-          if(seen!==scope){seen=scope;onEvents(events);}
-          const key=`${scope}:${shift.revision}:${events.map(e=>transportStatus(e,shift.date,minute)).join('|')}`;
+          const scope=`${shift.id}:${signature}`,appearance=`${scope}:${events.map(e=>transportStatus(e,shift.date,minute)).join('|')}`;
+          if(seen!==appearance){seen=appearance;onEvents(events);}
+          const key=`${appearance}:${shift.revision}`;
           if(!events.length||handled===key||failed===key)continue;
           const previous=await request(`previews/latest?shiftId=${encodeURIComponent(shift.id)}`);
           if(!owns())continue;
-          if(transportPreviewMatches(previous,shift,events)&&
+          const previousMinute=minuteOf(previous?.time),sameAppearance=previousMinute==null||events.every(event=>transportStatus(event,shift.date,minute)===transportStatus(event,shift.date,previousMinute));
+          if(transportPreviewMatches(previous,shift,events)&&sameAppearance&&
             (['RUNNING','FAILED','CANCELLED'].includes(previous.status)||previous.result?.eventImpacts)){
             handled=key;
             if(waiting===key){waiting='';onWaiting(false);onPreview(previous);}

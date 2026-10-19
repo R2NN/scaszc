@@ -12,9 +12,10 @@ export const transportMap={
   subscribe:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
   snapshot:()=>view,
   set:patch=>{view={...view,...patch};listeners.forEach(fn=>fn());},
-  focus(segments){
+  focusProblem(events){return transportMap.focus(events.flatMap(event=>event.segments||[]),{maxZoom:15.5});},
+  focus(segments,{maxZoom=14.6}={}){
     const coords=segments.flatMap(s=>s.geometry || []).map(p=>[p[1],p[0]]);
-    if(!liveMap||!coords.length)return;
+    if(!liveMap||!coords.length)return false;
     const bounds=coords.reduce((b,p)=>b.extend(p),new maplibregl.LngLatBounds(coords[0],coords[0]));
     const scale=liveMap.getCanvas().getBoundingClientRect().width/liveMap.getContainer().clientWidth;
     const width=liveMap.getContainer().clientWidth;
@@ -27,7 +28,7 @@ export const transportMap={
     const padding=compact?{left:Math.max(24,((document.querySelector('.sidebar')?.getBoundingClientRect().right||mapRect.left)-mapRect.left)/scale+24),top:((panel?.bottom||350)-mapRect.top+(document.querySelector('.transport-map-hint')?80:30))/scale,right:82,bottom}: {left,top:window.innerHeight<=520?125:155,right:85,bottom};
     if(liveMap.getContainer().clientHeight-padding.top-padding.bottom<90){padding.top=Math.min(padding.top,liveMap.getContainer().clientHeight*.6);padding.bottom=80;}
 
-    liveMap.fitBounds(bounds,{padding,maxZoom:14.6,duration:650});
+    liveMap.stop();liveMap.fitBounds(bounds,{padding,maxZoom,duration:650});return true;
   },
 };
 const collection=features=>({type:'FeatureCollection',features});
