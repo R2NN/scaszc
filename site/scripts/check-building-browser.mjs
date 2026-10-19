@@ -8,7 +8,7 @@ const require = createRequire(modules ? resolve(modules, 'package.json') : new U
 const { chromium } = require('playwright');
 const base = process.env.BEEGO_QA_URL || 'http://127.0.0.1:4186';
 if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(base)) throw new Error('Проверка допускается только на отдельном локальном стенде.');
-const output = resolve(process.env.BEEGO_QA_OUTPUT || '../docs/evidence/building-model');
+const output = resolve(process.env.BEEGO_QA_OUTPUT || '../output/browser/building-model');
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ channel: process.env.BEEGO_QA_CHANNEL || 'chrome', headless: true });
 const page = await browser.newPage({ viewport: { width: 1586, height: 992 }, deviceScaleFactor: 1 });

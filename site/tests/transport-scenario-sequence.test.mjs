@@ -99,7 +99,10 @@ test('scheduled events keep their times without requiring previous route publica
 });
 
 test('the sealed road showcase selects the first East visit and falls back if that crew has no future edge',async()=>{
-  const raw=JSON.parse(gunzipSync(await readFile(path.join(projectRoot(),'algorithm/artifacts/tz3/home-starts/initial-exact.json.gz'))).toString('utf8'));
+  const retained=gunzipSync(await readFile(path.join(projectRoot(),'algorithm/artifacts/tz3/home-starts/initial-exact.json.gz')));
+  const raw=JSON.parse(retained.toString('utf8'));
+  const previousDirectory=process.cwd();
+  const directory=await mkdtemp(path.join(tmpdir(),'beego-showcase-'));
   const db=new Database(':memory:');db.exec('CREATE TABLE dispatch_sessions(id TEXT,base_shift_id TEXT,shift_id TEXT,payload TEXT)');
   const base={id:'base',regionId:'moscow',date:'2026-08-17',orders:[],team:[{id:'EAST-ENG-02'}],plan:{contentSha256:raw.content_sha256}};
   const shifts=new Map([[base.id,base]]);let sequence=0,emptyPreferred=false;
@@ -115,6 +118,10 @@ test('the sealed road showcase selects the first East visit and falls back if th
     ];
   });
   try{
+    await mkdir(path.join(directory,'algorithm/tools'),{recursive:true});
+    await mkdir(path.join(directory,'runtime/exact-replans'),{recursive:true});
+    await writeFile(path.join(directory,'runtime/exact-replans',`${raw.content_sha256}.json`),retained);
+    process.chdir(directory);
     const url=new URL('http://localhost');
     const start=await scenario.handle('scenario/start',{baseShiftId:base.id},url);
     const road=await scenario.handle('scenario/tick',{shiftId:start.shift.id,minute:570},url);
@@ -127,7 +134,11 @@ test('the sealed road showcase selects the first East visit and falls back if th
     const alternate=await scenario.handle('scenario/tick',{shiftId:fallback.shift.id,minute:570},url);
     assert.equal(calls[0].length,1);assert.ok(calls[1].length>1);
     assert.ok(alternate.event);
-  }finally{db.close();}
+  }finally{
+    process.chdir(previousDirectory);
+    db.close();
+    await rm(directory,{recursive:true,force:true});
+  }
 });
 
 test('a cancelled exact calculation cannot start preparation or a new worker',async()=>{

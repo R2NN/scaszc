@@ -58,10 +58,7 @@ from beeline_routing.oracle import ExactRoutingOracle
 
 
 DATASET = (
-    Path(__file__).parents[1]
-    / 'work'
-    / 'dataset_v21'
-    / 'beeline_synthetic_dataset_v2_1'
+    Path(__file__).parents[2] / 'data' / 'fixtures' / 'planning-v2.1'
 )
 
 

@@ -267,8 +267,7 @@ def run_day(args: argparse.Namespace, history_date: str, expected_jobs: int) -> 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-root', type=Path, required=True)
-    parser.add_argument('--source-dataset', type=Path, default=ROOT / 'algorithm' / 'work' /
-                        'dataset_v21' / 'beeline_synthetic_dataset_v2_1')
+    parser.add_argument('--source-dataset', type=Path, default=ROOT / 'data' / 'dataset')
     parser.add_argument('--history', type=Path, default=ROOT / 'site' / 'public' /
                         'data' / 'analytics-history.json')
     parser.add_argument('--gtfs', type=Path, default=Path(os.environ.get(

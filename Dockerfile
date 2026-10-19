@@ -18,10 +18,13 @@ RUN pnpm install --frozen-lockfile
 WORKDIR /app
 COPY algorithm algorithm
 COPY data/dataset data/dataset
+COPY data/fixtures data/fixtures
+COPY data/screening data/screening
 COPY data/object-complexity data/object-complexity
 COPY data/transit data/transit
 COPY data/traffic4cast data/traffic4cast
 COPY runtime runtime
+COPY tools tools
 COPY site site
 RUN cd site && pnpm run build \
     && python3 /app/algorithm/tools/install_weekly_rail_snapshots.py \

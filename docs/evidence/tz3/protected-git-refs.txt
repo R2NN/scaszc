@@ -1,4 +1,0 @@
-02d4811a93a1e17d6a45364a8a705e0f93fc6053	refs/heads/main
-ba829e8d1b90508fefd85bc075ebabaae280ec29	refs/heads/safety/pre-tz3-20261017
-228fee43d26465c48ca5f8d1559c164f0e1f0b85	refs/tags/beego-before-tz3-20261017
-ba829e8d1b90508fefd85bc075ebabaae280ec29	refs/tags/beego-before-tz3-20261017^{}

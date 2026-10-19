@@ -8,6 +8,7 @@
   },
   "type": "module",
   "scripts": {
+    "test": "node --test",
     "dev": "vite",
     "dev:api": "node scripts/dev-api.mjs",
     "start:server": "node server/main.mjs",

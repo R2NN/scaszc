@@ -235,6 +235,8 @@ test('unreachable transit stop reports an actionable routing failure', async () 
 test('geocoding key alone does not switch road validation away from local Valhalla', async () => {
   const previousGeocoding = process.env.GEOAPIFY_API_KEY;
   const previousRouting = process.env.GEOAPIFY_ROUTING_API_KEY;
+  const previousEndpoint = process.env.VALHALLA_ROUTE_ENDPOINT;
+  process.env.VALHALLA_ROUTE_ENDPOINT = 'http://127.0.0.1:8002/route';
   process.env.GEOAPIFY_API_KEY = 'geocoding-only-key';
   delete process.env.GEOAPIFY_ROUTING_API_KEY;
   try {
@@ -249,6 +251,8 @@ test('geocoding key alone does not switch road validation away from local Valhal
     else process.env.GEOAPIFY_API_KEY = previousGeocoding;
     if (previousRouting === undefined) delete process.env.GEOAPIFY_ROUTING_API_KEY;
     else process.env.GEOAPIFY_ROUTING_API_KEY = previousRouting;
+    if (previousEndpoint === undefined) delete process.env.VALHALLA_ROUTE_ENDPOINT;
+    else process.env.VALHALLA_ROUTE_ENDPOINT = previousEndpoint;
   }
 });
 

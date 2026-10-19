@@ -18,7 +18,7 @@ from run_history_batch import plan_metrics, rail_reference, rail_weekday_overrid
 
 class HistoryBatchTests(unittest.TestCase):
     def test_weekend_workload_is_retimed_and_strictly_loadable(self) -> None:
-        source = ROOT / 'algorithm' / 'work' / 'dataset_v21' / 'beeline_synthetic_dataset_v2_1'
+        source = ROOT / 'data' / 'fixtures' / 'planning-v2.1'
         history = ROOT / 'site' / 'public' / 'data' / 'analytics-history.json'
         with tempfile.TemporaryDirectory() as temporary:
             dataset = Path(temporary) / 'day' / 'dataset'

@@ -8,7 +8,7 @@ runtime/*.sqlite3
 runtime/*.log
 runtime/*.jsonl
 
-# Large local transport index; restore it from the handoff dataset when needed
+# Generated local transport index; restored from the checked runtime bundle
 data/transit/*.sqlite
 
 # Local editor and OS files
@@ -54,3 +54,14 @@ site/.playwright-cli/
 site/audit-snapshot.txt
 # Runtime installation receipts; the public resources themselves are versioned.
 runtime/runtime-installation.json
+
+# Generated checks, training traces and local artifacts
+/output/
+/site/outputs/
+/site/catboost_info/
+/docs/evidence/
+/docs/screenshots/
+*.tsbuildinfo
+
+# Local planner work directories
+/algorithm/work/

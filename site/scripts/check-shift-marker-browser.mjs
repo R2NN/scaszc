@@ -11,7 +11,7 @@ const require = createRequire(process.env.BEEGO_QA_MODULES
 const { chromium } = require('playwright');
 const base = process.env.BEEGO_QA_URL || 'http://127.0.0.1:4186';
 if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(base)) throw new Error('Use a local test server.');
-const output = resolve(process.env.BEEGO_QA_OUTPUT || '../docs/evidence/shift-marker-anchors');
+const output = resolve(process.env.BEEGO_QA_OUTPUT || '../output/browser/shift-marker-anchors');
 await mkdir(output, { recursive: true });
 const before = await (await fetch(`${base}/api/shifts?regionId=moscow&date=2026-08-17`)).json();
 const browser = await chromium.launch({ channel: 'chrome', headless: true });

@@ -1,9 +1,0 @@
-{
-  "days": 182,
-  "first": "2026-02-17",
-  "last": "2026-08-17",
-  "orders": 30644,
-  "allHavePlans": true,
-  "existingPlansFactsDecisionsUnchanged": true,
-  "sessionClockCheck": "Preserves state; excludes server anchor/version and normalizes absent defaults"
-}

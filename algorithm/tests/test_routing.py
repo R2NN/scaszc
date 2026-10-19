@@ -1299,7 +1299,7 @@ class ExactOracleTests(unittest.TestCase):
 class DatasetIntegrationTests(unittest.TestCase):
     def test_v21_dataset_loads_for_both_scenarios(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
-        dataset_root = project_root / 'work' / 'dataset_v21' / 'beeline_synthetic_dataset_v2_1'
+        dataset_root = project_root.parent / 'data' / 'fixtures' / 'planning-v2.1'
         for scenario in ('core', 'stress'):
             with self.subTest(scenario=scenario):
                 dataset = load_dataset_locations(dataset_root, scenario)

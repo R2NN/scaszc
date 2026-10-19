@@ -11,5 +11,5 @@ the original canonical dataset with two start-office assignments and their
 provenance added. Its byte checksums are protected by `.gitattributes`.
 
 Coverage increases from 203/205 to 204/205. See
-`docs/home-start-scenario.md` and `algorithm/tools/repair_home_start_plan.py` for
+`docs/features/home-starts.md` and `algorithm/tools/repair_home_start_plan.py` for
 the actual insertion search, comparison and reproduction command.

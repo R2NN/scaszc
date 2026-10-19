@@ -17,9 +17,9 @@ from beeline_routing.models import Coordinate, TransportMode
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATASET = PROJECT_ROOT / 'work' / 'dataset_v21' / 'beeline_synthetic_dataset_v2_1'
-DEFAULT_CACHE = PROJECT_ROOT / 'work' / 'routing' / 'screening.sqlite3'
-DEFAULT_OUTPUT = PROJECT_ROOT / 'work' / 'routing' / 'screening'
+DEFAULT_DATASET = PROJECT_ROOT.parent / 'data' / 'dataset'
+DEFAULT_CACHE = PROJECT_ROOT.parent / 'runtime' / 'screening.sqlite3'
+DEFAULT_OUTPUT = PROJECT_ROOT.parent / 'runtime' / 'screening'
 SCREENING_MODES = (TransportMode.CAR, TransportMode.BICYCLE, TransportMode.WALKING)
 
 

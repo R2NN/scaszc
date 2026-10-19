@@ -34,7 +34,7 @@ from beeline_routing.oracle import ExactRoutingOracle
 from tools import refine_screening_exact as refinement_tool
 
 
-DATASET = Path(__file__).parents[1] / 'work/dataset_v21/beeline_synthetic_dataset_v2_1'
+DATASET = Path(__file__).parents[2] / 'data/fixtures/planning-v2.1'
 
 
 class _Client:

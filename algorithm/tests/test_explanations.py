@@ -16,7 +16,7 @@ from beeline_planning.export import load_exact_plan_artifact
 
 
 ROOT = Path(__file__).parents[1]
-DATASET = ROOT / 'work/dataset_v21/beeline_synthetic_dataset_v2_1'
+DATASET = ROOT.parent / 'data/fixtures/planning-v2.1'
 
 
 class ExplanationTests(unittest.TestCase):
@@ -24,7 +24,7 @@ class ExplanationTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.dataset = load_planning_dataset(DATASET, 'core')
         cls.initial, cls.initial_payload = load_exact_plan_artifact(
-            ROOT / 'work/planning/normatives-exact-improved.json',
+            ROOT.parent / 'data/fixtures/explanations/initial-plan.json',
             cls.dataset.dataset_sha256,
         )
         cls.initial_validation = validate_initial_plan(cls.dataset, cls.initial)
@@ -72,7 +72,7 @@ class ExplanationTests(unittest.TestCase):
 
     def test_event_bundle_explains_urgent_choice_changes_and_alternatives(self) -> None:
         replanned, _ = load_exact_plan_artifact(
-            ROOT / 'work/planning/normatives-event-001-smart-urgent.json',
+            ROOT.parent / 'data/fixtures/explanations/event-plan.json',
             self.dataset.dataset_sha256,
         )
         event = self.dataset.events[0]

@@ -7,7 +7,6 @@
 site/.beego-data
 site/.dev.vars
 site/outputs
-site/models
 site/catboost_info
 runtime/*.log
 runtime/*.sqlite3
@@ -18,13 +17,10 @@ runtime/qa
 runtime/baseline
 runtime/candidate*
 data/original_extract
-data/screening
 data/traffic4cast/*
 !data/traffic4cast/moscow-2019.json
 !data/traffic4cast/moscow-2019.bin
 data/transit/*.sqlite
-algorithm/work
-source_materials
 docs
 deploy
 docker-data
@@ -37,3 +33,10 @@ credentials
 data/runtime-bundle
 
 runtime/runtime-installation.json
+
+output
+.venv
+site/.beego-backups
+site/.playwright-cli
+
+algorithm/work

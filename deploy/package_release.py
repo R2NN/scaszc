@@ -15,20 +15,28 @@ def git(*args: str) -> bytes:
 
 
 def canonical_dataset_files() -> dict[str, str]:
-    manifest = git('cat-file', 'blob', 'HEAD:data/dataset/CHECKSUMS.sha256')
-    return {
-        f'data/dataset/{relative}': digest
-        for line in manifest.decode('utf-8').splitlines()
-        for digest, relative in (line.split('  ', 1),)
-        if line
-    }
+    """Collect checksummed datasets, including retained regression fixtures."""
+    paths = git('ls-tree', '-r', '--name-only', 'HEAD').decode('utf-8').splitlines()
+    expected = {}
+    for name in paths:
+        if not name.endswith('/CHECKSUMS.sha256'):
+            continue
+        prefix = name.rsplit('/', 1)[0]
+        manifest = git('cat-file', 'blob', f'HEAD:{name}')
+        for line in manifest.decode('utf-8-sig').splitlines():
+            if not line.strip():
+                continue
+            digest, relative = line.split('  ', 1)
+            expected[f'{prefix}/{relative}'] = digest
+    return expected
 
 
 def checked_dataset_bytes(name: str, data: bytes, expected: dict[str, str]) -> bytes:
     digest = expected.get(name)
     if digest is None:
         return data
-    candidates = (data, data.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n'))
+    normalized = data.replace(b'\r\n', b'\n')
+    candidates = (data, normalized, normalized.replace(b'\n', b'\r\n'))
     for candidate in candidates:
         if hashlib.sha256(candidate).hexdigest() == digest:
             return candidate

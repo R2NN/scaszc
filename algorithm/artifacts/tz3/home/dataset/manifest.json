@@ -1,1 +1,0 @@
-{"dataset_version": "2.1.0", "schema_version": "2.1.0", "planning_date": "2026-08-17", "initial_planning_at": "2026-08-17T07:00:00+03:00", "timezone": "Europe/Moscow", "source": "reviewed_ui_import", "requires_public_transit": true, "duration_contract": "server-snapshot-v1"}
