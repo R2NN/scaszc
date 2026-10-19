@@ -159,3 +159,5 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - Shift engineer markers must remain centered on their true geographic coordinates at every zoom and pan. Never spread overlapping crew badges with screen offsets or leader lines; use the brigade list to select co-located engineers. In brigade and overview modes, keep crew markers visible above depot symbols.
 
 - Clicking empty map canvas clears the selected network incident and its links, then smoothly dismisses its card without moving the camera. Markers, route features and map controls must not count as empty map. Animate network cards in and out, retaining the outgoing record and respecting reduced motion and quick reopen.
+
+- Keep the shared map calendar fixed at the horizontal viewport center in Shift as in Orders. Never offset it by the shift panel or sidebar width.

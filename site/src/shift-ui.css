@@ -95,7 +95,7 @@
 .app-shell.dark .shift-layer.operational-shift .shift-preview-metrics span{background:#292e35;border-color:#49505b;color:#bec6d0}
 .app-shell.dark .shift-layer.operational-shift .shift-preview-metrics b{color:#f1f3f5}
 .app-shell.dark .shift-layer.operational-shift .shift-preview-status{color:#9bd5ac}
-@media(min-width:1340px){.app-shell:has(.operational-shift) .shift-timeline{left:calc(var(--operational-panel-left) + 606px)}.app-shell.has-map-overlay.overlay-shift .workspace-background-only.calendar-over-overlay .minimal-topbar .date-control{left:calc(50% + (var(--operational-panel-left) + 600px) / 2)!important}}
+@media(min-width:1340px){.app-shell:has(.operational-shift) .shift-timeline{left:calc(var(--operational-panel-left) + 606px)}}
 @media(max-width:760px){.app-shell .shift-layer.operational-shift .shift-panel nav.shift-tabs button{font-size:14px;padding:9px 10px}.app-shell .shift-layer.operational-shift .shift-panel>header{padding:16px 18px;min-height:90px}.app-shell .shift-layer.operational-shift .shift-panel-body{padding:18px 16px 24px}.app-shell .shift-layer.operational-shift .shift-preview-metrics{grid-template-columns:1fr}.app-shell .shift-layer.operational-shift .shift-preview-metrics span{display:flex;justify-content:space-between;align-items:center}.app-shell .shift-layer.operational-shift .shift-empty-state{padding:22px 12px}}
 
 .app-shell .shift-layer.operational-shift .shift-form textarea{font-family:inherit}
