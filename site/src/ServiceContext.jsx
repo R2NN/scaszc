@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ChevronRight, Network, RefreshCw, Wrench, X } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Network, Wrench, X } from 'lucide-react';
 import { Marker, LngLatBounds } from 'maplibre-gl';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { INCIDENT_STATUSES, INCIDENT_TYPES, emptyServiceContext, incidentWorkflow, orderLabel, relatedOrders, serviceEventAt, serviceHistoryRows, serviceStats } from './serviceContextDomain.js';
@@ -79,7 +79,7 @@ function History({ record, model, onOrder }) {
   useEffect(() => setLimit(8), [record.id]);
   const rows = serviceHistoryRows(record, model.day);
   return <section className='network-journal' aria-label='Журнал сетевого события' aria-busy={model.refreshing}>
-    <div className='network-journal-heading'><div><h3>Действия по событию</h3><small>Новые записи сверху · {rows.length}</small></div><button type='button' disabled={model.refreshing || model.busy} onClick={model.reload} aria-label='Обновить журнал'><RefreshCw size={15}/>{model.refreshing ? 'Обновляем…' : 'Обновить'}</button></div>
+    <div className='network-journal-heading'><div><h3>Действия по событию</h3><small>Новые записи сверху · {rows.length}</small></div></div>
     <p className='service-muted'>Здесь сохраняются результаты диагностики, поручения и подготовка переноса заявок. История визитов клиента находится в паспорте объекта.</p>
     <ol className='service-history'>{rows.slice(0, limit).map(event => <li key={event.index}><div className='service-history-heading'><b>{event.label}</b>{event.status ? <span>{INCIDENT_STATUSES[event.status]}</span> : null}</div><time title={`Запись внесена: ${stamp(event.recordedAt)}`}>{event.displayAt ? stamp(event.displayAt) : `Смена ${model.day.split('-').reverse().join('.')} · время события не указано`}</time><strong>{event.text}</strong>{event.actor ? <small>{event.actor}</small> : null}{event.orderId && model.orders.find(item => String(item.id) === event.orderId) ? <button type='button' onClick={() => onOrder?.(model.orders.find(item => String(item.id) === event.orderId))}>Открыть связанную заявку</button> : null}</li>)}</ol>
     {rows.length > limit ? <button type='button' className='service-secondary' onClick={() => setLimit(value => value + 8)}>Показать ещё {Math.min(8, rows.length - limit)}</button> : null}

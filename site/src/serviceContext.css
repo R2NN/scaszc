@@ -84,7 +84,6 @@
 .network-panel .network-next-action>.service-secondary{width:100%;font-size:13px;font-weight:650}
 .network-journal-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0}
 .network-journal-heading h3{margin:0!important;font-size:14px}.network-journal-heading small{color:var(--svc-muted);font-size:11px}
-.network-journal-heading>button{min-height:34px;font-size:12px;padding:7px 9px}
 .service-history-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px}
 .service-history-heading>span{font-size:10px;border:1px solid var(--svc-border);border-radius:5px;padding:2px 5px;background:var(--svc-soft)}
 .network-panel .service-history li{padding-bottom:22px}.network-panel .service-history li>time{font-size:11px}
