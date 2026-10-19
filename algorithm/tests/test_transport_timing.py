@@ -1,6 +1,11 @@
 """Boundary regressions for official metro operating hours and known openings."""
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
+from dataclasses import asdict
+
+import pytest
+from algorithm.tools import transport_network
 
 from beeline_routing.metro_reference import MetroReference
 from beeline_routing.local_transit import LocalTransitRoutingClient
@@ -90,3 +95,25 @@ def test_official_late_weekend_train_is_not_rejected_by_a_fixed_one_am_cutoff():
     route=value.route(Coordinate('a',55.7,37.6),Coordinate('b',55.71,37.61),datetime.fromisoformat('2026-08-17T01:10:00+03:00'))
     assert route is not None and route.duration_seconds==300
     assert value.route(Coordinate('a',55.7,37.6),Coordinate('b',55.71,37.61),datetime.fromisoformat('2026-08-18T01:10:00+03:00')) is None
+
+
+@pytest.mark.parametrize('entry_seconds',[0,30])
+def test_router_and_independent_audit_agree_on_68_second_entry_wait(monkeypatch,entry_seconds):
+    value=graph()
+    value.stations[1]['enterTime']=entry_seconds
+    walk=SimpleNamespace(duration_seconds=52,distance_m=65,geometry=((55.699,37.599),(55.7,37.6)))
+    value._nearby_walks=lambda *args,inbound,**kwargs:{2:None} if inbound else {1:walk}
+    closed=event('2026-08-17T09:00:00+03:00','2026-08-17T10:02:00+03:00',source='m:1')
+    value.transport_context=TransportContext([closed])
+    departure=datetime.fromisoformat('2026-08-17T10:00:00+03:00')
+    route=value.route(Coordinate('a',55.699,37.599),Coordinate('b',55.71,37.61),departure)
+    assert route is not None
+    assert [step.duration_seconds for step in route.itinerary if step.mode=='waiting']==[68]
+    assert sum(step.duration_seconds for step in route.itinerary)==route.duration_seconds
+    monkeypatch.setattr(transport_network,'catalog',lambda:{'stations':[{'id':f'm:{key}','coords':list(value._point(key))} for key in value.stations]})
+    payload={'events':[closed],'date':'2026-08-17','time':'10:00','team':[],'plan':{'routes':[]},'raw':{'plan':{'engineer_plans':[{'visits':[{
+        'job_id':'visit','departure_at':departure.isoformat(),'travel':{'mode':'PUBLIC_TRANSIT','duration_minutes':route.duration_minutes,'itinerary':[asdict(step) for step in route.itinerary]}
+    }]}]}}}
+    result=transport_network.audit(payload)
+    assert result['status']=='VALID',result
+    assert result['checkedTransitLegs']==1

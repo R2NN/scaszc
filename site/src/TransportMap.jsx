@@ -44,6 +44,8 @@ export function TransportMapLayer({map,theme}) {
     let markers=[];
     let captionsToPlace=[];
     const outer=map.getContainer().parentElement;
+    const leaders=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    leaders.classList.add('transport-caption-leaders');leaders.setAttribute('aria-hidden','true');map.getContainer().append(leaders);
     const place=()=>{
       const rect=map.getContainer().getBoundingClientRect(),scale=rect.width/map.getContainer().clientWidth;
       const panel=document.querySelector('.transport-workspace-panel,.shift-layer.operational-shift .shift-panel')?.getBoundingClientRect();
@@ -56,16 +58,26 @@ export function TransportMapLayer({map,theme}) {
       const width=map.getContainer().clientWidth,height=map.getContainer().clientHeight;
       const top=window.innerWidth<=760&&panel?(panel.bottom-rect.top)/scale+12:145;
       const limit=legend?(legend.top-rect.top)/scale-12:height-bottom;
+      leaders.setAttribute('viewBox',`0 0 ${width} ${height}`);leaders.replaceChildren();
       const placed=[];
       const ordered=[...captionsToPlace].sort((a,b)=>map.project(a.coords).y-map.project(b.coords).y);
       for(const {marker,coords,level} of ordered){
-        const element=marker.getElement(),p=map.project(coords),w=element.getBoundingClientRect().width/scale,h=element.getBoundingClientRect().height/scale;
+        const element=marker.getElement(),p=map.project(coords);
+        const visible=p.x>=left&&p.x<=width-85&&p.y>=top&&p.y<=limit;
+        element.hidden=!visible;
+        if(!visible)continue;
+        const w=element.getBoundingClientRect().width/scale,h=element.getBoundingClientRect().height/scale;
         const x=Math.max(left,Math.min(width-95-w,p.x+22));
         const desired=Math.max(top,Math.min(limit-h,p.y-h-22-level*68));
         const candidates=[desired,...placed.flatMap(box=>[box.y-h-8,box.y+box.h+8])].filter(y=>y>=top&&y+h<=limit);
         const y=candidates.filter(y=>!placed.some(box=>x<box.x+box.w+6&&x+w+6>box.x&&y<box.y+box.h+6&&y+h+6>box.y)).sort((a,b)=>Math.abs(a-desired)-Math.abs(b-desired))[0]??desired;
         placed.push({x,y,w,h});
         marker.setOffset([x-p.x,y-p.y]);
+        const end={x:Math.max(x,Math.min(x+w,p.x)),y:Math.max(y,Math.min(y+h,p.y))};
+        if(Math.hypot(end.x-p.x,end.y-p.y)>12){
+          const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+          path.setAttribute('d',`M ${p.x} ${p.y} L ${end.x} ${end.y}`);leaders.append(path);
+        }
       }
     };
     const backgroundVisibility=new Map();
@@ -96,7 +108,7 @@ export function TransportMapLayer({map,theme}) {
     const render=()=>{
       const state=current.current;
       map.getCanvas().style.cursor=state.enabled&&state.drawing?'crosshair':'';
-      if(!state.enabled){markers.forEach(m=>m.remove());markers=[];restoreBackground();for(const layer of layers)if(map.getLayer(layer.id))map.setLayoutProperty(layer.id,'visibility','none');return;}
+      if(!state.enabled){markers.forEach(m=>m.remove());markers=[];captionsToPlace=[];leaders.replaceChildren();restoreBackground();for(const layer of layers)if(map.getLayer(layer.id))map.setLayoutProperty(layer.id,'visibility','none');return;}
       // Updating a GeoJSON source temporarily makes isStyleLoaded() false.
       // Existing layers are safe to update without waiting for every tile.
       if(!map.getLayer(layers[0].id)&&!map.isStyleLoaded()){map.off('idle',render);map.once('idle',render);return;}
@@ -203,7 +215,7 @@ export function TransportMapLayer({map,theme}) {
     const styleLoaded=()=>{backgroundVisibility.clear();dimmed.clear();render();};
     renderRef.current=render;render();map.on('style.load',styleLoaded);map.on('click',click);map.on('move',place);map.on('resize',place);
     const observer=new ResizeObserver(place);observer.observe(outer);const panel=document.querySelector('.transport-workspace-panel,.shift-layer.operational-shift .shift-panel');if(panel)observer.observe(panel);
-    return()=>{observer.disconnect();renderRef.current=null;markers.forEach(m=>m.remove());restoreBackground();map.getCanvas().style.cursor='';map.off('style.load',styleLoaded);map.off('idle',render);map.off('click',click);map.off('move',place);map.off('resize',place);};
+    return()=>{observer.disconnect();leaders.remove();renderRef.current=null;markers.forEach(m=>m.remove());restoreBackground();map.getCanvas().style.cursor='';map.off('style.load',styleLoaded);map.off('idle',render);map.off('click',click);map.off('move',place);map.off('resize',place);};
   },[map]);
   useEffect(()=>{renderRef.current?.();},[state.enabled,state.metro,state.catalog,state.events,state.draft,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,theme]);
   if(!state.enabled)return null;

@@ -402,14 +402,14 @@ class LocalTransitRoutingClient:
         access_walk, platform_enter, opening_wait = first.details
         if access_walk is not None:
             add_step('walking', self._walk_seconds(access_walk), access_walk.distance_m or 0, 0,
-                     access_walk.geometry, {'source': 'LOCAL_VALHALLA', 'purpose': 'station_access'})
+                     access_walk.geometry, {'source': 'LOCAL_VALHALLA', 'purpose': 'station_access','to_id':first.stop_id})
         if opening_wait:
             stop=self.stops[first.stop_id]
             add_step('waiting',opening_wait,0,opening_wait,((stop.lat,stop.lon),),{'source':'TRANSPORT_KNOWN_OPENING','station':stop.name})
         if platform_enter:
             stop = self.stops[first.stop_id]
             add_step('station_entry', platform_enter, 0, 0, ((stop.lat, stop.lon),),
-                     {'source': 'MOSMETRO_SCHEMA', 'station': stop.name})
+                     {'source': 'MOSMETRO_SCHEMA', 'station': stop.name,'from_id':stop.id})
         previous_time = first.time
         for action in actions[1:]:
             stop = self.stops[action.stop_id]
@@ -476,11 +476,11 @@ class LocalTransitRoutingClient:
             add_step('waiting',best[4],0,best[4],((end_stop.lat,end_stop.lon),),{'source':'TRANSPORT_KNOWN_OPENING','station':end_stop.name})
         if best[3]:
             add_step('station_exit', best[3], 0, 0, ((end_stop.lat, end_stop.lon),),
-                     {'source': 'MOSMETRO_SCHEMA', 'station': end_stop.name})
+                     {'source': 'MOSMETRO_SCHEMA', 'station': end_stop.name,'from_id':end_stop.id})
         if best[2] is not None:
             walk = best[2]
             add_step('walking', self._walk_seconds(walk), walk.distance_m or 0, 0,
-                     walk.geometry, {'source': 'LOCAL_VALHALLA', 'purpose': 'station_egress'})
+                     walk.geometry, {'source': 'LOCAL_VALHALLA', 'purpose': 'station_egress','from_id':end_stop.id})
         duration = best[0] - (departure_at.hour * 3600 + departure_at.minute * 60 + departure_at.second)
         if not geometry:
             geometry = [(origin.latitude, origin.longitude), (destination.latitude, destination.longitude)]

@@ -212,13 +212,13 @@ class MetroReference:
         first_walk = roots[first]
         if first_walk is not None:
             add('walking', self._walk_seconds(first_walk), first_walk.distance_m or 0, 0,
-                first_walk.geometry, {'source': 'LOCAL_VALHALLA', 'purpose': 'metro_access'})
+                first_walk.geometry, {'source': 'LOCAL_VALHALLA', 'purpose': 'metro_access','to_id':f'm:{first[0]}'})
         entry = self.stations[first[0]].get('enterTime') or 0
         if entry_waits[first]:
             add('waiting', entry_waits[first], 0, entry_waits[first], (self._point(first[0]),), {'source':'TRANSPORT_KNOWN_OPENING'})
         if entry:
             add('station_entry', entry, 0, 0, (self._point(first[0]),),
-                {'source': 'MOSMETRO_SCHEMA', 'station': self.stations[first[0]]['name']['ru']})
+                {'source': 'MOSMETRO_SCHEMA', 'station': self.stations[first[0]]['name']['ru'],'from_id':f'm:{first[0]}'})
         for source_state, target_state in zip(states, states[1:]):
             _, kind, duration, wait = previous[target_state]
             source_station = self.stations[source_state[0]]
@@ -247,10 +247,10 @@ class MetroReference:
             add('waiting', exit_wait, 0, exit_wait, (self._point(terminal[0]),), {'source':'TRANSPORT_KNOWN_OPENING'})
         if exit_time:
             add('station_exit', exit_time, 0, 0, (self._point(terminal[0]),),
-                {'source': 'MOSMETRO_SCHEMA', 'station': self.stations[terminal[0]]['name']['ru']})
+                {'source': 'MOSMETRO_SCHEMA', 'station': self.stations[terminal[0]]['name']['ru'],'from_id':f'm:{terminal[0]}'})
         if final_walk is not None:
             add('walking', self._walk_seconds(final_walk), final_walk.distance_m or 0, 0,
-                final_walk.geometry, {'source': 'LOCAL_VALHALLA', 'purpose': 'metro_egress'})
+                final_walk.geometry, {'source': 'LOCAL_VALHALLA', 'purpose': 'metro_egress','from_id':f'm:{terminal[0]}'})
         if not geometry:
             geometry = [(origin.latitude, origin.longitude), (destination.latitude, destination.longitude)]
         metadata = {

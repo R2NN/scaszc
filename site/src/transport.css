@@ -1,5 +1,6 @@
 .transport-workspace{position:fixed;z-index:24;inset:10px auto 10px var(--operational-panel-left);width:454px;pointer-events:none;color:var(--transport-ink,#202c3b)}
 .transport-map-pin.ended{background:#8b929c;border-color:#fff;color:#fff}
+.transport-map-caption[hidden]{display:none!important}.transport-caption-leaders{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}.transport-caption-leaders path{fill:none;stroke:#ef3853;stroke-width:2;stroke-dasharray:4 3;paint-order:stroke;filter:drop-shadow(0 0 1px #fff)}
 .sidebar button[aria-label='Транспортные ограничения'] em{white-space:normal;line-height:1.15;font-size:13px;padding-right:4px}
 .transport-workspace-panel{height:100%;display:flex;flex-direction:column;pointer-events:auto;background:var(--transport-surface,#fff);border:1px solid var(--transport-border,#e2e6ed);border-radius:18px;box-shadow:0 9px 35px #26333d12;overflow:hidden}
 .transport-workspace-panel>header{display:flex;justify-content:space-between;align-items:flex-start;padding:23px 22px 19px;border-bottom:1px solid var(--transport-border,#e2e6ed);background:linear-gradient(120deg,var(--transport-surface,#fff),var(--transport-warm,#fffdf2))}

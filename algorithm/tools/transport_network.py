@@ -112,7 +112,8 @@ def audit(payload):
                 if departure + timedelta(minutes=travel['duration_minutes']) <= datetime.fromisoformat(f'{payload["date"]}T{at}:00+03:00'):
                     continue
                 elapsed = 0
-                for step in travel.get('itinerary', []):
+                itinerary=travel.get('itinerary', [])
+                for index,step in enumerate(itinerary):
                     attrs, geometry = step['attributes'], step['geometry']
                     source = attrs.get('from_id') or (station_id(geometry[0]) if geometry else None)
                     target = attrs.get('to_id') or (station_id(geometry[-1]) if geometry else None)
@@ -122,9 +123,20 @@ def audit(payload):
                         violations.append({'orderId': visit['job_id'], 'kind': kind, 'fromId': source, 'toId': target})
                     if step['mode'] in ('station_entry','station_exit') and source and context.blocked('entry', source, None, when):
                         violations.append({'orderId':visit['job_id'],'kind':'entry','fromId':source})
-                    if step['mode'] == 'walking' and target and attrs.get('purpose') in ('station_access','metro_access') and context.blocked('entry',target,None,when+timedelta(seconds=step['duration_seconds'])):
-                        violations.append({'orderId':visit['job_id'],'kind':'entry','fromId':target})
-                    if step['mode'] == 'walking' and source and attrs.get('purpose') in ('station_egress','metro_egress') and context.blocked('entry',source,None,when):
+                    if step['mode'] == 'walking' and target and attrs.get('purpose') in ('station_access','metro_access'):
+                        # Reaching the door is not entry. Independently account
+                        # for stationary street-side waiting before crossing it,
+                        # including zero-duration entry legs omitted by the router.
+                        entry_at=when+timedelta(seconds=step['duration_seconds'])
+                        for following in itinerary[index+1:]:
+                            waiting_points=following.get('geometry',[])
+                            if following['mode']!='waiting' or not waiting_points or not all(sum(abs(p[i]-geometry[-1][i]) for i in (0,1))<.00005 for p in waiting_points):
+                                break
+                            entry_at+=timedelta(seconds=following['duration_seconds'])
+                        if context.blocked('entry',target,None,entry_at):
+                            violations.append({'orderId':visit['job_id'],'kind':'entry','fromId':target})
+                    exited=index>0 and itinerary[index-1]['mode']=='station_exit' and (itinerary[index-1].get('attributes',{}).get('from_id') or (station_id(itinerary[index-1]['geometry'][0]) if itinerary[index-1].get('geometry') else None))==source
+                    if step['mode'] == 'walking' and source and not exited and attrs.get('purpose') in ('station_egress','metro_egress') and context.blocked('entry',source,None,when):
                         violations.append({'orderId':visit['job_id'],'kind':'entry','fromId':source})
                     if step['mode'] == 'walking_transfer' and attrs.get('source') == 'VALHALLA_WALK_MATRIX':
                         if source and context.blocked('entry',source,None,when) or target and context.blocked('entry',target,None,when+timedelta(seconds=step['duration_seconds'])):

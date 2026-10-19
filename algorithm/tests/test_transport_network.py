@@ -1,4 +1,29 @@
 from algorithm.tools import transport_network as network
+import pytest
+
+
+@pytest.mark.parametrize('entry_seconds',[0,30])
+@pytest.mark.parametrize('wait,status',[(68,'VALID'),(67,'INVALID'),(0,'INVALID')])
+def test_entry_audit_checks_door_crossing_after_street_wait(monkeypatch,entry_seconds,wait,status):
+    street,station,next_station=[55.7,37.6],[55.701,37.601],[55.71,37.61]
+    monkeypatch.setattr(network,'catalog',lambda:{'stations':[{'id':'m:1','coords':station},{'id':'m:2','coords':next_station}]})
+    event={'id':'closed-entry','kind':'entry','status':'OPEN','startsAt':'2026-08-17T09:00:00+03:00','endsAt':'2026-08-17T10:02:00+03:00','segments':[{'fromId':'m:1','geometry':[station]}]}
+    steps=[{'mode':'walking','duration_seconds':52,'geometry':[street,station],'attributes':{'purpose':'station_access'}}]
+    if wait:steps.append({'mode':'waiting','duration_seconds':wait,'geometry':[station],'attributes':{'source':'TRANSPORT_KNOWN_OPENING'}})
+    if entry_seconds:steps.append({'mode':'station_entry','duration_seconds':entry_seconds,'geometry':[station],'attributes':{'from_id':'m:1'}})
+    steps.append({'mode':'metro','duration_seconds':120,'geometry':[station,next_station],'attributes':{'from_id':'m:1','to_id':'m:2'}})
+    payload={'events':[event],'date':'2026-08-17','time':'10:00','team':[],'plan':{'routes':[]},'raw':{'plan':{'engineer_plans':[{'visits':[{'job_id':'visit','departure_at':'2026-08-17T10:00:00+03:00','travel':{'mode':'PUBLIC_TRANSIT','duration_minutes':6,'itinerary':steps}}]}]}}}
+    assert network.audit(payload)['status']==status
+
+
+def test_wait_elsewhere_does_not_legalize_an_early_entry(monkeypatch):
+    station=[55.701,37.601]
+    monkeypatch.setattr(network,'catalog',lambda:{'stations':[{'id':'m:1','coords':station}]})
+    event={'id':'e','kind':'entry','status':'OPEN','startsAt':'2026-08-17T09:00:00+03:00','endsAt':'2026-08-17T10:02:00+03:00','segments':[{'fromId':'m:1'}]}
+    steps=[{'mode':'walking','duration_seconds':52,'geometry':[[55.7,37.6],station],'attributes':{'purpose':'metro_access'}},
+           {'mode':'waiting','duration_seconds':68,'geometry':[[55.72,37.62]],'attributes':{}}]
+    payload={'events':[event],'date':'2026-08-17','time':'10:00','team':[],'plan':{'routes':[]},'raw':{'plan':{'engineer_plans':[{'visits':[{'job_id':'v','departure_at':'2026-08-17T10:00:00+03:00','travel':{'mode':'PUBLIC_TRANSIT','duration_minutes':3,'itinerary':steps}}]}]}}}
+    assert network.audit(payload)['status']=='INVALID'
 
 
 def test_scenario_skips_an_ambiguous_first_edge_and_uses_a_proven_next_edge(monkeypatch):

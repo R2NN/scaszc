@@ -13,6 +13,13 @@ export function transportStatus(event, date, minute) {
   return at < Date.parse(event.startsAt) ? 'Запланировано' : event.endsAt && at >= Date.parse(event.endsAt) ? 'Завершено' : 'Действует';
 }
 
+/** Frame the selected detour with current restrictions, never completed history. */
+export function transportFocusSegments({orders=[],events=[],draft,selected,date,minute}) {
+  const current=events.filter(event=>transportStatus(event,date,minute)==='Действует');
+  const closures=draft?.segments?.length?draft.segments:selected&&transportStatus(selected,date,minute)==='Действует'?selected.segments:current.flatMap(event=>event.segments);
+  return [...orders.filter(order=>!order.lost&&order.geometryAfter?.length).map(order=>({geometry:order.geometryAfter})),...closures];
+}
+
 const remaining = (visit, at) => {
   const departure = minuteOf(visit.departureAt) ?? at, arrival = minuteOf(visit.arrival) ?? departure;
   const ratio = arrival <= at ? 0 : departure >= at ? 1 : (arrival-at)/Math.max(1,arrival-departure);

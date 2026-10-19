@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AlertTriangle, ArrowRight, Car, Check, ChevronRight, Clock3, Footprints, MapPin, Plus, Route, Search, TrainFront, Undo2, Users, X } from 'lucide-react';
 import { transportMap } from './TransportMap.jsx';
-import { transportStatus } from './transportDomain.js';
+import { transportStatus,transportFocusSegments } from './transportDomain.js';
 import { shiftClock } from './shiftClock.js';
 import { adoptDispatchClock } from './dispatchClockSync.js';
 import { minuteOf, timeOf } from './shiftDomain.js';
@@ -31,7 +31,6 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const [browse,setBrowse]=useState(false);
   const generation=useRef(0),previewRef=useRef(null),resumeRef=useRef(null),refs=useRef({});
   const [elapsed,setElapsed]=useState(0);
-  const [previewLoaded,setPreviewLoaded]=useState(false),autoAttempt=useRef('');
   const [scenario,setScenario]=useState(null),[scenarioBusy,setScenarioBusy]=useState(false);
   const resultRef=useRef(null);
   useEffect(()=>{
@@ -44,9 +43,9 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const load=async()=>{if(!shift?.id)return;const id=shift.id,result=await api(`events?shiftId=${encodeURIComponent(id)}`);if(refs.current.shift?.id===id)setEvents(result.events);};
   useEffect(()=>{let active=true;(async()=>{try{const value=await api('catalog');if(active)setCatalog(value);}catch(e){if(active)setError(e.message);}})();return()=>{active=false;};},[]);
   useEffect(()=>{
-    const own=++generation.current;setPreviewLoaded(false);autoAttempt.current='';setEvents([]);setPreview(null);setSelected(null);setScenario(null);setDraft(sessions.get(`${shift?.id}:${live}`)?.draft || null);
+    const own=++generation.current;setEvents([]);setPreview(null);setSelected(null);setScenario(null);setDraft(sessions.get(`${shift?.id}:${live}`)?.draft || null);
     load().catch(e=>setError(e.message));
-    if(shift?.id)(async()=>{try{const saved=await api(`previews/latest?shiftId=${shift.id}`);if(saved&&refs.current.shift?.id===shift.id&&own===generation.current){setPreview(saved);previewRef.current=saved;setEngineerId(saved.result?.consequences?.engineers[0]?.engineerId || '');}}catch(e){if(own===generation.current)setError(e.message);}finally{if(refs.current.shift?.id===shift.id)setPreviewLoaded(true);}})();
+    if(shift?.id)(async()=>{try{const saved=await api(`previews/latest?shiftId=${shift.id}`);if(saved&&refs.current.shift?.id===shift.id&&own===generation.current){setPreview(saved);previewRef.current=saved;setEngineerId(saved.result?.consequences?.engineers[0]?.engineerId || '');}}catch(e){if(own===generation.current)setError(e.message);}})();
     if(live&&shift?.id)(async()=>{try{const value=await api(`scenario?shiftId=${shift.id}`);if(refs.current.shift?.id===shift.id)setScenario(value);}catch(e){setError(e.message);}})();
   },[shift?.id]);
   useEffect(()=>{if(shift?.id)sessions.set(`${shift.id}:${live}`,{draft});},[draft,shift?.id,live]);
@@ -168,12 +167,16 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
       setPreview(value);previewRef.current=value;
     }catch(e){setError(e.message);}finally{setScenarioBusy(false);}
   };
-  const scenarioNextRef=useRef(nextWave);scenarioNextRef.current=nextWave;
   useEffect(()=>{
-    const wave=scenario?.waves?.[scenario.index+1];
-    const key=`${shift?.id}:${scenario?.index}:${minute}`;
-    if(live&&previewLoaded&&!draft&&!scenarioBusy&&!['RUNNING','READY'].includes(preview?.status)&&wave&&minute>=minuteOf(wave.time)&&autoAttempt.current!==key){autoAttempt.current=key;scenarioNextRef.current(true);}
-  },[minute,scenario?.index,preview?.status,previewLoaded,scenarioBusy,Boolean(draft)]);
+    const receive=event=>{
+      const result=event.detail;if(result?.shift?.id!==shift?.id)return;
+      generation.current++;setScenario(result.state);load().catch(error=>setError(error.message));
+      if(result.preview){setPreview(result.preview);previewRef.current=result.preview;setEngineerId('');setOrderId('');setSelected(result.event);transportMap.focus(result.event.segments);}
+      onScenarioEvent?.();
+    };
+    window.addEventListener('beego:transport-scenario',receive);
+    return()=>window.removeEventListener('beego:transport-scenario',receive);
+  },[shift?.id]);
   const visible=events.filter(e=>(showEnded||!['Завершено','Отменено'].includes(transportStatus(e,date,minute)))&&(filter==='all'||(filter==='metro'?e.kind!=='road':e.kind===filter))&&`${e.title} ${e.reason}`.toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru')));
   const results=catalog&&draft&&draft.kind!=='road'&&search.trim()? [...(draft.kind==='entry'?catalog.stations:catalog.segments.filter(s=>s.kind===draft.kind))].filter(s=>s.name.toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))).slice(0,12):[];
   const consequences=preview?.result?.consequences,engineer=consequences?.engineers.find(e=>e.engineerId===engineerId)||consequences?.engineers[0];
@@ -218,9 +221,9 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
       <div className='transport-metrics'><div><Users/><b>{consequences.engineers.length}</b><span>инженеров затронуто</span></div><div><Clock3/><b>{signed(consequences.addedTravelMinutes)} мин</b><span>сумма оставшегося движения</span></div></div>
 
       {engineer?<p className='transport-source-note'>Оставшийся путь: {engineer.beforeMinutes} → {engineer.afterMinutes} мин · {(engineer.beforeDistanceM/1000).toFixed(1)} → {(engineer.afterDistanceM/1000).toFixed(1)} км</p>:null}
-      {engineer?<button className='transport-show-route' onClick={()=>transportMap.focus([...(consequences.orders.filter(o=>o.engineerId===engineer.engineerId&&!o.lost).map(o=>({geometry:o.geometryAfter}))),...(draft?.segments||selected?.segments||events.flatMap(event=>event.segments))])}><Route size={16}/>Показать проверенный путь</button>:null}
+      {engineer?<button className='transport-show-route' onClick={()=>transportMap.focus(transportFocusSegments({orders:consequences.orders.filter(o=>o.engineerId===engineer.engineerId),events,draft,selected,date,minute}))}><Route size={16}/>Показать проверенный путь</button>:null}
       {itinerary.length?<details className='transport-itinerary'><summary>Как проходит путь</summary>{itinerary.map((step,index)=><div key={index}><span>{['walking','pedestrian','walking_transfer'].includes(step.mode)?<Footprints size={15}/>:step.mode==='metro'?<b>M</b>:<Clock3 size={15}/>}</span><span>{step.mode==='metro'?(catalog?.lines?.[step.lineId]?.name || 'Метро'):({metro_wait_model:'Ожидание поезда · модель',walking_transfer:'Пешая пересадка',walking:'Пешком',pedestrian:'Пешком',waiting:'Ожидание транспорта',station_entry:'Вход на станцию',station_exit:'Выход со станции',auto:'Автомобиль',bicycle:'Велосипед'})[step.mode] || step.line || 'Наземный транспорт'}{step.from||step.to?<small>{step.from} → {step.to}</small>:null}</span><strong>{Math.ceil(step.seconds/60)} мин</strong></div>)}</details>:null}
-      {consequences.orders.length?<div className='transport-impacts'><h4>Затронутые заявки ({consequences.orders.length})</h4>{consequences.orders.map(o=><button key={o.orderId} aria-pressed={o.orderId===firstOrder?.orderId} onClick={()=>{setEngineerId(o.engineerId);setOrderId(o.orderId);if(o.geometryAfter)transportMap.focus([{geometry:o.geometryAfter},...events.flatMap(event=>event.segments)]);}}><span>{o.address || o.orderId}</span><b>{o.lost?'Нет назначения':`${signed(o.delta)} мин`}</b><small className={o.lost||o.lateMinutes>0?'warning':''}>{o.lost?'Нужно решение':o.lateMinutes==null?'Окно неизвестно':o.lateMinutes>0?`Опоздание ${o.lateMinutes} мин`:'В окне'}</small></button>)}</div>:null}
+      {consequences.orders.length?<div className='transport-impacts'><h4>Затронутые заявки ({consequences.orders.length})</h4>{consequences.orders.map(o=><button key={o.orderId} aria-pressed={o.orderId===firstOrder?.orderId} onClick={()=>{setEngineerId(o.engineerId);setOrderId(o.orderId);if(o.geometryAfter)transportMap.focus(transportFocusSegments({orders:[o],events,draft,selected,date,minute}));}}><span>{o.address || o.orderId}</span><b>{o.lost?'Нет назначения':`${signed(o.delta)} мин`}</b><small className={o.lost||o.lateMinutes>0?'warning':''}>{o.lost?'Нужно решение':o.lateMinutes==null?'Окно неизвестно':o.lateMinutes>0?`Опоздание ${o.lateMinutes} мин`:'В окне'}</small></button>)}</div>:null}
 
       {engineer&&(engineer.beforeWaitingMinutes||engineer.afterWaitingMinutes)?<p className='transport-source-note'>Ожидание транспорта отдельно: {engineer.beforeWaitingMinutes} → {engineer.afterWaitingMinutes} мин</p>:null}
       <details><summary>Что проверено</summary><p>Независимый валидатор плана: {preview.result.plan.validation.status}. Запреты сети: {preview.result.audit.status}. Территории, навыки, оснащение, транспорт и история визитов сохраняются. Метро использует модель ожидания поезда из локального индекса.</p></details>
