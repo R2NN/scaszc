@@ -1,25 +1,46 @@
 import { randomUUID } from 'node:crypto';
 import { emptyServiceContext, validateServiceContext } from '../src/serviceContextDomain.js';
+import { loadComplexityArtifact } from './complexityArtifact.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const blankTask = () => ({ action: '', owner: '', deadline: '', access: 'unknown', equipment: 'unknown', customer: 'unknown' });
 export function demoServiceContext(shift) {
-  const orders = shift.orders.filter(order => Array.isArray(order.coords) && order.coords.length === 2 && order.coords.every(Number.isFinite)).slice(0, 3);
+  const located = shift.orders.filter(order => Array.isArray(order.coords) && order.coords.length === 2 && order.coords.every(Number.isFinite));
+  const anchor = located.find(order => order.id === 'EAST-74198') || located[0];
+  const distance = order => Math.hypot((order.coords[0]-anchor.coords[0])*111,(order.coords[1]-anchor.coords[1])*63);
+  const orders = anchor ? [anchor, ...located.filter(order => order !== anchor).sort((a,b)=>distance(a)-distance(b)).slice(0, 1)] : [];
   if (orders.length < 2) throw new Error('Для примера нужны минимум две заявки с координатами.');
   const at = `${shift.date}T11:17:00+03:00`;
   return {
-    components: [{ id: 'DEMO-NODE-042', title: 'Учебный узел MSK-042', coords: [orders.reduce((sum, item) => sum + item.coords[0], 0) / orders.length + .003, orders.reduce((sum, item) => sum + item.coords[1], 0) / orders.length - .003], provenance: 'demo', locationBasis: 'Условная координата учебной схемы; не расположение реального узла.' }],
+    components: [{ id: 'DEMO-NODE-042', demoVersion: 2, title: 'Учебный узел MSK-042', coords: [orders.reduce((sum, item) => sum + item.coords[0], 0) / orders.length + .0012, orders.reduce((sum, item) => sum + item.coords[1], 0) / orders.length - .0012], provenance: 'demo', locationBasis: 'Условная координата учебной схемы; не расположение реального узла.' }],
     incidents: [{ id: 'DEMO-INC-042', title: 'Нет ответа от общего узла', componentId: 'DEMO-NODE-042', type: 'equipment', status: 'review', provenance: 'demo', orderIds: orders.slice(0, 2).map(order => String(order.id)), basis: 'Демонстрационная зависимость двух заявок от общего узла. Связь не подтверждена данными оператора.', observedAt: at, updatedAt: at, history: [{ at, text: 'Учебный сигнал: узел перестал отвечать. Живой мониторинг не подключён.' }], task: blankTask() }],
-    cases: [{ id: 'DEMO-CASE-001', title: 'Связь снова пропадает', accountRef: 'DEMO-ACCOUNT-4821', identityConfirmed: true, symptom: 'Периодические обрывы связи', status: 'returned', provenance: 'demo', orderIds: [String(orders[0].id)], basis: 'Учебная история одного лицевого счёта и одного симптома. Это не история клиента из исходной заявки.', updatedAt: at, history: [{ at: `${shift.date}T09:00:00+03:00`, text: 'Пример: предыдущий выезд не состоялся — не было доступа к узлу.' }, { at, text: 'Пример: после настройки клиент снова сообщил об обрывах.' }], task: { ...blankTask(), action: 'Подтвердить доступ к узлу и проверить питание', owner: 'Диспетчер' } }],
+    cases: [],
   };
 }
 
-export function createServiceContextApi(store) {
+export function createServiceContextApi(store, { seedDemo = false } = {}) {
   store.db.exec(`CREATE TABLE IF NOT EXISTS service_contexts (shift_id TEXT PRIMARY KEY REFERENCES shifts(id), revision INTEGER NOT NULL, data_json TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS service_context_history (id TEXT PRIMARY KEY, shift_id TEXT NOT NULL REFERENCES shifts(id), revision INTEGER NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL, data_json TEXT NOT NULL);`);
   const read = shiftId => {
     const row = store.db.prepare('SELECT * FROM service_contexts WHERE shift_id = ?').get(shiftId);
     return row ? { revision: row.revision, ...JSON.parse(row.data_json) } : { revision: 0, ...emptyServiceContext() };
+  };
+  const ensureDemo = async shift => {
+    const current = read(shift.id);
+    const oldDemo = current.incidents.find(item => item.id === 'DEMO-INC-042' && item.provenance === 'demo');
+    const oldNode = current.components.find(item => item.id === 'DEMO-NODE-042' && item.provenance === 'demo');
+    if (!seedDemo || shift.regionId !== 'moscow' || shift.date !== '2026-08-17' || (current.revision && (!oldDemo || !oldNode || oldNode.demoVersion === 2))) return;
+    const artifact = await loadComplexityArtifact();
+    const originals = new Map((artifact?.orders || []).map(order => [String(order.id), order]));
+    if (!originals.size || shift.orders.length !== originals.size || shift.orders.some(order => { const source = originals.get(String(order.id)); return !source || source.address !== order.address || JSON.stringify(source.coords) !== JSON.stringify(order.coords); })) return;
+    const demo = demoServiceContext(shift);
+    const next = oldDemo ? { cases: current.cases, components: current.components.map(item => item.id === oldNode.id ? demo.components[0] : item), incidents: current.incidents.map(item => item.id === oldDemo.id ? { ...item, orderIds: demo.incidents[0].orderIds } : item) } : { ...demo, cases: [] };
+    store.db.transaction(() => {
+      if (read(shift.id).revision !== current.revision) return;
+      const revision = current.revision + 1, data = JSON.stringify(validateServiceContext(next, shift.orders));
+      store.db.prepare('INSERT INTO service_contexts VALUES (?,?,?) ON CONFLICT(shift_id) DO UPDATE SET revision=excluded.revision,data_json=excluded.data_json').run(shift.id, revision, data);
+      store.db.prepare('INSERT INTO service_context_history VALUES (?,?,?,?,?,?)').run(randomUUID(), shift.id, revision, 'Учебный сценарий сети', new Date().toISOString(), data);
+    })();
   };
   const priorCases = data => (data.cases || []).flatMap(record => (record.previousCases || []).map(ref => {
     const prior = read(ref.shiftId).cases.find(item => item.id === ref.caseId);
@@ -33,6 +54,7 @@ export function createServiceContextApi(store) {
       const shift = store.get(url.searchParams.get('shiftId'));
       if (!shift) return json({ error: 'Смена не найдена.' }, 404);
       if (request.method === 'GET') {
+        await ensureDemo(shift);
         const account = url.searchParams.get('accountRef');
         if (account) {
           const matches = store.db.prepare('SELECT c.shift_id,c.data_json,s.service_date FROM service_contexts c JOIN shifts s ON s.id=c.shift_id WHERE s.region_id=? AND s.service_date<?').all(shift.regionId, shift.date).flatMap(row => JSON.parse(row.data_json).cases.filter(record => record.provenance !== 'demo' && record.accountRef === account).map(record => ({ shiftId: row.shift_id, date: row.service_date, record })));
@@ -51,8 +73,8 @@ export function createServiceContextApi(store) {
         if (!Number.isInteger(input.revision) || current.revision !== input.revision) throw Object.assign(new Error('Данные уже изменились. Обновите и повторите сохранение.'), { status: 409 });
         let next;
         if (request.method === 'POST' && input.action === 'demo') {
-          if (current.cases.length || current.incidents.length || current.components.length) throw new Error('Пример доступен только в пустом наборе; текущие записи сохранены.');
-          next = demoServiceContext(shift);
+          if (current.incidents.length || current.components.length) throw new Error('Пример доступен только в пустом наборе; текущие записи сохранены.');
+          next = { ...demoServiceContext(shift), cases: current.cases };
         } else if (request.method === 'PUT') {
           if (input.shiftId !== shift.id || input.date !== shift.date) throw new Error('Файл относится к другой смене.');
           next = input.data;

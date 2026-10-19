@@ -26,7 +26,8 @@ test('empty contexts and explicit demo never modify operational orders, facts, p
     assert.equal((await request()).data.incidents.length, 0);
     const saved = await request('POST', { action: 'demo', revision: 0 });
     assert.equal(saved.status, 200);
-    assert.equal(saved.data.cases[0].provenance, 'demo');
+    assert.equal(saved.data.incidents[0].provenance, 'demo');
+    assert.equal(saved.data.cases.length, 0);
     assert.deepEqual(store.get('test-a'), before);
     assert.equal((await request('GET', null, 'test-b')).data.cases.length, 0);
     assert.equal((await request('POST', { action: 'demo', revision: 1 })).status, 422);
@@ -46,10 +47,10 @@ test('optimistic revision prevents lost edits, task and notes persist with audit
   try {
     await request('POST', { action: 'demo', revision: 0 });
     const task = { action: 'Получить ключ', owner: 'Ирина', deadline: '2026-08-17T13:00', access: 'waiting', equipment: 'ready', customer: 'unknown' };
-    const saved = await request('PATCH', { revision: 1, action: 'task', kind: 'case', id: 'DEMO-CASE-001', task, actor: 'Ирина' });
+    const saved = await request('PATCH', { revision: 1, action: 'task', kind: 'incident', id: 'DEMO-INC-042', task, actor: 'Ирина' });
     assert.equal(saved.status, 200);
-    assert.deepEqual(saved.data.cases[0].task, task);
-    assert.equal((await request('PATCH', { revision: 1, action: 'note', kind: 'case', id: 'DEMO-CASE-001', note: 'Старая запись' })).status, 409);
+    assert.deepEqual(saved.data.incidents[0].task, task);
+    assert.equal((await request('PATCH', { revision: 1, action: 'note', kind: 'incident', id: 'DEMO-INC-042', note: 'Старая запись' })).status, 409);
     const updated = await request('PATCH', { revision: 2, action: 'status', kind: 'incident', id: 'DEMO-INC-042', status: 'resolved' });
     assert.equal(serviceStats(updated.data.incidents).active, 0);
     assert.equal(store.db.prepare('SELECT count(*) n FROM service_context_history').get().n, 3);
@@ -78,7 +79,7 @@ test('invalid imports are atomic: unknown order, missing account, invalid coordi
   try {
     const demo = (await request('POST', { action: 'demo', revision: 0 })).data;
     const original = { cases: demo.cases, incidents: demo.incidents, components: demo.components };
-    for (const mutate of [data => { data.cases[0].accountRef = ''; }, data => { data.cases[0].identityConfirmed = false; }, data => { data.incidents[0].orderIds = ['test-b:EAST-1']; }, data => { data.components[0].coords = [155, 37]; }, data => { data.incidents[0].componentId = 'MISSING'; }]) {
+    for (const mutate of [data => { data.incidents[0].basis = ''; }, data => { data.incidents[0].status = 'invalid'; }, data => { data.incidents[0].orderIds = ['test-b:EAST-1']; }, data => { data.components[0].coords = [155, 37]; }, data => { data.incidents[0].componentId = 'MISSING'; }]) {
       const data = structuredClone(original); mutate(data);
       assert.equal((await request('PUT', { revision: 1, shiftId: 'test-a', date: '2026-08-17', data })).status, 422);
       assert.equal((await request()).data.revision, 1);
@@ -126,5 +127,14 @@ test('editing preparation does not refresh original telemetry time or accept mal
   data.incidents[0].history[0].actor={unexpected:'object'};
   assert.equal((await request('PUT',{revision:2,shiftId:'test-a',date:'2026-08-17',data})).status,422);
   assert.equal((await request()).data.revision,2);
+ } finally {store.close();}
+});
+test('automatic teaching overlay does not seed a changed or imported dataset', async () => {
+ const {store}=fixture();
+ try {
+  const before=store.get('test-a');
+  const api=createServiceContextApi(store,{seedDemo:true});
+  const response=await api(new Request('http://localhost/api/service-context?shiftId=test-a'));
+  const data=await response.json();assert.equal(data.revision,0);assert.equal(data.incidents.length,0);assert.deepEqual(store.get('test-a'),before);
  } finally {store.close();}
 });

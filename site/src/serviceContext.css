@@ -26,4 +26,12 @@
 
 @media(max-width:760px){.app-shell:has(.network-panel) .orders-panel,.app-shell:has(.network-panel) .map-plan-action{visibility:hidden;pointer-events:none}.network-panel{max-height:calc(100% - 130px)}}
 
-.maplibre-host .network-map-marker{z-index:500!important}@media(max-width:760px){.network-panel.is-detail{top:45dvh;max-height:calc(55dvh - 15px)}}
+.maplibre-host .network-map-marker{z-index:900!important}@media(max-width:760px){.network-panel.is-detail{top:45dvh;max-height:calc(55dvh - 15px)}}
+.cx-mode-switch>.network-mode-control{position:relative;min-width:42px;padding:0 10px}.network-mode-dot{position:absolute;right:5px;top:5px;width:6px;height:6px;background:#e44336;border:1px solid var(--surface,#fff);border-radius:50%;pointer-events:none}
+.network-map-marker.affected{width:32px;min-width:32px;height:32px;border:3px solid #e59b13;border-radius:50%;padding:0;background:transparent;box-shadow:0 0 0 3px #fff7d87d}.network-map-marker.affected:after{content:'!';position:absolute;right:-5px;top:-6px;width:13px;height:13px;border-radius:50%;background:#de4936;color:#fff;border:1px solid #fff;font-size:10px;line-height:13px;text-align:center}.network-map-marker.source.review{background:#df4939}.network-map-marker.source.is-demo:after{content:'демо';position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);font:9px sans-serif;background:#fff4c6;color:#76520a;border-radius:3px;padding:1px 3px;pointer-events:none}
+.network-map-notice{position:absolute;z-index:30;top:80px;right:80px;display:flex;align-items:center;gap:7px;max-width:280px;padding:8px 11px;border:1px solid #efd17a;border-radius:9px;background:#fff9df;color:#6c5111;box-shadow:0 3px 12px #18212d12;font:inherit;font-size:12px;cursor:pointer}.dark .network-map-notice{background:#403820;color:#f9df89;border-color:#74632a}
+@media(max-width:760px){.cx-mode-switch>.network-mode-control{min-width:34px;padding:0 7px}.network-map-notice{top:114px;right:12px;max-width:240px}}
+
+.network-connections{position:absolute;inset:0;width:100%;height:100%;z-index:400;pointer-events:none;overflow:hidden}.network-connections line{vector-effect:non-scaling-stroke}.network-connection-outline{stroke:#fff;stroke-width:5;opacity:.8}.network-connection-link{stroke:#cc6439;stroke-width:2.4;stroke-dasharray:6 5;opacity:.95}.dark .network-connection-outline{stroke:#252a32}.dark .network-connection-link{stroke:#ffc16c}
+
+.maplibre-host .network-map-marker.source{z-index:950!important}.maplibre-host .network-map-marker.request{z-index:940!important}

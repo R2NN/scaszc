@@ -4,8 +4,8 @@ export const CASE_STATUSES = { unresolved: 'Проблема не устране
 export const emptyServiceContext = () => ({ cases: [], incidents: [], components: [] });
 export const orderLabel = order => String(order?.sourceId || order?.id || '').split(':').at(-1).replace(/^.*?-/, '');
 export function relatedOrders(record, orders) {
-  const ids = new Set(record?.orderIds || []);
-  return orders.filter(order => ids.has(String(order.id)));
+  const byId = new Map(orders.map(order => [String(order.id), order]));
+  return (record?.orderIds || []).map(id => byId.get(id)).filter(Boolean);
 }
 export function caseForOrder(cases, order) {
   return order ? cases.filter(item => item.orderIds.includes(String(order.id))) : [];
