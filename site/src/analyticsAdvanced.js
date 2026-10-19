@@ -15,7 +15,11 @@ const median = values => {
 };
 const dateShift = (key, days) => new Date(new Date(`${key}T12:00:00Z`).getTime() + days * 86400000).toISOString().slice(0, 10);
 const zoneOf = order => String(order?.zone || order?.zoneName || order?.zoneId || 'Без зоны').trim();
-const skillOf = order => String(order?.skill || order?.requiredSkill || order?.sourceData?.required_skill || 'Навык не указан').trim();
+const skillCode = value => {
+  const normalized = String(value || '').trim().toLocaleLowerCase('ru-RU');
+  return ({ 'подключение': 'INSTALL', 'локальные работы': 'LOCAL', 'аварийные работы': 'EMERGENCY', 'дозаказ': 'UPSELL' })[normalized] || String(value || '').trim().toUpperCase();
+};
+const skillOf = order => skillCode(order?.skill || order?.requiredSkill || order?.sourceData?.required_skill || 'Навык не указан');
 const regionOf = order => String(order?.regionName || order?.regionId || 'Регион не указан').trim();
 const skillLabel = value => ({ INSTALL: 'подключение', LOCAL: 'локальные работы', EMERGENCY: 'аварийные работы', UPSELL: 'дозаказ' })[value] || String(value || 'не указан').toLocaleLowerCase('ru-RU');
 const hoursLabel = minutes => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(Math.max(0, minutes) / 60);
@@ -220,7 +224,7 @@ export function analyzeResourceGaps(record) {
   const unresolvedOrders = unresolved.map(item => ({ item, order: orderById.get(String(item.orderId)) })).filter(entry => entry.order);
   const neededSkills = new Set(unresolvedOrders.map(({ order }) => skillOf(order)));
   const idle = team.filter(engineer => !activeIds.has(String(engineer.id)));
-  const idleWithNeededSkill = idle.filter(engineer => (engineer.skills || []).some(skill => neededSkills.has(String(skill))));
+  const idleWithNeededSkill = idle.filter(engineer => (engineer.skills || []).some(skill => neededSkills.has(skillCode(skill))));
   const idleWithoutNeededSkill = idle.filter(engineer => !idleWithNeededSkill.includes(engineer));
   let idleDiagnosis = 'Все доступные бригады получили маршруты';
   if (idle.length && !unresolved.length) idleDiagnosis = `${idle.length} ${idle.length === 1 ? 'бригада не понадобилась' : 'бригады не понадобились'} при текущем спросе`;
@@ -238,10 +242,10 @@ export function analyzeResourceGaps(record) {
     const window = order.start && order.end ? `${order.start}–${order.end}` : 'окно не указано';
     const orderEnd = minute(order.end);
     const localTeam = team.filter(engineer => !engineer.zone || engineer.zone === zone);
-    const localWithSkill = localTeam.filter(engineer => (engineer.skills || []).map(String).includes(skill));
-    const otherRegionWithSkill = team.filter(engineer => engineer.zone && engineer.zone !== zone && (engineer.skills || []).map(String).includes(skill));
+    const localWithSkill = localTeam.filter(engineer => (engineer.skills || []).map(skillCode).includes(skill));
+    const otherRegionWithSkill = team.filter(engineer => engineer.zone && engineer.zone !== zone && (engineer.skills || []).map(skillCode).includes(skill));
     const freeLocal = localTeam.filter(engineer => !activeIds.has(String(engineer.id)));
-    const freeWithSkill = freeLocal.filter(engineer => (engineer.skills || []).map(String).includes(skill));
+    const freeWithSkill = freeLocal.filter(engineer => (engineer.skills || []).map(skillCode).includes(skill));
     const routeFinishes = localWithSkill.map(engineer => {
       const finishes = (routesByEngineer.get(String(engineer.id))?.assignments || []).map(assignment => minute(assignment.plannedFinish)).filter(value => value != null);
       return finishes.length ? Math.max(...finishes) : null;
@@ -324,7 +328,7 @@ export function analyzeTeamCapacity(record) {
   const stats = team.map(engineer => {
     const route = routeByEngineer.get(String(engineer.id));
     const assignments = route?.assignments || [];
-    const skills = (engineer.skills || []).map(String);
+    const skills = (engineer.skills || []).map(skillCode);
     const zone = String(engineer.zone || '').trim();
     const matches = order => (!zone || zoneOf(order) === zone) && skills.includes(skillOf(order));
     const matchingDemand = orders.filter(matches);
@@ -353,6 +357,8 @@ export function analyzeTeamCapacity(record) {
         explanation = `Не назначен: заявка #${firstOpenId} требует навык «${skillLabel(skillOf(firstOpen))}», у инженера: ${skills.map(skillLabel).join(', ') || 'навыки не указаны'}.`;
       } else if (firstOpen && requiredTransport && requiredTransport !== String(engineer.transport || '')) {
         explanation = `Не назначен: не подходит транспорт для заявки #${firstOpenId} (${skillLabel(skillOf(firstOpen))}).`;
+      } else if (firstOpen && shiftStart != null && minute(firstOpen.end) != null && shiftStart > minute(firstOpen.end)) {
+        explanation = `Не назначен: окно заявки #${firstOpenId} ${firstOpen.start}–${firstOpen.end} заканчивается до начала смены в ${engineer.shiftStart}.`;
       } else if (firstOpen && !shiftCanReach) {
         explanation = `Не назначен: не успевает к началу окна заявки #${firstOpenId} на выбранном транспорте.`;
       } else if (!zoneBacklog.length) {
@@ -551,7 +557,7 @@ export function generatePeriodInsights(records) {
   for (const record of source) {
     const active = new Set((record.plan?.routes || []).filter(route => route.assignments?.length).map(route => String(route.engineerId)));
     for (const engineer of record.team || []) {
-      const skills = (engineer.skills || []).map(String);
+      const skills = (engineer.skills || []).map(skillCode);
       if (zoneOf(engineer) === dominant.zone && !skills.includes(String(dominant.skill)) && !active.has(String(engineer.id))) traineeIds.add(String(engineer.id));
     }
   }
@@ -1119,7 +1125,7 @@ export function simulateCapacitySchedule(record, options) {
   const count = Math.max(1, Math.min(5, Math.round(numeric(options?.count) || 1)));
   const extraMinutes = Math.max(15, Math.min(180, Math.round(numeric(options?.minutes) || 60)));
   const backlog = (record?.plan?.unassigned || []).map(item => scenarioOrder(record, item)).filter(order => scenarioMatches(order, zone, skill));
-  const team = (record?.team || []).filter(engineer => (!zone || !engineer.zone || engineer.zone === zone) && (!skill || (engineer.skills || []).map(String).includes(skill)));
+  const team = (record?.team || []).filter(engineer => (!zone || !engineer.zone || engineer.zone === zone) && (!skill || (engineer.skills || []).map(skillCode).includes(skill)));
   const needsSkillSelection = mode === 'add' && !skill;
   const slots = [];
   let moved = 0;

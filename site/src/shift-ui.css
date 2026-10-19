@@ -95,7 +95,7 @@
 .app-shell.dark .shift-layer.operational-shift .shift-preview-metrics span{background:#292e35;border-color:#49505b;color:#bec6d0}
 .app-shell.dark .shift-layer.operational-shift .shift-preview-metrics b{color:#f1f3f5}
 .app-shell.dark .shift-layer.operational-shift .shift-preview-status{color:#9bd5ac}
-@media(min-width:1340px){.app-shell:has(.operational-shift) .shift-timeline{left:calc(var(--operational-panel-left) + 606px)}.app-shell.has-map-overlay.overlay-shift .workspace-background-only.calendar-over-overlay .minimal-topbar .date-control{left:calc(50% + (var(--operational-panel-left) + 600px) / 2)!important}}
+@media(min-width:1340px){.app-shell:has(.operational-shift) .shift-timeline{left:calc(var(--operational-panel-left) + 606px)}}
 @media(max-width:760px){.app-shell .shift-layer.operational-shift .shift-panel nav.shift-tabs button{font-size:14px;padding:9px 10px}.app-shell .shift-layer.operational-shift .shift-panel>header{padding:16px 18px;min-height:90px}.app-shell .shift-layer.operational-shift .shift-panel-body{padding:18px 16px 24px}.app-shell .shift-layer.operational-shift .shift-preview-metrics{grid-template-columns:1fr}.app-shell .shift-layer.operational-shift .shift-preview-metrics span{display:flex;justify-content:space-between;align-items:center}.app-shell .shift-layer.operational-shift .shift-empty-state{padding:22px 12px}}
 
 .app-shell .shift-layer.operational-shift .shift-form textarea{font-family:inherit}
@@ -155,3 +155,18 @@
 .app-shell .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives)[open]>summary{border-radius:11px 11px 0 0}
 
 .app-shell.dark .shift-layer.operational-shift .dispatch-scenario>small{color:#f1d56d}
+
+.shift-panel>header:has(.shift-workspace-close){position:relative;padding-right:64px!important}
+.shift-panel>header>.shift-workspace-close{position:absolute;right:18px;top:18px;display:grid;place-items:center;width:34px;height:34px;padding:6px;border:0;border-radius:0;background:transparent;color:#626e7b;box-shadow:none;cursor:pointer;transition:color .16s ease}
+.shift-panel>header>.shift-workspace-close:hover{background:transparent;color:#252d36}
+.shift-panel>header>.shift-workspace-close:focus-visible{outline:2px solid #d5aa00;outline-offset:3px}
+.app-shell.dark .shift-panel>header>.shift-workspace-close{background:transparent;color:#cbd3dc}
+.app-shell.dark .shift-panel>header>.shift-workspace-close:hover{background:transparent;color:#fff}
+@media(prefers-reduced-motion:reduce){.shift-panel>header>.shift-workspace-close{transition:none}}
+
+@media(max-width:760px){
+  .app-shell .shift-layer.replanning-layer{--operational-panel-left:64px}
+  .app-shell .replanning-panel>header:has(.shift-workspace-close){padding:18px 16px!important}
+  .app-shell .replanning-panel>header:has(.shift-workspace-close)>small{display:block;min-height:24px;padding-right:42px}
+  .app-shell .replanning-panel>header:has(.shift-workspace-close)>h2{font-size:24px;line-height:1.25;overflow-wrap:anywhere;margin-top:8px}
+}

@@ -101,6 +101,12 @@ export function eventModel(shift, event) {
   } else if (event.type === EVENT_TYPES.CLIENT_WINDOW_SHIFT) {
     if (!order || minuteOf(event.start) == null || (event.end && minuteOf(event.end) == null)) throw new Error('Укажите заявку и новое клиентское окно.');
     if ((minuteOf(event.end || order.end) ?? -1) <= minuteOf(event.start)) throw new Error('Конец клиентского окна должен быть позже начала.');
+    const assignment = shift.plan.routes.flatMap(route => route.assignments || []).find(visit => String(visit.orderId) === String(order.id));
+    const started = (shift.facts || []).some(fact => String(fact.orderId) === String(order.id) && ['started', 'completed'].includes(fact.status));
+    const departed = assignment?.departureAt && assignment.departureAt <= event.time;
+    if (assignment && (started || departed) && (assignment.plannedStart < event.start || assignment.plannedStart > (event.end || order.end))) {
+      throw new Error('Выезд по заявке уже начался. Новое окно исключает сохранённое время визита; сначала согласуйте решение с бригадой. План не изменён.');
+    }
     nextOrders = orders.map(item => String(item.id) === String(order.id) ? { ...item, start: event.start, end: event.end || item.end } : item);
   }
   return { orders: nextOrders, team: nextTeam, event: planningEvent };

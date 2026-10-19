@@ -7,6 +7,14 @@ const order = { id: 'a', coords: [55.75, 37.62], start: '10:00', end: '12:00' };
 const engineer = { id: 'e', shiftStart: '08:00', shiftEnd: '18:00', startCoords: [55.7, 37.6] };
 const plan = { status: 'EXACT_VALID', contentSha256: 'test-validated-plan', publicationAllowed: true, validation: { status: 'VALID' }, provider: 'LOCAL_VALHALLA', routes: [{ engineerId: 'e', shiftStart: '08:00', shiftEnd: '18:00', assignments: [{ orderId: 'a', departureAt: '09:00', arrivalAt: '09:30', plannedStart: '10:00', plannedFinish: '11:00', geometry: [[55.7, 37.6], [55.75, 37.62]] }] }], unassigned: [] };
 
+test('a window change cannot invalidate a departed visit, while future windows remain editable', () => {
+  const shift = { orders: [order], team: [engineer], plan, facts: [] };
+  const change = { type: 'CLIENT_WINDOW_SHIFT', time: '09:00', orderId: 'a', start: '12:00', end: '14:00', reason: 'Клиент перенёс окно' };
+  assert.throws(() => eventModel(shift, change), /Выезд.*уже начался.*План не изменён/);
+  assert.equal(eventModel(shift, { ...change, time: '08:00' }).orders[0].start, '12:00');
+  assert.equal(eventModel(shift, { ...change, start: '09:30', end: '12:00' }).orders[0].start, '09:30');
+});
+
 test('duration changes protect past visits and preserve an explained override or automatic reset', () => {
   const shift = { orders: [order], team: [engineer], plan, facts: [] };
   const event = { type: 'ORDER_DURATION_CHANGED', orderId: 'a', time: '09:00', reason: 'Дополнительное оборудование', durationMinutes: 95 };

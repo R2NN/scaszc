@@ -1,3 +1,4 @@
+import { createServiceContextApi } from './serviceContextApi.mjs';
 import { planningRuntimeStatus } from './runtimeReadiness.mjs';
 import { ShiftStore } from './shiftStore.mjs';
 import { eventModel, normalizeDataAdditionEvent } from '../src/shiftDomain.js';
@@ -23,6 +24,7 @@ const errorStatus = error => /устарел|уже изменился|Тран�
 export function createOperationsApi({ store = new ShiftStore(), routing = exactShiftReplan, routingOptions = {}, ai = askShiftAi, aiOptions = {}, seedFromBase = false } = {}) {
   const transportApi = createTransportApi(store);
   const dispatchApi = createDispatchApi(store,{onRestart:shiftId=>transportApi.cancelShift(shiftId)});
+  const serviceContextApi = createServiceContextApi(store, { seedDemo: seedFromBase });
   const ratingApi = createRatingApi(store);
   const seedPromise = seedFromBase ? (async () => { await seedComplexity(store.complexity); seedEngineerFeedback(store.complexity); await seedBaseShift(store); })() : Promise.resolve();
   const aiCalls = new Map();
@@ -52,6 +54,8 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
   async function handle(request) {
     await seedPromise;
     const url = new URL(request.url);
+    const serviceContextResponse = await serviceContextApi(request);
+    if (serviceContextResponse) return serviceContextResponse;
     if (url.pathname === '/api/runtime/readiness' && request.method === 'GET') return json(await planningRuntimeStatus());
     const transportResponse = await transportApi.handle(request);
     if (transportResponse) return transportResponse;

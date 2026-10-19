@@ -40,12 +40,14 @@ export function useEmergencyDispatch({ shift, active = false, onApply, notify, o
   useEffect(() => {
     if (!shift?.id || shift.regionId.includes(':scenario:') || initialized.current === shift.id) return;
     initialized.current = shift.id;
+    // Only this browser's explicitly started scenario may replace the working day.
+    const marker = `beego-dispatch-session:${shift.id}`;
+    if (!sessionStorage.getItem(marker)) return;
     let alive = true;
     const restore = async () => {
       try {
         const value = await api(`context?baseShiftId=${shift.id}`);
         if (!alive || !value) return;
-        const marker = `beego-dispatch-session:${shift.id}`;
         sessionStorage.setItem(marker, 'active');
         setSession(value); refs.current.onApply(value.shift);
         const chosenSpeed=shiftClock.getSnapshot().reviewSpeed;
