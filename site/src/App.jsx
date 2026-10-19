@@ -1280,22 +1280,12 @@ function MapCanvas({ratingWorkspace=false,onComplexityModeChange,complexityMode=
 
   useEffect(()=>{
     if(!map||!crewPlayback)return;
-    const arrange=()=>{
-      const crewPoints=[...crewMarkersRef.current].map(([id,marker])=>({id,coords:marker.getLngLat().toArray()}));
-      const starts=startMarkersRef.current.map(item=>item.marker.getLngLat().toArray());
-      const offsets=layoutShiftCrewMarkers(crewPoints,starts,coords=>map.project(coords));
-      for(const [id,marker] of crewMarkersRef.current){
-        const offset=offsets.get(id)||[0,0],element=marker.getElement();
-        marker.setOffset(offset);
-        const length=Math.hypot(...offset);
-        element.classList.toggle('is-displaced',length>0);
-        element.style.setProperty('--crew-leader-length',`${length}px`);
-        element.style.setProperty('--crew-leader-angle',`${Math.atan2(-offset[1],-offset[0])}rad`);
-      }
-    };
-    arrange();map.on('moveend',arrange);map.on('resize',arrange);
-    return()=>{map.off('moveend',arrange);map.off('resize',arrange);};
-  },[map,crewPlayback,routeStarts]);
+    const crews=[...crewMarkersRef.current.keys()].map(id=>({id}));
+    const offsets=layoutShiftCrewMarkers(crews);
+    for(const [id,marker] of crewMarkersRef.current){
+      marker.setOffset(offsets.get(id));
+    }
+  },[map,crewPlayback]);
 
   useLayoutEffect(()=>{
     if(!map)return undefined;

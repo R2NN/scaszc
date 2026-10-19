@@ -893,9 +893,9 @@
 
 /* The map hierarchy follows the active Shift list: crews first in Brigades,
    requests first in Orders. Planned completion is light green; fact is solid green. */
-.real-map.shift-map-crews .shift-map-crew-marker{z-index:160!important}
+.real-map.shift-map-crews .shift-map-crew-marker{z-index:830!important}
 .real-map.shift-map-orders .shift-map-crew-marker{z-index:10!important;opacity:.82}
-.real-map.shift-map-overview .shift-map-crew-marker{z-index:110!important}
+.real-map.shift-map-overview .shift-map-crew-marker{z-index:830!important}
 .real-map.shift-map-crews .shift-map-crew,
 .real-map.shift-map-overview .shift-map-crew{display:grid;place-items:center;width:25px;height:25px;border:1.5px solid #2b240e;background:#ffd21f;color:#211b0c;font-size:7.5px;font-weight:900;letter-spacing:-.4px;box-shadow:0 0 0 1.5px #fff,0 3px 8px #2c28075c}
 .real-map.shift-map-overview .shift-map-crew{width:24px;height:24px;font-size:7.5px}
@@ -1022,7 +1022,6 @@
 /* One row at every width; phones scroll the row rather than wrapping Journal. */
 .shift-layer:not(.report-layer):not(.replanning-layer) .shift-panel nav.shift-tabs{flex-wrap:nowrap!important;gap:1px;padding:5px 7px;overflow-x:auto;scrollbar-width:thin;min-height:46px;box-sizing:border-box}
 .shift-layer:not(.report-layer):not(.replanning-layer) .shift-panel nav.shift-tabs button{flex:0 0 auto;white-space:nowrap;font-size:12px;padding:8px 5px}
-.shift-map-crew-marker.is-displaced::before{content:'';position:absolute;left:50%;top:50%;height:1px;width:var(--crew-leader-length);background:#796b42;opacity:.6;transform-origin:0 50%;transform:rotate(var(--crew-leader-angle));pointer-events:none;z-index:-1}
 .shift-map-crew-marker>.shift-map-crew{position:relative}
 
 @media(max-width:760px){
