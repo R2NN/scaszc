@@ -137,17 +137,18 @@ export function TransportMapLayer({map,theme}) {
       {id:'beego-transport-links',type:'line',source:sources[0],paint:{'line-color':['get','color'],'line-width':2.4,'line-opacity':.55,'line-dasharray':[2,1.6]}},
       {id:'beego-transport-stations',type:'circle',source:sources[1],paint:{'circle-radius':5,'circle-color':'#fff','circle-stroke-color':['get','color'],'circle-stroke-width':2.5}},
       {id:'beego-transport-station-labels',type:'symbol',source:sources[1],minzoom:11.3,layout:{'text-field':['concat','M · ',['get','name']],'text-size':12,'text-font':['Noto Sans Regular'],'text-anchor':'top-left','text-offset':[.7,.5],'text-max-width':13,'text-optional':true},paint:{'text-color':'#394650','text-halo-color':'#fff','text-halo-width':2}},
-      {id:'beego-transport-before',type:'line',source:sources[3],paint:{'line-color':'#868b93','line-width':4,'line-dasharray':[2,1.5],'line-opacity':.8}},
+      {id:'beego-transport-before-casing',type:'line',source:sources[3],layout:{'line-join':'round'},paint:{'line-color':'#fff','line-width':11,'line-dasharray':[1.5,1]}},
+      {id:'beego-transport-before',type:'line',source:sources[3],layout:{'line-join':'round'},paint:{'line-color':'#7c16eb','line-width':7,'line-dasharray':[2.35,1.57]}},
       {id:'beego-transport-casing',type:'line',source:sources[4],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#fff','line-width':9}},
-      {id:'beego-transport-after',type:'line',source:sources[4],filter:['!',['in',['get','mode'],['literal',['walking','pedestrian','walking_transfer']]]],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#7c16eb','line-width':5}},
-      {id:'beego-transport-after-walking',type:'line',source:sources[4],filter:['in',['get','mode'],['literal',['walking','pedestrian','walking_transfer']]],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#7c16eb','line-width':4,'line-dasharray':[.5,1.5]}},
+      {id:'beego-transport-after',type:'line',source:sources[4],filter:['!',['in',['get','mode'],['literal',['walking','pedestrian','walking_transfer']]]],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#059669','line-width':5}},
+      {id:'beego-transport-after-walking',type:'line',source:sources[4],filter:['in',['get','mode'],['literal',['walking','pedestrian','walking_transfer']]],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#059669','line-width':4,'line-dasharray':[.5,1.5]}},
       {id:'beego-transport-arrows',type:'symbol',source:sources[4],layout:{'symbol-placement':'line','symbol-spacing':100,'icon-image':'beego-transport-arrow','icon-size':1,'icon-rotation-alignment':'map','icon-keep-upright':false,'icon-allow-overlap':true}},
       {id:'beego-transport-closed-casing',type:'line',source:sources[2],paint:{'line-color':'#fff','line-width':17}},
       {id:'beego-transport-closed',type:'line',source:sources[2],paint:{'line-color':'#ff344b','line-width':12,'line-opacity':['case',['get','ended'],.4,1]}},
       {id:'beego-transport-hatching',type:'line',source:sources[2],paint:{'line-color':'#fff','line-width':9,'line-dasharray':[.15,.5]}},
       {id:'beego-transport-closed-arrows',type:'symbol',source:sources[2],filter:['!=',['get','direction'],'both'],layout:{'symbol-placement':'line','symbol-spacing':65,'text-field':'❯','text-size':18,'text-font':['Noto Sans Regular'],'text-keep-upright':false,'text-allow-overlap':true},paint:{'text-color':'#ff1839','text-halo-color':'#fff','text-halo-width':2}},
-      {id:'beego-transport-route-station-points',type:'circle',source:sources[5],paint:{'circle-radius':5,'circle-color':'#fff','circle-stroke-color':'#7c16eb','circle-stroke-width':2.5}},
-      {id:'beego-transport-route-station-labels',type:'symbol',source:sources[5],layout:{'text-field':['concat','M · ',['get','name']],'text-size':13,'text-font':['Noto Sans Regular'],'text-variable-anchor':['top-left','bottom-left','top-right','bottom-right'],'text-radial-offset':.8,'text-max-width':12,'text-padding':5,'text-optional':false,'symbol-sort-key':['case',['==',['get','role'],'transfer'],0,1]},paint:{'text-color':'#7211dc','text-halo-color':'#fff','text-halo-width':2.5}},
+      {id:'beego-transport-route-station-points',type:'circle',source:sources[5],paint:{'circle-radius':5,'circle-color':'#fff','circle-stroke-color':'#059669','circle-stroke-width':2.5}},
+      {id:'beego-transport-route-station-labels',type:'symbol',source:sources[5],layout:{'text-field':['concat','M · ',['get','name']],'text-size':13,'text-font':['Noto Sans Regular'],'text-variable-anchor':['top-left','bottom-left','top-right','bottom-right'],'text-radial-offset':.8,'text-max-width':12,'text-padding':5,'text-optional':false,'symbol-sort-key':['case',['==',['get','role'],'transfer'],0,1]},paint:{'text-color':'#047857','text-halo-color':'#fff','text-halo-width':2.5}},
     ];
     const render=()=>{
       const state=current.current;
@@ -169,7 +170,7 @@ export function TransportMapLayer({map,theme}) {
       markers.forEach(m=>m.remove());markers=[];captionsToPlace=[];pinItems=[];
       if(!map.hasImage('beego-transport-arrow')){
         const canvas=document.createElement('canvas');canvas.width=40;canvas.height=40;const ctx=canvas.getContext('2d');
-        ctx.beginPath();ctx.moveTo(32,20);ctx.lineTo(12,7);ctx.lineTo(18,20);ctx.lineTo(12,33);ctx.closePath();ctx.lineWidth=5;ctx.strokeStyle='#fff';ctx.stroke();ctx.fillStyle='#7c16eb';ctx.fill();
+        ctx.beginPath();ctx.moveTo(32,20);ctx.lineTo(12,7);ctx.lineTo(18,20);ctx.lineTo(12,33);ctx.closePath();ctx.lineWidth=5;ctx.strokeStyle='#fff';ctx.stroke();ctx.fillStyle='#059669';ctx.fill();
         map.addImage('beego-transport-arrow',ctx.getImageData(0,0,40,40),{pixelRatio:2});
       }
       for(const id of sources)if(!map.getSource(id))map.addSource(id,{type:'geojson',data:collection([])});
@@ -186,13 +187,13 @@ export function TransportMapLayer({map,theme}) {
       }else{for(const [id,{property,value}] of dimmed)if(map.getLayer(id))map.setPaintProperty(id,property,value);dimmed.clear();}
       for(const id of hide)if(map.getLayer(id)){if(!backgroundVisibility.has(id))backgroundVisibility.set(id,map.getLayoutProperty(id,'visibility') || 'visible');map.setLayoutProperty(id,'visibility','none');}
       const dark=map.getContainer().closest('.app-shell')?.classList.contains('dark');
-      map.setPaintProperty('beego-transport-route-station-labels','text-color',dark?'#dbbbff':'#7211dc');
+      map.setPaintProperty('beego-transport-route-station-labels','text-color',dark?'#6ee7b7':'#047857');
       map.setPaintProperty('beego-transport-route-station-labels','text-halo-color',dark?'#202a39':'#fff');
       map.setPaintProperty('beego-transport-station-labels','text-color',dark?'#eff3fa':'#394650');
       map.setPaintProperty('beego-transport-station-labels','text-halo-color',dark?'#202a39':'#fff');
       for(const layer of layers)map.setLayoutProperty(layer.id,'visibility',state.enabled && (!layer.source.includes('network')&&!layer.source.includes('stations')||state.management!==false&&state.metro)?'visible':'none');
       if(state.comparison==='before')for(const layer of layers)if([sources[4],sources[5]].includes(layer.source))map.setLayoutProperty(layer.id,'visibility','none');
-      if(state.comparison==='after')map.setLayoutProperty('beego-transport-before','visibility','none');
+      if(state.comparison==='after')for(const layer of layers)if(layer.source===sources[3])map.setLayoutProperty(layer.id,'visibility','none');
       const catalog=state.catalog;
       const colors=catalog?.lines || {};
       write(sources[0],collection((catalog?.segments || []).map(s=>line(s.geometry,{id:s.id,color:colors[s.lineId]?.color || '#aab0bb',kind:s.kind}))));
@@ -237,7 +238,7 @@ export function TransportMapLayer({map,theme}) {
       routePaths=selected.map(order=>order.geometryAfter||[]);stopPoints=[];
       selected.forEach((order,index)=>{
         const p=order.geometryAfter?.at(-1);if(!p)return;stopPoints.push([p[1],p[0]]);
-        const element=document.createElement('span');element.className='transport-stop';element.textContent=String(index+1);element.title=order.address;
+        const element=document.createElement('span');element.className='transport-stop';element.dataset.route=state.comparison==='before'?'before':'after';element.textContent=String(index+1);element.title=order.address;
         markers.push(new maplibregl.Marker({element}).setLngLat([p[1],p[0]]).addTo(map));
       });
       refreshPins();place();
@@ -272,6 +273,6 @@ export function TransportMapLayer({map,theme}) {
       {state.drawing?<button onClick={state.onUndo} aria-label='Отменить последний участок'><Undo2 size={18}/></button>:<button onClick={state.onNew}><Plus size={18}/>Ограничение</button>}
     </div>}
     {state.drawing?<div className='transport-map-hint'>{state.kind==='road'?'Нажмите на проезжую часть — привяжем участок к дорожной сети':state.kind==='entry'?'Выберите станцию на карте или найдите по названию':'Выберите связь метро или две соседние станции'}{state.kind==='road'?<button onClick={()=>{const p=map.getCenter();state.onRoad?.([p.lat,p.lng]);}} aria-label='Выбрать дорогу в центре карты'><Crosshair size={15}/></button>:null}</div>:null}
-    {state.management!==false?<details className='transport-map-legend' open={legendOpen} onToggle={event=>setLegendOpen(event.currentTarget.open)}><summary>Легенда</summary><div><span><i className='closure'/>Закрыто для авто</span><span><TrainFront size={16}/>Движение метро</span><span><DoorOpen size={16}/>Вход</span><span><ArrowLeftRight size={16}/>Пересадка</span><span><i className='before'/>Было</span><span><i className='after'/>Проверенный путь</span><span><Footprints size={15}/><i className='walking'/>Пешком / пересадка</span></div></details>:null}
+    {state.management!==false?<details className='transport-map-legend' open={legendOpen} onToggle={event=>setLegendOpen(event.currentTarget.open)}><summary>Легенда</summary><div><span><i className='closure'/>Закрыто для авто</span><span><TrainFront size={16}/>Движение метро</span><span><DoorOpen size={16}/>Вход</span><span><ArrowLeftRight size={16}/>Пересадка</span><span><i className='before'/>Прежний путь</span><span><i className='after'/>Новый путь</span><span><Footprints size={15}/><i className='walking'/>Пешком / пересадка</span></div></details>:null}
   </>;
 }

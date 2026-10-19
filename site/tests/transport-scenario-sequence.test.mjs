@@ -21,19 +21,44 @@ test('scheduled events keep their times without requiring previous route publica
   let sequence=0;
   const scenario=createTransportScenario(store,transport,async({kind,time})=>{
     sequence++;
-    return [{engineerId:'engineer',orderId:'order',usedAt:`2026-08-17T${time}:00+03:00`,segment:{
+    const candidate={engineerId:'engineer',orderId:'order',usedAt:`2026-08-17T${time}:00+03:00`,segment:{
       id:`edge-${sequence}`,kind,fromId:'m:a',toId:'m:b',edgeId:String(sequence),opposingEdgeId:'9',
-      name:'Проверенный участок',geometry:[[55.75,37.62],[55.751,37.62]],
-    }}];
+      name:'Проверенный участок',lengthM:200,geometry:[[55.75,37.62],[55.751,37.62]],
+    }};
+    return kind==='road'?[
+      {...candidate,segment:{...candidate.segment,id:'short',lengthM:40}},
+      {...candidate,segment:{...candidate.segment,id:'one-way',opposingEdgeId:null,lengthM:350}},
+      candidate,
+    ]:[candidate];
   });
   try{
     const url=new URL('http://localhost');
-    await scenario.handle('scenario/start',{baseShiftId:base.id},url);
+    const start=await scenario.handle('scenario/start',{baseShiftId:base.id},url);
+    assert.deepEqual(start.state.waves.map(w=>[w.time,w.kind]),[['09:30','road'],['14:25','metro']]);
+    const early=await scenario.handle('scenario/tick',{shiftId:'scenario',minute:569},url);
+    assert.equal(early.event,undefined);
     const first=await scenario.handle('scenario/tick',{shiftId:'scenario',minute:570},url);
     assert.equal(first.event.startsAt.slice(11,16),'09:30');
+    assert.equal(first.event.direction,'both');
+    assert.equal(first.event.segments[0].id,'edge-1','Prefer a longer real two-way segment over a short or one-way road');
     const second=await scenario.handle('scenario/tick',{shiftId:'scenario',minute:865},url);
     assert.equal(second.event.startsAt.slice(11,16),'14:25');
     assert.equal(transport.list(shifts.get('scenario')).length,2);
+    const legacy={...second.state,index:4,presentationVersion:undefined,waves:[...second.state.waves,
+      {time:'15:15',kind:'road',status:'PENDING'},
+      {time:'15:45',kind:'entry',status:'PENDING'},
+      {time:'17:00',kind:'road',status:'PENDING'},
+    ]};
+    db.prepare('UPDATE transport_scenarios SET payload=? WHERE shift_id=?').run(JSON.stringify(legacy),'scenario');
+    const restored=await scenario.handle('scenario',{shiftId:'scenario'},url);
+    assert.equal(restored.waves.length,2);
+    assert.equal(restored.index,1);
+    assert.equal(restored.waves[0].eventId,first.event.id);
+    assert.equal(restored.waves[0].status,'OPEN');
+    const evening=await scenario.handle('scenario/tick',{shiftId:'scenario',minute:1020},url);
+    assert.equal(evening.complete,true);
+    assert.equal(evening.event,undefined);
+    assert.equal(transport.list(shifts.get('scenario')).length,2,'Retire extra waves without deleting saved events');
     assert.equal(second.state.waves[0].status,'OPEN','No automatic publication of the first plan');
     assert.equal(db.prepare('SELECT count(*) n FROM transport_previews').get().n,0);
     const duplicate=await scenario.handle('scenario/tick',{shiftId:'scenario',minute:865},url);

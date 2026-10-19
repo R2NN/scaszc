@@ -5,11 +5,8 @@ import { projectRoot } from '../scripts/project-root.mjs';
 import { minuteOf, timeOf } from '../src/shiftDomain.js';
 
 const waves=[
-  {time:'09:30',end:'11:00',kind:'road',direction:'forward',title:'Плановое перекрытие: одно направление'},
+  {time:'09:30',end:'11:00',kind:'road',direction:'both',title:'Перекрытие дороги в обоих направлениях'},
   {time:'14:25',end:'15:10',kind:'metro',direction:'both',title:'Закрыт участок метро'},
-  {time:'15:15',end:'16:00',kind:'road',direction:'both',title:'Проезд закрыт: пешеходам проход открыт'},
-  {time:'15:45',end:'16:40',kind:'entry',direction:'both',title:'Закрыт вход станции · поезда продолжают движение'},
-  {time:'17:00',end:null,kind:'road',direction:'both',title:'Локальное перекрытие: срок уточняется'},
 ];
 
 async function rawPlan(shift) {
@@ -21,11 +18,26 @@ async function rawPlan(shift) {
   throw new Error('Не найден проверенный исходный артефакт для сценария');
 }
 
-/** An explicitly isolated, durable five-wave demonstration over real current routes. */
+/** An isolated, durable road/metro demonstration over real current routes. */
 export function createTransportScenario(store,transport,network) {
   store.db.exec('CREATE TABLE IF NOT EXISTS transport_scenarios(shift_id TEXT PRIMARY KEY,payload TEXT NOT NULL)');
-  const get=id=>{const row=store.db.prepare('SELECT payload FROM transport_scenarios WHERE shift_id=?').get(id);return row?JSON.parse(row.payload):null;};
   const put=state=>store.db.prepare('INSERT INTO transport_scenarios VALUES (?,?) ON CONFLICT(shift_id) DO UPDATE SET payload=excluded.payload').run(state.shiftId,JSON.stringify(state));
+  const get=id=>{
+    const row=store.db.prepare('SELECT payload FROM transport_scenarios WHERE shift_id=?').get(id);
+    if(!row)return null;
+    const state=JSON.parse(row.payload);
+    if(state.variant!=='simultaneous'&&state.presentationVersion!==2){
+      // Retire only the scripted schedule. Saved events and published history
+      // remain intact, including any already demonstrated legacy waves.
+      state.waves=waves.map((wave,index)=>{
+        const existing=state.waves.find(item=>item.time===wave.time&&item.kind===wave.kind);
+        return existing?.eventId?{...existing,index}:{...wave,index,status:'PENDING'};
+      });
+      state.index=state.waves.findLastIndex(wave=>wave.eventId);
+      state.presentationVersion=2;put(state);
+    }
+    return state;
+  };
   const pending=new Set();
   async function handle(action,input,url) {
     const id=input.shiftId||url.searchParams.get('shiftId');
@@ -61,7 +73,7 @@ export function createTransportScenario(store,transport,network) {
       const id=randomUUID(),shift=store.ensure({regionId:`moscow:scenario:transport-${id}`,date:base.date,orders:base.orders,team:base.team,plan:base.plan});
       const session={id,baseShiftId:base.id,shiftId:shift.id,profile:'transport',clock:{minute:420,playing:false,speed:60,anchorAt:Date.now(),version:1},lastMinute:420,fired:true};
       store.db.prepare('INSERT INTO dispatch_sessions VALUES (?,?,?,?)').run(id,base.id,shift.id,JSON.stringify(session));
-      const state={shiftId:shift.id,baseShiftId:base.id,waves:waves.map((w,i)=>({...w,index:i,status:'PENDING'})),index:-1};put(state);
+      const state={shiftId:shift.id,baseShiftId:base.id,presentationVersion:2,waves:waves.map((w,i)=>({...w,index:i,status:'PENDING'})),index:-1};put(state);
       return {state,shift,clock:session.clock};
     }
     const shiftId=input.shiftId || url.searchParams.get('shiftId'),state=get(shiftId);
@@ -82,11 +94,13 @@ export function createTransportScenario(store,transport,network) {
       const time=timeOf(Math.floor(minute));
       const choices=await network({action:'candidates',raw:await rawPlan(shift),team:shift.team,date:shift.date,time,kind:wave.kind,direction:wave.direction},{timeout:120_000});
       const priorIds=new Set(transport.list(shift).flatMap(e=>e.segments.map(s=>s.id)));
-      const choice=choices.sort((a,b)=>Date.parse(a.usedAt)-Date.parse(b.usedAt)).find(c=>!priorIds.has(c.segment.id));
+      const choice=choices.filter(c=>!priorIds.has(c.segment.id)).sort((a,b)=>wave.kind==='road'
+        ?Number(Boolean(b.segment.opposingEdgeId))-Number(Boolean(a.segment.opposingEdgeId))||Number(b.segment.lengthM||0)-Number(a.segment.lengthM||0)||Date.parse(a.usedAt)-Date.parse(b.usedAt)
+        :Date.parse(a.usedAt)-Date.parse(b.usedAt))[0];
       if(!choice)throw new Error(`В текущем оставшемся плане не найден используемый участок для «${wave.title}». Текущий план сохранён`);
       transport.segments([choice.segment]);
       const endMinute=wave.end?Math.max(minuteOf(wave.end),(minuteOf(choice.usedAt.slice(11,16))||minute)+20):null;
-      const event=transport.save({id:`transport-wave-${state.shiftId}-${index}`,title:wave.title,reason:`Сценарное событие · ${choice.segment.name}`,kind:wave.kind,direction:wave.direction,
+      const event=transport.save({id:`transport-wave-${state.shiftId}-${index}`,title:wave.kind==='road'&&!choice.segment.opposingEdgeId?'Перекрытие автомобильного проезда':wave.title,reason:`Сценарное событие · ${choice.segment.name}`,kind:wave.kind,direction:wave.direction,
         startsAt:`${shift.date}T${wave.time}:00+03:00`,endsAt:endMinute==null?null:`${shift.date}T${timeOf(Math.min(1439,endMinute))}:00+03:00`,segmentIds:[choice.segment.id],
         source:'Изолированный транспортный сценарий',externalId:`wave-${index}`},shift);
       wave.eventId=event.id;wave.status='OPEN';wave.targetEngineer=choice.engineerId;wave.targetOrder=choice.orderId;state.index=index;put(state);

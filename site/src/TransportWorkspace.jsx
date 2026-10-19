@@ -4,7 +4,6 @@ import { transportMap } from './TransportMap.jsx';
 import { transportStatus,transportFocusSegments,transportSelectedConsequences,transportCrewOrders } from './transportDomain.js';
 import { transportPreviewMatches } from './transportImpactClock.js';
 import { shiftClock } from './shiftClock.js';
-import { adoptDispatchClock } from './dispatchClockSync.js';
 import { minuteOf, timeOf } from './shiftDomain.js';
 import { ratingName } from './engineerPresentation.js';
 import { EngineerPortrait } from './EngineerPortrait.jsx';
@@ -48,7 +47,6 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const calculationRequest=useRef(0),retryRef=useRef(null),focusResult=useRef(null);
   const [comparison,setComparison]=useState('both');
   const [elapsed,setElapsed]=useState(0);
-  const [scenario,setScenario]=useState(null),[scenarioBusy,setScenarioBusy]=useState(false);
   const [waitingForPlanner,setWaitingForPlanner]=useState(false);
   const resultRef=useRef(null),groupRef=useRef(null);
   const [eventGroup,setEventGroup]=useState([]);
@@ -63,10 +61,9 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const load=async()=>{if(!shift?.id)return;const id=shift.id,result=await api(`events?shiftId=${encodeURIComponent(id)}`);if(refs.current.shift?.id===id)setEvents(result.events);};
   useEffect(()=>{let active=true;(async()=>{try{const value=await api('catalog');if(active)setCatalog(value);}catch(e){if(active)setError(e.message);}})();return()=>{active=false;};},[]);
   useEffect(()=>{
-    const own=++generation.current;calculationRequest.current++;clearTimeout(retryRef.current);focusResult.current=null;previewRef.current=null;setWaitingForPlanner(false);setEvents([]);setPreview(null);setSelected(null);setScenario(null);setEventGroup([]);setDraft(sessions.get(`${shift?.id}:${live}`)?.draft || null);
+    const own=++generation.current;calculationRequest.current++;clearTimeout(retryRef.current);focusResult.current=null;previewRef.current=null;setWaitingForPlanner(false);setEvents([]);setPreview(null);setSelected(null);setEventGroup([]);setDraft(sessions.get(`${shift?.id}:${live}`)?.draft || null);
     load().catch(e=>setError(e.message));
     if(shift?.id)(async()=>{try{const saved=await api(`previews/latest?shiftId=${shift.id}`);if(saved&&refs.current.shift?.id===shift.id&&own===generation.current){setPreview(saved);previewRef.current=saved;setEngineerId(saved.result?.consequences?.engineers[0]?.engineerId || '');}}catch(e){if(own===generation.current)setError(e.message);}})();
-    if(live&&shift?.id)(async()=>{try{const value=await api(`scenario?shiftId=${shift.id}`);if(refs.current.shift?.id===shift.id)setScenario(value);}catch(e){setError(e.message);}})();
   },[shift?.id]);
   useEffect(()=>{if(shift?.id)sessions.set(`${shift.id}:${live}`,{draft});},[draft,shift?.id,live]);
   const begin=(kind='road')=>{
@@ -177,32 +174,15 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   };
   const apply=async()=>{
     setBusy(true);setError('');
-    try{const result=await api(`previews/${preview.id}/apply`,{time:live?timeOf(Math.floor(shiftClock.getSnapshot().minute)):preview.time,actor});setPreview(result.preview);if(result.state)setScenario(result.state);onApply?.(result.shift);
+    try{const result=await api(`previews/${preview.id}/apply`,{time:live?timeOf(Math.floor(shiftClock.getSnapshot().minute)):preview.time,actor});setPreview(result.preview);onApply?.(result.shift);
       if(resumeRef.current)await restorePlayback();}
     catch(e){setError(e.message);}finally{setBusy(false);}
-  };
-  const startScenario=async(variant='sequential')=>{
-    setScenarioBusy(true);setError('');
-    try{const result=await api(variant==='simultaneous'?'scenario/dual':'scenario/start',{baseShiftId:shift.id});setScenario(result.state);onApply?.(result.shift);if(!adoptDispatchClock(result.shift.id,{...result.clock,playing:false}))shiftClock.set({...result.clock,playing:false});
-      if(result.events?.length){const value=await api('previews',{shiftId:result.shift.id,expectedRevision:result.shift.revision,time:timeOf(result.clock.minute),live:true});setPreview(value);previewRef.current=value;transportMap.focus(result.events.flatMap(e=>e.segments));}}
-    catch(e){setError(e.message);}finally{setScenarioBusy(false);}
-  };
-  const nextWave=async(automatic=false)=>{
-    setScenarioBusy(true);setError('');
-    try{
-      const result=await api(automatic?'scenario/tick':'scenario/next',{shiftId:shift.id,minute:Math.floor(shiftClock.getSnapshot().minute)});
-      setScenario(result.state);if(!result.event)return;
-      onScenarioEvent?.();
-      if(!adoptDispatchClock(result.shift.id,{...result.clock,playing:false}))shiftClock.set({...result.clock,playing:false});onApply?.(result.shift);await load();setSelected(result.event);setDraft(null);setDrawing(false);transportMap.focus(result.event.segments);
-      const value=await api('previews',{shiftId:shift.id,expectedRevision:result.shift.revision,time:timeOf(Math.floor(result.clock.minute)),live:true});
-      setPreview(value);previewRef.current=value;
-    }catch(e){setError(e.message);}finally{setScenarioBusy(false);}
   };
   useEffect(()=>{
     const receive=event=>{
       const result=event.detail;if(result?.shift?.id!==shift?.id)return;
       if(result.operational&&refs.current.draft)return;
-      if(result.state)setScenario(result.state);setWaitingForPlanner(Boolean(result.waitingForPlanner));
+      setWaitingForPlanner(Boolean(result.waitingForPlanner));
       if(result.waitingForPlanner)return;
       if(!result.preview&&!result.event)return;
       generation.current++;load().catch(error=>setError(error.message));
@@ -234,8 +214,6 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const routeSummary=engineer?<div className='transport-route-summary'><label className='transport-engineer'>{engineer.transport==='CAR'?<Car size={18}/>:<TrainFront size={18}/>}<select aria-label='Затронутый инженер' value={engineer.engineerId} onChange={event=>focusEngineer(event.target.value)}>{consequences.engineers.map(person=><option key={person.engineerId} value={person.engineerId}>{ratingName(shift.team.find(member=>member.id===person.engineerId)||{name:person.name})}</option>)}</select><span>{engineer.transport==='CAR'?'Авто':'Общественный транспорт'}</span></label>{firstOrder?<div className='transport-eta'><div><small>Было прибытие</small><b>{firstOrder.before}</b></div><ArrowRight/><div><small>Новое прибытие</small><b>{firstOrder.after}</b></div><strong>{signed(firstOrder.delta)} мин</strong></div>:null}</div>:null;
   return <div className={`transport-panel-frame ${live?'live':''} ${ready?'has-decision':''}`}><div onFocusCapture={event=>{const element=event.target;requestAnimationFrame(()=>keepInputVisible(element));}} className={`transport-panel-content ${live?'live':''} ${consequences?'has-result':''} ${draft?'editing':''}`}>
     {selected&&!draft?<section className='transport-problem-context' aria-label='Влияние выбранной проблемы'><span className='transport-type-icon'>{restrictionIcon(selected.kind)}</span><div><small>ВЛИЯНИЕ НА БРИГАДЫ</small><b>{selected.title}</b><p>{preview?.status==='RUNNING'?'Вычисляем влияние и новый путь от текущего положения…':waitingForPlanner?'Ожидаем расчёт. Проблема остаётся видна на карте.':consequences?`Проверено на ${preview.time} · ${consequences.engineers.length} бригад`:'Готовим сравнение исходного пути и объезда…'}</p></div></section>:null}
-    {live&&date==='2026-08-17'?<section className='transport-scenario'><div className='transport-section-title'><div><small>ИЗОЛИРОВАННЫЙ ПОКАЗ · 17 АВГУСТА</small><h3>{scenario?.variant==='simultaneous'?'Дорога и метро одновременно':'Пять событий одного дня'}</h3></div><Route size={21}/></div>{scenario?<><details><summary>{scenario.index<0?'Список пяти событий':`Событие ${scenario.index+1} из ${scenario.waves.length} · ${scenario.waves[scenario.index].time}`}</summary><div className='transport-timeline'>{scenario.waves.map(w=><button key={w.index} className={w.index===scenario.index?'current':''} disabled={!w.eventId} onClick={()=>{const event=events.find(e=>e.id===w.eventId);if(event)selectEvent(event);}}><time>{w.time}</time><span>{w.title}</span><small>{w.status==='APPLIED'?'Применено':w.eventId?'К событию':'Впереди'}</small></button>)}</div></details><button disabled={scenarioBusy||preview?.status==='RUNNING'} onClick={()=>nextWave(false)}>{scenarioBusy?'Готовим событие по текущим маршрутам…':scenario.index>=scenario.waves.length-1?'Завершить показ':'Следующее событие'}<ChevronRight size={16}/></button></>:<><p>Последовательные перекрытия дороги, метро и пересадки. Каждое выбирается по реальному оставшемуся пути.</p><button disabled={scenarioBusy} onClick={startScenario}>{scenarioBusy?'Подготавливаем смену…':'Запустить транспортный показ'}</button></>}</section>:null}
-    {live&&date==='2026-08-17'?<details className='transport-scenario-alternatives'><summary>Другие варианты показа</summary><button disabled={scenarioBusy||preview?.status==='RUNNING'} onClick={()=>startScenario('simultaneous')}>Одновременное перекрытие дороги и метро</button><button disabled={scenarioBusy||preview?.status==='RUNNING'} onClick={()=>startScenario('sequential')}>Новая сессия из пяти событий</button><small>Текущая история сохранится. Создаётся отдельная демонстрационная смена.</small></details>:null}
     {eventGroup.length&&!draft?<section ref={groupRef} className='transport-event-group'><div className='transport-section-title'><h3>Ограничения в точке ({eventGroup.length})</h3><button onClick={()=>setEventGroup([])} aria-label='Закрыть группу ограничений'><X size={18}/></button></div>{eventGroup.map(event=><button key={event.id} onClick={()=>{setEventGroup([]);selectEvent(event);}}>{restrictionIcon(event.kind)}<span><b>{event.title}</b><small>{kindLabel[event.kind]} · {event.startsAt.slice(11,16)}–{endLabel(event)}</small></span><ChevronRight size={16}/></button>)}</section>:null}
     {consequences&&!draft?<button className='transport-browse' onClick={()=>setBrowse(value=>!value)}>{browse?'Скрыть поиск':'Найти или добавить ограничение'}</button>:null}
     {!draft&&(!consequences||browse)?<div className='transport-intro'><div><b>{live?'Движение в течение смены':'Доступность дорог и метро'}</b><p>{live?'Закрытия, проверенные объезды и последствия для заявок':'Планируйте перекрытия на выбранный день'}</p></div><button className='transport-add' onClick={()=>begin()} aria-label='Добавить транспортное ограничение'><Plus size={18}/></button></div>:null}
@@ -268,7 +246,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     {preview?.status==='FAILED'?<div className='transport-error' role='alert'><AlertTriangle size={18}/><span>{preview.error}</span><button onClick={calculate}>Повторить</button></div>:null}
     {consequences?<section ref={resultRef} className='transport-result'><header><span className='transport-check-icon'><Check/></span><div><h3>{preview.status==='APPLIED'?'Изменения применены':'Пересчёт готов'}</h3>{selected?<strong className='transport-result-problem'>{selected.title}</strong>:null}<p>{consequences.lost?'Часть заявок не имеет допустимого назначения — требуется решение':consequences.engineers.length?'Найден и независимо проверен допустимый путь':'На оставшихся маршрутах влияние не обнаружено'}</p></div></header>
       {consequences.engineers.length?<section className='transport-affected-crews' aria-label='Затронутые бригады'><h4>Затронутые бригады · {consequences.engineers.length}</h4>{consequences.engineers.map(person=>{const member=shift.team.find(e=>e.id===person.engineerId)||{id:person.engineerId,name:person.name},orders=consequences.orders.filter(o=>o.engineerId===person.engineerId),first=orders.find(o=>!o.lost);return <button key={person.engineerId} data-engineer-id={person.engineerId} aria-pressed={person.engineerId===engineer?.engineerId} onClick={()=>focusEngineer(person.engineerId)}><span className='engineer-portrait'><EngineerPortrait id={person.engineerId}/></span><span><b>{ratingName(member)}</b><small>{person.transport==='CAR'?'Авто':'Общественный транспорт'} · {orders.length} заявок</small></span><strong>{first?`${first.before} → ${first.after}`:'Изменение назначений'}<small>{first?`${signed(first.delta)} мин к прибытию`:'Проверьте очередь'}</small></strong></button>;})}</section>:null}
-      {engineer?<div className='transport-comparison-switch' role='group' aria-label='Сравнение маршрутов'>{[['before','Как ехала бригада'],['both','Сравнить'],['after','Новый путь']].map(([value,label])=><button key={value} aria-pressed={comparison===value} onClick={()=>setComparison(value)}>{label}</button>)}</div>:null}
+      {engineer?<div className='transport-comparison-switch' role='group' aria-label='Сравнение маршрутов'>{[['before','Как ехала бригада'],['both','Сравнить'],['after','Новый путь']].map(([value,label])=><button key={value} data-route={value} aria-pressed={comparison===value} onClick={()=>setComparison(value)}><i aria-hidden='true'/>{label}</button>)}</div>:null}
       <div className={`transport-outcome ${consequences.lost||consequences.late||consequences.overtime?'warning':''}`}><Check size={18}/><span>{consequences.lost?`${consequences.lost} назначений потеряно`:consequences.late?`${consequences.late} нарушений клиентского окна`:consequences.overtime?`${consequences.overtime} бригад выйдут за смену`:consequences.unknownWindows?'Назначения сохранены · часть клиентских окон неизвестна':'Назначения сохранены · клиентские окна соблюдены'}</span></div>
       {!(compact&&ready)?routeSummary:null}
       <div className='transport-metrics'><div><Users/><b>{consequences.engineers.length}</b><span>инженеров затронуто</span></div><div><Clock3/><b>{signed(consequences.addedTravelMinutes)} мин</b><span>сумма оставшегося движения</span></div></div>
