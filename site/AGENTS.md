@@ -157,3 +157,5 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - The building tab is a full-window modal workspace covering the calendar, sidebar and map controls. Compact passport tabs must fit without horizontal scrolling. Visits default to all work kinds, retain explicit synthetic measurement labels, and distinguish read-only archived plans (execution unconfirmed) from recorded visits. Never convert saved schedule times into execution facts.
 
 - Shift engineer markers must remain centered on their true geographic coordinates at every zoom and pan. Never spread overlapping crew badges with screen offsets or leader lines; use the brigade list to select co-located engineers. In brigade and overview modes, keep crew markers visible above depot symbols.
+
+- Clicking empty map canvas clears the selected network incident and its links, then smoothly dismisses its card without moving the camera. Markers, route features and map controls must not count as empty map. Animate network cards in and out, retaining the outgoing record and respecting reduced motion and quick reopen.

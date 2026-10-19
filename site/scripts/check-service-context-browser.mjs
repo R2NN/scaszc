@@ -22,6 +22,30 @@ try{
  const links=await page.locator('.network-connection-link').evaluateAll(es=>es.map(e=>Math.hypot(Number(e.getAttribute('x1'))-Number(e.getAttribute('x2')),Number(e.getAttribute('y1'))-Number(e.getAttribute('y2')))));assert.ok(links.every(length=>length>5));
  assert.ok(await page.locator('.network-map-marker.request').evaluateAll(es=>es.every(e=>{const r=e.getBoundingClientRect();return document.elementsFromPoint(r.x+r.width/2,r.y+r.height/2).includes(e)&&r.left>620&&r.right<1515;})));
  await shot('network-selected-links');
+ const card=page.locator('.network-panel');
+ assert.equal(await card.evaluate(e=>getComputedStyle(e).animationName),'network-panel-enter');
+ await card.getByRole('button',{name:'Причина',exact:true}).click();
+ await page.getByRole('button',{name:'Уменьшить масштаб',exact:true}).click();await page.waitForTimeout(700);
+ assert.equal(await card.locator('h2').innerText(),'DEMO-INC-042');assert.equal(await page.locator('.network-connection-link').count(),2);
+ const canvas=await page.locator('.maplibregl-canvas').boundingBox();
+ await page.mouse.move(canvas.x+canvas.width*.55,canvas.y+canvas.height*.3);await page.mouse.down();await page.mouse.move(canvas.x+canvas.width*.55+80,canvas.y+canvas.height*.3+40,{steps:8});await page.mouse.up();await page.waitForTimeout(800);
+ assert.equal(await card.locator('h2').innerText(),'DEMO-INC-042');
+ const sourceBefore=await page.locator('.network-map-marker.source').boundingBox();
+ await page.mouse.click(canvas.x+canvas.width*.57,canvas.y+canvas.height*.2);
+ await page.locator('.network-panel.is-closing').waitFor();
+ assert.equal(await card.locator('h2').innerText(),'DEMO-INC-042');assert.ok((await card.innerText()).includes('Основание связи'));
+ assert.equal(await card.evaluate(e=>getComputedStyle(e).animationName),'network-panel-exit');
+ await card.waitFor({state:'detached'});assert.equal(await page.locator('.network-connection-link').count(),0);assert.equal(await page.locator('.network-map-marker.request').count(),0);assert.equal(await page.locator('.network-map-marker.affected').count(),2);assert.equal(await page.locator('.service-order-focus').count(),0);
+ const sourceAfter=await page.locator('.network-map-marker.source').boundingBox();assert.ok(Math.hypot(sourceAfter.x-sourceBefore.x,sourceAfter.y-sourceBefore.y)<2,'Deselect must not move the camera');
+ await page.locator('.network-map-marker.source').click();await page.locator('.network-order').first().waitFor();await page.waitForTimeout(700);
+ await page.getByRole('button',{name:'Закрыть сетевые инциденты',exact:true}).click();
+ await page.locator('.network-map-marker.source').click();await page.locator('.network-order').first().waitFor();await page.waitForTimeout(400);
+ assert.equal(await card.count(),1);assert.equal(await page.locator('.network-connection-link').count(),2);
+ await page.keyboard.press('Escape');await card.waitFor({state:'detached'});
+ await page.emulateMedia({reducedMotion:'reduce'});await page.locator('.network-map-marker.source').click();await page.locator('.network-order').first().waitFor();
+ assert.equal(await card.evaluate(e=>getComputedStyle(e).animationName),'none');await page.keyboard.press('Escape');await card.waitFor({state:'detached'});await page.emulateMedia({reducedMotion:'no-preference'});
+ await page.locator('.network-map-marker.source').click();await page.locator('.network-order').first().waitFor();await page.waitForTimeout(700);
+
  await page.getByLabel('Показать связи с заявками',{exact:true}).uncheck();assert.equal(await page.locator('.network-connection-link').count(),0);await page.getByLabel('Показать связи с заявками',{exact:true}).check();
  await page.locator('.network-order').first().getByRole('button',{name:'Открыть заявку',exact:true}).click();await page.getByRole('button',{name:'Паспорт объекта',exact:true}).click();await page.getByRole('button',{name:'Визиты',exact:true}).click();await page.locator('.cx-archive-plan').first().waitFor();assert.equal(await page.getByRole('button',{name:'Обращения',exact:true}).count(),0);await shot('passport-archive');
  await page.getByRole('button',{name:'Схема объекта',exact:true}).click();await page.locator('.building-cutaway').waitFor();await page.waitForTimeout(400);
@@ -30,5 +54,5 @@ try{
  await page.goto(`${base}/?object=OBJ-8834f788ece1a22351`);await page.getByRole('button',{name:'Визиты',exact:true}).click();await page.locator('.cx-visit').first().waitFor();assert.ok(await page.locator('.cx-visit').count()>0);assert.ok(await page.getByText('Архивные модельные измерения',{exact:true}).count()>0);await shot('passport-recorded-visits');await page.getByRole('button',{name:'Закрыть паспорт объекта',exact:true}).click();
  await network.click();await page.locator('.network-event').first().click();await page.locator('.network-connection-link').first().waitFor();await page.locator('.theme-switch').click();await page.waitForTimeout(600);assert.equal(await page.locator('.network-connection-link').count(),2);await shot('network-dark');
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(600);await shot('network-mobile');
- assert.deepEqual(errors,[]);assert.deepEqual(await(await fetch(`${base}/api/shifts?regionId=moscow&date=2026-08-17`)).json(),before);console.log('PASS: normal-map warnings, shared icon toolbar, default links, archive provenance, full-window drawing, dark/mobile; operational shift unchanged.');
+ assert.deepEqual(errors,[]);assert.deepEqual(await(await fetch(`${base}/api/shifts?regionId=moscow&date=2026-08-17`)).json(),before);console.log('PASS: empty-map network deselection, enter/exit animation, preserved outgoing record, rapid reopen, reduced motion, pan/control selection retention, normal-map warnings, shared icon toolbar, default links, archive provenance, full-window drawing, dark/mobile; operational shift unchanged.');
 }finally{await browser.close();}

@@ -35,3 +35,10 @@
 .network-connections{position:absolute;inset:0;width:100%;height:100%;z-index:400;pointer-events:none;overflow:hidden}.network-connections line{vector-effect:non-scaling-stroke}.network-connection-outline{stroke:#fff;stroke-width:5;opacity:.8}.network-connection-link{stroke:#cc6439;stroke-width:2.4;stroke-dasharray:6 5;opacity:.95}.dark .network-connection-outline{stroke:#252a32}.dark .network-connection-link{stroke:#ffc16c}
 
 .maplibre-host .network-map-marker.source{z-index:950!important}.maplibre-host .network-map-marker.request{z-index:940!important}
+
+/* Preserve panel content while entering/leaving; rapid reopen cancels the exit. */
+.network-panel.is-open{animation:network-panel-enter .22s cubic-bezier(.2,.7,.2,1) both}
+.network-panel.is-closing{animation:network-panel-exit .18s ease both;pointer-events:none}
+@keyframes network-panel-enter{from{opacity:0;transform:translateX(14px) scale(.99)}to{opacity:1;transform:translateX(0) scale(1)}}
+@keyframes network-panel-exit{from{opacity:1;transform:translateX(0) scale(1)}to{opacity:0;transform:translateX(10px) scale(.99)}}
+@media(prefers-reduced-motion:reduce){.network-panel.is-open,.network-panel.is-closing{animation:none;transform:none}.network-panel.is-closing{opacity:0}}
