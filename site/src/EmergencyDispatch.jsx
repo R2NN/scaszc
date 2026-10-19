@@ -46,13 +46,6 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
         const value = await api(`context?baseShiftId=${shift.id}`);
         if (!alive || !value) return;
         const marker = `beego-dispatch-session:${shift.id}`;
-        if (!sessionStorage.getItem(marker)) {
-          const fresh = await api('sessions', { baseShiftId: shift.id });
-          sessionStorage.setItem(marker, 'active');
-          setSession(fresh); refs.current.onApply(fresh.shift);
-          shiftClock.set({ minute: fresh.clock.minute, playing: false, speed: fresh.clock.speed, awaitingDecision:Boolean(fresh.clock.awaitingDecision), confirmingDecision:Boolean(fresh.clock.confirmingDecision) });
-          return;
-        }
         sessionStorage.setItem(marker, 'active');
         setSession(value); refs.current.onApply(value.shift);
         shiftClock.set({ minute: value.clock.minute, playing: false, speed: value.clock.speed, awaitingDecision:Boolean(value.clock.awaitingDecision), confirmingDecision:Boolean(value.clock.confirmingDecision) });

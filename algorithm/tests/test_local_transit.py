@@ -4,6 +4,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime
 from pathlib import Path
 
@@ -38,6 +39,11 @@ class LocalTransitMixedModeTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.clients: list[LocalTransitRoutingClient] = []
         self.database = Path(self.temporary.name) / 'network.sqlite'
+        # This tiny synthetic index has no official station mapping. Never
+        # attach an unrelated runtime Moscow graph merely because it is installed.
+        schema_patch=patch.object(LocalTransitRoutingClient,'_schema_path',return_value=Path(self.temporary.name)/'missing-schema.json')
+        schema_patch.start()
+        self.addCleanup(schema_patch.stop)
         db = sqlite3.connect(self.database)
         db.executescript('''
             CREATE TABLE stops(id TEXT PRIMARY KEY, name TEXT, lat REAL, lon REAL, kind TEXT);

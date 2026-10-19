@@ -8,6 +8,7 @@ import { acquirePlanningSlot, planningBusyResponse } from './planningSlot.mjs';
 import { minuteOf } from '../src/shiftDomain.js';
 import { transportConsequences } from '../src/transportDomain.js';
 import { createTransportScenario } from './transportScenario.mjs';
+import { transportEventsForDay } from './transportScope.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -58,19 +59,19 @@ export class TransportStore {
     const insert = this.db.prepare('INSERT OR REPLACE INTO transport_segments VALUES (?,?)');
     this.db.transaction(() => items.forEach(item => insert.run(item.id, JSON.stringify(item))))();
   }
-  list(shift) { return this.db.prepare('SELECT payload FROM transport_events WHERE region_id=? AND service_date=? ORDER BY rowid DESC').all(shift.regionId, shift.date).map(row => JSON.parse(row.payload)); }
+  list(shift) { return transportEventsForDay(this.db,shift.regionId,shift.date); }
   get(id) { const row = this.db.prepare('SELECT payload FROM transport_events WHERE id=?').get(id); return row ? JSON.parse(row.payload) : null; }
   normalize(input, shift) {
     if (!shift?.plan) throw new Error('Выберите смену с проверенным планом');
     const prior = input.id ? this.get(input.id) : null;
-    if (prior && (prior.regionId !== shift.regionId || prior.date !== shift.date)) throw new Error('Ограничение относится к другой смене');
+    if (prior && (prior.regionId !== shift.regionId || !this.list(shift).some(event=>event.id===prior.id))) throw new Error('Ограничение относится к другой смене');
     if (prior && prior.revision !== input.expectedRevision) throw new Error('Ограничение устарело. Обновите список');
     if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 160) throw new Error('Укажите название до 160 символов');
     if (!['road','metro','transfer','entry'].includes(input.kind)) throw new Error('Неизвестный вид ограничения');
     if (!['both','forward','reverse'].includes(input.direction)) throw new Error('Укажите направление');
     if (input.kind !== 'road' && input.direction === 'reverse') throw new Error('Для метро выберите связь в нужном направлении');
     const validTime = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+03:00$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(Date.parse(value)+180*60_000).toISOString().slice(0,16)===value.slice(0,16);
-    if (!validTime(input.startsAt) || input.startsAt.slice(0,10) !== shift.date) throw new Error('Дата начала должна совпадать с выбранной сменой (Москва)');
+    if (!validTime(input.startsAt) || input.startsAt.slice(0,10) !== (prior?.date || shift.date)) throw new Error('Дата начала должна совпадать с выбранной сменой (Москва)');
     if (input.endsAt !== null && (!validTime(input.endsAt) || Date.parse(input.endsAt) < Date.parse(input.startsAt) || input.endsAt===input.startsAt && input.status!=='ENDED')) throw new Error('Окончание должно быть позже начала; для неизвестного срока выберите соответствующую отметку');
     if (!Array.isArray(input.segmentIds) || input.segmentIds.length < 1 || input.segmentIds.length > 20) throw new Error('Выберите от 1 до 20 участков сети');
     const segments = [...new Set(input.segmentIds)].map(id => {
@@ -89,7 +90,7 @@ export class TransportStore {
     }
     return {
       id: prior?.id || input.id || randomUUID(), revision: (prior?.revision || 0)+1,
-      regionId: shift.regionId, date: shift.date, title: input.title.trim(), reason: String(input.reason || input.title).slice(0,500),
+      regionId: shift.regionId, date: prior?.date || shift.date, title: input.title.trim(), reason: String(input.reason || input.title).slice(0,500),
       kind: input.kind, direction: input.direction, modes: input.kind === 'road' ? ['CAR'] : ['PUBLIC_TRANSIT'],
       startsAt: input.startsAt, endsAt: input.endsAt, segments, status: input.status || prior?.status || 'OPEN',
       source: String(input.source || 'Диспетчер').slice(0,160), externalId: input.externalId || prior?.externalId || null,
@@ -99,7 +100,7 @@ export class TransportStore {
   save(input, shift) {
     return this.db.transaction(() => {
       const prior = input.id && this.get(input.id);
-      if(prior&&(prior.regionId!==shift.regionId||prior.date!==shift.date))throw new Error('Ограничение относится к другой смене');
+      if(prior&&(prior.regionId!==shift.regionId||!this.list(shift).some(event=>event.id===prior.id)))throw new Error('Ограничение относится к другой смене');
       // Repeating the exact same save is idempotent, but a competing edit is not.
       if (prior && hash({...input,expectedRevision:undefined}) === prior.requestHash) return prior;
       const event = this.normalize(input,shift);

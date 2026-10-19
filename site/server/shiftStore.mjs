@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { nextFact, minuteOf } from '../src/shiftDomain.js';
 import { ComplexityStore } from './complexityStore.mjs';
 import { transportContextSignature } from '../src/transportDomain.js';
+import { transportEventsForDay } from './transportScope.mjs';
 
 const encode = value => JSON.stringify(value ?? null);
 const decode = value => value == null ? null : JSON.parse(value);
@@ -202,8 +203,7 @@ export class ShiftStore {
     const events = this.db.prepare('SELECT * FROM shift_events WHERE shift_id = ? ORDER BY revision, created_at').all(id).map(item => ({ id: item.id, revision: item.revision, type: item.type, time: item.event_time, reason: item.reason, actor: item.actor, payload: decode(item.payload_json), beforePlanId: item.before_plan_id, afterPlanId: item.after_plan_id }));
     const factLog = this.db.prepare('SELECT * FROM visit_facts WHERE shift_id = ? ORDER BY created_at, rowid').all(id).map(item => ({ id: item.id, orderId: item.order_id, status: item.status, time: item.fact_time, actor: item.actor, ...decode(item.payload_json) }));
     const latest = new Map(factLog.map(item => [String(item.orderId), item]));
-    const transportRestrictions = this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='transport_events'").get()
-      ? this.db.prepare('SELECT payload FROM transport_events WHERE region_id=? AND service_date=?').all(row.region_id,row.service_date).map(item=>decode(item.payload)) : [];
+    const transportRestrictions = transportEventsForDay(this.db,row.region_id,row.service_date);
     return { id: row.id, regionId: row.region_id, date: row.service_date, revision: row.revision, orders: decode(row.orders_json), team: decode(row.team_json), plan: versions.find(item => item.id === row.current_plan_id)?.plan || null, currentPlanId: row.current_plan_id, versions, events, facts: [...latest.values()], factLog, transportRestrictions };
   }
 

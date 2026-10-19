@@ -20,7 +20,9 @@ export const transportMap={
     const mapRect=liveMap.getCanvas().getBoundingClientRect();
     const panel=document.querySelector('.transport-workspace-panel,.shift-layer.operational-shift .shift-panel')?.getBoundingClientRect();
     const left=Math.min(width*.72,Math.max(85,(panel?.right || 490)-mapRect.left+44)/scale);
-    const padding=window.innerWidth<=760?{left:80,top:Math.min(liveMap.getContainer().clientHeight*.66,((panel?.bottom || 350)-mapRect.top+20)/scale),right:75,bottom:document.querySelector('.shift-panel .transport-panel-content.live')?160:85}:{left,top:165,right:110,bottom:150};
+    const legend=document.querySelector('.transport-map-legend')?.getBoundingClientRect();
+    const bottom=Math.max(100,legend?(mapRect.bottom-legend.top+45)/scale:150);
+    const padding=window.innerWidth<=760?{left:80,top:Math.min(liveMap.getContainer().clientHeight*.66,((panel?.bottom || 350)-mapRect.top+20)/scale),right:85,bottom:Math.min(bottom,liveMap.getContainer().clientHeight*.25)}:{left,top:155,right:125,bottom};
     liveMap.fitBounds(bounds,{padding,maxZoom:14.6,duration:650});
   },
 };
@@ -40,8 +42,36 @@ export function TransportMapLayer({map,theme}) {
   useEffect(()=>{
     if(!map)return;
     let markers=[];
+    let captionsToPlace=[];
+    const outer=map.getContainer().parentElement;
+    const place=()=>{
+      const rect=map.getContainer().getBoundingClientRect(),scale=rect.width/map.getContainer().clientWidth;
+      const panel=document.querySelector('.transport-workspace-panel,.shift-layer.operational-shift .shift-panel')?.getBoundingClientRect();
+      const timeline=document.querySelector('.shift-timeline')?.getBoundingClientRect();
+      const left=window.innerWidth<=760?12:Math.max(12,((panel?.right||rect.left)-rect.left)/scale+22);
+      const bottom=timeline?Math.max(20,(rect.bottom-timeline.top)/scale+20):24;
+      outer.style.setProperty('--transport-corridor-left',`${left}px`);
+      outer.style.setProperty('--transport-corridor-bottom',`${bottom}px`);
+      const legend=outer.querySelector('.transport-map-legend')?.getBoundingClientRect();
+      const width=map.getContainer().clientWidth,height=map.getContainer().clientHeight;
+      const top=window.innerWidth<=760&&panel?(panel.bottom-rect.top)/scale+12:145;
+      const limit=legend?(legend.top-rect.top)/scale-12:height-bottom;
+      const placed=[];
+      const ordered=[...captionsToPlace].sort((a,b)=>map.project(a.coords).y-map.project(b.coords).y);
+      for(const {marker,coords,level} of ordered){
+        const element=marker.getElement(),p=map.project(coords),w=element.getBoundingClientRect().width/scale,h=element.getBoundingClientRect().height/scale;
+        const x=Math.max(left,Math.min(width-95-w,p.x+22));
+        const desired=Math.max(top,Math.min(limit-h,p.y-h-22-level*68));
+        const candidates=[desired,...placed.flatMap(box=>[box.y-h-8,box.y+box.h+8])].filter(y=>y>=top&&y+h<=limit);
+        const y=candidates.filter(y=>!placed.some(box=>x<box.x+box.w+6&&x+w+6>box.x&&y<box.y+box.h+6&&y+h+6>box.y)).sort((a,b)=>Math.abs(a-desired)-Math.abs(b-desired))[0]??desired;
+        placed.push({x,y,w,h});
+        marker.setOffset([x-p.x,y-p.y]);
+      }
+    };
     const backgroundVisibility=new Map();
-    const restoreBackground=()=>{delete map.getContainer().dataset.transportComparison;for(const [id,visibility] of backgroundVisibility)if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visibility);backgroundVisibility.clear();};
+    const dimmed=new Map();
+    let baseTheme=map.getContainer().dataset.mapTheme;
+    const restoreBackground=()=>{delete map.getContainer().dataset.transportComparison;for(const [id,visibility] of backgroundVisibility)if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visibility);backgroundVisibility.clear();for(const [id,{property,value}] of dimmed)if(map.getLayer(id))map.setPaintProperty(id,property,value);dimmed.clear();};
     const sources=['beego-transport-network','beego-transport-stations','beego-transport-closed','beego-transport-before','beego-transport-after'];
     const written=new Map();
     const write=(id,data)=>{
@@ -71,7 +101,15 @@ export function TransportMapLayer({map,theme}) {
       // Existing layers are safe to update without waiting for every tile.
       if(!map.getLayer(layers[0].id)&&!map.isStyleLoaded()){map.off('idle',render);map.once('idle',render);return;}
       map.off('idle',render);
-      markers.forEach(m=>m.remove());markers=[];
+      if(baseTheme!==map.getContainer().dataset.mapTheme){
+        for(const [id,record] of dimmed)if(map.getLayer(id)){
+          const value=map.getPaintProperty(id,record.property);
+          if(value!==.55)record.value=value;
+          map.setPaintProperty(id,record.property,.55);
+        }
+        baseTheme=map.getContainer().dataset.mapTheme;
+      }
+      markers.forEach(m=>m.remove());markers=[];captionsToPlace=[];
       if(!map.hasImage('beego-transport-arrow')){
         const canvas=document.createElement('canvas');canvas.width=40;canvas.height=40;const ctx=canvas.getContext('2d');
         ctx.beginPath();ctx.moveTo(32,20);ctx.lineTo(12,7);ctx.lineTo(18,20);ctx.lineTo(12,33);ctx.closePath();ctx.lineWidth=5;ctx.strokeStyle='#fff';ctx.stroke();ctx.fillStyle='#7c16eb';ctx.fill();
@@ -82,6 +120,13 @@ export function TransportMapLayer({map,theme}) {
       const hide=state.preview?.result?.consequences?.orders?.length?['planned-route','planned-route-casing','planned-route-arrows','planned-route-hit','shift-route-remaining','shift-route-travelled']:state.drawing?['planned-route-hit']:[];
       for(const [id,visibility] of backgroundVisibility)if(!hide.includes(id)){if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visibility);backgroundVisibility.delete(id);}
       if(state.preview?.result||state.drawing)map.getContainer().dataset.transportComparison='true';else delete map.getContainer().dataset.transportComparison;
+      if(state.preview?.result){
+        for(const layer of map.getStyle().layers){
+          if(/^(beego-|planned-|shift-|object-|dispatch-)/.test(layer.id)||dimmed.has(layer.id))continue;
+          const property=({raster:'raster-opacity',fill:'fill-opacity',line:'line-opacity',symbol:'text-opacity',circle:'circle-opacity'})[layer.type];
+          if(property){dimmed.set(layer.id,{property,value:map.getPaintProperty(layer.id,property)});map.setPaintProperty(layer.id,property,.55);}
+        }
+      }else{for(const [id,{property,value}] of dimmed)if(map.getLayer(id))map.setPaintProperty(id,property,value);dimmed.clear();}
       for(const id of hide)if(map.getLayer(id)){if(!backgroundVisibility.has(id))backgroundVisibility.set(id,map.getLayoutProperty(id,'visibility') || 'visible');map.setLayoutProperty(id,'visibility','none');}
       const dark=map.getContainer().closest('.app-shell')?.classList.contains('dark');
       map.setPaintProperty('beego-transport-station-labels','text-color',dark?'#eff3fa':'#394650');
@@ -93,6 +138,15 @@ export function TransportMapLayer({map,theme}) {
       write(sources[1],collection((catalog?.stations || []).map(s=>point(s.coords,{id:s.id,name:s.name,color:colors[s.lineId]?.color || '#d41317'}))));
       const events=[...(state.events || [])];
       if(state.draft?.segments?.length)events.push({...state.draft,id:'draft',title:state.draft.title||'Новое ограничение',status:'OPEN'});
+      const stationIds=[...new Set(events.filter(event=>!['Завершено','Отменено'].includes(transportStatus(event,state.date,state.minute||0))).flatMap(event=>event.segments.flatMap(segment=>[segment.fromId,segment.toId])).filter(id=>String(id).startsWith('m:')))];
+      const affected=['in',['get','id'],['literal',stationIds]];
+      map.setFilter('beego-transport-station-labels',state.preview?.result?affected:null);
+      map.setLayerZoomRange('beego-transport-station-labels',state.preview?.result?0:11.3,24);
+      map.setPaintProperty('beego-transport-station-labels','text-color',['case',affected,'#df1736',dark?'#eff3fa':'#394650']);
+      map.setLayoutProperty('beego-transport-station-labels','text-size',['case',affected,15,12]);
+      map.setPaintProperty('beego-transport-stations','circle-opacity',state.preview?.result?['case',affected,1,.25]:1);
+      map.setPaintProperty('beego-transport-stations','circle-stroke-opacity',state.preview?.result?['case',affected,1,.25]:1);
+      map.setPaintProperty('beego-transport-links','line-opacity',state.preview?.result?.22:.55);
       const closures=[];
       const captions=[];
       for(const event of events){
@@ -116,8 +170,8 @@ export function TransportMapLayer({map,theme}) {
           const projected=map.project([p[1],p[0]]);let level=0;
           while(captions.some(c=>Math.abs(c.x-projected.x)<245&&Math.abs(c.y-(projected.y-level*68))<60))level++;
           captions.push({x:projected.x,y:projected.y-level*68});
-          const right=projected.x>map.getContainer().clientWidth-400;
-          markers.push(new maplibregl.Marker({element,anchor:right?'bottom-right':'bottom-left',offset:[right?-19:19,-20-level*68]}).setLngLat([p[1],p[0]]).addTo(map));
+          const marker=new maplibregl.Marker({element,anchor:'top-left'}).setLngLat([p[1],p[0]]).addTo(map);
+          markers.push(marker);captionsToPlace.push({marker,coords:[p[1],p[0]],level});
         }
       }
       write(sources[2],collection(closures));
@@ -130,6 +184,7 @@ export function TransportMapLayer({map,theme}) {
         const element=document.createElement('span');element.className='transport-stop';element.textContent=String(index+1);element.title=order.address;
         markers.push(new maplibregl.Marker({element}).setLngLat([p[1],p[0]]).addTo(map));
       });
+      place();
     };
     const click=event=>{
       const state=current.current;
@@ -145,8 +200,10 @@ export function TransportMapLayer({map,theme}) {
       if(link)state.onSegment?.(state.catalog.segments.find(s=>s.id===link.properties.id));
       else if(station)state.onStation?.(station.properties.id);
     };
-    renderRef.current=render;render();map.on('style.load',render);map.on('click',click);
-    return()=>{renderRef.current=null;markers.forEach(m=>m.remove());restoreBackground();map.getCanvas().style.cursor='';map.off('style.load',render);map.off('idle',render);map.off('click',click);};
+    const styleLoaded=()=>{backgroundVisibility.clear();dimmed.clear();render();};
+    renderRef.current=render;render();map.on('style.load',styleLoaded);map.on('click',click);map.on('move',place);map.on('resize',place);
+    const observer=new ResizeObserver(place);observer.observe(outer);const panel=document.querySelector('.transport-workspace-panel,.shift-layer.operational-shift .shift-panel');if(panel)observer.observe(panel);
+    return()=>{observer.disconnect();renderRef.current=null;markers.forEach(m=>m.remove());restoreBackground();map.getCanvas().style.cursor='';map.off('style.load',styleLoaded);map.off('idle',render);map.off('click',click);map.off('move',place);map.off('resize',place);};
   },[map]);
   useEffect(()=>{renderRef.current?.();},[state.enabled,state.metro,state.catalog,state.events,state.draft,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,theme]);
   if(!state.enabled)return null;

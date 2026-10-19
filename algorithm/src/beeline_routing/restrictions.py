@@ -48,6 +48,21 @@ class TransportContext:
             elapsed += segment.get('seconds', 0) + segment.get('wait_seconds', 0)
         return False
 
+    def next_open(self, kind, source, target, at):
+        """Earliest confirmed opening, including consecutive overlapping closures."""
+        candidate = at
+        for _ in range(len(self.events) + 1):
+            blocking = [event for event in self.events if event.get('kind')==kind and self.active(event,candidate)
+                        and any(str(segment.get('fromId'))==str(source) and (target is None or str(segment.get('toId'))==str(target))
+                                or event.get('direction','both')=='both' and target is not None and str(segment.get('toId'))==str(source) and str(segment.get('fromId'))==str(target)
+                                for segment in event.get('segments',[]))]
+            if not blocking:
+                return candidate
+            if any(not event.get('endsAt') for event in blocking):
+                return None
+            candidate = max(datetime.fromisoformat(event['endsAt']) for event in blocking)
+        return None
+
     def road_events(self, mode):
         return [e for e in self.events if e.get('kind') == 'road' and mode in e.get('modes', ['CAR']) and e.get('status') not in ('ENDED', 'CANCELLED')]
 

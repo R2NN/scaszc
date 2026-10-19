@@ -157,16 +157,19 @@ def _safe_transit_exit(original, at, context):
         if not blocking:
             candidate=(seconds+exit_seconds,station,steps)
             if answer is None or candidate[0]<answer[0]:answer=candidate
-        elif all(e.get('endsAt') for e in blocking):
-            opening=max(datetime.fromisoformat(e['endsAt']) for e in blocking)
-            candidate=(int((opening-release).total_seconds())+exit_seconds,station,steps)
-            if answer is None or candidate[0]<answer[0]:answer=candidate
+        else:
+            opening=context.next_open('entry',f'm:{station}',None,when)
+            if opening is not None:
+                candidate=(int((opening-release).total_seconds())+exit_seconds,station,steps)
+                if answer is None or candidate[0]<answer[0]:answer=candidate
         if answer and seconds>=answer[0]:continue
         for target,duration,kind in graph.edges[station]:
             next_line=graph.stations[station]['lineId'] if kind=='metro' else -1
             wait=180 if kind=='metro' and (line!=next_line or station==source and target==previous_station) else 0
+            opening=context.next_open(kind,f'm:{station}',f'm:{target}',when+timedelta(seconds=wait))
+            if opening is None:continue
+            wait=int((opening-when).total_seconds())
             if kind=='metro' and not graph._train_available(station,target,seconds,release,wait):continue
-            if context.blocked(kind,f'm:{station}',f'm:{target}',when+timedelta(seconds=wait)):continue
             arrival=seconds+wait+duration
             if arrival<best.get((target,next_line),float('inf')):
                 best[(target,next_line)]=arrival

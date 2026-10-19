@@ -1006,7 +1006,7 @@ export function ShiftWorkspace({
         </nav> : null}
         <div className="shift-panel-body">
           {tab === 'crews' && shift?.plan ? <EngineerStartSettings shift={shift} onDraft={onStartDraft}/> : null}
-          {tab === 'transport' ? <TransportPanel shift={shift} live actor={actor} onApply={onApply}/> : null}
+          {!reportOnly&&!standaloneReplanning?<div hidden={tab!=='transport'}><TransportPanel shift={shift} live active={tab==='transport'} actor={actor} onApply={onApply} onScenarioEvent={()=>setTab('transport')}/></div>:null}
           {tab === 'incident' && emergency ? <EmergencyDispatchPanel controller={emergency} onRoute={onEmergencyRoute}/> : null}
           {standaloneReplanning && shift?.plan ? <section className="replanning-overview" aria-label="Текущий план"><div><small>ОПУБЛИКОВАННЫЙ ПЛАН</small><strong>Версия {shift.versions?.at(-1)?.version || 1}</strong></div><div><b>{current.assigned}</b><span>назначено</span></div><div><b>{current.unassigned}</b><span>в очереди</span></div><div><b>{shift.team?.length || 0}</b><span>бригад</span></div></section> : null}
           {standaloneReplanning && publishedNotice ? <div className="replanning-published" role="status"><Check size={19}/><span>{publishedNotice}</span><button type="button" onClick={() => setTab('events')}>История</button></div> : null}

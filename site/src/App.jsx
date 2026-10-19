@@ -511,7 +511,7 @@ function applyMapTheme(map,themeId='day'){
   const theme=MAP_THEMES[themeId]||MAP_THEMES.day;
   const paint=(id,property,value)=>{try{if(map.getLayer(id))map.setPaintProperty(id,property,value)}catch(error){console.warn(`Не удалось применить ${property} к слою ${id}:`,error?.message||error)}};
   map.getStyle().layers.forEach(layer=>{
-    if(/^(?:planned-route|selected-district|cx-)/.test(layer.id))return;
+    if(/^(?:planned-route|selected-district|cx-|beego-transport)/.test(layer.id))return;
     const key=`${layer.id} ${layer['source-layer']||''}`.toLowerCase();
     const isWater=/(?:water|waterway|ocean|river|lake)/.test(key);
     const isPark=/(?:park|grass|wood|forest|cemetery|pitch)/.test(key);
@@ -1476,7 +1476,7 @@ function MapCanvas({ratingWorkspace=false,onComplexityModeChange,complexityMode=
   };
 
   return <section className={`map-canvas real-map${shiftMapEmphasis?` shift-map-${shiftMapEmphasis}`:''}`}>
-    <div ref={containerRef} className="maplibre-host"/><TransportMapLayer map={map} theme={uiTheme}/>
+    <div ref={containerRef} className="maplibre-host"/><TransportMapLayer map={map} theme={mapTheme}/>
     <ComplexityMapLayer map={map} enabled={complexityMode} view={objectTimeView} onLayerReady={objectLayerReady} panelOpen={complexityPanelOpen} onClosePanel={onCloseComplexityPanel} date={complexityDate} territory={complexityTerritory} territoryControl={complexityTerritoryControl} regionId={region?.id} routeOrderIds={activeRoute?.assignments?.map(visit=>visit.orderId)||[]}/>
     {engineerPopup?.engineer?<EngineerMapPopup map={map} {...engineerPopup}/>:null}
     {selectedTerritory?<div className={`district-map-badge ${districtBoundaryStatus}`}><MapPinned/><span><small>{territorySelection(selectedTerritory).kind==='zone'?'Зона из таблицы · показаны её заявки':districtBoundaryStatus==='points'?'Граница района не найдена · показаны заявки':'Сценарий района'}</small><b>{territorySelection(selectedTerritory).name}</b></span>{districtBoundaryStatus==='loading'?<i className="spinner"/>:districtBoundaryStatus==='unavailable'?<AlertTriangle/>:<Check/>}</div>:null}

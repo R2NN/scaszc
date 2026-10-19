@@ -3,11 +3,33 @@ import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { TransportStore } from '../server/transportApi.mjs';
 import { transportStatus, transportConsequences } from '../src/transportDomain.js';
+import { ShiftStore } from '../server/shiftStore.mjs';
 
 const shift={id:'shift',regionId:'moscow',date:'2026-08-17',plan:{},orders:[],team:[]};
 const segment={id:'road:1',kind:'road',edgeId:'1',opposingEdgeId:'2',geometry:[[55.75,37.62],[55.751,37.62]],fromId:'a',toId:'b',heading:0,midpoint:[55.7505,37.62]};
 const input={id:'e',title:'Ремонт дороги',kind:'road',direction:'both',startsAt:'2026-08-17T14:25:00+03:00',endsAt:'2026-08-17T15:00:00+03:00',segmentIds:['road:1']};
 const setup=()=>{const db=new Database(':memory:');const store=new TransportStore({db});store.segments([segment]);return store;};
+
+test('overnight and unknown-end events reach subsequent shifts with one shared publication context',()=>{
+  const store=new ShiftStore(':memory:'),s=new TransportStore(store);
+  try{
+    s.segments([segment]);
+    const event=s.save({...input,endsAt:'2026-08-18T10:00:00+03:00'},shift);
+    const next={...shift,date:'2026-08-18'};
+    assert.deepEqual(s.list(next).map(e=>e.id),[event.id]);
+    assert.equal(s.list({...next,date:'2026-08-19'}).length,0);
+    assert.equal(s.list({...next,regionId:'moscow:scenario:test'}).length,0);
+    const saved=store.ensure({...next,plan:{status:'EXACT_VALID',contentSha256:'fixture',publicationAllowed:true,validation:{status:'VALID'},routes:[],unassigned:[],metrics:{}}});
+    assert.deepEqual(store.get(saved.id).transportRestrictions,s.list(next));
+    const changed=s.save({...input,expectedRevision:1,endsAt:null},next);
+    assert.equal(changed.date,shift.date);
+    assert.equal(s.list({...next,date:'2026-08-19'})[0].id,event.id);
+    assert.equal(transportStatus(changed,next.date,360),'Действует');
+    const ended=s.save({...input,expectedRevision:2,status:'ENDED',endsAt:'2026-08-18T09:00:00+03:00'},next);
+    assert.equal(transportStatus(ended,next.date,600),'Завершено');
+    assert.equal(s.db.prepare('SELECT count(*) n FROM transport_history WHERE event_id=?').get(event.id).n,3);
+  }finally{store.close();}
+});
 
 test('transport events retain history, optimistic revision and idempotent retries',()=>{
   const s=setup();try{

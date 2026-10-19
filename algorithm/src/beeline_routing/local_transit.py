@@ -97,7 +97,7 @@ class LocalTransitRoutingClient:
                                 if schema_path.is_file() else None)
         transport_schema = self._schema_path()
         self.transport_graph = self.metro_reference
-        if self.transport_context.events and self.transport_graph is None and transport_schema.is_file():
+        if self.transport_graph is None and transport_schema.is_file():
             self.transport_graph = MetroReference(transport_schema, walking, boarding_wait_seconds=metro_wait_seconds)
 
     def _schema_path(self):
@@ -128,14 +128,19 @@ class LocalTransitRoutingClient:
             for target, duration, kind in graph.edges[station]:
                 target_line = graph.stations[station]['lineId'] if kind == 'metro' else -1
                 wait = 180 if kind == 'metro' and line != target_line else 0
+                model_wait = wait
                 a, b = f'm:{station}', f'm:{target}'
-                if self.transport_context.blocked(kind, a, b, self._at(clock + wait)):
+                opening = self.transport_context.next_open(kind, a, b, self._at(clock + wait))
+                if opening is None:
+                    continue
+                wait = int((opening-self._at(clock)).total_seconds())
+                if kind == 'metro' and not graph._train_available(station,target,0,self._at(clock),wait):
                     continue
                 arrival = clock + wait + duration
                 if arrival < best.get((target, target_line), 10**9):
                     best[(target, target_line)] = arrival
                     segment = {'from_id': a, 'to_id': b, 'kind': kind, 'seconds': duration,
-                               'wait_seconds': wait, 'line_id': graph.stations[station]['lineId']}
+                               'wait_seconds': wait, 'opening_wait_seconds':wait-model_wait, 'line_id': graph.stations[station]['lineId']}
                     heapq.heappush(queue, (arrival, target, target_line, path + [segment]))
         return [(f'm:{station}', clock - start, path) for station, (clock, path) in results.items()]
 
@@ -278,6 +283,17 @@ class LocalTransitRoutingClient:
                         )
                     ]
                     self.metro_paths_cache[current.stop_id] = paths
+                if self.transport_graph:
+                    def valid_path(path):
+                        elapsed=0
+                        for segment in path:
+                            wait=segment['wait_seconds']
+                            if segment['kind']=='metro' and not self.transport_graph._train_available(int(segment['from_id'][2:]),int(segment['to_id'][2:]),elapsed,self._at(current.time),wait):
+                                return False
+                            elapsed+=wait+segment['seconds']
+                        return True
+                    if any(not valid_path(segments) for _,_,segments in paths):
+                        paths=self._restricted_metro_paths(current.stop_id,current.time)
                 for target, duration, segments in paths:
                     candidate = current.time + duration
                     if candidate < labels.get(target, _Label(10**9, target, '', None, ())).time:
@@ -302,7 +318,7 @@ class LocalTransitRoutingClient:
                        if self.metro_reference else None)
         direct_walk = self._direct_walk_option(origin, destination, departure_at)
         start = departure_at.hour * 3600 + departure_at.minute * 60 + departure_at.second
-        allow_metro = not (3600 <= start < 5 * 3600 + 30 * 60)
+        allow_metro = bool(self.transport_graph) or not (3600 <= start < 5 * 3600 + 30 * 60)
         access = self._walk_routes(origin, inbound=False, departure_at=departure_at)
         egress = self._walk_routes(destination, inbound=True, departure_at=departure_at)
         if not access or not egress:
@@ -310,11 +326,14 @@ class LocalTransitRoutingClient:
                 origin, destination, departure_at, 'WALKING_ACCESS_UNAVAILABLE')
         labels: dict[str, _Label] = {}
         for stop_id, walk in access.items():
-            if self.transport_context.blocked('entry', stop_id, None, self._at(start + self._walk_seconds(walk))):
+            reached=self._at(start+self._walk_seconds(walk))
+            opening=self.transport_context.next_open('entry',stop_id,None,reached)
+            if opening is None:
                 continue
+            opening_wait=int((opening-reached).total_seconds())
             platform_enter = self.station_access.get(stop_id, (0, 0))[0]
-            candidate = _Label(start + self._walk_seconds(walk) + platform_enter,
-                               stop_id, 'access', None, (walk, platform_enter))
+            candidate = _Label(start + self._walk_seconds(walk) + platform_enter + opening_wait,
+                               stop_id, 'access', None, (walk, platform_enter, opening_wait))
             if stop_id not in labels or candidate.time < labels[stop_id].time:
                 labels[stop_id] = candidate
                 self._relax_transfers(candidate, labels, allow_metro=allow_metro)
@@ -339,12 +358,14 @@ class LocalTransitRoutingClient:
             label = labels.get(stop_id)
             if label is None:
                 continue
-            if self.transport_context.blocked('entry', stop_id, None, self._at(label.time)):
+            opening=self.transport_context.next_open('entry',stop_id,None,self._at(label.time))
+            if opening is None:
                 continue
+            opening_wait=int((opening-self._at(label.time)).total_seconds())
             platform_exit = self.station_access.get(stop_id, (0, 0))[1]
-            arrival = label.time + platform_exit + self._walk_seconds(walk)
+            arrival = label.time + opening_wait + platform_exit + self._walk_seconds(walk)
             if best is None or arrival < best[0]:
-                best = (arrival, label, walk, platform_exit)
+                best = (arrival, label, walk, platform_exit, opening_wait)
         if best is None:
             return self._fastest(metro_route, direct_walk) or self._unknown(
                 origin, destination, departure_at, 'NO_PATH_IN_COVERED_NETWORK')
@@ -378,10 +399,13 @@ class LocalTransitRoutingClient:
             distance += meters
 
         first = actions[0]
-        access_walk, platform_enter = first.details
+        access_walk, platform_enter, opening_wait = first.details
         if access_walk is not None:
             add_step('walking', self._walk_seconds(access_walk), access_walk.distance_m or 0, 0,
                      access_walk.geometry, {'source': 'LOCAL_VALHALLA', 'purpose': 'station_access'})
+        if opening_wait:
+            stop=self.stops[first.stop_id]
+            add_step('waiting',opening_wait,0,opening_wait,((stop.lat,stop.lon),),{'source':'TRANSPORT_KNOWN_OPENING','station':stop.name})
         if platform_enter:
             stop = self.stops[first.stop_id]
             add_step('station_entry', platform_enter, 0, 0, ((stop.lat, stop.lon),),
@@ -423,6 +447,10 @@ class LocalTransitRoutingClient:
                     source_stop = self.stops[segment['from_id']]
                     target_stop = self.stops[segment['to_id']]
                     wait = int(segment['wait_seconds'])
+                    opening_wait = int(segment.get('opening_wait_seconds',0))
+                    if opening_wait:
+                        add_step('waiting',opening_wait,0,opening_wait,((source_stop.lat,source_stop.lon),),{'source':'TRANSPORT_KNOWN_OPENING','station':source_stop.name})
+                        wait -= opening_wait
                     if wait:
                         add_step('metro_wait_model', wait, 0, wait,
                                  ((source_stop.lat, source_stop.lon),),
@@ -444,6 +472,8 @@ class LocalTransitRoutingClient:
                               'distance_quality': 'geodesic_lower_bound'})
             previous_time = action.time
         end_stop = self.stops[best[1].stop_id]
+        if best[4]:
+            add_step('waiting',best[4],0,best[4],((end_stop.lat,end_stop.lon),),{'source':'TRANSPORT_KNOWN_OPENING','station':end_stop.name})
         if best[3]:
             add_step('station_exit', best[3], 0, 0, ((end_stop.lat, end_stop.lon),),
                      {'source': 'MOSMETRO_SCHEMA', 'station': end_stop.name})

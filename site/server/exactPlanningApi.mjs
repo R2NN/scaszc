@@ -9,6 +9,7 @@ import { fillExactIdentityGeometry } from './exactPlanGeometry.mjs';
 import { historicalInventory } from './exactShiftReplan.mjs';
 import { acquirePlanningSlot, planningBusyResponse, withPlanningSlot } from './planningSlot.mjs';
 import { loadComplexityArtifact, matchesComplexityArtifact } from './complexityArtifact.mjs';
+import { transportEventsForDay } from './transportScope.mjs';
 
 const siteRoot = path.resolve(import.meta.dirname, '..');
 const repositoryRoot = projectRoot(siteRoot);
@@ -70,7 +71,7 @@ export async function handleExactPlanning(request, { complexity, planRunner = ru
     const payload = await request.json();
     if (store) {
       const date=payload.planningDate || payload.date || payload.orders?.[0]?.serviceDate || payload.orders?.[0]?.sourceData?.window_start?.slice(0,10);
-      payload.transportRestrictions=store.byDate(payload.regionId || 'moscow',date)?.transportRestrictions || [];
+      payload.transportRestrictions=transportEventsForDay(store.db,payload.regionId || 'moscow',date);
       if(payload.transportRestrictions.length)payload.recompute=true;
     }
     if (!Array.isArray(payload.orders) || !Array.isArray(payload.engineers)) {

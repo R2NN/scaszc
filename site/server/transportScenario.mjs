@@ -26,7 +26,15 @@ export function createTransportScenario(store,transport,network) {
   store.db.exec('CREATE TABLE IF NOT EXISTS transport_scenarios(shift_id TEXT PRIMARY KEY,payload TEXT NOT NULL)');
   const get=id=>{const row=store.db.prepare('SELECT payload FROM transport_scenarios WHERE shift_id=?').get(id);return row?JSON.parse(row.payload):null;};
   const put=state=>store.db.prepare('INSERT INTO transport_scenarios VALUES (?,?) ON CONFLICT(shift_id) DO UPDATE SET payload=excluded.payload').run(state.shiftId,JSON.stringify(state));
+  const pending=new Set();
   async function handle(action,input,url) {
+    const id=input.shiftId||url.searchParams.get('shiftId');
+    if(!['scenario/next','scenario/tick'].includes(action))return run(action,input,url);
+    if(pending.has(id))return {state:get(id)};
+    pending.add(id);
+    try{return await run(action,input,url);}finally{pending.delete(id);}
+  }
+  async function run(action,input,url) {
     if(action==='scenario/dual') {
       const result=await handle('scenario/start',input,url),state=result.state,shift=result.shift,raw=await rawPlan(shift),events=[];
       state.variant='simultaneous';state.waves=[];state.index=1;

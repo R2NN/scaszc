@@ -9,6 +9,7 @@ import math
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from .models import Coordinate, DetailedRoute, Provenance, RouteStatus, RouteStep, TransportMode
 from .valhalla import ValhallaRoutingClient
@@ -94,10 +95,6 @@ class MetroReference:
                          elapsed_since_query: int, departure_at: datetime,
                          wait: int) -> bool:
         departures = self.stations[station_id].get('scheduleTrains', {}).get(str(neighbor), [])
-        weekday = [item for item in departures if item.get('weekend') is False]
-        if not weekday:
-            return False
-
         def minute_of_day(value: str) -> int | None:
             match = re.match(r'^\s*(\d{1,2})[:.,](\d{2})', str(value))
             if not match:
@@ -105,25 +102,29 @@ class MetroReference:
             hours, minutes = map(int, match.groups())
             return hours * 3600 + minutes * 60 if minutes < 60 else None
 
-        first_values = [value for item in weekday if (value := minute_of_day(item.get('first'))) is not None]
-        last_values = [value for item in weekday if (value := minute_of_day(item.get('last'))) is not None]
-        if not first_values or not last_values:
-            return False
-        first = min(first_values)
-        last = max(last_values)
-        if last < first:
-            last += 86400
-        clock = departure_at.hour * 3600 + departure_at.minute * 60 + departure_at.second
-        if clock < 3600:
-            clock += 86400
-        boarding = clock + elapsed_since_query + wait
-        return first <= boarding <= last
+        boarding = (departure_at + timedelta(seconds=elapsed_since_query + wait)).astimezone(ZoneInfo('Europe/Moscow'))
+        midnight = boarding.replace(hour=0, minute=0, second=0, microsecond=0)
+        if not hasattr(self,'_service_bounds'):
+            self._service_bounds={}
+        key=(station_id,neighbor,midnight.date())
+        if key in self._service_bounds:
+            return any(first<=boarding<=last for first,last in self._service_bounds[key])
+        bounds=[]
+        for service_day in (midnight - timedelta(days=1), midnight):
+            for item in departures:
+                if item.get('weekend') is not (service_day.weekday() >= 5):
+                    continue
+                first, last = minute_of_day(item.get('first')), minute_of_day(item.get('last'))
+                if first is None or last is None:
+                    continue
+                if last < first:
+                    last += 86400
+                bounds.append((service_day+timedelta(seconds=first),service_day+timedelta(seconds=last)))
+        self._service_bounds[key]=bounds
+        return any(first<=boarding<=last for first,last in bounds)
 
     def route(self, origin: Coordinate, destination: Coordinate,
               departure_at: datetime) -> DetailedRoute | None:
-        clock = departure_at.hour * 3600 + departure_at.minute * 60 + departure_at.second
-        if 3600 <= clock < 5 * 3600 + 30 * 60:
-            return None
         access = self._nearby_walks(origin, departure_at, inbound=False)
         egress = self._nearby_walks(destination, departure_at, inbound=True)
         if not access or not egress:
@@ -132,16 +133,22 @@ class MetroReference:
         # second boarding wait. -1 means the next train requires boarding.
         times: dict[tuple[int, int, bool], int] = {}
         roots: dict[tuple[int, int, bool], DetailedRoute | None] = {}
+        entry_waits = {}
         previous: dict[tuple[int, int, bool], tuple[tuple[int, int, bool], str, int, int]] = {}
         queue: list[tuple[int, int, int, bool]] = []
         for station_id, walk in access.items():
             state = (station_id, -1, False)
             duration = self._walk_seconds(walk) + (self.stations[station_id].get('enterTime') or 0)
-            if self.transport_context.blocked('entry', f'm:{station_id}', None, departure_at + timedelta(seconds=self._walk_seconds(walk))):
+            reached = departure_at + timedelta(seconds=self._walk_seconds(walk))
+            opening = self.transport_context.next_open('entry', f'm:{station_id}', None, reached)
+            if opening is None:
                 continue
+            entry_wait = int((opening-reached).total_seconds())
+            duration += entry_wait
             if duration < times.get(state, 10**9):
                 times[state] = duration
                 roots[state] = walk
+                entry_waits[state] = entry_wait
                 heapq.heappush(queue, (duration, *state))
         while queue:
             elapsed, station_id, onboard_line, ridden = heapq.heappop(queue)
@@ -149,19 +156,22 @@ class MetroReference:
             if times[state] != elapsed:
                 continue
             for neighbor, duration, kind in self.edges[station_id]:
-                if self.transport_context.blocked(kind, f'm:{station_id}', f'm:{neighbor}', departure_at + timedelta(seconds=elapsed)):
-                    continue
                 if kind == 'metro':
                     line_id = self.stations[station_id]['lineId']
                     wait = 0 if onboard_line == line_id else self.boarding_wait_seconds
-                    if self.transport_context.blocked(kind, f'm:{station_id}', f'm:{neighbor}', departure_at + timedelta(seconds=elapsed + wait)):
+                    opening = self.transport_context.next_open(kind, f'm:{station_id}', f'm:{neighbor}', departure_at + timedelta(seconds=elapsed + wait))
+                    if opening is None:
                         continue
+                    wait = int((opening-departure_at).total_seconds())-elapsed
                     if not self._train_available(station_id, neighbor, elapsed,
                                                  departure_at, wait):
                         continue
                     next_state = (neighbor, line_id, True)
                 else:
-                    wait = 0
+                    opening = self.transport_context.next_open(kind, f'm:{station_id}', f'm:{neighbor}', departure_at + timedelta(seconds=elapsed))
+                    if opening is None:
+                        continue
+                    wait = int((opening-departure_at).total_seconds())-elapsed
                     next_state = (neighbor, -1, ridden)
                 candidate = elapsed + wait + duration
                 if candidate < times.get(next_state, 10**9):
@@ -173,9 +183,9 @@ class MetroReference:
             exit_time = self.stations[station_id].get('exitTime') or 0
             for state, duration in times.items():
                 if state[0] == station_id and state[2]:
-                    if self.transport_context.blocked('entry', f'm:{station_id}', None, departure_at + timedelta(seconds=duration)):
-                        continue
-                    options.append((duration + exit_time + self._walk_seconds(walk), state, walk))
+                    opening = self.transport_context.next_open('entry', f'm:{station_id}', None, departure_at + timedelta(seconds=duration))
+                    if opening is not None:
+                        options.append((int((opening-departure_at).total_seconds()) + exit_time + self._walk_seconds(walk), state, walk))
         if not options:
             return None
         total, terminal, final_walk = min(options, key=lambda option: option[0])
@@ -204,6 +214,8 @@ class MetroReference:
             add('walking', self._walk_seconds(first_walk), first_walk.distance_m or 0, 0,
                 first_walk.geometry, {'source': 'LOCAL_VALHALLA', 'purpose': 'metro_access'})
         entry = self.stations[first[0]].get('enterTime') or 0
+        if entry_waits[first]:
+            add('waiting', entry_waits[first], 0, entry_waits[first], (self._point(first[0]),), {'source':'TRANSPORT_KNOWN_OPENING'})
         if entry:
             add('station_entry', entry, 0, 0, (self._point(first[0]),),
                 {'source': 'MOSMETRO_SCHEMA', 'station': self.stations[first[0]]['name']['ru']})
@@ -213,8 +225,11 @@ class MetroReference:
             target_station = self.stations[target_state[0]]
             if kind == 'metro' and source_state[1] != source_station['lineId']:
                 boardings += 1
-            if wait:
-                add('metro_wait_model', wait, 0, wait, (self._point(source_state[0]),),
+            model_wait = self.boarding_wait_seconds if kind == 'metro' and source_state[1] != source_station['lineId'] else 0
+            if wait > model_wait:
+                add('waiting', wait-model_wait, 0, wait-model_wait, (self._point(source_state[0]),), {'source':'TRANSPORT_KNOWN_OPENING'})
+            if model_wait:
+                add('metro_wait_model', model_wait, 0, model_wait, (self._point(source_state[0]),),
                     {'source': 'EXPLICIT_SCENARIO_ASSUMPTION',
                      'station': source_station['name']['ru'],
                      'assumed_seconds': self.boarding_wait_seconds})
@@ -227,6 +242,9 @@ class MetroReference:
                  'geometry_quality': 'station_to_station_chord',
                  'distance_quality': 'geodesic_lower_bound'})
         exit_time = self.stations[terminal[0]].get('exitTime') or 0
+        exit_wait = total-times[terminal]-exit_time-self._walk_seconds(final_walk)
+        if exit_wait:
+            add('waiting', exit_wait, 0, exit_wait, (self._point(terminal[0]),), {'source':'TRANSPORT_KNOWN_OPENING'})
         if exit_time:
             add('station_exit', exit_time, 0, 0, (self._point(terminal[0]),),
                 {'source': 'MOSMETRO_SCHEMA', 'station': self.stations[terminal[0]]['name']['ru']})
