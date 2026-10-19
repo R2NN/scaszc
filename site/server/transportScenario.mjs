@@ -24,7 +24,18 @@ export function createTransportScenario(store,transport,network) {
   const put=state=>store.db.prepare('INSERT INTO transport_scenarios VALUES (?,?) ON CONFLICT(shift_id) DO UPDATE SET payload=excluded.payload').run(state.shiftId,JSON.stringify(state));
   const get=id=>{
     const row=store.db.prepare('SELECT payload FROM transport_scenarios WHERE shift_id=?').get(id);
-    if(!row)return null;
+    if(!row){
+      const sessionRow=store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(id);
+      const shift=store.get(id);
+      if(!sessionRow||shift?.date!=='2026-08-17'||!shift.regionId.startsWith('moscow:scenario:'))return null;
+      const session=JSON.parse(sessionRow.payload);
+      // The ordinary shift demonstration also includes roads and metro. Do not
+      // backdate expired disruptions into an already executing legacy day.
+      const minute=Number(session.clock.minute)+(session.clock.playing?(Date.now()-session.clock.anchorAt)/60000*session.clock.speed:0);
+      const state={shiftId:id,baseShiftId:session.baseShiftId,presentationVersion:2,variant:'shift',
+        waves:waves.map((wave,index)=>({...wave,index,status:wave.end&&minute>=minuteOf(wave.end)?'MISSED':'PENDING'}))};
+      state.index=state.waves.findLastIndex(wave=>wave.status==='MISSED');put(state);return state;
+    }
     const state=JSON.parse(row.payload);
     if(state.variant!=='simultaneous'&&state.presentationVersion!==2){
       // Retire only the scripted schedule. Saved events and published history

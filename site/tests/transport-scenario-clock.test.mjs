@@ -11,7 +11,7 @@ test('a transport problem notification never claims routes are already built',()
 
 test('application-level clock fires while Orders is open, pauses, and does not duplicate a wave',async()=>{
   let value={minute:864,playing:true},listener,tab='orders';
-  const shift={id:'s',regionId:'moscow:scenario:transport-demo',revision:2};
+  const shift={id:'s',regionId:'moscow:scenario:ordinary-emergency-day',revision:2};
   const calls=[],events=[],adoptions=[];
   let index=0;
   const clock={getSnapshot:()=>value,subscribe:fn=>{listener=fn;return()=>{listener=null;};}};

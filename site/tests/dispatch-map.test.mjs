@@ -76,6 +76,21 @@ test('selecting an alternative displays the emergency marker even if its opening
   }finally{f.cleanup();}
 });
 
+test('closing a decision clears pending map restoration as well as both route layers',()=>{
+  const f=setup();
+  try{
+    f.fire('dispatch-preview',{...f.preview,current:{...f.preview.current,origin:[55.7,37.6],emergencyCoords:[55.71,37.61]}});
+    f.fire('dispatch-preview',f.preview);
+    f.fire('dispatch-clear');
+    const fits=f.fits.length;
+    f.loaded('idle');f.loaded('style.load');
+    assert.equal(f.sources.size,0);
+    assert.equal(f.layers.size,0);
+    assert.ok(f.markers.every(marker=>marker.removed));
+    assert.equal(f.fits.length,fits,'Late style events cannot resurrect or refocus a dismissed comparison');
+  }finally{f.cleanup();}
+});
+
 for (const scope of ['day','next']) test(`${scope} scope retains the engineer checkpoint and emergency even when neither is a route endpoint`,()=>{
   const f=setup();
   try{

@@ -197,8 +197,8 @@ test('preview controller emits the original revision after the shift plan was re
     const after = {contentSha256:'after',routes:[]};
     const shift = {id:'shift',revision:2,plan:after,versions:[{version:1,plan:before},{version:2,plan:after}]};
     let controller;
-    function Harness() {
-      controller = useEmergencyDispatch({shift});
+    function Harness({active=true}) {
+      controller = useEmergencyDispatch({shift,active});
       return null;
     }
     renderToStaticMarkup(React.createElement(Harness));
@@ -227,6 +227,9 @@ test('preview controller emits the original revision after the shift plan was re
     controller.preview({...candidate,baseRevision:3});
     controller.showChanges({...candidate,baseRevision:3}, []);
     assert.equal(events.length, 5, 'An unavailable source must not silently compare the plan with itself or move the map');
+    renderToStaticMarkup(React.createElement(Harness,{active:false}));
+    controller.preview(candidate);controller.showResult(candidate);controller.showChanges(candidate,[]);controller.changeRouteScope('next');
+    assert.equal(events.length,5,'Late candidate refinement and confirmation callbacks cannot draw outside the emergency decision');
   } finally {
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;

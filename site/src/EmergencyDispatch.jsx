@@ -19,14 +19,14 @@ const api = async (path, body) => {
 const terminal = item => ['ACCEPTED', 'CANCELLED'].includes(item.status);
 
 /** Bridge durable incidents to BeeGo's existing notifications and playback clock. */
-export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
+export function useEmergencyDispatch({ shift, active = false, onApply, notify, onOpen }) {
   const [incidents, setIncidents] = useState([]), [session, setSession] = useState(null), [selectedId, setSelectedId] = useState('');
   const [candidateId, setCandidateId] = useState(''), [error, setError] = useState(''), [policy, setPolicy] = useState(null);
   const [routeScope, setRouteScope] = useState('day');
   const [acceptingId, setAcceptingId] = useState('');
   const [submission,setSubmission] = useState(null);
   const refs = useRef({});
-  refs.current = { shift, onApply, notify, onOpen };
+  refs.current = { shift, active, onApply, notify, onOpen };
   const notified = useRef(new Set()), initialized = useRef(''), clockSync = useRef(null);
   const [serverOffset, setServerOffset] = useState(0);
   const announcer = useRef(null);
@@ -113,6 +113,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     } catch (e) {setError(e.message);}
   };
   const preview = (candidate, scope = routeScope, engineerId = candidate.engineer.id, focusRoute = true) => {
+    if (!refs.current.active) return false;
     try {
       const detail = dispatchPreviewDetail(refs.current.shift,candidate,{engineerId,scope});
       setError(''); setCandidateId(candidate.id); setRouteScope(scope);
@@ -121,7 +122,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
     } catch (e) { setError(e.message); return false; }
   };
   const changeRouteScope = scope => {
-    if (!['day', 'next'].includes(scope)) return;
+    if (!refs.current.active || !['day', 'next'].includes(scope)) return;
     setRouteScope(scope);
     window.dispatchEvent(new CustomEvent('beego:dispatch-scope', {detail:{scope}}));
   };
@@ -183,10 +184,19 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   };
   const select = incidents.find(item => item.id === selectedId) || incidents.find(item => !terminal(item)) || incidents.at(-1);
   useEffect(() => {
-    if (!select || submission || terminal(select)) return;
+    publishDispatchMapEvent(window,'clear');
+    if (active && select) {
+      const candidate = resolveDispatchCandidate(select,candidateId) || select.candidates.find(item=>item.id===select.decision?.candidateId);
+      if (candidate) preview(candidate,routeScope,candidate.engineer.id,false);
+      else publishDispatchMapEvent(window,'incident-focus',{coords:select.order.coords});
+    }
+    return () => publishDispatchMapEvent(window,'clear');
+  }, [active, shift?.id]);
+  useEffect(() => {
+    if (!active || !select || submission || terminal(select)) return;
     const improved = resolveDispatchCandidate(select, candidateId);
     if (improved && improved.id !== candidateId) preview(improved, routeScope, improved.engineer.id, false);
-  }, [select, candidateId, submission]);
+  }, [active, select, candidateId, submission]);
   return { incidents, selected:select, candidateId, routeScope, acceptingId, submission, changeRouteScope, showChanges, showResult, open, preview, startSession, session, error, serverOffset, policy, accept, read,
     retry, cancel, savePolicy };
 }
@@ -210,6 +220,7 @@ function ConsequenceGroup({ title, rows, controller, candidate, accepted = false
 
 /** Full-shift alternatives lead with their operational effect, rather than diff volume. */
 export function EmergencyDispatchPanel({ controller, onRoute }) {
+  useEffect(() => () => publishDispatchMapEvent(window,'clear'), []);
   const { selected:item, candidateId, policy } = controller;
   const [now, setNow] = useState(Date.now());
   const [openedRouteId, setOpenedRouteId] = useState('');
@@ -259,7 +270,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
         <div className='dispatch-scope-controls' role='group' aria-label='Показывать маршрут'>{[{value:'day',label:'Весь оставшийся день'},{value:'next',label:'Ближайшее действие'}].map(option => <button key={option.value} type='button' aria-pressed={(controller.routeScope || 'day') === option.value} onClick={() => controller.changeRouteScope(option.value)}>{option.label}</button>)}</div>
       </> : null}
     </div> : null}
-    {!item ? <div className='dispatch-empty'><h4>Бригада для срочного выезда</h4><p>При поступлении аварии здесь появятся проверенные варианты: кто приедет, какие заявки придётся передать и успеет ли команда закончить день.</p><div className='dispatch-scenario'><small>Демонстрационный сценарий</small><p>{controller.session ? 'Смена готова. Включите воспроизведение: вызов поступит в 11:17.' : 'Отдельная смена 17 августа: старт в 06:00, авария в 11:17. Можно проверить выбор бригады и изменение маршрутов.'}</p><button type='button' className='shift-secondary' onClick={controller.startSession}>{controller.session ? 'Новая изолированная сессия' : 'Запустить сценарий с 06:00'}</button></div></div> : <>
+    {!item ? <div className='dispatch-empty'><h4>Бригада для срочного выезда</h4><p>При поступлении аварии здесь появятся проверенные варианты: кто приедет, какие заявки придётся передать и успеет ли команда закончить день.</p><div className='dispatch-scenario'><small>Демонстрационный сценарий</small><p>{controller.session?.profile==='transport' ? 'Транспортный показ: дорога в 09:30 и метро в 14:25.' : 'Общий показ смены 17 августа с 06:00: дорога в 09:30, авария в 11:17, метро в 14:25. События появляются на общей карте.'}</p><button type='button' className='shift-secondary' onClick={controller.startSession}>{controller.session ? 'Новая изолированная сессия' : 'Запустить сценарий с 06:00'}</button></div></div> : <>
       <div className='dispatch-incident'><b>{item.order.address}</b><span>{item.time} · {accepted ? 'Решение принято' : item.status === 'CANCELLED' ? 'Отменена' : 'Требуется решение'}</span></div>
       {acceptedCandidate && accepted ? <div className='dispatch-result' role='status'>
         <Check size={24}/><div><b>{ratingName(acceptedCandidate.engineer)} направлен на аварию</b><strong>Прибытие {acceptedCandidate.visit.arrival}</strong><span>{item.decision.actor === 'system' ? 'Автовыбор' : 'Решение диспетчера'} · версия {item.decision.revision}</span></div>

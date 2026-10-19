@@ -44,6 +44,22 @@ test('scheduled events keep their times without requiring previous route publica
     const second=await scenario.handle('scenario/tick',{shiftId:'scenario',minute:865},url);
     assert.equal(second.event.startsAt.slice(11,16),'14:25');
     assert.equal(transport.list(shifts.get('scenario')).length,2);
+    const ordinary={...base,id:'ordinary',regionId:'moscow:scenario:ordinary'};
+    shifts.set(ordinary.id,ordinary);
+    db.prepare('INSERT INTO dispatch_sessions VALUES (?,?,?,?)').run('ordinary-session',base.id,ordinary.id,JSON.stringify({baseShiftId:base.id,clock:{minute:360,playing:false}}));
+    const integrated=await scenario.handle('scenario',{shiftId:ordinary.id},url);
+    assert.deepEqual(integrated.waves.map(w=>[w.time,w.status]),[['09:30','PENDING'],['14:25','PENDING']]);
+    assert.equal(integrated.index,-1);
+    const ordinaryRoad=await scenario.handle('scenario/tick',{shiftId:ordinary.id,minute:570},url);
+    assert.equal(ordinaryRoad.event.kind,'road','The regular emergency day must also generate transport events');
+    const late={...base,id:'late',regionId:'moscow:scenario:late'};
+    shifts.set(late.id,late);
+    db.prepare('INSERT INTO dispatch_sessions VALUES (?,?,?,?)').run('late-session',base.id,late.id,JSON.stringify({baseShiftId:base.id,clock:{minute:1080,playing:false}}));
+    const missed=await scenario.handle('scenario',{shiftId:late.id},url);
+    assert.equal(missed.index,1);
+    assert.ok(missed.waves.every(w=>w.status==='MISSED'));
+    assert.equal((await scenario.handle('scenario/tick',{shiftId:late.id,minute:1080},url)).event,undefined,'Do not fabricate expired disruptions after upgrading a legacy day');
+    assert.equal(await scenario.handle('scenario',{shiftId:base.id},url),null,'The published baseline is not a scripted session');
     const legacy={...second.state,index:4,presentationVersion:undefined,waves:[...second.state.waves,
       {time:'15:15',kind:'road',status:'PENDING'},
       {time:'15:45',kind:'entry',status:'PENDING'},
