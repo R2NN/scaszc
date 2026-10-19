@@ -28,7 +28,7 @@ try{
  await shot('network-selected-links');
  const card=page.locator('.network-panel');
  assert.equal(await card.evaluate(e=>getComputedStyle(e).animationName),'network-panel-enter');
- await card.getByRole('button',{name:'Причина',exact:true}).click();
+ assert.equal(await card.getByRole('button',{name:'Причина',exact:true}).count(),0);assert.equal(await card.locator('.network-detail-tabs>button').count(),2);
  await page.getByRole('button',{name:'Уменьшить масштаб',exact:true}).click();await page.waitForTimeout(700);
  assert.equal(await card.locator('h2').innerText(),'DEMO-INC-042');assert.equal(await page.locator('.network-connection-link').count(),2);
  const canvas=await page.locator('.maplibregl-canvas').boundingBox();
@@ -37,7 +37,7 @@ try{
  const sourceBefore=await page.locator('.network-map-marker.source[aria-label^="DEMO-INC-042:"]').boundingBox();
  await page.mouse.click(canvas.x+canvas.width*.57,canvas.y+canvas.height*.2);
  await page.locator('.network-panel.is-closing').waitFor();
- assert.equal(await card.locator('h2').innerText(),'DEMO-INC-042');assert.ok((await card.innerText()).includes('1. Проверить общий источник'));
+ assert.equal(await card.locator('h2').innerText(),'DEMO-INC-042');assert.ok((await card.innerText()).includes('Статус проблемы'));
  assert.equal(await card.evaluate(e=>getComputedStyle(e).animationName),'network-panel-exit');
  await card.waitFor({state:'detached'});assert.equal(await page.locator('.network-connection-link').count(),0);assert.equal(await page.locator('.network-map-marker.request').count(),0);assert.equal(await page.locator('.network-map-marker.affected').count(),6);assert.equal(await page.locator('.service-order-focus').count(),0);
  const sourceAfter=await page.locator('.network-map-marker.source[aria-label^="DEMO-INC-042:"]').boundingBox();assert.ok(Math.hypot(sourceAfter.x-sourceBefore.x,sourceAfter.y-sourceBefore.y)<2,'Deselect must not move the camera');

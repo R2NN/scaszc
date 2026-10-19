@@ -90,3 +90,29 @@
 .network-panel .network-verification>.service-primary{white-space:normal;line-height:1.4}
 
 @media(min-width:1101px){.network-panel .service-fields{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+
+/* The dispatcher manages affected visits; network repair is handled elsewhere. */
+.network-tab-content[hidden]{display:none}
+.network-incident-controls{display:grid;gap:12px;padding:14px;border:1px solid var(--svc-border);border-radius:12px;background:var(--svc-soft)}
+.network-source-summary{display:flex;align-items:center;gap:9px;min-width:0}.network-source-summary>svg{flex:none;color:var(--svc-muted)}
+.network-source-summary>div{display:grid;gap:3px}.network-source-summary small{font-size:11px;color:var(--svc-muted)}.network-source-summary b{font-size:13px}
+.network-recovery{display:grid;gap:8px}.network-recovery>b{font-size:13px}.network-recovery .service-check{font-size:12px}
+.network-panel .network-comment,.network-panel .network-save-details details,.network-panel .network-link-basis{margin:0;padding-top:10px}
+.network-panel .network-comment label,.network-save-details details label{margin-top:10px}
+.network-comment textarea{min-height:64px;resize:vertical}
+.network-save-details{display:grid;gap:10px}.network-save-details .service-primary{justify-content:center}
+.network-panel .network-save-details summary{font-size:11px;color:var(--svc-muted);font-weight:500}
+.network-related-heading{display:grid;gap:4px;margin:18px 0 10px}.network-related-heading h3{font-size:14px;margin:0}.network-related-heading small{font-size:12px;color:var(--svc-muted)}
+.network-panel .network-link-basis{border:0;padding:0}.network-link-basis summary{font-size:12px;font-weight:500;color:var(--svc-muted)}
+.network-panel .network-order{padding:12px 10px;gap:10px}.network-panel .network-order>div{gap:6px}.network-panel .network-order p{font-size:12px;line-height:1.4}
+.network-decision-label{font-size:11px;font-weight:650;color:var(--svc-muted)}.network-decision-label.proceed{color:#27824d}.network-decision-label.wait{color:#976300}
+.network-order-decisions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.network-panel .network-order-decisions>button{width:100%;justify-content:center;padding:7px 5px;font-size:11px;line-height:1.35;background:var(--svc-soft);border-color:var(--svc-border);white-space:normal}
+.network-panel .network-order-decisions>button.active{background:#fff3bc;border-color:#e4bb22;color:#5d4900}
+.network-panel .network-order-actions{grid-template-columns:1fr 1fr;gap:6px;margin-top:2px}
+.network-panel .network-order-actions>button{padding:8px 5px;font-size:11px;white-space:normal;line-height:1.35;min-height:34px}
+.network-panel .service-footnote{display:block;line-height:1.5;font-size:11px;color:var(--svc-muted)}
+.app-shell.dark .network-decision-label.proceed{color:#8adea9}.app-shell.dark .network-decision-label.wait{color:#f4d26d}
+.app-shell.dark .network-order-decisions>button.active{background:#443b18;border-color:#b79b25;color:#ffe88d}
+.app-shell.dark .network-alert.resolved{background:#213b2b;border-color:#426d4e;color:#a1e2b3}
+@media(max-width:760px){.network-panel .network-order-actions{grid-template-columns:1fr}.network-panel .network-order-decisions{grid-template-columns:1fr}.network-incident-controls{padding:11px}}

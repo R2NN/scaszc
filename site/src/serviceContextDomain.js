@@ -1,5 +1,6 @@
 export const INCIDENT_TYPES = { equipment: 'Оборудование', line: 'Линия / кабель', power: 'Питание', degradation: 'Качество связи', maintenance: 'Плановые работы', access: 'Общий доступ' };
-export const INCIDENT_STATUSES = { review: 'Требует проверки', confirmed: 'Подтверждено', resolved: 'Устранено' };
+export const INCIDENT_STATUSES = { review: 'Проверяется', confirmed: 'Подтверждена', resolved: 'Устранена' };
+export const ORDER_DECISIONS = { review: 'Решение не принято', proceed: 'Можно выполнять', wait: 'Ждать восстановления' };
 export const CASE_STATUSES = { unresolved: 'Проблема не устранена', returned: 'Сбой вернулся', no_access: 'Выезд не выполнен', planned: 'Плановый второй этап', resolved: 'Решено' };
 export const emptyServiceContext = () => ({ cases: [], incidents: [], components: [] });
 export const orderLabel = order => String(order?.sourceId || order?.id || '').split(':').at(-1).replace(/^.*?-/, '');
@@ -7,24 +8,8 @@ export function serviceEventAt(day, time) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '') || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time || '') || !Number.isFinite(Date.parse(`${day}T12:00:00Z`)) || new Date(`${day}T12:00:00Z`).toISOString().slice(0, 10) !== day) throw new Error('Укажите время события в выбранной смене.');
   return `${day}T${time}:00+03:00`;
 }
-export function incidentWorkflow(record) {
-  const checks = {
-    equipment: 'Проверьте доступность узла, питание и соединение с вышестоящим оборудованием.',
-    line: 'Проверьте участок линии и устройства на его концах; уточните место повреждения.',
-    power: 'Уточните питание площадки и состояние резервного источника.',
-    degradation: 'Сопоставьте ошибки и качество связи на общем участке с обращениями клиентов.',
-    maintenance: 'Сверьте время и охват плановых работ с заявками на этот период.',
-    access: 'Подтвердите доступ к общей площадке у ответственного за объект.',
-  };
-  return {
-    check: checks[record.type] || checks.equipment,
-    next: record.status === 'resolved' ? 'Связь восстановлена по отметке диспетчера. Проверьте оставшиеся обращения: нужна ли отдельная работа у клиента.'
-      : record.status === 'confirmed' ? 'Общая проблема подтверждена. Организуйте восстановление источника; при необходимости подготовьте перенос времени затронутых заявок.'
-        : 'Причина пока не подтверждена. Сначала сохраните результат проверки; не считайте совпадение адресов доказательством общего сбоя.',
-  };
-}
 export function serviceHistoryRows(record, day) {
-  const names = { signal: 'Сигнал', verification: 'Результат проверки', task: 'Поручение', prepare: 'Подготовка решения', status: 'Статус', note: 'Комментарий' };
+  const names = { signal: 'Сигнал', verification: 'Результат проверки', task: 'Поручение', prepare: 'Пересмотр плана', status: 'Статус', note: 'Комментарий', details: 'Проблема обновлена', order_decision: 'Решение по заявке' };
   return (record.history || []).map((event, index) => {
     const date = new Date(event.at);
     const eventDay = Number.isFinite(date.getTime()) ? date.toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' }) : '';
@@ -72,6 +57,8 @@ export function validateServiceContext(input, orders) {
     if (item.observedAt != null && (typeof item.observedAt !== 'string' || !Number.isFinite(Date.parse(item.observedAt)))) fail('Неверное время сигнала observedAt.');
     item.observedAt ||= item.updatedAt;
     if (!INCIDENT_TYPES[item.type] || !INCIDENT_STATUSES[item.status]) fail('Неизвестный тип или статус события.');
+    if (item.expectedRecoveryAt != null && (typeof item.expectedRecoveryAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/.test(item.expectedRecoveryAt) || !Number.isFinite(Date.parse(item.expectedRecoveryAt)) || !Number.isFinite(Date.parse(`${item.expectedRecoveryAt.slice(0, 10)}T12:00:00Z`)) || new Date(`${item.expectedRecoveryAt.slice(0, 10)}T12:00:00Z`).toISOString().slice(0, 10) !== item.expectedRecoveryAt.slice(0, 10) || Date.parse(item.expectedRecoveryAt) < Date.parse(item.observedAt))) fail('Укажите время восстановления с часовым поясом, не раньше исходного сигнала, либо null.');
+    if (item.orderDecisions != null && (typeof item.orderDecisions !== 'object' || Array.isArray(item.orderDecisions) || Object.entries(item.orderDecisions).some(([id, decision]) => !item.orderIds.includes(id) || !Object.hasOwn(ORDER_DECISIONS, decision)))) fail('Решения должны относиться к связанным заявкам и иметь известный статус.');
     if (!componentIds.has(item.componentId)) fail('Для события нужен компонент из реестра.');
   }
   for (const item of result.cases) {

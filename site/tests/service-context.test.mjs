@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { ShiftStore } from '../server/shiftStore.mjs';
 import { demoServiceContext, createServiceContextApi } from '../server/serviceContextApi.mjs';
 import { loadComplexityArtifact } from '../server/complexityArtifact.mjs';
-import { caseForOrder, incidentWorkflow, relatedOrders, serviceEventAt, serviceHistoryRows, serviceStats } from '../src/serviceContextDomain.js';
+import { caseForOrder, relatedOrders, serviceEventAt, serviceHistoryRows, serviceStats } from '../src/serviceContextDomain.js';
 
 test('network action times belong to the shift; journal retains separate audit time', async () => {
   const { store, request } = fixture();
@@ -37,16 +37,13 @@ test('network action times belong to the shift; journal retains separate audit t
   } finally { store.close(); }
 });
 
-test('shift event time validation, workflow guidance and legacy journal dates stay honest', () => {
+test('shift event time validation and legacy journal dates stay honest', () => {
   for (const [day, time] of [['2026-02-30','12:00'], ['2026-08-17','24:00'], ['2026-08-17','']]) assert.throws(() => serviceEventAt(day, time));
   const record = { type: 'power', status: 'review', history: [{ at: '2026-08-17T11:17:00+03:00', text: 'Сигнал' }, { at: '2026-10-19T12:00:00Z', text: 'Старая запись' }] };
   const rows = serviceHistoryRows(record, '2026-08-17');
   assert.equal(rows[0].displayAt, null);
   assert.equal(rows[0].recordedAt, record.history[1].at);
   assert.equal(rows[1].displayAt, record.history[0].at);
-  assert.match(incidentWorkflow(record).check, /питание/);
-  assert.match(incidentWorkflow(record).next, /не подтверждена/);
-  assert.match(incidentWorkflow({ ...record, status: 'resolved' }).next, /оставшиеся обращения/);
 });
 
 function fixture(file = ':memory:') {
@@ -61,6 +58,59 @@ function fixture(file = ':memory:') {
   };
   return { store, request };
 }
+
+test('simple incident status, recovery and per-order decisions persist with automatic audit and no plan edits', async () => {
+  const { store, request } = fixture();
+  try {
+    const operational = store.get('test-a');
+    const original = (await request('POST', { action: 'demo', revision: 0 })).data.incidents[0];
+    const update = { kind: 'incident', id: original.id, action: 'details', revision: 1, status: 'confirmed', expectedRecoveryAt: '2026-08-18T14:30:00+03:00' };
+    const saved = await request('PATCH', update);
+    assert.equal(saved.status, 200);
+    assert.equal(saved.data.incidents[0].expectedRecoveryAt, update.expectedRecoveryAt);
+    assert.equal(saved.data.incidents[0].observedAt, original.observedAt);
+    const event = saved.data.incidents[0].history.at(-1);
+    assert.equal(event.kind, 'details');
+    assert.equal(event.at, event.recordedAt);
+    assert.equal(event.eventTimeKnown, false);
+    assert.match(event.text, /18.08.2026, 14:30/);
+    assert.equal((await request('PATCH', { ...update, revision: 2 })).data.revision, 2);
+    const decision = { kind: 'incident', id: original.id, action: 'order_decision', revision: 2, orderId: original.orderIds[0], decision: 'wait' };
+    const waiting = await request('PATCH', decision);
+    assert.equal(waiting.status, 200);
+    assert.equal(waiting.data.incidents[0].orderDecisions[original.orderIds[0]], 'wait');
+    assert.equal(waiting.data.incidents[0].orderDecisions[original.orderIds[1]], undefined);
+    assert.match(waiting.data.incidents[0].history.at(-1).text, /Ждать восстановления/);
+    assert.equal((await request('PATCH', { ...decision, revision: 3 })).data.revision, 3);
+    const restored = await request('PATCH', { ...update, revision: 3, status: 'resolved', note: 'Связь восстановлена' });
+    assert.equal(restored.status, 200);
+    assert.equal(restored.data.incidents[0].expectedRecoveryAt, null);
+    assert.equal(restored.data.incidents[0].orderDecisions[original.orderIds[0]], 'wait');
+    assert.match(restored.data.incidents[0].history.at(-1).text, /Связь восстановлена/);
+    assert.deepEqual((await request()).data.incidents, restored.data.incidents);
+    assert.deepEqual(store.get('test-a'), operational);
+  } finally { store.close(); }
+});
+
+test('invalid recovery and foreign request decisions reject atomically; explicit event time remains optional', async () => {
+  const { store, request } = fixture();
+  try {
+    const demo = (await request('POST', { action: 'demo', revision: 0 })).data;
+    const update = { kind: 'incident', id: demo.incidents[0].id, action: 'details', revision: 1, status: 'confirmed', expectedRecoveryAt: null };
+    for (const invalid of ['tomorrow', '2026-08-17T14:00', '2026-08-16T14:00:00+03:00', '2027-02-30T14:00:00+03:00', 123]) {
+      assert.equal((await request('PATCH', { ...update, expectedRecoveryAt: invalid })).status, 422);
+      assert.equal((await request()).data.revision, 1);
+    }
+    assert.equal((await request('PATCH', { ...update, status: 'invalid' })).status, 422);
+    for (const extra of [{ orderId: 'test-b:EAST-1', decision: 'wait' }, { orderId: demo.incidents[0].orderIds[0], decision: 'cancel' }]) assert.equal((await request('PATCH', { ...update, action: 'order_decision', ...extra })).status, 422);
+    const saved = await request('PATCH', { ...update, effectiveAt: serviceEventAt('2026-08-17', '12:00') });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.data.incidents[0].history.at(-1).eventTimeKnown, true);
+    const invalidImport = { cases: [], components: demo.components, incidents: saved.data.incidents.map(item => ({ ...item, orderDecisions: { 'test-b:EAST-1': 'wait' } })) };
+    assert.equal((await request('PUT', { revision: 2, shiftId: 'test-a', date: '2026-08-17', data: invalidImport })).status, 422);
+    assert.equal((await request()).data.revision, 2);
+  } finally { store.close(); }
+});
 test('empty contexts and explicit demo never modify operational orders, facts, plans or history', async () => {
   const { store, request } = fixture();
   try {
