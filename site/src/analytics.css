@@ -908,3 +908,7 @@
 .app-shell.dark .resource-recent-change button{border-color:#776827;background:#272a2c;color:#f5e6a4}
 
 .analytics-engineer-avatar{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;flex:0 0 32px;width:32px;height:32px;border-radius:50%;background:#ffdf58;color:#715900;font-size:11px;font-style:normal;font-weight:800}.analytics-engineer-avatar img{position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;object-fit:cover}.analytics-engineer-avatar img+span{display:none}.app-shell.dark .analytics-engineer-avatar{background:#5a4a10;color:#ffe878}
+.app-shell .analytics-page>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.app-shell .analytics-page .page-header-actions{flex:none;margin-left:auto}
+.app-shell .analytics-page .page-close,.app-shell .analytics-page .page-close:hover,.app-shell .analytics-page .page-close:focus-visible{background:transparent;border:0;box-shadow:none}
+.app-shell .analytics-page .page-close:focus-visible{outline:2px solid #d5aa00;outline-offset:3px}

@@ -3,6 +3,35 @@ export const INCIDENT_STATUSES = { review: 'Требует проверки', co
 export const CASE_STATUSES = { unresolved: 'Проблема не устранена', returned: 'Сбой вернулся', no_access: 'Выезд не выполнен', planned: 'Плановый второй этап', resolved: 'Решено' };
 export const emptyServiceContext = () => ({ cases: [], incidents: [], components: [] });
 export const orderLabel = order => String(order?.sourceId || order?.id || '').split(':').at(-1).replace(/^.*?-/, '');
+export function serviceEventAt(day, time) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '') || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time || '') || !Number.isFinite(Date.parse(`${day}T12:00:00Z`)) || new Date(`${day}T12:00:00Z`).toISOString().slice(0, 10) !== day) throw new Error('Укажите время события в выбранной смене.');
+  return `${day}T${time}:00+03:00`;
+}
+export function incidentWorkflow(record) {
+  const checks = {
+    equipment: 'Проверьте доступность узла, питание и соединение с вышестоящим оборудованием.',
+    line: 'Проверьте участок линии и устройства на его концах; уточните место повреждения.',
+    power: 'Уточните питание площадки и состояние резервного источника.',
+    degradation: 'Сопоставьте ошибки и качество связи на общем участке с обращениями клиентов.',
+    maintenance: 'Сверьте время и охват плановых работ с заявками на этот период.',
+    access: 'Подтвердите доступ к общей площадке у ответственного за объект.',
+  };
+  return {
+    check: checks[record.type] || checks.equipment,
+    next: record.status === 'resolved' ? 'Связь восстановлена по отметке диспетчера. Проверьте оставшиеся обращения: нужна ли отдельная работа у клиента.'
+      : record.status === 'confirmed' ? 'Общая проблема подтверждена. Организуйте восстановление источника; при необходимости подготовьте перенос времени затронутых заявок.'
+        : 'Причина пока не подтверждена. Сначала сохраните результат проверки; не считайте совпадение адресов доказательством общего сбоя.',
+  };
+}
+export function serviceHistoryRows(record, day) {
+  const names = { signal: 'Сигнал', verification: 'Результат проверки', task: 'Поручение', prepare: 'Подготовка решения', status: 'Статус', note: 'Комментарий' };
+  return (record.history || []).map((event, index) => {
+    const date = new Date(event.at);
+    const eventDay = Number.isFinite(date.getTime()) ? date.toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' }) : '';
+    const knownTime = event.eventTimeKnown !== false && eventDay === day;
+    return { ...event, index, label: names[event.kind] || (index === 0 ? 'Исходная запись' : 'Запись диспетчера'), displayAt: knownTime ? event.at : null, recordedAt: event.recordedAt || event.at };
+  }).reverse();
+}
 export function relatedOrders(record, orders) {
   const byId = new Map(orders.map(order => [String(order.id), order]));
   return (record?.orderIds || []).map(id => byId.get(id)).filter(Boolean);

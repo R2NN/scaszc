@@ -990,7 +990,7 @@ export function ShiftWorkspace({
           </span>
           {standaloneReplanning ? <p>Измените состав или заявки, рассчитайте черновик и сравните маршруты перед публикацией.</p> : null}
           {assistantOnly ? <button type="button" className="assistant-close" onClick={onClose} aria-label="Закрыть AI‑помощника"><X size={20}/></button> : null}
-          {!assistantOnly && !reportOnly && onClose ? <button type="button" className="shift-workspace-close" onClick={onClose} aria-label={standaloneReplanning ? 'Закрыть перепланирование' : 'Закрыть ход смены'} data-tooltip="Закрыть"><X size={20}/></button> : null}
+          {!assistantOnly && onClose ? <button type="button" className="shift-workspace-close" onClick={onClose} aria-label={reportOnly ? 'Закрыть отчёт PDF' : standaloneReplanning ? 'Закрыть перепланирование' : 'Закрыть ход смены'} data-tooltip="Закрыть"><X size={20}/></button> : null}
         </header>
         {!reportOnly ? <nav ref={shiftTabsRef} className={`shift-tabs${standaloneReplanning ? ' replanning-tabs' : ''}`} aria-label={standaloneReplanning ? 'Разделы перепланирования' : 'Разделы смены'}>
           {tabIndicator ? <span className="shift-tab-indicator" aria-hidden="true" style={{ width: tabIndicator.width, height: tabIndicator.height, transform: `translate3d(${tabIndicator.x}px, ${tabIndicator.y}px, 0)` }} /> : null}

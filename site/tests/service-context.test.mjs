@@ -6,7 +6,48 @@ import { join } from 'node:path';
 import { ShiftStore } from '../server/shiftStore.mjs';
 import { demoServiceContext, createServiceContextApi } from '../server/serviceContextApi.mjs';
 import { loadComplexityArtifact } from '../server/complexityArtifact.mjs';
-import { caseForOrder, relatedOrders, serviceStats } from '../src/serviceContextDomain.js';
+import { caseForOrder, incidentWorkflow, relatedOrders, serviceEventAt, serviceHistoryRows, serviceStats } from '../src/serviceContextDomain.js';
+
+test('network action times belong to the shift; journal retains separate audit time', async () => {
+  const { store, request } = fixture();
+  try {
+    const original = (await request('POST', { action: 'demo', revision: 0 })).data;
+    const incident = original.incidents[0];
+    const action = { revision: 1, action: 'verification', kind: 'incident', id: incident.id, status: 'confirmed', note: 'Проверено питание и доступность узла', effectiveAt: serviceEventAt('2026-08-17', '11:40') };
+    assert.equal((await request('PATCH', { ...action, effectiveAt: '2026-10-19T11:40:00+03:00' })).status, 422);
+    assert.equal((await request('GET')).data.revision, 1);
+    const saved = await request('PATCH', action);
+    assert.equal(saved.status, 200);
+    const record = saved.data.incidents[0], event = record.history.at(-1);
+    assert.equal(record.status, 'confirmed');
+    assert.equal(record.observedAt, incident.observedAt);
+    assert.equal(event.at, action.effectiveAt);
+    assert.equal(event.recordedAt, record.updatedAt);
+    assert.equal(event.eventTimeKnown, true);
+    assert.equal(serviceHistoryRows(record, '2026-08-17')[0].displayAt, action.effectiveAt);
+    assert.equal((await request('PATCH', { ...action, revision: 2 })).data.revision, 2);
+    const prepared = await request('PATCH', { revision: 2, action: 'prepare', kind: 'incident', id: incident.id, orderId: incident.orderIds[0] });
+    assert.equal(prepared.status, 200);
+    assert.match(prepared.data.incidents[0].history.at(-1).text, /ещё не опубликованы/);
+    assert.equal(serviceHistoryRows(prepared.data.incidents[0], '2026-08-17')[0].displayAt, null);
+    assert.equal((await request('PATCH', { revision: 3, action: 'prepare', kind: 'incident', id: incident.id, orderId: incident.orderIds[0] })).data.revision, 3);
+    assert.equal((await request('PATCH', { revision: 3, action: 'prepare', kind: 'incident', id: incident.id, orderId: 'other-shift:order' })).status, 422);
+    assert.equal((await request('GET')).data.incidents[0].history.length, incident.history.length + 2);
+    assert.equal(store.get('test-a').events.length, 0);
+  } finally { store.close(); }
+});
+
+test('shift event time validation, workflow guidance and legacy journal dates stay honest', () => {
+  for (const [day, time] of [['2026-02-30','12:00'], ['2026-08-17','24:00'], ['2026-08-17','']]) assert.throws(() => serviceEventAt(day, time));
+  const record = { type: 'power', status: 'review', history: [{ at: '2026-08-17T11:17:00+03:00', text: 'Сигнал' }, { at: '2026-10-19T12:00:00Z', text: 'Старая запись' }] };
+  const rows = serviceHistoryRows(record, '2026-08-17');
+  assert.equal(rows[0].displayAt, null);
+  assert.equal(rows[0].recordedAt, record.history[1].at);
+  assert.equal(rows[1].displayAt, record.history[0].at);
+  assert.match(incidentWorkflow(record).check, /питание/);
+  assert.match(incidentWorkflow(record).next, /не подтверждена/);
+  assert.match(incidentWorkflow({ ...record, status: 'resolved' }).next, /оставшиеся обращения/);
+});
 
 function fixture(file = ':memory:') {
   const store = new ShiftStore(file);

@@ -157,11 +157,11 @@
 .app-shell.dark .shift-layer.operational-shift .dispatch-scenario>small{color:#f1d56d}
 
 .shift-panel>header:has(.shift-workspace-close){position:relative;padding-right:64px!important}
-.shift-panel>header>.shift-workspace-close{position:absolute;right:18px;top:18px;display:grid;place-items:center;width:34px;height:34px;padding:6px;border:1px solid transparent;border-radius:9px;background:#f4f5f7;color:#626e7b;cursor:pointer;transition:background .16s ease,color .16s ease}
-.shift-panel>header>.shift-workspace-close:hover{background:#fff0b4;color:#4b3c13}
+.shift-panel>header>.shift-workspace-close{position:absolute;right:18px;top:18px;display:grid;place-items:center;width:34px;height:34px;padding:6px;border:0;border-radius:0;background:transparent;color:#626e7b;box-shadow:none;cursor:pointer;transition:color .16s ease}
+.shift-panel>header>.shift-workspace-close:hover{background:transparent;color:#252d36}
 .shift-panel>header>.shift-workspace-close:focus-visible{outline:2px solid #d5aa00;outline-offset:3px}
-.app-shell.dark .shift-panel>header>.shift-workspace-close{background:#30363e;color:#cbd3dc}
-.app-shell.dark .shift-panel>header>.shift-workspace-close:hover{background:#494126;color:#ffe58f}
+.app-shell.dark .shift-panel>header>.shift-workspace-close{background:transparent;color:#cbd3dc}
+.app-shell.dark .shift-panel>header>.shift-workspace-close:hover{background:transparent;color:#fff}
 @media(prefers-reduced-motion:reduce){.shift-panel>header>.shift-workspace-close{transition:none}}
 
 @media(max-width:760px){

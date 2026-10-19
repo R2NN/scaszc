@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { emptyServiceContext, validateServiceContext } from '../src/serviceContextDomain.js';
+import { INCIDENT_STATUSES, emptyServiceContext, validateServiceContext } from '../src/serviceContextDomain.js';
 import { loadComplexityArtifact } from './complexityArtifact.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -110,12 +110,29 @@ export function createServiceContextApi(store, { seedDemo = false } = {}) {
           const list = input.kind === 'case' ? next.cases : input.kind === 'incident' ? next.incidents : null;
           const record = list?.find(item => item.id === input.id);
           if (!record) throw new Error('Запись не найдена.');
-          if (!['task', 'status', 'note'].includes(input.action)) throw new Error('Неизвестное действие.');
+          if (!['task', 'status', 'note', 'verification', 'prepare'].includes(input.action)) throw new Error('Неизвестное действие.');
+          if (['verification', 'prepare'].includes(input.action) && input.kind !== 'incident') throw new Error('Это действие относится к сетевому событию.');
+          if (input.effectiveAt != null && (typeof input.effectiveAt !== 'string' || !Number.isFinite(Date.parse(input.effectiveAt)) || new Date(input.effectiveAt).toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' }) !== shift.date)) throw new Error('Время события должно относиться к выбранному дню смены.');
+          const now = new Date().toISOString(), last = record.history?.at(-1);
+          if (input.action === 'prepare') {
+            if (!record.orderIds.includes(String(input.orderId))) throw new Error('Заявка не связана с этим сетевым событием.');
+            if (last?.kind === 'prepare' && last.orderId === String(input.orderId)) return { shiftId: shift.id, date: shift.date, ...current, priorCases: priorCases(current) };
+          }
+          if (input.action === 'verification') {
+            if (!INCIDENT_STATUSES[input.status] || typeof input.note !== 'string' || !input.note.trim() || input.note.length > 2000 || !input.effectiveAt) throw new Error('Для результата проверки нужны статус, описание и время в смене.');
+            if (last?.kind === 'verification' && record.status === input.status && last.text === input.note.trim() && last.at === input.effectiveAt) return { shiftId: shift.id, date: shift.date, ...current, priorCases: priorCases(current) };
+            record.status = input.status;
+          }
           if (input.action === 'task') record.task = input.task;
           if (input.action === 'status') record.status = input.status;
           if (input.action === 'note' && (typeof input.note !== 'string' || !input.note.trim() || input.note.length > 2000)) throw new Error('Введите комментарий (до 2000 символов).');
-          record.updatedAt = new Date().toISOString();
-          record.history = [...(record.history || []), { at: record.updatedAt, actor, text: input.action === 'note' ? input.note.trim() : input.action === 'task' ? 'Обновлена подготовка выезда.' : `Статус изменён: ${input.status}` }];
+          record.updatedAt = now;
+          const order = input.action === 'prepare' && shift.orders.find(item => String(item.id) === String(input.orderId));
+          const text = ['note', 'verification'].includes(input.action) ? input.note.trim()
+            : input.action === 'prepare' ? `Открыта подготовка переноса окна заявки ${order?.sourceId || input.orderId}. Изменения плана ещё не опубликованы.`
+              : input.action === 'task' ? `Поручение: ${input.task.action}. Ответственный: ${input.task.owner}${input.task.deadline ? `. Срок: ${input.task.deadline.replace('T', ' ')}` : ''}.`
+                : `Статус изменён: ${input.status}`;
+          record.history = [...(record.history || []), { at: input.effectiveAt || now, recordedAt: now, eventTimeKnown: Boolean(input.effectiveAt), kind: input.action, actor, text, ...(input.action === 'prepare' ? { orderId: String(input.orderId) } : {}), ...(input.action === 'verification' ? { status: input.status } : {}) }];
         } else throw new Error('Неизвестное действие.');
         next = validateServiceContext(next, shift.orders);
         for (const record of next.cases) {
