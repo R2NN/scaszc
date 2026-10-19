@@ -275,6 +275,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
           <span className='dispatch-decision-timer' aria-live='off'><Clock3 size={15}/>{item.policy?.enabled ? seconds ? `Автовыбор через ${countdown}` : 'Автовыбор: ожидаем готовое решение' : 'Ручное решение'}</span>
         </div> : null}
       </div> : null}
+      {!pending && !accepted && item.candidates.length > 0 ? <p className='dispatch-preview-label'>Положение проверено на {item.candidates[0].scenarioTime}. Перед направлением уточним путь выбранного инженера по текущему времени.</p> : null}
       {!pending && item.candidates.length > 0 ? <details className='dispatch-alternatives' open={accepted ? undefined : true} key={accepted ? 'accepted' : 'choosing'}><summary>{accepted ? 'Сравнить сохранённые варианты' : 'Варианты направления'}</summary>{!candidate ? <p className='dispatch-choice-hint'>Выберите карточку инженера для сравнения маршрута и заявок.</p> : null}<div className='dispatch-options' role='group' aria-label='Проверенные варианты'>{item.candidates.map(option => {
         const effect = impacts.get(option.id);
         return <button type='button' key={option.id} aria-pressed={option.id === candidate?.id} className={`dispatch-option ${option.id === candidate?.id ? 'selected' : ''}`} onClick={() => controller.preview(option)}>

@@ -85,6 +85,30 @@ def test_expired_repair_deadline_retains_cached_incumbent_without_starting_more_
     assert result.exact_route_checks == 0
 
 
+def test_dispatch_short_first_pass_keeps_the_broader_exact_fallback(tmp_path, monkeypatch):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
+    import replan_ui_event as adapter
+    _, data, old, event, options, _ = chain_scenario()
+    budgets = []
+    real_replan = adapter.replan_after_event
+    def bounded_replan(*args, **kwargs):
+        budgets.append(kwargs['max_route_checks'])
+        result = real_replan(*args, **kwargs)
+        # Model a handoff too difficult for the short pass. No candidate may
+        # be published until the broader search returns an actual valid plan.
+        return replace(result, state=None, exact_route_checks=24) if len(budgets) == 1 else result
+    monkeypatch.setattr(adapter, 'replan_after_event', bounded_replan)
+    args = SimpleNamespace(output=tmp_path / 'offers.json', transit_index=Path('model-index.sqlite'),
+                           rebuild_route_checks=5000, max_route_checks=400)
+    adapter.dispatch_variants(args, {'event': {}, 'orders': [], 'team': [], 'dispatchCoverageRepair': False},
+        options['source_dataset'], data, ReplanningState(old), event,
+        {'content_sha256': '0' * 64}, [], fixtures._Oracle())
+    assert budgets == [24, 400]
+    final = json.loads(args.output.read_text())
+    assert final['dispatch_candidates'][0]['validation']['status'] == 'VALID'
+    assert final['dispatch_search']['complete']
+
+
 @pytest.mark.parametrize('worsen', [None, 'response', 'another_assignment', 'confirmation'])
 def test_dispatch_publishes_first_offer_before_repair_then_replaces_only_with_strict_improvement(tmp_path, monkeypatch, worsen):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))

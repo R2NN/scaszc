@@ -169,13 +169,19 @@ export class EmergencyDispatch {
       if (item.mode === 'live') throw new Error('Для точного live-выезда нужны свежие координаты и история движения. Источник телеметрии не подключён; расчётная позиция не выдаётся за фактическую.');
       const orders = this.prepareSearch(shift, item, time), prepared = orders.at(-1);
       const searchShift = { ...shift, orders: orders.slice(0,-1) }, searchItem = { ...item, order: prepared };
+      const committedEngineer = item.confirmation?.state === 'CHECKING'
+        ? shift.team.find(engineer => String(engineer.id) === String(item.confirmation.engineer.id)) : null;
       const event = { type: 'NEW_ORDER', time, orderId: prepared.id, order: prepared, reason: 'Аварийный выезд', incidentId: item.id };
-      const result = await this.routing({ orders, team: shift.team, plan: shift.plan, planningDate: shift.date, basePlanContentSha256: shift.plan.contentSha256, event, dispatch: true, transportRestrictions:shift.transportRestrictions || [], dispatchCoverageRepair:item.confirmation?.state !== 'CHECKING', facts: shift.facts }, undefined, {signal:controller.signal,onProgress:progress => {
+      const result = await this.routing({ orders, team: shift.team, plan: shift.plan, planningDate: shift.date, basePlanContentSha256: shift.plan.contentSha256, event, dispatch: true,
+        ...(committedEngineer ? {dispatchEngineerId:String(committedEngineer.sourceId || committedEngineer.id).split(':').at(-1)} : {}),
+        transportRestrictions:shift.transportRestrictions || [], dispatchCoverageRepair:item.confirmation?.state !== 'CHECKING', facts: shift.facts }, undefined, {signal:controller.signal,onProgress:progress => {
         const fresh=this.get(id);
         if (!fresh || terminal(fresh) || controller.signal.aborted) return;
         const {dispatchCandidates:partial,...summary}=progress;
         fresh.progress={...summary, engineerName:shift.team.find(e => String(e.sourceId || e.id).split(':').at(-1) === summary.engineerId)?.name};
-        if (partial?.length && this.fingerprint(this.store.get(item.shiftId))===fingerprint && this.currentMinute(item)===minute) {
+        // Scenario movement makes an offer require fresh confirmation; it must
+        // not conceal an independently checked result while other crews search.
+        if (partial?.length && this.fingerprint(this.store.get(item.shiftId))===fingerprint) {
           const described = partial.map(candidate=>this.describe(searchShift,searchItem,candidate,states,fingerprint,time));
           fresh.recommendedId=described[0].id;
           fresh.candidates=orderCandidates(described);
@@ -188,7 +194,7 @@ export class EmergencyDispatch {
       const fresh = this.get(id);
       if (terminal(fresh)) return fresh;
       if (controller.signal.aborted) return fresh;
-      if (this.fingerprint(this.store.get(item.shiftId)) !== fingerprint || this.currentMinute(item) !== minute) {
+      if (this.fingerprint(this.store.get(item.shiftId)) !== fingerprint) {
         return this.requeue(fresh);
       }
       // Preserve reads and notices recorded while the search was running.

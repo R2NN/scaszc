@@ -34,8 +34,10 @@ test('an improved offer retains the original receipt and can be accepted through
     const originalRouting = f.dispatch.routing;
     let originalId;
     const repairModes = [];
+    const committedEngineers = [];
     f.dispatch.routing = async (payload, root, options) => {
       repairModes.push(payload.dispatchCoverageRepair);
+      committedEngineers.push(payload.dispatchEngineerId);
       const first = await originalRouting(payload);
       options.onProgress({ stage: 'COVERAGE_REPAIR', dispatchCandidates: first.dispatchCandidates });
       originalId = f.dispatch.all(f.shift.id)[0].candidates[0].id;
@@ -52,6 +54,7 @@ test('an improved offer retains the original receipt and can be accepted through
     assert.equal(accepted.status, 'ACCEPTED', accepted.error);
     assert.equal(accepted.candidates.find(c => c.id === accepted.decision.candidateId).engineer.id, 'E1');
     assert.deepEqual(repairModes, [true, false], 'Explicit confirmation does not wait for an optional repair phase');
+    assert.deepEqual(committedEngineers, [undefined, 'E1'], 'Fresh confirmation only searches the chosen engineer');
   } finally { f.store.close(); }
 });
 
@@ -402,6 +405,28 @@ test('rejecting a stale partial result interrupts the old search and leaves it q
     assert.equal(f.dispatch.get(item.id).status,'QUEUED');
     assert.equal(f.dispatch.busy,false);
     assert.equal(f.store.get(f.shift.id).revision,1);
+  } finally { f.store.close(); }
+});
+
+test('clock progression never hides a checked offer; publication still requires current validation', async () => {
+  const f = fixture();
+  try {
+    const routing = f.dispatch.routing;
+    f.dispatch.routing = async (payload, root, {onProgress}) => {
+      const result = await routing(payload);
+      setScenarioMinute(f, 601);
+      onProgress({completed:1,total:2,dispatchCandidates:result.dispatchCandidates});
+      const partial = f.dispatch.get(f.dispatch.all(f.shift.id)[0].id);
+      assert.equal(partial.status, 'WAITING');
+      assert.equal(partial.candidates[0].scenarioTime, '10:00');
+      assert.equal(f.store.get(f.shift.id).revision, 1);
+      return result;
+    };
+    const ready = await f.dispatch.search(f.create().id);
+    assert.equal(ready.status, 'WAITING');
+    assert.equal(ready.candidates.length, 1);
+    assert.equal(f.dispatch.accept(ready.id, ready.candidates[0].id).status, 'QUEUED');
+    assert.equal(f.store.get(f.shift.id).revision, 1);
   } finally { f.store.close(); }
 });
 

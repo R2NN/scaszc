@@ -397,6 +397,10 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
     from beeline_planning.eligibility import build_candidate_index
     index = build_candidate_index(dataset, event.event_time, applied_event_ids=frozenset((*state.applied_event_ids, event.event_id)))
     eligible = index.eligible_engineers_by_job.get(event.target_id, ())
+    if payload.get('dispatchEngineerId'):
+        eligible = tuple(key for key in eligible if key == payload['dispatchEngineerId'])
+        if not eligible:
+            raise ValueError('Выбранный инженер не соответствует требованиям аварии')
     checked, artifacts, rejected, repair_reports = 0, [], [], []
     attempted = set()
     current = {}
@@ -437,7 +441,7 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
             output['dispatch_candidates'] = artifacts
             output['dispatch_search'] = {'eligible': list(eligible), 'rejected': rejected, 'route_checks': checked, 'route_check_budget': args.rebuild_route_checks, 'coverage_repair': repair_reports, 'global_optimality_proven': False, 'complete': complete}
             write_json_atomic(args.output, output)
-        write_json_atomic(args.output.with_suffix('.progress.json'), {'phase':'DISPATCH', 'completed':len(attempted), 'total':len(eligible), 'candidates':len(artifacts), 'routeChecks':checked, 'candidateArtifacts':[a['content_sha256'] for a in artifacts], **current})
+        write_json_atomic(args.output.with_suffix('.progress.json'), {'phase':'DISPATCH', 'completed':len(attempted), 'total':len(eligible), 'candidates':len(artifacts), 'routeChecks':checked + current.get('attemptRouteChecks', 0), 'candidateArtifacts':[a['content_sha256'] for a in artifacts], **current})
     constraints = _dispatch_constraints(dataset, state.plan, event.event_time, payload)
     blocked = constraints['locked_engineer_ids']
     from beeline_planning.dispatch import rank_interceptions
@@ -448,11 +452,17 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
     intercepts = rank_interceptions(dataset, state.plan, event, available,
         payload['event'].get('dispatchAnchors', {}), oracle, checking_road)
     # A local handoff is tried before ordinary insertions and regional rebuilding.
-    attempts = [(key, False, True) for key in intercepts]
-    attempts += [(key, True, True) for key in intercepts]
-    attempts += [(key, False, False) for key in eligible]
-    attempts += [(key, True, False) for key in eligible if key not in intercepts]
-    for engineer_id, rebuild, handoff in attempts:
+    # Give each engineer a short exact first pass before a difficult handoff
+    # consumes hundreds of route trials. Exhaustion still falls back to the
+    # original broader search and never establishes infeasibility.
+    quick_checks = min(24, args.max_route_checks)
+    attempts = [(key, False, True, quick_checks) for key in intercepts]
+    attempts += [(key, False, False, quick_checks) for key in eligible]
+    attempts += [(key, False, True, args.max_route_checks) for key in intercepts]
+    attempts += [(key, True, True, 1000) for key in intercepts]
+    attempts += [(key, False, False, args.max_route_checks) for key in eligible]
+    attempts += [(key, True, False, 1000) for key in eligible if key not in intercepts]
+    for engineer_id, rebuild, handoff, trial_budget in attempts:
         if any(item['dispatch_engineer_id'] == engineer_id for item in artifacts):
             continue
         current.update(engineerId=engineer_id, stage='INTERCEPT_HANDOFF' if handoff else 'FULL_DAY_CHECK')
@@ -472,11 +482,16 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
             rejected.append({'engineerId': engineer_id, 'reason': 'Общий бюджет поиска исчерпан; невозможность не доказана'})
             continue
         try:
+            def checking_progress(count):
+                current.update(attemptRouteChecks=count)
+                save_progress()
             result = replan_after_event(dataset, state, event, oracle,
-                max_route_checks=min(1000 if rebuild else args.max_route_checks, remaining), departure_timing_queries=0,
+                max_route_checks=min(trial_budget, remaining), departure_timing_queries=0,
                 forced_engineer_by_job={event.target_id: engineer_id}, source_dataset=canonical,
                 dispatch_engineer_id=engineer_id, rebuild_future=rebuild,
-                handoff_interrupted_job=handoff, transport_anchors=payload.get('transportAnchors'), **constraints)
+                handoff_interrupted_job=handoff, progress_callback=checking_progress,
+                transport_anchors=payload.get('transportAnchors'), **constraints)
+            current.pop('attemptRouteChecks', None)
             checked += result.exact_route_checks
             if result.state is None or event.target_id in result.state.plan.unserved_job_ids:
                 rejected.append({'engineerId': engineer_id, 'reason': result.detail or result.unserved_reasons.get(event.target_id, 'Допустимая вставка не найдена в пределах поиска')})
@@ -487,6 +502,7 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
         except Exception as error:
             rejected.append({'engineerId': engineer_id, 'reason': str(error)})
         finally:
+            current.pop('attemptRouteChecks', None)
             attempted.add(engineer_id)
     # Publish all first responses before spending the remaining shared budget
     # on restoring coverage. An unsuccessful improvement never removes an offer.

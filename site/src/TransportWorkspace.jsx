@@ -123,7 +123,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
       setPreview(value);previewRef.current=value;
     }catch(e){if(own===generation.current)setError(e.message);}
   };
-  refs.current={calculate,shift};
+  refs.current={calculate,shift,active};
   const draftSignature=JSON.stringify(draft);
   useEffect(()=>{
     if(!draft?.title.trim()||!draft.segments.length)return;
@@ -142,8 +142,8 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   },[preview?.id,preview?.status]);
   useEffect(()=>()=>{generation.current++;transportMap.set({enabled:false,onRoad:null,onSegment:null,onSelect:null,onGroup:null});},[]);
   useEffect(()=>{
-    transportMap.set({enabled:active,catalog,events,draft,editingId:draft?.expectedRevision?draft.id:null,preview,date,minute,showEnded,engineerId,
-      drawing,kind:draft?.kind,onRoad:selectRoad,onSegment:selectSegment,onStation:selectStation,onSelect:selectEvent,onGroup:openGroup,onNew:()=>begin(),
+    transportMap.set({enabled:live||active,management:active,catalog,events,draft:active?draft:null,editingId:active&&draft?.expectedRevision?draft.id:null,preview:active?preview:null,date,minute,showEnded:active&&showEnded,engineerId,
+      drawing:active&&drawing,kind:draft?.kind,onRoad:selectRoad,onSegment:selectSegment,onStation:selectStation,onSelect:event=>{onScenarioEvent?.();selectEvent(event);},onGroup:items=>{onScenarioEvent?.();openGroup(items);},onOpen:onScenarioEvent,onNew:()=>begin(),
       onUndo:()=>change({segments:draft?.segments.slice(0,-1)||[]}),onKind:kind=>{if(!draft)begin(kind);else{change({kind,segments:[]});setDrawing(true);}}});
   },[active,catalog,events,draft,preview,date,minute,drawing,showEnded,engineerId,stationFrom]);
   const save=async()=>{
@@ -185,8 +185,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     const receive=event=>{
       const result=event.detail;if(result?.shift?.id!==shift?.id)return;
       generation.current++;setScenario(result.state);load().catch(error=>setError(error.message));
-      if(result.preview){setPreview(result.preview);previewRef.current=result.preview;setEngineerId('');setOrderId('');setSelected(result.event);transportMap.focus(result.event.segments);}
-      onScenarioEvent?.();
+      if(result.preview){setPreview(result.preview);previewRef.current=result.preview;setEngineerId('');setOrderId('');setSelected(result.event);if(refs.current.active)transportMap.focus(result.event.segments);}
     };
     window.addEventListener('beego:transport-scenario',receive);
     return()=>window.removeEventListener('beego:transport-scenario',receive);

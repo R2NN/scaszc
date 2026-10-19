@@ -152,7 +152,7 @@ export function TransportMapLayer({map,theme}) {
       const state=current.current;
       map.getCanvas().style.cursor=state.enabled&&state.drawing?'crosshair':'';
       if(!state.enabled){markers.forEach(m=>m.remove());markers=[];captionsToPlace=[];pinItems=[];pinMarkers.forEach(marker=>marker.remove());pinMarkers=[];pinSignature='';leaders.replaceChildren();restoreBackground();for(const layer of layers)if(map.getLayer(layer.id))map.setLayoutProperty(layer.id,'visibility','none');return;}
-      map.getContainer().dataset.transportActive='true';
+      if(state.management!==false)map.getContainer().dataset.transportActive='true';else delete map.getContainer().dataset.transportActive;
       // Updating a GeoJSON source temporarily makes isStyleLoaded() false.
       // Existing layers are safe to update without waiting for every tile.
       if(!map.getLayer(layers[0].id)&&!map.isStyleLoaded()){map.off('idle',render);map.once('idle',render);return;}
@@ -189,7 +189,7 @@ export function TransportMapLayer({map,theme}) {
       map.setPaintProperty('beego-transport-route-station-labels','text-halo-color',dark?'#202a39':'#fff');
       map.setPaintProperty('beego-transport-station-labels','text-color',dark?'#eff3fa':'#394650');
       map.setPaintProperty('beego-transport-station-labels','text-halo-color',dark?'#202a39':'#fff');
-      for(const layer of layers)map.setLayoutProperty(layer.id,'visibility',state.enabled && (!layer.source.includes('network')&&!layer.source.includes('stations')||state.metro)?'visible':'none');
+      for(const layer of layers)map.setLayoutProperty(layer.id,'visibility',state.enabled && (!layer.source.includes('network')&&!layer.source.includes('stations')||state.management!==false&&state.metro)?'visible':'none');
       const catalog=state.catalog;
       const colors=catalog?.lines || {};
       write(sources[0],collection((catalog?.segments || []).map(s=>line(s.geometry,{id:s.id,color:colors[s.lineId]?.color || '#aab0bb',kind:s.kind}))));
@@ -209,6 +209,7 @@ export function TransportMapLayer({map,theme}) {
       for(const event of events){
         if(event.id===state.editingId||event.status==='CANCELLED')continue;
         const status=transportStatus(event,state.date,state.minute || 0);
+        if(state.management===false&&status!=='Действует')continue;
         if(status==='Завершено'&&!state.showEnded)continue;
         for(const segment of event.segments){
           if(segment.geometry.length>1)closures.push(line(event.direction==='reverse'?[...segment.geometry].reverse():segment.geometry,{id:event.id,kind:event.kind,direction:event.kind==='road'&&!segment.opposingEdgeId?'forward':event.direction,ended:status==='Завершено'}));
@@ -257,16 +258,17 @@ export function TransportMapLayer({map,theme}) {
     const observer=new ResizeObserver(place);observer.observe(outer);const panel=document.querySelector('.transport-workspace-panel,.shift-layer.operational-shift .shift-panel');if(panel)observer.observe(panel);
     return()=>{cancelAnimationFrame(pinFrame);observer.disconnect();leaders.remove();renderRef.current=null;markers.forEach(m=>m.remove());pinMarkers.forEach(m=>m.remove());restoreBackground();map.getCanvas().style.cursor='';map.off('style.load',styleLoaded);map.off('idle',render);map.off('click',click);map.off('move',place);map.off('resize',place);map.off('zoomend',refreshPins);map.off('zoom',schedulePins);map.off('resize',schedulePins);};
   },[map]);
-  useEffect(()=>{renderRef.current?.();},[state.enabled,state.metro,state.catalog,state.events,state.draft,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,theme]);
+  useEffect(()=>{renderRef.current?.();},[state.enabled,state.management,state.metro,state.catalog,state.events,state.draft,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,theme]);
   if(!state.enabled)return null;
+  const liveEvents=(state.events||[]).filter(event=>transportStatus(event,state.date,state.minute||0)==='Действует');
   return <>
-    <div className='transport-map-tools' aria-label='Выбор транспортного участка'>
+    {state.management===false?<button className='shift-map-problems' onClick={state.onOpen} aria-label={`Проблемы на маршрутах: ${liveEvents.length}`}><Car size={18}/><span>Проблемы на маршрутах</span><b>{liveEvents.length}</b></button>:<div className='transport-map-tools' aria-label='Выбор транспортного участка'>
       <button className={state.drawing&&state.kind==='road'?'active':''} onClick={()=>state.onKind?.('road')}><Car size={18}/>Участок дороги</button>
       <button className={state.drawing&&state.kind!=='road'?'active':''} onClick={()=>state.onKind?.('metro')}><TrainFront size={18}/>Метро</button>
       <button onClick={()=>transportMap.set({metro:!state.metro})} aria-pressed={state.metro} title='Показать станции и схему связей метро'><Layers3 size={18}/></button>
       {state.drawing?<button onClick={state.onUndo} aria-label='Отменить последний участок'><Undo2 size={18}/></button>:<button onClick={state.onNew}><Plus size={18}/>Ограничение</button>}
-    </div>
+    </div>}
     {state.drawing?<div className='transport-map-hint'>{state.kind==='road'?'Нажмите на проезжую часть — привяжем участок к дорожной сети':state.kind==='entry'?'Выберите станцию на карте или найдите по названию':'Выберите связь метро или две соседние станции'}{state.kind==='road'?<button onClick={()=>{const p=map.getCenter();state.onRoad?.([p.lat,p.lng]);}} aria-label='Выбрать дорогу в центре карты'><Crosshair size={15}/></button>:null}</div>:null}
-    <details className='transport-map-legend' open={legendOpen} onToggle={event=>setLegendOpen(event.currentTarget.open)}><summary>Легенда</summary><div><span><i className='closure'/>Закрыто для авто</span><span><TrainFront size={16}/>Движение метро</span><span><DoorOpen size={16}/>Вход</span><span><ArrowLeftRight size={16}/>Пересадка</span><span><i className='before'/>Было</span><span><i className='after'/>Проверенный путь</span><span><Footprints size={15}/><i className='walking'/>Пешком / пересадка</span></div></details>
+    {state.management!==false?<details className='transport-map-legend' open={legendOpen} onToggle={event=>setLegendOpen(event.currentTarget.open)}><summary>Легенда</summary><div><span><i className='closure'/>Закрыто для авто</span><span><TrainFront size={16}/>Движение метро</span><span><DoorOpen size={16}/>Вход</span><span><ArrowLeftRight size={16}/>Пересадка</span><span><i className='before'/>Было</span><span><i className='after'/>Проверенный путь</span><span><Footprints size={15}/><i className='walking'/>Пешком / пересадка</span></div></details>:null}
   </>;
 }
