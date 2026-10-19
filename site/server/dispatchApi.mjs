@@ -1,4 +1,4 @@
-import { reconcileDispatchPlayback } from './dispatchPlayback.mjs';
+import { reconcileDispatchPlayback,transportDecisionPlayback } from './dispatchPlayback.mjs';
 import { randomUUID } from 'node:crypto';
 import { EmergencyDispatch } from './emergencyDispatch.mjs';
 import { minuteOf } from '../src/shiftDomain.js';
@@ -56,11 +56,12 @@ export function createDispatchApi(store, options) {
       if (url.pathname === '/api/dispatch/sessions' && request.method === 'POST') {
         return json(createSession(input),201);
       }
-      const route = /^\/api\/dispatch\/shifts\/([^/]+)\/(incidents|policy|clock|states)$/.exec(url.pathname);
+      const route = /^\/api\/dispatch\/shifts\/([^/]+)\/(incidents|policy|clock|states|transport)$/.exec(url.pathname);
       if (route) {
         const [, shiftId, action] = route;
         if (!store.db.prepare('SELECT 1 FROM shifts WHERE id=?').get(shiftId)) throw new Error('Смена не найдена');
         if (action === 'policy') return json(request.method === 'GET' ? dispatch.policy(shiftId) : dispatch.setPolicy(shiftId, input));
+        if (action === 'transport' && request.method==='POST') return json({clock:transportDecisionPlayback(store,shiftId)});
         if (action === 'states') return json(operationalStates(store.get(shiftId), Number(url.searchParams.get('minute') || 677), url.searchParams.get('mode') || 'plan'));
         if (action === 'incidents') {
           if (request.method === 'POST') return json(dispatch.create(shiftId, input), 201);
@@ -78,7 +79,7 @@ export function createDispatchApi(store, options) {
             return json({...next,shift:store.get(next.shiftId),restarted:true});
           }
           if(!serverTick&&input.restartDay&&input.mode==='plan'&&Number(input.minute)===360&&session.lastMinute>360){
-            const speed=session.preIncidentSpeed??input.speed??session.clock.speed;
+            const speed=session.preTransportSpeed??session.preIncidentSpeed??input.speed??session.clock.speed;
             for(const incident of dispatch.all(shiftId))if(!['ACCEPTED','CANCELLED'].includes(incident.status))dispatch.cancel(incident.id);
             options?.onRestart?.(shiftId);
             const next=store.db.transaction(()=>{
@@ -91,7 +92,7 @@ export function createDispatchApi(store, options) {
           }
           // A scenario jump can overtake an already queued browser clock write.
           // Return the authoritative revision instead of rewinding its minute.
-          if(!serverTick&&Number.isInteger(input.serverClockVersion)&&input.serverClockVersion!==session.clock.version)return json({...session,incidents:dispatch.all(shiftId)});
+          if(!serverTick&&Number.isInteger(input.serverClockVersion)&&input.serverClockVersion!==session.clock.version)return json({...session,incidents:dispatch.all(shiftId),clockConflict:true});
           const staleOverride = !serverTick && !dispatch.hasPending(shiftId) && (input.awaitingDecision || input.confirmingDecision);
           const minute = session.clock.confirmingDecision ? session.clock.minute : serverTick || staleOverride
             ? Math.min(1439, session.clock.minute + (session.clock.playing ? Math.max(0,Date.now() - session.clock.anchorAt) / 60000 * (Number(session.clock.speed) || 60) : 0))
@@ -113,7 +114,7 @@ export function createDispatchApi(store, options) {
           const playing = serverTick ? Boolean(session.clock.playing) : Boolean(input.playing);
           const requestedSpeed = serverTick || staleOverride ? session.clock.speed : Number(input.speed);
           session.clock = { ...session.clock, minute, playing:playing && minute < 1439,
-            speed:session.preIncidentSpeed != null ? session.clock.speed : [1,30,60,120,300].includes(requestedSpeed) ? requestedSpeed : session.clock.speed,
+            speed:session.preIncidentSpeed != null || session.preTransportSpeed != null ? 1 : [1,30,60,120,300].includes(requestedSpeed) ? requestedSpeed : session.clock.speed,
             anchorAt:Date.now(),version:(session.clock.version || 0)+1 };
           reconcileDispatchPlayback(session,dispatch.hasPending(shiftId),Date.now());
           store.db.prepare('UPDATE dispatch_sessions SET payload=? WHERE id=?').run(JSON.stringify(session), row.id);

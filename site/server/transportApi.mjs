@@ -8,6 +8,7 @@ import { acquirePlanningSlot, planningBusyResponse } from './planningSlot.mjs';
 import { minuteOf } from '../src/shiftDomain.js';
 import { transportConsequences,transportEventImpacts } from '../src/transportDomain.js';
 import { createTransportScenario } from './transportScenario.mjs';
+import { transportDecisionPlayback } from './dispatchPlayback.mjs';
 import { transportEventsForDay } from './transportScope.mjs';
 import { algorithmPhaseLabel } from '../src/algorithmProgress.js';
 import { PLANNING_DEADLINE_MS, remainingMilliseconds } from '../scripts/process-deadline.mjs';
@@ -215,6 +216,7 @@ export function createTransportApi(store) {
         let previewId;
         try { previewId=store.startPreview(shift.id,shift.revision,{type:'RECALCULATE',time:input.time,reason:'Транспортные ограничения'}); }
         catch(error){release();throw error;}
+        const clock=input.live?transportDecisionPlayback(store,shift.id):null;
         const item={id:previewId,shiftId:shift.id,baseRevision:shift.revision,contextSha256:contextHash(events),hasDraft:Boolean(input.draft),time:input.time,live:Boolean(input.live),status:'RUNNING',phase:'Проверяем оставшиеся маршруты',startedAt:Date.now(),events};
         transport.putPreview(item); running.set(item.id,controller);
         (async()=>{
@@ -241,7 +243,7 @@ export function createTransportApi(store) {
           } catch(error){item.status=controller.signal.aborted?'CANCELLED':'FAILED';item.finishedAt=Date.now();item.error=error.message;store.failPreview(item.id,error);}
           finally{transport.putPreview(item);running.delete(item.id);release();}
         })();
-        return json(item,202);
+        return json({...item,clock},202);
       }
       const previewMatch=/^previews\/([^/]+)(?:\/(apply|cancel))?$/.exec(action);
       if(previewMatch) {
@@ -258,9 +260,17 @@ export function createTransportApi(store) {
           if(item.status!=='READY') throw new Error('Дождитесь проверенного решения');
           if(contextHash(transport.list(shift))!==item.contextSha256) throw new Error('Ограничения изменились или ещё не сохранены. Повторите расчёт');
           const currentMinute=minuteNow(shift);
-          if(item.live && (minuteOf(input.time)!==minuteOf(item.time) || currentMinute!==null && currentMinute!==minuteOf(item.time))) throw new Error('Решение устарело: часы изменились. Повторите расчёт из текущего положения');
+          if(item.live && (minuteOf(input.time)!==minuteOf(item.time) || currentMinute!==null && currentMinute!==minuteOf(item.time))) {
+            if(input.refresh&&currentMinute!==null){
+              const time=`${String(Math.floor(currentMinute/60)).padStart(2,'0')}:${String(currentMinute%60).padStart(2,'0')}`;
+              const response=await handle(new Request(`${url.origin}/api/transport/previews`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({shiftId:shift.id,expectedRevision:shift.revision,time,live:true})}));
+              const value=await response.json();return response.ok?json({refresh:true,preview:value},202):json(value,response.status);
+            }
+            throw new Error('Решение устарело: часы изменились. Повторите расчёт из текущего положения');
+          }
           const next=store.publish(shift.id,item.id,item.baseRevision,input.actor);
-          item.status='APPLIED';item.appliedRevision=next.revision;transport.putPreview(item);const state=scenario.applied(shift.id,item.events);return json({shift:next,preview:item,state});
+          item.status='APPLIED';item.appliedRevision=next.revision;transport.putPreview(item);const state=scenario.applied(shift.id,item.events);
+          const clock=item.live?transportDecisionPlayback(store,shift.id,{finish:true}):null;return json({shift:next,preview:item,state,clock});
         }
       }
       return json({error:'Неизвестный адрес транспорта'},404);

@@ -56,6 +56,18 @@ test('a new session consumes an adopted server minute before it can echo old loc
   try{assert.equal(f.clock.getSnapshot().minute,420);assert.equal(f.requests.length,0);}finally{f.sync.close();}
 });
 
+test('a concurrent server tick cannot undo an explicit pause or seek',async()=>{
+  const f=fixture();
+  try{
+    f.sync.apply({version:1,minute:570,playing:true,speed:300});f.clock.set({minute:600,playing:false});
+    f.requests[0].resolve({clockConflict:true,clock:{version:2,minute:571,playing:true,speed:300}});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(f.clock.getSnapshot().minute,600);assert.equal(f.clock.getSnapshot().playing,false);
+    assert.equal(f.requests[1].snapshot.serverClockVersion,2);assert.equal(f.requests[1].snapshot.minute,600);assert.equal(f.requests[1].snapshot.playing,false);
+    f.requests[1].resolve({clock:{version:3,minute:600,playing:false,speed:300}});await f.sync.flush();assert.equal(f.clock.getSnapshot().playing,false);
+  }finally{f.sync.close();}
+});
+
 test('a restarted session is delivered even though its clock version begins at one',async()=>{
   let state={minute:865,playing:false,speed:300},listener,received;
   const clock={getSnapshot:()=>state,set:patch=>{state={...state,...patch};listener?.();},subscribe:fn=>{listener=fn;return()=>{listener=null;};}};

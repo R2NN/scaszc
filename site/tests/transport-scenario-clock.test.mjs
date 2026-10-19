@@ -19,7 +19,7 @@ test('a pending rewind suppresses late scenario events and cannot adopt an old c
   }finally{controller.close();}
 });
 
-test('application-level clock fires while Orders is open, pauses, and does not duplicate a wave',async()=>{
+test('application-level clock adopts live ×1 playback while Orders is open without duplicating a wave',async()=>{
   let value={minute:864,playing:true},listener,tab='orders';
   const shift={id:'s',regionId:'moscow:scenario:ordinary-emergency-day',revision:2};
   const calls=[],events=[],adoptions=[];
@@ -30,13 +30,13 @@ test('application-level clock fires while Orders is open, pauses, and does not d
       calls.push({path,body,tab});
       if(path.startsWith('scenario?'))return {index,waves:[{time:'09:30'},{time:'14:25'}]};
       if(path.startsWith('previews/latest'))return {status:'APPLIED'};
-      if(path==='scenario/tick'){index=1;return {shift,clock:{minute:865,playing:false},event:{id:'metro'},state:{index,waves:[{time:'09:30',eventId:'road'},{time:'14:25',eventId:'metro'}]}};}
+      if(path==='scenario/tick'){index=1;return {shift,clock:{minute:865,playing:true,speed:1,awaitingTransport:true},event:{id:'metro'},state:{index,waves:[{time:'09:30',eventId:'road'},{time:'14:25',eventId:'metro'}]}};}
       return {id:'p',status:'RUNNING'};
     },adopt:(id,clockValue)=>{adoptions.push(id);value=clockValue;},onEvent:result=>{events.push(result);tab='transport';},onError:error=>{throw error;}});
   await controller.flush();value={minute:865,playing:true};listener();listener();await controller.flush();
   assert.equal(calls.filter(call=>call.path==='scenario/tick').length,1);
   assert.equal(calls.find(call=>call.path==='scenario/tick').tab,'orders');
-  assert.equal(value.playing,false);assert.deepEqual(adoptions,['s']);assert.equal(events.at(-1).preview.id,'p');
+  assert.equal(value.playing,true);assert.equal(value.speed,1);assert.deepEqual(adoptions,['s']);assert.equal(events.at(-1).preview.id,'p');
   listener();await controller.flush();assert.equal(calls.filter(call=>call.path==='previews').length,1);
   controller.close();assert.equal(listener,null);
 });

@@ -35,6 +35,14 @@ test('a pending rewind owns the clock and drops late transport reads',async()=>{
   }finally{controller.close();}
 });
 
+test('an expired last problem does not slow the shift or start an unsolicited review',async()=>{
+  const c=clock();c.set({minute:660});
+  const controller=createTransportImpactClock({clock:c,getShift:()=>shift,
+    request:async path=>{assert.ok(path.startsWith('events?'));return {events:[{...road,endsAt:'2026-08-17T11:00:00+03:00'}]};},
+    pause:()=>assert.fail(),onEvents:()=>{},onPreview:()=>assert.fail(),onWaiting:()=>assert.fail(),onError:error=>assert.fail(error.message)});
+  try{await controller.flush();assert.equal(c.getSnapshot().playing,true);}finally{controller.close();}
+});
+
 test('a busy planner retries with paused clocks without an immediate request loop',async()=>{
   const c=clock();let attempts=0,pauses=0;const notices=[];
   const controller=createTransportImpactClock({retryMs:20,clock:c,getShift:()=>shift,

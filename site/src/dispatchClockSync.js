@@ -14,7 +14,7 @@ export function createDispatchClockSync({clock, scope, send, onValue = () => {},
     if (!active || !value || (value.version ?? 0) < version) return false;
     version = value.version ?? version;
     const current = clock.getSnapshot();
-    const patch = {speed:value.speed,awaitingDecision:Boolean(value.awaitingDecision),confirmingDecision:Boolean(value.confirmingDecision)};
+    const patch = {speed:value.speed,awaitingDecision:Boolean(value.awaitingDecision),awaitingTransport:Boolean(value.awaitingTransport),confirmingDecision:Boolean(value.confirmingDecision)};
     if (!current.playing || !value.playing || value.confirmingDecision) Object.assign(patch,{minute:value.minute,playing:value.playing});
     if (Object.entries(patch).every(([key,val]) => current[key] === val)) return true;
     applying = true;
@@ -35,6 +35,7 @@ export function createDispatchClockSync({clock, scope, send, onValue = () => {},
           if(requestEpoch!==epoch)continue;
           if(result.restarted){onValue(result);return;}
           version=Math.max(version,result.clock?.version ?? version);
+          if(result.clockConflict){queued=true;continue;}
           if (!queued && apply(result.clock)) onValue(result);
         } catch (error) {if (active) onError(error);}
       }
@@ -43,7 +44,7 @@ export function createDispatchClockSync({clock, scope, send, onValue = () => {},
   };
   const adopt=value=>{
     epoch++;queued=false;version=value.version ?? version;
-    applying=true;try{clock.set({...value,awaitingDecision:Boolean(value.awaitingDecision),confirmingDecision:Boolean(value.confirmingDecision)});}finally{applying=false;}
+    applying=true;try{clock.set({...value,awaitingDecision:Boolean(value.awaitingDecision),awaitingTransport:Boolean(value.awaitingTransport),confirmingDecision:Boolean(value.confirmingDecision)});}finally{applying=false;}
   };
   const unsubscribe = clock.subscribe(sync);
   if(scope){bridges.set(scope,adopt);if(pendingClocks.has(scope)){adopt(pendingClocks.get(scope));pendingClocks.delete(scope);}}

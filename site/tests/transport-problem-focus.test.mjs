@@ -5,6 +5,14 @@ import { createTransportProblemFocus } from '../src/transportProblemFocus.js';
 const event={id:'metro',revision:1,status:'OPEN',startsAt:'2026-08-17T14:25:00+03:00',endsAt:'2026-08-17T15:10:00+03:00'};
 const input={shiftId:'shift',date:'2026-08-17',minute:865,events:[event],visible:true};
 
+test('a new active problem opens its decision once even outside Shift, not on subsequent clock ticks',()=>{
+  const opened=[],focus=createTransportProblemFocus(event=>opened.push(event.id));
+  focus.update({...input,visible:false,minute:864});assert.deepEqual(opened,[]);
+  focus.update({...input,visible:false});assert.deepEqual(opened,['metro']);
+  focus.update(input);focus.acknowledge([event]);focus.update({...input,minute:866});assert.deepEqual(opened,['metro']);
+  focus.update({...input,events:[event,{...event,id:'road'}]});assert.deepEqual(opened,['metro','road']);
+});
+
 test('a future problem focuses at its actual start, once after the map accepts focus',()=>{
   const focus=createTransportProblemFocus();
   assert.deepEqual(focus.update({...input,minute:864}),[]);

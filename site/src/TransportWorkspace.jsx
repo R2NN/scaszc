@@ -4,6 +4,7 @@ import { transportMap } from './TransportMap.jsx';
 import { transportStatus,transportFocusSegments,transportSelectedConsequences,transportCrewOrders } from './transportDomain.js';
 import { transportPreviewReusable } from './transportImpactClock.js';
 import { shiftClock } from './shiftClock.js';
+import { transportPlaybackClock } from './transportPlaybackClock.js';
 import { minuteOf, timeOf } from './shiftDomain.js';
 import { ratingName } from './engineerPresentation.js';
 import { EngineerPortrait } from './EngineerPortrait.jsx';
@@ -40,10 +41,10 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const [catalog,setCatalog]=useState(null),[events,setEvents]=useState([]),[draft,setDraft]=useState(()=>sessions.get(`${shift?.id}:${live}`)?.draft || null);
   const [selected,setSelected]=useState(null),[preview,setPreview]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const [search,setSearch]=useState(''),[filter,setFilter]=useState('all'),[drawing,setDrawing]=useState(false),[showEnded,setShowEnded]=useState(false),[stationFrom,setStationFrom]=useState('');
-  const [engineerId,setEngineerId]=useState(''),[orderId,setOrderId]=useState(''),[pauseNotice,setPauseNotice]=useState(false);
+  const [engineerId,setEngineerId]=useState(''),[orderId,setOrderId]=useState(''),[refreshNotice,setRefreshNotice]=useState(false);
   const [whenMode,setWhenMode]=useState(live?'now':'planned');
   const [browse,setBrowse]=useState(false);
-  const generation=useRef(0),previewRef=useRef(null),resumeRef=useRef(null),refs=useRef({});
+  const generation=useRef(0),previewRef=useRef(null),refs=useRef({});
   const calculationRequest=useRef(0),retryRef=useRef(null),focusResult=useRef(null);
   const [comparison,setComparison]=useState('both');
   const [elapsed,setElapsed]=useState(0);
@@ -63,7 +64,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   useEffect(()=>{
     const own=++generation.current;calculationRequest.current++;clearTimeout(retryRef.current);focusResult.current=null;previewRef.current=null;setWaitingForPlanner(false);setEvents([]);setPreview(null);setSelected(null);setEventGroup([]);setDraft(sessions.get(`${shift?.id}:${live}`)?.draft || null);
     load().catch(e=>setError(e.message));
-    if(shift?.id)(async()=>{try{const saved=await api(`previews/latest?shiftId=${shift.id}`);if(saved&&refs.current.shift?.id===shift.id&&own===generation.current){setPreview(saved);previewRef.current=saved;setEngineerId(saved.result?.consequences?.engineers[0]?.engineerId || '');}}catch(e){if(own===generation.current)setError(e.message);}})();
+    if(shift?.id)(async()=>{try{const saved=await api(`previews/latest?shiftId=${shift.id}`);if(saved&&refs.current.shift?.id===shift.id&&own===generation.current){setPreview(saved);previewRef.current=saved;setEngineerId(saved.result?.consequences?.engineers[0]?.engineerId || '');if(!refs.current.draft){const event=[...(saved.events||[])].filter(event=>transportStatus(event,shift.date,Math.floor(shiftClock.getSnapshot().minute))==='Действует').sort((a,b)=>String(b.createdAt||b.startsAt).localeCompare(String(a.createdAt||a.startsAt)))[0];if(event)setSelected(current=>current||event);}}}catch(e){if(own===generation.current)setError(e.message);}})();
   },[shift?.id]);
   useEffect(()=>{if(shift?.id)sessions.set(`${shift.id}:${live}`,{draft});},[draft,shift?.id,live]);
   const begin=(kind='road')=>{
@@ -94,41 +95,35 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   };
   const selectEvent=event=>{if(!event||event.id==='draft')return;if(draft){setError('Сохраните ограничение или нажмите «Отмена», чтобы открыть другое событие');return;}setSelected(event);setDrawing(false);setSearch('');setBrowse(false);setComparison('both');focusResult.current={eventId:event.id};transportMap.focusProblem([event]);refs.current.calculate({selection:event.id});};
   const editEvent=event=>{setSelected(null);setDraft({...event,expectedRevision:event.revision});setDrawing(true);clearPreview();};
-  const pause=async()=>{
+  const slowPlayback=async()=>{
     if(!live)return;
-    const current=shiftClock.getSnapshot();
-    if(current.playing){resumeRef.current={playing:current.playing,speed:current.speed};shiftClock.set({playing:false});setPauseNotice(true);}
-    if(shift.regionId.includes(':scenario:'))await fetch(`/api/dispatch/shifts/${shift.id}/clock`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...shiftClock.getSnapshot(),playing:false})});
-  };
-  const restorePlayback=async()=>{
-    const saved=resumeRef.current;if(!saved)return;
-    try{
-      let patch=saved;
-      if(shift.regionId.includes(':scenario:')){
-        const response=await fetch(`/api/dispatch/shifts/${shift.id}/clock`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...shiftClock.getSnapshot(),...saved})});
-        const result=await response.json();if(!response.ok)throw new Error(result.error || 'Не удалось восстановить воспроизведение');patch=result.clock || saved;
-      }
-      shiftClock.set(patch);resumeRef.current=null;setPauseNotice(false);
-    }catch(e){setError(`План сохранён. ${e.message}; продолжить воспроизведение можно кнопкой на шкале времени.`);}
+    let clock;
+    if(shift.regionId.includes(':scenario:')){
+      const response=await fetch(`/api/dispatch/shifts/${shift.id}/transport`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+      const result=await response.json();if(!response.ok)throw new Error(result.error || 'Не удалось изменить скорость');clock=result.clock;
+    }
+    if(refs.current.shift?.id===shift.id&&!shiftClock.getSnapshot().restartDay)transportPlaybackClock(shiftClock,shift.id,clock);
   };
   const calculate=async(options={})=>{
     if(!shift?.plan||shiftClock.getSnapshot().restartDay)return;
     const own=++calculationRequest.current;clearTimeout(retryRef.current);
     setError('');
     try {
-      await pause();
       const earliest=Math.max(minuteOf(shift.versions?.at(-1)?.effectiveAt) || 0,minuteOf(shift.plan.createdAt?.slice(11,16)) || 0);
-      const time=live?timeOf(Math.floor(shiftClock.getSnapshot().minute)):timeOf(Math.max(earliest,360));
+      let time=live?timeOf(Math.floor(shiftClock.getSnapshot().minute)):timeOf(Math.max(earliest,360));
       const currentEvents=draft?events:(await api(`events?shiftId=${shift.id}`)).events;
       if(!draft)setEvents(currentEvents);
       const previous=await api(`previews/latest?shiftId=${shift.id}`);
       if(own!==calculationRequest.current)return;
+      if(!(options.selection&&previous?.status==='APPLIED'&&transportPreviewReusable(previous,shift,currentEvents,time,options)))await slowPlayback();
+      if(live)time=timeOf(Math.floor(shiftClock.getSnapshot().minute));
       const reusable=!draft&&transportPreviewReusable(previous,shift,currentEvents,time,options);
       if(!reusable&&previous?.status==='RUNNING')await api(`previews/${previous.id}/cancel`,{});
       const value=reusable?previous:await api('previews',{shiftId:shift.id,expectedRevision:shift.revision,time,live,
         draft:draft?{...inputOf({...draft,revision:draft.expectedRevision},actor),expectedRevision:draft.expectedRevision}:null});
       if(own!==calculationRequest.current){if(!reusable)await api(`previews/${value.id}/cancel`,{});return;}
       setWaitingForPlanner(false);
+      if(live&&value.clock)transportPlaybackClock(shiftClock,shift.id,value.clock);
       setPreview(value);previewRef.current=value;
     }catch(e){if(own!==calculationRequest.current)return;if(e.status===429){setWaitingForPlanner(true);retryRef.current=setTimeout(()=>refs.current.calculate(options),2000);}else setError(e.message);}
   };
@@ -171,11 +166,18 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     catch(e){setError(e.message);}finally{setBusy(false);}
   };
   const apply=async()=>{
-    setBusy(true);setError('');
-    try{const result=await api(`previews/${preview.id}/apply`,{time:live?timeOf(Math.floor(shiftClock.getSnapshot().minute)):preview.time,actor});setPreview(result.preview);onApply?.(result.shift);
-      if(resumeRef.current)await restorePlayback();}
-    catch(e){setError(e.message);}finally{setBusy(false);}
+    clearTimeout(retryRef.current);setBusy(true);setError('');
+    const scope=shift.id,pendingId=preview.id;
+    try{
+      const result=await api(`previews/${preview.id}/apply`,{time:live?timeOf(Math.floor(shiftClock.getSnapshot().minute)):preview.time,actor,refresh:live});
+      if(refs.current.shift?.id!==scope||shiftClock.getSnapshot().restartDay)return;
+      setWaitingForPlanner(false);setPreview(result.preview);previewRef.current=result.preview;
+      if(result.refresh){setRefreshNotice(true);if(result.preview.clock)transportPlaybackClock(shiftClock,scope,result.preview.clock);return;}
+      setRefreshNotice(false);if(live)transportPlaybackClock(shiftClock,scope,result.clock,{finish:true});onApply?.(result.shift);
+    }
+    catch(e){if(refs.current.shift?.id===scope){if(e.status===429){setWaitingForPlanner(true);retryRef.current=setTimeout(()=>{if(refs.current.shift?.id===scope&&previewRef.current?.id===pendingId&&!shiftClock.getSnapshot().restartDay)refs.current.apply();},2000);}else setError(e.message);}}finally{if(refs.current.shift?.id===scope)setBusy(false);}
   };
+  refs.current.apply=apply;
   useEffect(()=>{
     const receive=event=>{
       const result=event.detail;if(result?.shift?.id!==shift?.id)return;
@@ -183,8 +185,8 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
       setWaitingForPlanner(Boolean(result.waitingForPlanner));
       if(result.waitingForPlanner)return;
       if(!result.preview&&!result.event)return;
-      generation.current++;load().catch(error=>setError(error.message));
-      if(result.event){focusResult.current={eventId:result.event.id};setSelected(result.event);setComparison('both');setPreview(null);previewRef.current=null;}
+      if(!result.opening)generation.current++;load().catch(error=>setError(error.message));
+      if(result.event){focusResult.current={eventId:result.event.id};setSelected(result.event);setComparison('both');if(!result.opening||previewRef.current&&!previewRef.current.events?.some(event=>event.id===result.event.id&&event.revision===result.event.revision)){setPreview(null);previewRef.current=null;}}
       if(result.preview){setPreview(result.preview);previewRef.current=result.preview;setEngineerId('');setOrderId('');if(result.event&&refs.current.active)transportMap.focusProblem([result.event]);}
     };
     window.addEventListener('beego:transport-scenario',receive);
@@ -215,7 +217,8 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     {eventGroup.length&&!draft?<section ref={groupRef} className='transport-event-group'><div className='transport-section-title'><h3>Ограничения в точке ({eventGroup.length})</h3><button onClick={()=>setEventGroup([])} aria-label='Закрыть группу ограничений'><X size={18}/></button></div>{eventGroup.map(event=><button key={event.id} onClick={()=>{setEventGroup([]);selectEvent(event);}}>{restrictionIcon(event.kind)}<span><b>{event.title}</b><small>{kindLabel[event.kind]} · {event.startsAt.slice(11,16)}–{endLabel(event)}</small></span><ChevronRight size={16}/></button>)}</section>:null}
     {consequences&&!draft?<button className='transport-browse' onClick={()=>setBrowse(value=>!value)}>{browse?'Скрыть поиск':'Найти или добавить ограничение'}</button>:null}
     {!draft&&(!consequences||browse)?<div className='transport-intro'><div><b>{live?'Движение в течение смены':'Доступность дорог и метро'}</b><p>{live?'Закрытия, проверенные объезды и последствия для заявок':'Планируйте перекрытия на выбранный день'}</p></div><button className='transport-add' onClick={()=>begin()} aria-label='Добавить транспортное ограничение'><Plus size={18}/></button></div>:null}
-    {pauseNotice?<div className='transport-clock-notice'><Clock3 size={16}/><span>Сценарий на паузе: фиксируем положение для проверки.</span><button onClick={restorePlayback}>Продолжить</button></div>:null}
+    {live&&clock.awaitingTransport?<div className='transport-clock-notice' role='status'><Clock3 size={16}/><span>Время идёт ×1. После применения вернётся прежнее ускорение.</span></div>:null}
+    {refreshNotice?<div className='transport-clock-notice' role='status'><Clock3 size={16}/><span>Время изменилось: обновляем решение из текущего положения. Проверьте обновлённый результат перед применением.</span></div>:null}
     {waitingForPlanner?<div className='transport-clock-notice' role='status'><Clock3 size={16}/><span>Событие уже на карте. Ожидаем свободный расчёт — проверка запустится автоматически.</span></div>:null}
     {error?<div className='transport-error' role='alert'><AlertTriangle size={18}/><span>{error}</span><button onClick={()=>setError('')} aria-label='Закрыть сообщение'><X size={15}/></button></div>:null}
     {!draft?<>

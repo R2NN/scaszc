@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { transportDecisionPlayback } from './dispatchPlayback.mjs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { projectRoot } from '../scripts/project-root.mjs';
@@ -149,9 +150,10 @@ export function createTransportScenario(store,transport,network) {
         source:'Изолированный транспортный сценарий',externalId:`wave-${index}`},shift);
       wave.eventId=event.id;wave.status='OPEN';wave.targetEngineer=choice.engineerId;wave.targetOrder=choice.orderId;state.index=index;put(state);
       const row=store.db.prepare('SELECT id,payload FROM dispatch_sessions WHERE shift_id=?').get(shiftId),session=JSON.parse(row.payload);
-      session.clock={...session.clock,minute,playing:false,anchorAt:Date.now(),version:session.clock.version+1};session.lastMinute=minute;
+      session.lastMinute=minute;
       store.db.prepare('UPDATE dispatch_sessions SET payload=? WHERE id=?').run(JSON.stringify(session),row.id);
-      return {state,event,clock:session.clock,shift:store.get(shiftId)};
+      const clock=transportDecisionPlayback(store,shiftId,{minute});
+      return {state,event,clock,shift:store.get(shiftId)};
     }
     throw new Error('Неизвестное действие сценария');
   }

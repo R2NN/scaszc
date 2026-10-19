@@ -10,7 +10,7 @@ export function transportPreviewMatches(preview,shift,events) {
 /** Reuse a current search, but an explicit recalculation never reuses a finished answer. */
 export function transportPreviewReusable(preview,shift,events,time,{force=false,selection=false}={}) {
   if(!transportPreviewMatches(preview,shift,events))return false;
-  if(preview.status==='RUNNING')return preview.time===time;
+  if(preview.status==='RUNNING')return true;
   if(force)return false;
   return Boolean(preview.result?.eventImpacts&&((preview.status==='READY'&&preview.time===time)||(selection&&preview.status==='APPLIED')));
 }
@@ -34,7 +34,7 @@ export function createTransportImpactClock({clock,getShift,request,pause,onEvent
           const scope=`${shift.id}:${signature}`,appearance=`${scope}:${events.map(e=>transportStatus(e,shift.date,minute)).join('|')}`;
           if(seen!==appearance){seen=appearance;onEvents(events);}
           const key=`${appearance}:${shift.revision}`;
-          if(!events.length||handled===key||failed===key)continue;
+          if(!events.some(event=>transportStatus(event,shift.date,minute)==='Действует')||handled===key||failed===key)continue;
           const previous=await request(`previews/latest?shiftId=${encodeURIComponent(shift.id)}`);
           if(!owns())continue;
           const previousMinute=minuteOf(previous?.time),sameAppearance=previousMinute==null||events.every(event=>transportStatus(event,shift.date,minute)===transportStatus(event,shift.date,previousMinute));

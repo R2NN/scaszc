@@ -22,7 +22,7 @@ export function createTransportScenarioClock({clock,getShift,request,adopt,onEve
             if(!owns())continue;
             state=result.state;
             if(result.event){
-              adopt(shift.id,{...result.clock,playing:false});
+              adopt(shift.id,result.clock);
               onEvent(result);handled='';
             }
           }

@@ -6,12 +6,16 @@ import { createTransportImpactClock } from './transportImpactClock.js';
 import { createTransportProblemFocus } from './transportProblemFocus.js';
 import { transportMap } from './TransportMap.jsx';
 import { transportStatus } from './transportDomain.js';
+import { transportPlaybackClock } from './transportPlaybackClock.js';
 
 /** Keep the scenario clock alive while the operator uses Orders or another workspace. */
 export function useTransportScenario({shift,visible=false,onApply,onOpen,onError}) {
   const refs=useRef(null);refs.current={shift,visible,onApply,onOpen,onError};
   const problemFocus=useRef(null),latestEvents=useRef(null),focusNow=useRef(null);
-  problemFocus.current ||= createTransportProblemFocus();
+  problemFocus.current ||= createTransportProblemFocus(event=>{
+    const current=refs.current;current.onOpen?.(event);
+    window.dispatchEvent(new CustomEvent('beego:transport-scenario',{detail:{shift:current.shift,event,operational:true,opening:true}}));
+  });
   useEffect(()=>{focusNow.current?.();},[visible]);
   useEffect(()=>{
     let frame;
@@ -36,20 +40,20 @@ export function useTransportScenario({shift,visible=false,onApply,onOpen,onError
       clock:shiftClock,getShift:()=>refs.current.shift,request,manageCalculations:false,
       adopt:(id,value)=>{if(!adoptDispatchClock(id,value))shiftClock.set(value);},
       onEvent:result=>{
-        if(result.event){refs.current.onApply?.(result.shift);refs.current.onOpen?.();}
+        if(result.event)refs.current.onApply?.(result.shift);
         window.dispatchEvent(new CustomEvent('beego:transport-scenario',{detail:result}));
       },
       onError:error=>refs.current.onError?.(error),
     });
     const impacts=createTransportImpactClock({clock:shiftClock,getShift:()=>refs.current.shift,request,
       pause:async shift=>{
-        const current=shiftClock.getSnapshot();
-        if(current.playing)shiftClock.set({playing:false});
+        let clock;
         if(shift.regionId.includes(':scenario:')){
-          const response=await fetch(`/api/dispatch/shifts/${shift.id}/clock`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...shiftClock.getSnapshot(),playing:false})});
+          const response=await fetch(`/api/dispatch/shifts/${shift.id}/transport`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
           const value=await response.json();if(!response.ok)throw new Error(value.error);
-          if(!adoptDispatchClock(shift.id,value.clock))shiftClock.set(value.clock);
+          clock=value.clock;
         }
+        if(refs.current.shift?.id===shift.id&&!shiftClock.getSnapshot().restartDay)transportPlaybackClock(shiftClock,shift.id,clock);
       },
       onEvents:events=>{latestEvents.current={shiftId:refs.current.shift.id,events};window.dispatchEvent(new CustomEvent('beego:transport-events',{detail:latestEvents.current}));focus();},
       onPreview:preview=>{
