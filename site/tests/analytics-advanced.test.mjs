@@ -6,6 +6,18 @@ import { analyzeResourceGaps, analyzeShiftEfficiency, analyzeTeamCapacity, build
 const days = JSON.parse(await readFile(new URL('../public/data/analytics-history.json', import.meta.url), 'utf8')).days;
 const selected = days.at(-1);
 
+test('localized work skills match imported engineer codes when diagnosing an early window', () => {
+  const record = { orders: [{ id: 'early', zone: 'South', skill: 'Подключение', start: '06:00', end: '07:00', duration: 60 }],
+    team: [{ id: 'crew', zone: 'South', skills: ['INSTALL'], shiftStart: '08:00', shiftEnd: '18:00' }],
+    plan: { routes: [], unassigned: [{ orderId: 'early' }] } };
+  const gap = analyzeResourceGaps(record);
+  assert.doesNotMatch(gap.explanations[0].detail, /нет бригады с навыком/);
+  assert.equal(gap.idleWithNeededSkill, 1);
+  const crew = analyzeTeamCapacity(record).stats[0];
+  assert.doesNotMatch(crew.explanation, /требует навык/);
+  assert.match(crew.explanation, /окно.*до начала смены/);
+});
+
 test('audited schedule conflicts take precedence over idle-skill guesses', () => {
   const summary = 'Окончание 22:08, смена до 22:00: превышение 8 мин.';
   const result = analyzeResourceGaps({

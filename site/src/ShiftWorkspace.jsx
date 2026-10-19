@@ -1430,7 +1430,7 @@ export function ShiftWorkspace({
                 <small>ОТЧЁТ ДИСПЕТЧЕРА</small>
                 <h3>Вся смена — в одном PDF</h3>
                 <p>Решения на первых двух страницах, подробные расчёты — дальше. Без длинной панели графиков перед скачиванием.</p>
-                <div className="report-generator-points"><span>8 страниц</span><span>Данные выбранного дня</span><span>Сохраняется в архиве</span></div>
+                <div className="report-generator-points"><span>Все разделы смены</span><span>Данные выбранного дня</span><span>Сохраняется в архиве</span></div>
               </aside>
               <div className="report-generator-form">
                 <small>ВЫБРАННЫЙ ДЕНЬ</small>
