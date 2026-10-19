@@ -82,7 +82,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     if(!segment)return;
     const value=segment.kind?segment:{...segment,kind:'entry',fromId:segment.id,toId:null,geometry:[segment.coords]};
     setDraft(current=>current&&!current.segments.some(s=>s.id===value.id)?{...current,segments:[...current.segments,value]}:current);
-    clearPreview();setError('');
+    clearPreview();setError('');setStationFrom('');
   };
   const roadRequest=useRef(0),roadAbort=useRef(null);
   useEffect(()=>()=>{roadRequest.current++;roadAbort.current?.abort();},[draft?.id,draft?.kind]);
@@ -102,9 +102,10 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const undoRoad=()=>{const form=refs.current.draft;if(form?.kind==='road'&&form.roadPoints?.length)drawRoad(form.roadPoints.slice(0,-1),form.roadMode);else change({segments:form?.segments.slice(0,-1)||[]});};
   const cancelDraft=()=>{roadRequest.current++;roadAbort.current?.abort();setDraft(null);setDrawing(false);clearPreview();setBusy(false);};
   const selectStation=id=>{
-    if(!stationFrom){setStationFrom(id);return;}
+    if(id===stationFrom){setStationFrom('');setError('');return;}
+    if(!stationFrom){setStationFrom(id);setError('');return;}
     const segment=catalog?.segments.find(s=>s.kind===draft?.kind&&((s.fromId===stationFrom&&s.toId===id)||(s.bidirectional&&s.toId===stationFrom&&s.fromId===id)));
-    if(segment){selectSegment(segment);setStationFrom('');}else{setError('Выберите соседнюю станцию: для длинного участка добавьте связи последовательно');setStationFrom(id);}
+    if(segment){selectSegment(segment);setStationFrom('');}else setError('Между этими станциями нет прямого участка. Выберите соседнюю станцию с фиолетовой обводкой.');
   };
   const selectEvent=event=>{if(!event||event.id==='draft')return;if(draft){setError('Сохраните ограничение или нажмите «Отмена», чтобы открыть другое событие');return;}setSelected(event);setDrawing(false);setSearch('');setBrowse(false);setComparison('both');focusResult.current={eventId:event.id};transportMap.focusProblem([event]);refs.current.calculate({selection:event.id});};
   const editEvent=event=>{setSelected(null);setDraft({...event,expectedRevision:event.revision});setDrawing(true);clearPreview();};
@@ -162,11 +163,12 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   useEffect(()=>{
     const scoped=transportSelectedConsequences(preview?.result?.consequences,preview?.result?.eventImpacts,selected?.id);
     transportMap.set({enabled:live||active,management:active,catalog,events,draft:active?draft:null,editingId:active&&draft?.expectedRevision?draft.id:null,preview:active?preview:null,date,minute,showEnded:active&&showEnded,engineerId,
-      impactOrderIds:scoped?.orders.map(order=>order.orderId),comparison,
+      impactOrderIds:scoped?.orders.map(order=>order.orderId),comparison,selectedStationId:active&&draft?stationFrom:'',
       drawing:active&&drawing,kind:draft?.kind,roadMode:draft?.roadMode||'points',roadBusy:busy,onRoad:selectRoad,onRoadStroke:points=>drawRoad(points,'brush'),onRoadPointMove:(index,coords)=>drawRoad(draft.roadPoints.map((point,i)=>i===index?coords:point)),onSegment:selectSegment,onStation:selectStation,onSelect:event=>{onScenarioEvent?.();selectEvent(event);},onGroup:items=>{onScenarioEvent?.();openGroup(items);},onOpen:onScenarioEvent,onNew:()=>begin(),
       onUndo:undoRoad,onFinish:()=>setDrawing(false),onRoadMode:roadMode=>change({roadMode}),onKind:kind=>{if(!draft)begin(kind);else{change({kind,segments:[],roadPoints:[]});setDrawing(true);}}});
   },[active,catalog,events,draft,preview,date,minute,drawing,busy,showEnded,engineerId,stationFrom,selected?.id,comparison]);
   const save=async()=>{
+    if(busy||!draft?.title.trim()||!draft.segments.length)return;
     setBusy(true);setError('');
     try{const event=await api('events',{shiftId:shift.id,event:{...inputOf({...draft,revision:draft.expectedRevision},actor),expectedRevision:draft.expectedRevision}});
       await load();focusResult.current={eventId:event.id};setSelected(event);setDraft(null);setDrawing(false);
@@ -253,7 +255,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
       {draft.kind!=='road'?<><div className='transport-search'><Search size={17}/><input aria-label='Поиск станции или участка метро' placeholder='Название станции или пересадки' value={search} onChange={e=>setSearch(e.target.value)}/></div>{results.length?<div className='transport-station-results'>{results.map(s=><button key={s.id} onClick={()=>{selectSegment(s);setSearch('');}}><b>M</b><span>{s.name}<small>{catalog?.lines?.[s.lineId]?.name || ''}</small></span><Plus size={15}/></button>)}</div>:null}</>:null}
       <div className='transport-selection'><span><strong>{draft.segments.length?draft.kind==='road'?`${(draft.roadLengthM||draft.segments.reduce((sum,item)=>sum+item.lengthM,0)).toLocaleString('ru-RU')} м · ${sectionCount(draft.segments.length)}`:`Выбрано ${draft.segments.length} ${draft.kind==='entry'?'станций':'участков'}`:draft.roadPoints?.length?draft.roadPoints.length===1?'Отмечено начало участка':'Уточните линию на карте':'Участок ещё не выбран'}</strong>{busy||draft.segments.length?<small>{busy?'Привязываем линию к дороге…':[...new Set(draft.segments.map(s=>s.name))].join(' → ')}</small>:null}</span><button disabled={!draft.segments.length&&!draft.roadPoints?.length} onClick={undoRoad} aria-label='Отменить выбор последней точки'><Undo2 size={18}/></button><button disabled={busy||drawing&&!draft.segments.length} onClick={()=>setDrawing(value=>!value)}>{drawing?'Готово':'Изменить участок'}</button></div>
       {draft.kind==='road'&&(draft.roadPoints?.length||draft.segments.length)?<button className='transport-clear-selection' onClick={()=>{drawRoad([],draft.roadMode);setDrawing(true);}}>Очистить участок</button>:null}
-      {stationFrom?<p className='transport-source-note'>Выбрана первая станция. Нажмите соседнюю станцию.</p>:null}
+      {stationFrom?<p className='transport-source-note' role='status'><strong>{catalog?.stations.find(station=>station.id===stationFrom)?.name}</strong> выбрана. Нажмите подсвеченную соседнюю станцию; повторный клик снимет выбор.</p>:null}
     </>}
     {preview?.status==='RUNNING'?<section className='transport-calculating' role='status'><i className='spinner'/><div><b>Рассчитываем новый маршрут</b><p>{preview.phase}</p><p>Факты и опубликованный план сохранены · {elapsed} с{preview.progress?.routeChecks>0?` · проверок маршрута: ${preview.progress.routeChecks}`:''}</p></div><button onClick={async()=>{await api(`previews/${preview.id}/cancel`,{});setPreview(null);}}>Отмена</button></section>:null}
     {preview?.status==='FAILED'?<div className='transport-error' role='alert'><AlertTriangle size={18}/><span>{preview.error}</span><button onClick={calculate}>Повторить</button></div>:null}
@@ -273,7 +275,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     </section>:null}
     </div>
     {ready?<footer className='transport-decision-bar'>{compact?routeSummary:null}{preview.requiresSave?<span>Сохраните ограничение и повторите проверку</span>:null}<button className='transport-primary full' disabled={busy||preview.requiresSave} onClick={apply}>Применить изменения плана</button></footer>:null}
-    {draft?<footer className='transport-form-footer'><button className='transport-primary' disabled={busy||drawing||!draft.title.trim()||!draft.segments.length} onClick={save}>Сохранить ограничение</button><button onClick={cancelDraft}>Отмена</button></footer>:null}
+    {draft?<footer className='transport-form-footer'>{busy||!draft.title.trim()||!draft.segments.length?<span className='transport-save-hint' role='status'>{busy?'Подтверждаем выбранный участок…':!draft.title.trim()?'Введите название ограничения':draft.kind==='road'?'Отметьте начало и конец дороги':'Выберите станцию или участок метро'}</span>:null}<button className='transport-primary' disabled={busy||!draft.title.trim()||!draft.segments.length} onClick={save}>Сохранить ограничение</button><button onClick={cancelDraft}>Отмена</button></footer>:null}
   </div>;
 }
 

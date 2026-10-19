@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { Car, TrainFront, Undo2, Layers3, Plus, DoorOpen, ArrowLeftRight, Footprints, Pencil, MousePointer2, Check } from 'lucide-react';
 import { sampleRoadStroke } from './roadDrawing.js';
+import { transportMetroSelection } from './transportMetroSelection.js';
 import { groupTransportPins,transportBoxClear,transportUsesSidePanel,transportRouteStations,clipTransportSegment } from './transportMapLayout.js';
 import { transportStatus,transportCrewOrders } from './transportDomain.js';
 
@@ -148,7 +149,7 @@ export function TransportMapLayer({map,theme}) {
     const backgroundVisibility=new Map();
     const dimmed=new Map();
     let baseTheme=map.getContainer().dataset.mapTheme;
-    const restoreBackground=()=>{delete map.getContainer().dataset.transportActive;delete map.getContainer().dataset.transportComparison;for(const [id,visibility] of backgroundVisibility)if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visibility);backgroundVisibility.clear();for(const [id,{property,value}] of dimmed)if(map.getLayer(id))map.setPaintProperty(id,property,value);dimmed.clear();};
+    const restoreBackground=()=>{delete map.getContainer().dataset.transportActive;delete map.getContainer().dataset.transportComparison;delete map.getContainer().dataset.transportDrawing;for(const [id,visibility] of backgroundVisibility)if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visibility);backgroundVisibility.clear();for(const [id,{property,value}] of dimmed)if(map.getLayer(id))map.setPaintProperty(id,property,value);dimmed.clear();};
     const sources=['beego-transport-network','beego-transport-stations','beego-transport-closed','beego-transport-before','beego-transport-after','beego-transport-route-stations'];
     const written=new Map();
     const write=(id,data)=>{
@@ -172,12 +173,16 @@ export function TransportMapLayer({map,theme}) {
       {id:'beego-transport-closed-arrows',type:'symbol',source:sources[2],filter:['!=',['get','direction'],'both'],layout:{'symbol-placement':'line','symbol-spacing':65,'text-field':'❯','text-size':18,'text-font':['Noto Sans Regular'],'text-keep-upright':false,'text-allow-overlap':true},paint:{'text-color':'#ff1839','text-halo-color':'#fff','text-halo-width':2}},
       {id:'beego-transport-route-station-points',type:'circle',source:sources[5],paint:{'circle-radius':5,'circle-color':'#fff','circle-stroke-color':'#059669','circle-stroke-width':2.5}},
       {id:'beego-transport-route-station-labels',type:'symbol',source:sources[5],layout:{'text-field':['concat','M · ',['get','name']],'text-size':13,'text-font':['Noto Sans Regular'],'text-variable-anchor':['top-left','bottom-left','top-right','bottom-right'],'text-radial-offset':.8,'text-max-width':12,'text-padding':5,'text-optional':false,'symbol-sort-key':['case',['==',['get','role'],'transfer'],0,1]},paint:{'text-color':'#047857','text-halo-color':'#fff','text-halo-width':2.5}},
+      {id:'beego-transport-selection-halo',type:'circle',source:sources[1],filter:['!=',['get','selection'],''],paint:{'circle-radius':['case',['==',['get','selection'],'available'],12,18],'circle-color':['case',['==',['get','selection'],'selected'],'#ff344b','#7c16eb'],'circle-opacity':.22}},
+      {id:'beego-transport-selection-points',type:'circle',source:sources[1],filter:['!=',['get','selection'],''],paint:{'circle-radius':['case',['==',['get','selection'],'available'],6,10],'circle-color':['case',['==',['get','selection'],'pending'],'#ffdb2e',['==',['get','selection'],'selected'],'#ff344b','#fff'],'circle-stroke-color':['case',['==',['get','selection'],'selected'],'#fff','#7c16eb'],'circle-stroke-width':3}},
+      {id:'beego-transport-selection-labels',type:'symbol',source:sources[1],filter:['in',['get','selection'],['literal',['pending','selected']]],layout:{'text-field':['get','name'],'text-size':15,'text-font':['Noto Sans Regular'],'text-variable-anchor':['top-left','bottom-left','top-right','bottom-right'],'text-radial-offset':1.1,'text-allow-overlap':true,'text-max-width':15},paint:{'text-color':['case',['==',['get','selection'],'pending'],'#7515d9','#db2443'],'text-halo-color':'#fff','text-halo-width':3}},
     ];
     const render=()=>{
       const state=current.current;
       map.getCanvas().style.cursor=state.enabled&&state.drawing?'crosshair':'';
       if(!state.enabled){markers.forEach(m=>m.remove());markers=[];captionsToPlace=[];pinItems=[];pinMarkers.forEach(marker=>marker.remove());pinMarkers=[];pinSignature='';leaders.replaceChildren();restoreBackground();for(const layer of layers)if(map.getLayer(layer.id))map.setLayoutProperty(layer.id,'visibility','none');return;}
       if(state.management!==false)map.getContainer().dataset.transportActive='true';else delete map.getContainer().dataset.transportActive;
+      if(state.drawing)map.getContainer().dataset.transportDrawing='true';else delete map.getContainer().dataset.transportDrawing;
       // Updating a GeoJSON source temporarily makes isStyleLoaded() false.
       // Existing layers are safe to update without waiting for every tile.
       if(!map.getLayer(layers[0].id)&&!map.isStyleLoaded()){map.off('idle',render);map.once('idle',render);return;}
@@ -220,7 +225,8 @@ export function TransportMapLayer({map,theme}) {
       const catalog=state.catalog;
       const colors=catalog?.lines || {};
       write(sources[0],collection((catalog?.segments || []).map(s=>line(s.geometry,{id:s.id,color:colors[s.lineId]?.color || '#aab0bb',kind:s.kind}))));
-      write(sources[1],collection((catalog?.stations || []).map(s=>point(s.coords,{id:s.id,name:s.name,color:colors[s.lineId]?.color || '#d41317'}))));
+      const metroSelection=transportMetroSelection(catalog,state.draft,state.selectedStationId);
+      write(sources[1],collection((catalog?.stations || []).map(s=>point(s.coords,{id:s.id,name:s.name,color:colors[s.lineId]?.color || '#d41317',selection:metroSelection.get(s.id)||''}))));
       const events=[...(state.events || [])];
       if(state.draft?.segments?.length)events.push({...state.draft,id:'draft',title:state.draft.title||'Новое ограничение',status:'OPEN'});
       const stationIds=[...new Set(events.filter(event=>!['Завершено','Отменено'].includes(transportStatus(event,state.date,state.minute||0))).flatMap(event=>event.segments.flatMap(segment=>[segment.fromId,segment.toId])).filter(id=>String(id).startsWith('m:')))];
@@ -240,7 +246,7 @@ export function TransportMapLayer({map,theme}) {
         if(status==='Завершено'&&!state.showEnded)continue;
         for(const segment of event.segments){
           if(segment.geometry.length>1)closures.push(line(event.direction==='reverse'?[...segment.geometry].reverse():segment.geometry,{id:event.id,kind:event.kind,direction:event.kind==='road'&&!segment.opposingEdgeId?'forward':event.direction,ended:status==='Завершено'}));
-          if(!(event.id==='draft'&&state.draft?.roadPoints?.length))for(const p of [segment.geometry[0],...(segment.geometry.length>1?[segment.geometry.at(-1)]:[])])pinItems.push({coords:[p[1],p[0]],event,status});
+          if(!(event.id==='draft'&&(state.draft?.kind!=='road'||state.draft?.roadPoints?.length)))for(const p of [segment.geometry[0],...(segment.geometry.length>1?[segment.geometry.at(-1)]:[])])pinItems.push({coords:[p[1],p[0]],event,status});
 
         }
         const selected=event.segments[0];
@@ -274,8 +280,9 @@ export function TransportMapLayer({map,theme}) {
       if(closure&&!state.drawing){state.onSelect?.((state.events || []).find(e=>e.id===closure.properties.id));return;}
       if(!state.drawing)return;
       if(state.kind==='road'){if(state.roadMode!=='brush')state.onRoad?.([event.lngLat.lat,event.lngLat.lng]);return;}
-      const station=hit.find(f=>f.layer.id==='beego-transport-stations');
+      const station=hit.find(f=>['beego-transport-selection-points','beego-transport-stations','beego-transport-selection-halo'].includes(f.layer.id));
       if(state.kind==='entry'&&station){state.onSegment?.((state.catalog.stations || []).find(s=>s.id===station.properties.id));return;}
+      if(station){state.onStation?.(station.properties.id);return;}
       const link=hit.find(f=>f.layer.id==='beego-transport-links'&&f.properties.kind===state.kind);
       if(link)state.onSegment?.(state.catalog.segments.find(s=>s.id===link.properties.id));
       else if(station)state.onStation?.(station.properties.id);
@@ -285,7 +292,7 @@ export function TransportMapLayer({map,theme}) {
     const observer=new ResizeObserver(place);observer.observe(outer);const panel=document.querySelector('.transport-workspace-panel,.shift-layer.operational-shift .shift-panel');if(panel)observer.observe(panel);
     return()=>{cancelAnimationFrame(pinFrame);observer.disconnect();leaders.remove();renderRef.current=null;markers.forEach(m=>m.remove());pinMarkers.forEach(m=>m.remove());restoreBackground();map.getCanvas().style.cursor='';map.off('style.load',styleLoaded);map.off('idle',render);map.off('click',click);map.off('move',place);map.off('resize',place);map.off('zoomend',refreshPins);map.off('zoom',schedulePins);map.off('resize',schedulePins);};
   },[map]);
-  useEffect(()=>{renderRef.current?.();},[state.enabled,state.management,state.metro,state.catalog,state.events,state.draft,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,state.comparison,impactKey,theme]);
+  useEffect(()=>{renderRef.current?.();},[state.enabled,state.management,state.metro,state.catalog,state.events,state.draft,state.selectedStationId,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,state.comparison,impactKey,theme]);
   if(!state.enabled)return null;
   return <>
     {state.management!==false?<div className='transport-map-tools' aria-label='Выбор транспортного участка'>
@@ -294,7 +301,7 @@ export function TransportMapLayer({map,theme}) {
       <button onClick={()=>transportMap.set({metro:!state.metro})} aria-pressed={state.metro} title='Показать станции и схему связей метро'><Layers3 size={18}/></button>
       {state.drawing?<button onClick={state.onUndo} aria-label='Отменить последнюю точку'><Undo2 size={18}/></button>:<button onClick={state.onNew}><Plus size={18}/>Ограничение</button>}
     </div>:null}
-    {state.drawing&&state.kind==='road'?<div className='transport-draw-tools' aria-label='Рисование перекрытия'><div><button aria-pressed={state.roadMode!=='brush'} onClick={()=>state.onRoadMode?.('points')}><MousePointer2 size={16}/>По точкам</button><button aria-pressed={state.roadMode==='brush'} onClick={()=>state.onRoadMode?.('brush')}><Pencil size={16}/>Кисть</button><button disabled={state.roadBusy||!state.draft?.segments?.length} onClick={state.onFinish}><Check size={16}/>Готово</button></div><p role='status'>{state.roadBusy?'Проверяем линию и привязываем к проезжей части…':state.roadMode==='brush'?'Проведите линию вдоль дороги. По точкам — для перемещения карты.':state.draft?.roadPoints?.length?'Добавляйте точки на поворотах. Точки можно перетаскивать.':'Отметьте начало и конец участка. Между ними построим линию по дороге.'}</p></div>:state.drawing?<div className='transport-map-hint'>{state.kind==='entry'?'Выберите станцию на карте или найдите по названию':'Выберите связь метро или две соседние станции'}</div>:null}
+    {state.drawing&&state.kind==='road'?<div className='transport-draw-tools' aria-label='Рисование перекрытия'><div><button aria-pressed={state.roadMode!=='brush'} onClick={()=>state.onRoadMode?.('points')}><MousePointer2 size={16}/>По точкам</button><button aria-pressed={state.roadMode==='brush'} onClick={()=>state.onRoadMode?.('brush')}><Pencil size={16}/>Кисть</button><button disabled={state.roadBusy||!state.draft?.segments?.length} onClick={state.onFinish}><Check size={16}/>Готово</button></div><p role='status'>{state.roadBusy?'Проверяем линию и привязываем к проезжей части…':state.roadMode==='brush'?'Проведите линию вдоль дороги. По точкам — для перемещения карты.':state.draft?.roadPoints?.length?'Добавляйте точки на поворотах. Точки можно перетаскивать.':'Отметьте начало и конец участка. Между ними построим линию по дороге.'}</p></div>:state.drawing?<div className='transport-map-hint' role='status'>{state.kind==='entry'?'Нажмите станцию — выбранный вход подсветится красным':state.selectedStationId?'Начало выбрано. Нажмите соседнюю станцию с фиолетовой обводкой':state.draft?.segments?.length?'Участок выделен красным. Можно добавить ещё или сохранить ограничение':'Нажмите первую станцию или участок между станциями'}</div>:null}
     {state.management!==false?<details className='transport-map-legend' open={legendOpen} onToggle={event=>setLegendOpen(event.currentTarget.open)}><summary>Легенда</summary><div><span><i className='closure'/>Закрыто для авто</span><span><TrainFront size={16}/>Движение метро</span><span><DoorOpen size={16}/>Вход</span><span><ArrowLeftRight size={16}/>Пересадка</span><span><i className='before'/>Прежний путь</span><span><i className='after'/>Новый путь</span><span><Footprints size={15}/><i className='walking'/>Пешком / пересадка</span></div></details>:null}
   </>;
 }
