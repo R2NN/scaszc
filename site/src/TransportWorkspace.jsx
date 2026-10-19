@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { AlertTriangle, ArrowRight, Car, Check, ChevronRight, Clock3, Footprints, MapPin, Plus, Route, Search, TrainFront, Undo2, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Car, Check, ChevronRight, Clock3, DoorOpen, ArrowLeftRight, Footprints, MapPin, Plus, Route, Search, TrainFront, Undo2, Users, X } from 'lucide-react';
 import { transportMap } from './TransportMap.jsx';
 import { transportStatus,transportFocusSegments } from './transportDomain.js';
 import { shiftClock } from './shiftClock.js';
@@ -12,6 +12,16 @@ const sessions=new Map();
 const kindLabel={road:'Автомобильная дорога',metro:'Участок метро',transfer:'Пересадка',entry:'Вход и выход станции'};
 const endLabel=event=>event.endsAt?`${event.endsAt.slice(0,10)!==event.startsAt.slice(0,10)?event.endsAt.slice(0,10).split('-').reverse().join('.')+' · ':''}${event.endsAt.slice(11,16)}`:'окончание неизвестно';
 const directionLabel=event=>event.kind==='entry'?'Вход и выход':event.kind==='road'&&event.segments.every(s=>!s.opposingEdgeId)?'Односторонний проезд':event.direction==='both'?'Все разрешённые направления':'По направлению стрелок';
+const restrictionIcon=kind=>kind==='road'?<Car/>:kind==='entry'?<DoorOpen/>:kind==='transfer'?<ArrowLeftRight/>:<TrainFront/>;
+const keepInputVisible=element=>{
+  if(!element?.matches('input,select,textarea'))return;
+  const scroller=element.closest('.shift-panel-body,.transport-workspace-scroll');if(!scroller)return;
+  const bounds=scroller.getBoundingClientRect(),rect=(element.closest('label')||element).getBoundingClientRect(),scale=bounds.height/scroller.offsetHeight;
+  const footer=scroller.querySelector('.transport-form-footer')?.getBoundingClientRect();
+  const top=bounds.top+12,bottom=Math.min(bounds.bottom-12,footer?.top||bounds.bottom-12);
+  if(rect.top<top)scroller.scrollTop+=(rect.top-top)/scale;
+  else if(rect.bottom>bottom)scroller.scrollTop+=(rect.bottom-bottom)/scale;
+};
 const signed=value=>`${value>0?'+':''}${value}`;
 const api=async(path,body)=>{
   const response=await fetch(`/api/transport/${path}`,body?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}:undefined);
@@ -32,18 +42,20 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const generation=useRef(0),previewRef=useRef(null),resumeRef=useRef(null),refs=useRef({});
   const [elapsed,setElapsed]=useState(0);
   const [scenario,setScenario]=useState(null),[scenarioBusy,setScenarioBusy]=useState(false);
-  const resultRef=useRef(null);
+  const resultRef=useRef(null),groupRef=useRef(null);
+  const [eventGroup,setEventGroup]=useState([]);
+  const openGroup=items=>{setEventGroup(items);requestAnimationFrame(()=>groupRef.current?.scrollIntoView({block:'nearest'}));};
   useEffect(()=>{
     if(!active||!preview?.result)return;
-    const frame=requestAnimationFrame(()=>resultRef.current?.scrollIntoView({block:'start',behavior:'instant'}));
+    const frame=requestAnimationFrame(()=>{if(draft)keepInputVisible(document.activeElement);else resultRef.current?.scrollIntoView({block:'start',behavior:'instant'});});
     return()=>cancelAnimationFrame(frame);
-  },[active,preview?.id,Boolean(preview?.result)]);
+  },[active,preview?.id,Boolean(preview?.result),Boolean(draft)]);
   const date=shift?.date;
   const minute=live?Math.floor(clock.minute):360;
   const load=async()=>{if(!shift?.id)return;const id=shift.id,result=await api(`events?shiftId=${encodeURIComponent(id)}`);if(refs.current.shift?.id===id)setEvents(result.events);};
   useEffect(()=>{let active=true;(async()=>{try{const value=await api('catalog');if(active)setCatalog(value);}catch(e){if(active)setError(e.message);}})();return()=>{active=false;};},[]);
   useEffect(()=>{
-    const own=++generation.current;setEvents([]);setPreview(null);setSelected(null);setScenario(null);setDraft(sessions.get(`${shift?.id}:${live}`)?.draft || null);
+    const own=++generation.current;setEvents([]);setPreview(null);setSelected(null);setScenario(null);setEventGroup([]);setDraft(sessions.get(`${shift?.id}:${live}`)?.draft || null);
     load().catch(e=>setError(e.message));
     if(shift?.id)(async()=>{try{const saved=await api(`previews/latest?shiftId=${shift.id}`);if(saved&&refs.current.shift?.id===shift.id&&own===generation.current){setPreview(saved);previewRef.current=saved;setEngineerId(saved.result?.consequences?.engineers[0]?.engineerId || '');}}catch(e){if(own===generation.current)setError(e.message);}})();
     if(live&&shift?.id)(async()=>{try{const value=await api(`scenario?shiftId=${shift.id}`);if(refs.current.shift?.id===shift.id)setScenario(value);}catch(e){setError(e.message);}})();
@@ -126,10 +138,10 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     const timer=setInterval(poll,1300),tick=setInterval(()=>setElapsed(Math.floor((Date.now()-preview.startedAt)/1000)),1000);
     poll();return()=>{alive=false;clearInterval(timer);clearInterval(tick);};
   },[preview?.id,preview?.status]);
-  useEffect(()=>()=>{generation.current++;transportMap.set({enabled:false,onRoad:null,onSegment:null,onSelect:null});},[]);
+  useEffect(()=>()=>{generation.current++;transportMap.set({enabled:false,onRoad:null,onSegment:null,onSelect:null,onGroup:null});},[]);
   useEffect(()=>{
     transportMap.set({enabled:active,catalog,events,draft,editingId:draft?.expectedRevision?draft.id:null,preview,date,minute,showEnded,engineerId,
-      drawing,kind:draft?.kind,onRoad:selectRoad,onSegment:selectSegment,onStation:selectStation,onSelect:selectEvent,onNew:()=>begin(),
+      drawing,kind:draft?.kind,onRoad:selectRoad,onSegment:selectSegment,onStation:selectStation,onSelect:selectEvent,onGroup:openGroup,onNew:()=>begin(),
       onUndo:()=>change({segments:draft?.segments.slice(0,-1)||[]}),onKind:kind=>{if(!draft)begin(kind);else{change({kind,segments:[]});setDrawing(true);}}});
   },[active,catalog,events,draft,preview,date,minute,drawing,showEnded,engineerId,stationFrom]);
   const save=async()=>{
@@ -184,9 +196,10 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const itinerary=(firstOrder?.stepsAfter || []).filter(s=>s.seconds>0).reduce((groups,step)=>{
     const last=groups.at(-1);if(last&&last.mode===step.mode&&last.lineId===step.lineId&&last.line===step.line){last.seconds+=step.seconds;last.to=step.to || last.to;}else groups.push({...step});return groups;
   },[]);
-  return <div className={`transport-panel-content ${live?'live':''} ${consequences?'has-result':''}`}>
+  return <div onFocusCapture={event=>{const element=event.target;requestAnimationFrame(()=>keepInputVisible(element));}} className={`transport-panel-content ${live?'live':''} ${consequences?'has-result':''} ${draft?'editing':''}`}>
     {live&&date==='2026-08-17'?<section className='transport-scenario'><div className='transport-section-title'><div><small>ИЗОЛИРОВАННЫЙ ПОКАЗ · 17 АВГУСТА</small><h3>{scenario?.variant==='simultaneous'?'Дорога и метро одновременно':'Пять событий одного дня'}</h3></div><Route size={21}/></div>{scenario?<><details><summary>{scenario.index<0?'Список пяти событий':`Событие ${scenario.index+1} из ${scenario.waves.length} · ${scenario.waves[scenario.index].time}`}</summary><div className='transport-timeline'>{scenario.waves.map(w=><button key={w.index} className={w.index===scenario.index?'current':''} disabled={!w.eventId} onClick={()=>{const event=events.find(e=>e.id===w.eventId);if(event)selectEvent(event);}}><time>{w.time}</time><span>{w.title}</span><small>{w.status==='APPLIED'?'Применено':w.eventId?'К событию':'Впереди'}</small></button>)}</div></details><button disabled={scenarioBusy||preview?.status==='RUNNING'} onClick={()=>nextWave(false)}>{scenarioBusy?'Готовим событие по текущим маршрутам…':scenario.index>=scenario.waves.length-1?'Завершить показ':'Следующее событие'}<ChevronRight size={16}/></button></>:<><p>Последовательные перекрытия дороги, метро и пересадки. Каждое выбирается по реальному оставшемуся пути.</p><button disabled={scenarioBusy} onClick={startScenario}>{scenarioBusy?'Подготавливаем смену…':'Запустить транспортный показ'}</button></>}</section>:null}
     {live&&date==='2026-08-17'?<details className='transport-scenario-alternatives'><summary>Другие варианты показа</summary><button disabled={scenarioBusy||preview?.status==='RUNNING'} onClick={()=>startScenario('simultaneous')}>Одновременное перекрытие дороги и метро</button><button disabled={scenarioBusy||preview?.status==='RUNNING'} onClick={()=>startScenario('sequential')}>Новая сессия из пяти событий</button><small>Текущая история сохранится. Создаётся отдельная демонстрационная смена.</small></details>:null}
+    {eventGroup.length&&!draft?<section ref={groupRef} className='transport-event-group'><div className='transport-section-title'><h3>Ограничения в точке ({eventGroup.length})</h3><button onClick={()=>setEventGroup([])} aria-label='Закрыть группу ограничений'><X size={18}/></button></div>{eventGroup.map(event=><button key={event.id} onClick={()=>{setEventGroup([]);selectEvent(event);}}>{restrictionIcon(event.kind)}<span><b>{event.title}</b><small>{kindLabel[event.kind]} · {event.startsAt.slice(11,16)}–{endLabel(event)}</small></span><ChevronRight size={16}/></button>)}</section>:null}
     {consequences&&!draft?<button className='transport-browse' onClick={()=>setBrowse(value=>!value)}>{browse?'Скрыть поиск':'Найти или добавить ограничение'}</button>:null}
     {!draft&&(!consequences||browse)?<div className='transport-intro'><div><b>{live?'Движение в течение смены':'Доступность дорог и метро'}</b><p>{live?'Закрытия, проверенные объезды и последствия для заявок':'Планируйте перекрытия на выбранный день'}</p></div><button className='transport-add' onClick={()=>begin()} aria-label='Добавить транспортное ограничение'><Plus size={18}/></button></div>:null}
     {pauseNotice?<div className='transport-clock-notice'><Clock3 size={16}/><span>Сценарий на паузе: фиксируем положение для проверки.</span><button onClick={restorePlayback}>Продолжить</button></div>:null}
@@ -194,7 +207,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     {!draft?<>
       <div className={`transport-search ${consequences&&!browse?'transport-collapsed':''}`}><Search size={17}/><input aria-label='Поиск транспортных ограничений' placeholder='Название, причина ограничения' value={search} onChange={e=>setSearch(e.target.value)}/></div>
       <div className={`transport-filter ${consequences&&!browse?'transport-collapsed':''}`}><button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>Все</button><button className={filter==='road'?'active':''} onClick={()=>setFilter('road')}><Car size={16}/>Авто</button><button className={filter==='metro'?'active':''} onClick={()=>setFilter('metro')}><TrainFront size={16}/>Метро</button><label><input type='checkbox' checked={showEnded} onChange={e=>setShowEnded(e.target.checked)}/>Завершённые</label></div>
-      <div className='transport-event-list'>{visible.map(event=><button key={event.id} className={`transport-event ${event.id===selected?.id?'selected':''}`} onClick={()=>selectEvent(event)}><span className={`transport-type-icon ${event.kind}`}>{event.kind==='road'?<Car/>:<b>M</b>}</span><span><small className={transportStatus(event,date,minute)==='Действует'?'active':''}>{transportStatus(event,date,minute)}</small><strong>{event.title}</strong><em>{event.startsAt.slice(11,16)}–{endLabel(event)} · {directionLabel(event)}</em></span><ChevronRight size={17}/></button>)}</div>
+      <div className='transport-event-list'>{visible.map(event=><button key={event.id} className={`transport-event ${event.id===selected?.id?'selected':''}`} onClick={()=>selectEvent(event)}><span className={`transport-type-icon ${event.kind}`}>{restrictionIcon(event.kind)}</span><span><small className={transportStatus(event,date,minute)==='Действует'?'active':''}>{transportStatus(event,date,minute)}</small><strong>{event.title}</strong><em>{event.startsAt.slice(11,16)}–{endLabel(event)} · {directionLabel(event)}</em></span><ChevronRight size={17}/></button>)}</div>
       {!visible.length?<div className='transport-empty'><Route size={36}/><h3>Дороги под контролем</h3><p>Добавьте участок дороги, закрытие метро или пересадки. Система проверит оставшиеся маршруты по сети.</p><button onClick={()=>begin()}><Plus size={17}/>Добавить ограничение</button></div>:null}
       {selected?<section className='transport-detail'><div className='transport-section-title'><h3>{kindLabel[selected.kind]}</h3><button onClick={()=>setSelected(null)} aria-label='Закрыть карточку ограничения'><X size={18}/></button></div><p>{selected.reason}</p><dl><div><dt>Участок</dt><dd>{selected.segments.map(s=>s.name).join(', ')}</dd></div><div><dt>Направление</dt><dd>{directionLabel(selected)}</dd></div><div><dt>Источник</dt><dd>{selected.source}</dd></div><div><dt>Действует</dt><dd>{selected.startsAt.slice(0,10)} · {selected.startsAt.slice(11,16)}–{endLabel(selected)}</dd></div><div><dt>Транспорт</dt><dd>{selected.kind==='road'?'Автомобили · пешеходам проход открыт':'Общественный транспорт'}</dd></div></dl><div className='transport-actions'><button onClick={()=>transportMap.focus(selected.segments)}><MapPin size={16}/>На карте</button><button onClick={()=>editEvent(selected)}>Изменить / продлить</button></div><div className='transport-actions'><button disabled={busy||selected.status!=='OPEN'||transportStatus(selected,date,minute)==='Запланировано'} onClick={()=>endEvent('ENDED')}>Завершить событие</button><button disabled={busy||selected.status!=='OPEN'} onClick={()=>endEvent('CANCELLED')}>Отменить событие</button></div><button className='transport-primary full' onClick={calculate} disabled={preview?.status==='RUNNING'}><Route size={17}/>Проверить последствия</button></section>:null}
     </>:<>
@@ -221,9 +234,9 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
       <div className='transport-metrics'><div><Users/><b>{consequences.engineers.length}</b><span>инженеров затронуто</span></div><div><Clock3/><b>{signed(consequences.addedTravelMinutes)} мин</b><span>сумма оставшегося движения</span></div></div>
 
       {engineer?<p className='transport-source-note'>Оставшийся путь: {engineer.beforeMinutes} → {engineer.afterMinutes} мин · {(engineer.beforeDistanceM/1000).toFixed(1)} → {(engineer.afterDistanceM/1000).toFixed(1)} км</p>:null}
-      {engineer?<button className='transport-show-route' onClick={()=>transportMap.focus(transportFocusSegments({orders:consequences.orders.filter(o=>o.engineerId===engineer.engineerId),events,draft,selected,date,minute}))}><Route size={16}/>Показать проверенный путь</button>:null}
+      {engineer?<button className='transport-show-route' onClick={()=>transportMap.focus(transportFocusSegments({orders:consequences.orders.filter(o=>o.engineerId===engineer.engineerId),events,draft,selected,date,minute,transport:engineer.transport}))}><Route size={16}/>Показать проверенный путь</button>:null}
       {itinerary.length?<details className='transport-itinerary'><summary>Как проходит путь</summary>{itinerary.map((step,index)=><div key={index}><span>{['walking','pedestrian','walking_transfer'].includes(step.mode)?<Footprints size={15}/>:step.mode==='metro'?<b>M</b>:<Clock3 size={15}/>}</span><span>{step.mode==='metro'?(catalog?.lines?.[step.lineId]?.name || 'Метро'):({metro_wait_model:'Ожидание поезда · модель',walking_transfer:'Пешая пересадка',walking:'Пешком',pedestrian:'Пешком',waiting:'Ожидание транспорта',station_entry:'Вход на станцию',station_exit:'Выход со станции',auto:'Автомобиль',bicycle:'Велосипед'})[step.mode] || step.line || 'Наземный транспорт'}{step.from||step.to?<small>{step.from} → {step.to}</small>:null}</span><strong>{Math.ceil(step.seconds/60)} мин</strong></div>)}</details>:null}
-      {consequences.orders.length?<div className='transport-impacts'><h4>Затронутые заявки ({consequences.orders.length})</h4>{consequences.orders.map(o=><button key={o.orderId} aria-pressed={o.orderId===firstOrder?.orderId} onClick={()=>{setEngineerId(o.engineerId);setOrderId(o.orderId);if(o.geometryAfter)transportMap.focus(transportFocusSegments({orders:[o],events,draft,selected,date,minute}));}}><span>{o.address || o.orderId}</span><b>{o.lost?'Нет назначения':`${signed(o.delta)} мин`}</b><small className={o.lost||o.lateMinutes>0?'warning':''}>{o.lost?'Нужно решение':o.lateMinutes==null?'Окно неизвестно':o.lateMinutes>0?`Опоздание ${o.lateMinutes} мин`:'В окне'}</small></button>)}</div>:null}
+      {consequences.orders.length?<div className='transport-impacts'><h4>Затронутые заявки ({consequences.orders.length})</h4>{consequences.orders.map(o=><button key={o.orderId} aria-pressed={o.orderId===firstOrder?.orderId} onClick={()=>{setEngineerId(o.engineerId);setOrderId(o.orderId);if(o.geometryAfter)transportMap.focus(transportFocusSegments({orders:[o],events,draft,selected,date,minute,transport:shift.team.find(person=>person.id===o.engineerId)?.transport}));}}><span>{o.address || o.orderId}</span><b>{o.lost?'Нет назначения':`${signed(o.delta)} мин`}</b><small className={o.lost||o.lateMinutes>0?'warning':''}>{o.lost?'Нужно решение':o.lateMinutes==null?'Окно неизвестно':o.lateMinutes>0?`Опоздание ${o.lateMinutes} мин`:'В окне'}</small></button>)}</div>:null}
 
       {engineer&&(engineer.beforeWaitingMinutes||engineer.afterWaitingMinutes)?<p className='transport-source-note'>Ожидание транспорта отдельно: {engineer.beforeWaitingMinutes} → {engineer.afterWaitingMinutes} мин</p>:null}
       <details><summary>Что проверено</summary><p>Независимый валидатор плана: {preview.result.plan.validation.status}. Запреты сети: {preview.result.audit.status}. Территории, навыки, оснащение, транспорт и история визитов сохраняются. Метро использует модель ожидания поезда из локального индекса.</p></details>

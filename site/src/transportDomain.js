@@ -13,11 +13,22 @@ export function transportStatus(event, date, minute) {
   return at < Date.parse(event.startsAt) ? 'Запланировано' : event.endsAt && at >= Date.parse(event.endsAt) ? 'Завершено' : 'Действует';
 }
 
-/** Frame the selected detour with current restrictions, never completed history. */
-export function transportFocusSegments({orders=[],events=[],draft,selected,date,minute}) {
-  const current=events.filter(event=>transportStatus(event,date,minute)==='Действует');
-  const closures=draft?.segments?.length?draft.segments:selected&&transportStatus(selected,date,minute)==='Действует'?selected.segments:current.flatMap(event=>event.segments);
-  return [...orders.filter(order=>!order.lost&&order.geometryAfter?.length).map(order=>({geometry:order.geometryAfter})),...closures];
+const nearPath=(point,path)=>path.some((target,index)=>{
+  const source=path[Math.max(0,index-1)],scale=Math.cos(point[0]*Math.PI/180);
+  const dx=(target[1]-source[1])*scale,dy=target[0]-source[0];
+  const t=Math.max(0,Math.min(1,((point[1]-source[1])*scale*dx+(point[0]-source[0])*dy)/(dx*dx+dy*dy||1)));
+  return Math.hypot((point[1]-source[1])*scale-t*dx,point[0]-source[0]-t*dy)<.0045;
+});
+
+/** Frame only restrictions relevant to this engineer's transport and selected route. */
+export function transportFocusSegments({orders=[],events=[],draft,selected,date,minute,transport}) {
+  const routes=orders.filter(order=>!order.lost&&order.geometryAfter?.length);
+  const paths=routes.flatMap(order=>[order.geometryBefore||[],order.geometryAfter]);
+  const compatible=event=>!transport||(transport==='CAR'?event.kind==='road':event.kind!=='road');
+  const relevant=event=>compatible(event)&&(!paths.length||event.segments.some(segment=>segment.geometry?.some(point=>paths.some(path=>nearPath(point,path)))));
+  const current=events.filter(event=>transportStatus(event,date,minute)==='Действует'&&relevant(event));
+  const closures=draft?.segments?.length&&relevant(draft)?draft.segments:selected&&transportStatus(selected,date,minute)==='Действует'&&relevant(selected)?selected.segments:current.flatMap(event=>event.segments);
+  return [...routes.map(order=>({geometry:order.geometryAfter})),...closures];
 }
 
 const remaining = (visit, at) => {
