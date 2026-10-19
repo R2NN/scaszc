@@ -157,6 +157,12 @@
 .app-shell .transport-panel-frame>.transport-decision-bar,.app-shell .transport-panel-frame>.transport-form-footer{position:relative;bottom:auto;flex:none;margin:0;padding:10px 20px 12px;background:var(--transport-surface,#fff);border-top:1px solid var(--transport-border,#e2e6ed)}
 .transport-panel-frame>.transport-form-footer{display:flex;gap:8px}
 .transport-map-caption{z-index:1000!important}
+.transport-problem-context{display:flex;gap:12px;padding:14px;border:1px solid var(--transport-purple-border,#e7dcfe);border-radius:12px;background:var(--transport-purple-soft,#f6f1ff)}.transport-problem-context>div{min-width:0}.transport-problem-context small{font-size:10px;letter-spacing:1px;color:var(--transport-purple,#7211dc);font-weight:800}.transport-problem-context b{display:block;font-size:15px;margin:4px 0}.transport-problem-context p{font-size:13px;line-height:1.5;margin:5px 0 0;color:var(--transport-muted,#66768b)}
+.transport-result-problem{display:block;color:var(--transport-ink,#202c3b);font-size:14px;line-height:1.4;margin-top:5px}
+.transport-affected-crews{padding:12px 11px}.transport-affected-crews h4{margin:0 0 10px!important;font-size:14px!important}.transport-affected-crews>button{width:100%;display:flex;align-items:center;gap:9px;padding:11px 9px;border:1px solid var(--transport-border,#e2e6ed);border-radius:10px;background:var(--transport-surface,#fff);color:var(--transport-ink,#202c3b);text-align:left;margin:7px 0}.transport-affected-crews>button[aria-pressed=true]{border-color:#8a32ef;background:var(--transport-purple-soft,#f6f1ff);box-shadow:inset 3px 0 #7c16eb}.transport-affected-crews .engineer-portrait{width:38px;height:38px;flex:none}.transport-affected-crews>button>span:not(.engineer-portrait){flex:1;min-width:0}.transport-affected-crews b{font-size:14px}.transport-affected-crews small{display:block;font-size:11px;line-height:1.5;color:var(--transport-muted,#66768b);margin-top:4px}.transport-affected-crews strong{font-size:14px;text-align:right;color:var(--transport-purple,#7211dc);flex:none}
+.transport-comparison-switch{display:flex;gap:4px;padding:0 11px 12px}.transport-comparison-switch button{flex:1;min-width:0;border:1px solid var(--transport-border,#e2e6ed);background:var(--transport-surface,#fff);color:var(--transport-ink,#202c3b);border-radius:8px;padding:9px 5px;font-size:12px;font-weight:750}.transport-comparison-switch button[aria-pressed=true]{background:var(--transport-purple-soft,#f6f1ff);border-color:#af79ed;color:var(--transport-purple,#7211dc)}
+.transport-affected-crews .engineer-portrait{position:relative;display:block;overflow:hidden;border-radius:50%;background:#eceef3}.transport-affected-crews .engineer-portrait>img{width:100%;height:100%;object-fit:cover}
+@media(max-width:1100px){.transport-affected-crews{padding:8px}.transport-affected-crews>button{flex-wrap:wrap;padding:8px}.transport-affected-crews strong{margin-left:auto}.transport-problem-context{padding:10px}.transport-comparison-switch{padding:0 8px 8px}.transport-comparison-switch button{font-size:11px}}
 .transport-map-pin{z-index:1001!important}
 .shift-map-problems{position:absolute;z-index:1010;left:var(--transport-corridor-left,510px);top:66px;display:flex;align-items:center;gap:8px;max-width:calc(100% - var(--transport-corridor-left,510px) - 85px);padding:10px 13px;border:1px solid #e6c6ca;border-radius:12px;background:#fff;color:#842536;font:700 13px/1.3 system-ui;box-shadow:0 3px 15px #34415417;cursor:pointer}
 .shift-map-problems b{min-width:22px;padding:3px 6px;border-radius:8px;background:#ff344b;color:#fff;text-align:center}
@@ -213,6 +219,11 @@
 }
 
 .transport-panel-frame>.transport-panel-content>*{flex-shrink:0}
+@media(max-width:650px) and (min-height:521px){
+ .app-shell .shift-layer.operational-shift .shift-panel:has(> .shift-panel-body>div:not([hidden])>.transport-panel-frame.live.has-decision){height:min(52dvh,460px,max(280px,calc(100dvh - 330px)))!important}
+ .has-decision .transport-result>header h3{display:none}
+ .has-decision .transport-result>header .transport-result-problem{margin:0}
+}
 
 @media(min-width:600px) and (max-width:1100px) and (min-height:521px){
  .app-shell .transport-panel-frame>.transport-decision-bar:has(.transport-route-summary){display:grid;grid-template-columns:minmax(240px,1fr) minmax(180px,.65fr);gap:5px 12px;align-items:center}

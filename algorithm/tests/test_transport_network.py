@@ -2,6 +2,30 @@ from algorithm.tools import transport_network as network
 import pytest
 
 
+def test_audit_attributes_metro_conflict_to_the_matching_event(monkeypatch):
+    a, b, c = [55.7,37.6], [55.71,37.61], [55.72,37.62]
+    monkeypatch.setattr(network,'catalog',lambda:{'stations':[{'id':'m:1','coords':a},{'id':'m:2','coords':b},{'id':'m:3','coords':c}]})
+    base={'kind':'metro','status':'OPEN','startsAt':'2026-08-17T09:00:00+03:00','endsAt':None}
+    events=[{**base,'id':'used','segments':[{'fromId':'m:1','toId':'m:2'}]},
+            {**base,'id':'other','segments':[{'fromId':'m:2','toId':'m:3'}]}]
+    payload={'events':events,'date':'2026-08-17','time':'10:00','team':[],'plan':{'routes':[]},'remainingOnly':True,
+             'raw':{'plan':{'engineer_plans':[{'visits':[{'job_id':'J','departure_at':'2026-08-17T10:05:00+03:00',
+               'travel':{'mode':'PUBLIC_TRANSIT','duration_minutes':2,'itinerary':[{'mode':'metro','duration_seconds':120,'geometry':[a,b],
+                 'attributes':{'from_id':'m:1','to_id':'m:2'}}]}}]}]}}}
+    result=network.audit(payload)
+    assert {v['eventId'] for v in result['violations']}=={'used'}
+    assert result['violations'][0]['orderId']=='J'
+
+
+def test_impact_audit_uses_directed_remaining_edges_not_a_nearby_road(monkeypatch):
+    monkeypatch.setattr(network,'trace_edges',lambda *args:[{'id':'10','end_node':{'elapsed_time':300}},{'id':'11','end_node':{'elapsed_time':600}}])
+    base={'kind':'road','status':'OPEN','direction':'forward','startsAt':'2026-08-17T09:00:00+03:00','endsAt':None}
+    events=[{**base,'id':name,'segments':[{'edgeId':edge,'geometry':[[55.7,37.6],[55.71,37.61]]}]} for name,edge in [('passed','10'),('future','11'),('bridge','99')]]
+    result=network.audit({'events':events,'date':'2026-08-17','time':'10:05','remainingOnly':True,'team':[{'id':'E','transport':'CAR'}],
+        'plan':{'routes':[{'engineerId':'E','assignments':[{'orderId':'J','departureAt':'10:00','arrival':'10:10','travelMinutes':10,'distanceM':1000,'geometry':[[55.7,37.6],[55.71,37.61]]}]}]}})
+    assert {v['eventId'] for v in result['violations']}=={'future'}
+
+
 @pytest.mark.parametrize('entry_seconds',[0,30])
 @pytest.mark.parametrize('wait,status',[(68,'VALID'),(67,'INVALID'),(0,'INVALID')])
 def test_entry_audit_checks_door_crossing_after_street_wait(monkeypatch,entry_seconds,wait,status):

@@ -78,6 +78,14 @@ def audit(payload):
     violations, checked = [], 0
     engineers = {e['id']: e for e in payload['team']}
     at = payload['time']
+    moment = datetime.fromisoformat(f'{payload["date"]}T{at}:00+03:00')
+    individual = [(event, TransportContext([event])) for event in context.events]
+    def record(order_id, kind, source, target, when):
+        if payload.get('remainingOnly') and when < moment:
+            return
+        violations.extend({'orderId': order_id, 'eventId': event['id'], 'kind': kind,
+                           'fromId': source, 'toId': target, 'usedAt': when.isoformat()}
+                          for event, scope in individual if scope.blocked(kind, source, target, when))
     for route in payload['plan']['routes']:
         mode = engineers[route['engineerId']]['transport']
         if mode != 'CAR' or not context.road_events(mode):
@@ -90,7 +98,8 @@ def audit(payload):
                 continue
             edges = trace_edges(ENDPOINT, geometry)
             departure = datetime.fromisoformat(f'{payload["date"]}T{visit["departureAt"]}:00+03:00')
-            blocked = list(road_violations(context, context.road_events(mode), edges, departure, visit['travelMinutes'] * 60))
+            blocked = list(road_violations(context, context.road_events(mode), edges, departure, visit['travelMinutes'] * 60,
+                                          not_before=moment if payload.get('remainingOnly') else None))
             violations.extend({'orderId': visit['orderId'], 'eventId': event['id']} for event in blocked)
             checked += 1
     checked_transit = 0
@@ -120,9 +129,9 @@ def audit(payload):
                     when = departure + timedelta(seconds=elapsed)
                     kind = 'metro' if step['mode'] == 'metro' else 'transfer' if step['mode'] == 'walking_transfer' and attrs.get('source') != 'VALHALLA_WALK_MATRIX' else None
                     if kind and source and target and context.blocked(kind, source, target, when):
-                        violations.append({'orderId': visit['job_id'], 'kind': kind, 'fromId': source, 'toId': target})
+                        record(visit['job_id'], kind, source, target, when)
                     if step['mode'] in ('station_entry','station_exit') and source and context.blocked('entry', source, None, when):
-                        violations.append({'orderId':visit['job_id'],'kind':'entry','fromId':source})
+                        record(visit['job_id'], 'entry', source, None, when)
                     if step['mode'] == 'walking' and target and attrs.get('purpose') in ('station_access','metro_access'):
                         # Reaching the door is not entry. Independently account
                         # for stationary street-side waiting before crossing it,
@@ -134,13 +143,14 @@ def audit(payload):
                                 break
                             entry_at+=timedelta(seconds=following['duration_seconds'])
                         if context.blocked('entry',target,None,entry_at):
-                            violations.append({'orderId':visit['job_id'],'kind':'entry','fromId':target})
+                            record(visit['job_id'], 'entry', target, None, entry_at)
                     exited=index>0 and itinerary[index-1]['mode']=='station_exit' and (itinerary[index-1].get('attributes',{}).get('from_id') or (station_id(itinerary[index-1]['geometry'][0]) if itinerary[index-1].get('geometry') else None))==source
                     if step['mode'] == 'walking' and source and not exited and attrs.get('purpose') in ('station_egress','metro_egress') and context.blocked('entry',source,None,when):
-                        violations.append({'orderId':visit['job_id'],'kind':'entry','fromId':source})
+                        record(visit['job_id'], 'entry', source, None, when)
                     if step['mode'] == 'walking_transfer' and attrs.get('source') == 'VALHALLA_WALK_MATRIX':
                         if source and context.blocked('entry',source,None,when) or target and context.blocked('entry',target,None,when+timedelta(seconds=step['duration_seconds'])):
-                            violations.append({'orderId':visit['job_id'],'kind':'entry','fromId':source,'toId':target})
+                            if source:record(visit['job_id'], 'entry', source, None, when)
+                            if target:record(visit['job_id'], 'entry', target, None, when+timedelta(seconds=step['duration_seconds']))
                     elapsed += step['duration_seconds']
                 checked_transit += 1
     return {'status': 'VALID' if not violations else 'INVALID', 'checkedRoadLegs': checked, 'checkedTransitLegs': checked_transit, 'violations': violations, 'contextSha256': context.digest}

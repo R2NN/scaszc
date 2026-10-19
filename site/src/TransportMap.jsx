@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { Car, TrainFront, Undo2, Crosshair, Layers3, Plus, DoorOpen, ArrowLeftRight, Footprints } from 'lucide-react';
 import { groupTransportPins,transportBoxClear,transportUsesSidePanel,transportRouteStations,clipTransportSegment } from './transportMapLayout.js';
-import { transportStatus } from './transportDomain.js';
+import { transportStatus,transportCrewOrders } from './transportDomain.js';
 
 let view={enabled:false,metro:true};
 const listeners=new Set();
@@ -44,6 +44,7 @@ export function TransportMapLayer({map,theme}) {
   // Clock minutes change five times a second at ×300. Only crossing an event
   // boundary changes this overlay; callbacks still read the latest panel state.
   const statuses=[...(state.events || []),...(state.draft?[state.draft]:[])].map(event=>transportStatus(event,state.date,state.minute || 0)).join('|');
+  const impactKey=JSON.stringify(state.impactOrderIds||null);
   useEffect(()=>{liveMap=map;return()=>{if(liveMap===map)liveMap=null;};},[map]);
   useEffect(()=>{
     if(!map)return;
@@ -190,6 +191,8 @@ export function TransportMapLayer({map,theme}) {
       map.setPaintProperty('beego-transport-station-labels','text-color',dark?'#eff3fa':'#394650');
       map.setPaintProperty('beego-transport-station-labels','text-halo-color',dark?'#202a39':'#fff');
       for(const layer of layers)map.setLayoutProperty(layer.id,'visibility',state.enabled && (!layer.source.includes('network')&&!layer.source.includes('stations')||state.management!==false&&state.metro)?'visible':'none');
+      if(state.comparison==='before')for(const layer of layers)if([sources[4],sources[5]].includes(layer.source))map.setLayoutProperty(layer.id,'visibility','none');
+      if(state.comparison==='after')map.setLayoutProperty('beego-transport-before','visibility','none');
       const catalog=state.catalog;
       const colors=catalog?.lines || {};
       write(sources[0],collection((catalog?.segments || []).map(s=>line(s.geometry,{id:s.id,color:colors[s.lineId]?.color || '#aab0bb',kind:s.kind}))));
@@ -226,8 +229,8 @@ export function TransportMapLayer({map,theme}) {
         }
       }
       write(sources[2],collection(closures));
-      const impacts=state.preview?.result?.consequences?.orders?.filter(o=>!o.lost) || [];
-      const selected=impacts.filter(o=>!state.engineerId||o.engineerId===state.engineerId);
+      const impacts=state.preview?.result?.consequences?.orders?.filter(o=>!state.impactOrderIds||state.impactOrderIds.includes(o.orderId)) || [];
+      const selected=state.engineerId?transportCrewOrders(impacts,state.engineerId):impacts;
       write(sources[3],collection(selected.filter(o=>o.geometryBefore?.length>1).map(o=>line(o.geometryBefore,{}))));
       write(sources[4],collection(selected.flatMap(o=>o.stepsAfter?.some(s=>s.geometry?.length>1)?o.stepsAfter.filter(s=>s.geometry?.length>1).map(s=>line(s.geometry,{mode:s.mode})):o.geometryAfter?.length>1?[line(o.geometryAfter,{mode:'auto'})]:[])));
       write(sources[5],collection(transportRouteStations(selected,catalog).map(station=>point(station.coords,{id:station.id,name:station.name,role:station.role}))));
@@ -258,7 +261,7 @@ export function TransportMapLayer({map,theme}) {
     const observer=new ResizeObserver(place);observer.observe(outer);const panel=document.querySelector('.transport-workspace-panel,.shift-layer.operational-shift .shift-panel');if(panel)observer.observe(panel);
     return()=>{cancelAnimationFrame(pinFrame);observer.disconnect();leaders.remove();renderRef.current=null;markers.forEach(m=>m.remove());pinMarkers.forEach(m=>m.remove());restoreBackground();map.getCanvas().style.cursor='';map.off('style.load',styleLoaded);map.off('idle',render);map.off('click',click);map.off('move',place);map.off('resize',place);map.off('zoomend',refreshPins);map.off('zoom',schedulePins);map.off('resize',schedulePins);};
   },[map]);
-  useEffect(()=>{renderRef.current?.();},[state.enabled,state.management,state.metro,state.catalog,state.events,state.draft,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,theme]);
+  useEffect(()=>{renderRef.current?.();},[state.enabled,state.management,state.metro,state.catalog,state.events,state.draft,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,state.comparison,impactKey,theme]);
   if(!state.enabled)return null;
   const liveEvents=(state.events||[]).filter(event=>transportStatus(event,state.date,state.minute||0)==='Действует');
   return <>

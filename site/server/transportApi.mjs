@@ -6,7 +6,7 @@ import { projectRoot } from '../scripts/project-root.mjs';
 import { runExactReplan } from '../scripts/exact-replan-runner.mjs';
 import { acquirePlanningSlot, planningBusyResponse } from './planningSlot.mjs';
 import { minuteOf } from '../src/shiftDomain.js';
-import { transportConsequences } from '../src/transportDomain.js';
+import { transportConsequences,transportEventImpacts } from '../src/transportDomain.js';
 import { createTransportScenario } from './transportScenario.mjs';
 import { transportEventsForDay } from './transportScope.mjs';
 import { algorithmPhaseLabel } from '../src/algorithmProgress.js';
@@ -144,12 +144,12 @@ export function createTransportApi(store) {
     for(const file of [path.join(root,'runtime/exact-replans',`${sha}.json`),path.join(root,'algorithm/artifacts/complexity/initial-exact.json'),path.join(root,'algorithm/artifacts/current/initial-exact-205-of-205-retimed.json')]){
       const raw=JSON.parse(await readFile(file,'utf8').catch(()=>'null'));if(raw?.content_sha256!==sha)continue;
       const visits=new Map(raw.plan.engineer_plans.flatMap(r=>r.visits.map(v=>[v.job_id,v])));
-      return {...shift,plan:{...shift.plan,routes:shift.plan.routes.map(r=>({...r,assignments:r.assignments.map(v=>{
+      return {raw,shift:{...shift,plan:{...shift.plan,routes:shift.plan.routes.map(r=>({...r,assignments:r.assignments.map(v=>{
         const steps=visits.get(v.sourceOrderId || shift.orders.find(o=>o.id===v.orderId)?.sourceId || v.orderId)?.travel?.itinerary;
         return steps?.length?{...v,travelSteps:steps.map(s=>({mode:s.mode,seconds:s.duration_seconds,distanceM:s.distance_m,geometry:s.geometry}))}:v;
-      })}))}};
+      })}))}}};
     }
-    return shift;
+    throw new Error('Исходный проверенный маршрут для сравнения не найден');
   };
   const presentPreview = item => {
     if(!item||item.status!=='READY')return item;
@@ -223,7 +223,12 @@ export function createTransportApi(store) {
             item.audit=audit;
             if(audit.status!=='VALID') throw new Error('Путь использует закрытый переход. Прежний план сохранён; уточните участок или выберите другое время');
             if(controller.signal.aborted) throw new Error('Расчёт отменён');
-            item.result={plan,consequences:transportConsequences(await comparisonShift(shift),plan,input.time),audit};
+            item.phase='Определяем влияние каждого ограничения';transport.putPreview(item);
+            const before=await comparisonShift(shift);
+            const originalAudit=await transportNetwork({action:'audit',events,team:shift.team,plan:before.shift.plan,raw:before.raw,date:shift.date,time:input.time,remainingOnly:true},
+              {signal:controller.signal,timeout:Math.min(180_000,remainingMilliseconds(deadlineAt))});
+            const consequences=transportConsequences(before.shift,plan,input.time);
+            item.result={plan,consequences,audit,eventImpacts:transportEventImpacts(before.shift,consequences,originalAudit,events)};
             store.completePreview(item.id,{plan,orders:shift.orders,team:shift.team});
             item.status='READY';item.phase='Проверенный объезд готов';item.finishedAt=Date.now();
           } catch(error){item.status=controller.signal.aborted?'CANCELLED':'FAILED';item.finishedAt=Date.now();item.error=error.message;store.failPreview(item.id,error);}

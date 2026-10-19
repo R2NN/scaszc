@@ -1,7 +1,7 @@
 import { minuteOf,timeOf } from './shiftDomain.js';
 
 /** Schedule map events independently of decisions, retrying a busy planner while paused. */
-export function createTransportScenarioClock({clock,getShift,request,adopt,onEvent,onError,retryMs=2000}) {
+export function createTransportScenarioClock({clock,getShift,request,adopt,onEvent,onError,retryMs=2000,manageCalculations=true}) {
   let active=true,running=null,queued=false,handled='',waiting='',lastError='';
   const tick=()=>{
     if(!active)return;
@@ -26,6 +26,7 @@ export function createTransportScenarioClock({clock,getShift,request,adopt,onEve
               onEvent(result);handled='';
             }
           }
+          if(!manageCalculations)continue;
           const current=state?.waves?.[state.index];
           if(!current?.eventId||current.status==='APPLIED')continue;
           const target=`${shift.id}:${shift.revision}:${current.eventId}`;

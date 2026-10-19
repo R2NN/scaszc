@@ -5,6 +5,40 @@ export function transportContextSignature(events = []) {
   return JSON.stringify(events.map(e=>[e.id,e.revision,e.kind,e.direction,e.startsAt,e.endsAt,e.status,e.segments.map(s=>s.id)]).sort((a,b)=>a[0].localeCompare(b[0])));
 }
 
+/** Attribute direct network conflicts and downstream changes to each real event. */
+export function transportEventImpacts(shift,consequences,audit,events) {
+  const sourceId=item=>String(item.sourceId || item.id).split(':').at(-1);
+  const ids=new Map(shift.orders.flatMap(order=>[[String(order.id),String(order.id)],[sourceId(order),String(order.id)]]));
+  const owners=new Map(shift.plan.routes.flatMap(route=>route.assignments.map(visit=>[String(visit.orderId),route.engineerId])));
+  return events.map(event=>{
+    const direct=[...new Set((audit.violations||[]).filter(item=>item.eventId===event.id).map(item=>ids.get(String(item.orderId))).filter(Boolean))];
+    const engineers=new Set(direct.map(id=>owners.get(id)).filter(Boolean));
+    for(const order of consequences.orders)if(direct.includes(String(order.orderId)))engineers.add(order.engineerId);
+    const orders=consequences.orders.filter(order=>engineers.has(order.engineerId)||engineers.has(owners.get(String(order.orderId))));
+    return {eventId:event.id,directOrderIds:direct,engineerIds:[...engineers],orderIds:orders.map(order=>order.orderId),proof:'DIRECTED_NETWORK_AND_TIMETABLE'};
+  });
+}
+
+/** Scope the comparison to one incident without attributing unrelated crew changes to it. */
+export function transportSelectedConsequences(consequences,impacts,eventId) {
+  if(!consequences||!eventId||!impacts)return consequences;
+  const impact=impacts.find(item=>item.eventId===eventId);
+  if(!impact)return null;
+  const orders=consequences.orders.filter(order=>impact.orderIds.includes(order.orderId));
+  const engineers=consequences.engineers.filter(engineer=>impact.engineerIds.includes(engineer.engineerId));
+  return {...consequences,orders,engineers,directOrderIds:impact.directOrderIds,addedTravelMinutes:engineers.reduce((sum,e)=>sum+e.deltaMinutes,0),
+    lost:orders.filter(o=>o.lost).length,late:orders.filter(o=>o.lateMinutes>0).length,unknownWindows:orders.filter(o=>!o.lost&&o.lateMinutes==null).length,
+    transferred:orders.filter(o=>o.transferred).length,overtime:engineers.filter(e=>e.overtimeMinutes>0).length};
+}
+
+/** Compare only this crew's own before/after legs when a job changes owner. */
+export function transportCrewOrders(orders,engineerId) {
+  return orders.filter(order=>order.engineerId===engineerId||order.beforeEngineerId===engineerId).map(order=>({...order,
+    geometryBefore:!order.beforeEngineerId||order.beforeEngineerId===engineerId?order.geometryBefore:[],
+    geometryAfter:order.engineerId===engineerId?order.geometryAfter:[],stepsAfter:order.engineerId===engineerId?order.stepsAfter:[],
+  }));
+}
+
 /** Moscow event intervals are [start,end); an unknown end is never invented. */
 export function transportStatus(event, date, minute) {
   if (event.status === 'CANCELLED') return 'Отменено';
@@ -73,7 +107,7 @@ export function transportConsequences(shift, plan, time) {
   for(const [id,old] of before) {
     if(protectedIds.has(id)||(minuteOf(old.plannedStart) ?? 0)<at) continue;
     const next=after.get(id),order=orders.get(id);
-    if(!next){affected.push({orderId:id,address:order?.address,lost:true,before:old.arrival,engineerId:old.engineerId});continue;}
+    if(!next){affected.push({orderId:id,address:order?.address,lost:true,before:old.arrival,engineerId:old.engineerId,beforeEngineerId:old.engineerId,geometryBefore:remainingGeometry(old,at)});continue;}
     const delta=(minuteOf(next.arrival) ?? 0)-(minuteOf(old.arrival) ?? 0);
     const changed=next.engineerId!==old.engineerId||delta!==0||JSON.stringify(next.geometry)!==JSON.stringify(old.geometry);
     if(!changed) continue;
@@ -86,7 +120,7 @@ export function transportConsequences(shift, plan, time) {
     const prefix=checkedSteps.length?checkedSteps.flatMap(s=>s.geometry):movement?remainingGeometry({geometry:movement.geometry,departureAt:movement.departure_at.slice(11,16),arrival:movement.at.slice(11,16)},at):[];
     const waitSeconds=remainingWait(movement)*60;
     const prefixSteps=checkedSteps.length?checkedSteps:prefix.length>1?[{mode:'metro',geometry:prefix,seconds:Math.max(0,((minuteOf(movement.at.slice(11,16)) ?? at)-at)*60-waitSeconds),from:'Текущее положение · модель',to:'Безопасный выход'},...(waitSeconds?[{mode:'waiting',geometry:[prefix.at(-1)],seconds:waitSeconds}]:[])]:[];
-    affected.push({orderId:id,address:order?.address,engineerId:next.engineerId,before:old.arrival,after:next.arrival,delta,
+    affected.push({orderId:id,address:order?.address,engineerId:next.engineerId,beforeEngineerId:old.engineerId,before:old.arrival,after:next.arrival,delta,
       transferred:next.engineerId!==old.engineerId,lateMinutes:end==null?null:Math.max(0,Math.max(start ?? 0,arrival ?? 0)-end),
       geometryBefore:remainingGeometry(old,at),geometryAfter:[...prefix,...remainingGeometry(next,at)],stepsAfter:[...prefixSteps,...(next.travelSteps || [])]});
   }
