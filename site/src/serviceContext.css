@@ -107,12 +107,20 @@
 .network-panel .network-order{padding:12px 10px;gap:10px}.network-panel .network-order>div{gap:6px}.network-panel .network-order p{font-size:12px;line-height:1.4}
 .network-decision-label{font-size:11px;font-weight:650;color:var(--svc-muted)}.network-decision-label.proceed{color:#27824d}.network-decision-label.wait{color:#976300}
 .network-order-decisions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.network-panel .network-order-decisions>button{width:100%;justify-content:center;padding:7px 5px;font-size:11px;line-height:1.35;background:var(--svc-soft);border-color:var(--svc-border);white-space:normal}
+.network-panel .network-order-decisions>button{background:var(--svc-soft);border-color:var(--svc-border)}
 .network-panel .network-order-decisions>button.active{background:#fff3bc;border-color:#e4bb22;color:#5d4900}
 .network-panel .network-order-actions{grid-template-columns:1fr 1fr;gap:6px;margin-top:2px}
-.network-panel .network-order-actions>button{padding:8px 5px;font-size:11px;white-space:normal;line-height:1.35;min-height:34px}
+
 .network-panel .service-footnote{display:block;line-height:1.5;font-size:11px;color:var(--svc-muted)}
 .app-shell.dark .network-decision-label.proceed{color:#8adea9}.app-shell.dark .network-decision-label.wait{color:#f4d26d}
 .app-shell.dark .network-order-decisions>button.active{background:#443b18;border-color:#b79b25;color:#ffe88d}
 .app-shell.dark .network-alert.resolved{background:#213b2b;border-color:#426d4e;color:#a1e2b3}
 @media(max-width:760px){.network-panel .network-order-actions{grid-template-columns:1fr}.network-panel .network-order-decisions{grid-template-columns:1fr}.network-incident-controls{padding:11px}}
+
+/* Shared button geometry and a restrained text scale across Requests and History. */
+.network-panel .network-order-decisions>button,.network-panel .network-order-actions>button,.network-panel .service-history li>button,.network-panel .network-save-details>.service-primary{box-sizing:border-box;width:100%;height:40px;min-height:40px;padding:4px 8px;justify-content:center;gap:6px;border-radius:9px;font-size:13px;line-height:1.15;font-weight:600;white-space:normal}
+.network-panel .network-order button>svg,.network-panel .service-history li>button>svg{width:16px;height:16px;flex:none}
+.network-panel .network-order>div>b{font-size:14px;line-height:1.4}
+.network-panel .network-order p,.network-panel .service-history strong,.network-panel .network-journal>p{font-size:13px;line-height:1.5}
+.network-panel .network-order small,.network-panel .network-decision-label,.network-panel .service-footnote,.network-panel .network-link-basis summary,.network-panel .network-related-heading small,.network-panel .network-journal-heading small,.network-panel .service-history li>time,.network-panel .service-history li>small,.network-panel .service-history-heading>span,.network-panel .network-source-summary small{font-size:12px;line-height:1.45}
+.network-panel .service-history-heading{font-size:13px;line-height:1.4}.network-panel .service-history-heading>b{font-weight:650}
