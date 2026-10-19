@@ -38,11 +38,13 @@ test('notification actions occupy their own row before and after reading; playba
     }
     const html=renderToStaticMarkup(React.createElement(PlaybackDropdown,{label:'Скорость',value:1,options:[{value:30,label:'×30'}]}));
     assert.match(html,/<span>1<\/span>/);assert.doesNotMatch(html,/×30/);
-    shiftClock.set({minute:600,speed:1,playing:false,awaitingDecision:true});
-    const bar=renderToStaticMarkup(React.createElement(ShiftPlaybackBar));
-    assert.match(bar,/×1/);assert.doesNotMatch(bar,/Ожидаем решения|shift-decision-wait/);
-    assert.match(bar,/disabled="" aria-label="Скорость воспроизведения"/);
-    shiftClock.set({awaitingDecision:false,speed:60});
+    for(const review of [{awaitingDecision:true,awaitingTransport:false},{awaitingDecision:false,awaitingTransport:true}]){
+      shiftClock.set({minute:600,speed:1,playing:false,...review});
+      const bar=renderToStaticMarkup(React.createElement(ShiftPlaybackBar));
+      assert.match(bar,/×1/);assert.doesNotMatch(bar,/Ожидаем решения|shift-decision-wait/);
+      assert.match(bar,/<button type="button" aria-label="Скорость воспроизведения"/);
+    }
+    shiftClock.set({awaitingDecision:false,awaitingTransport:false,speed:60});
   }finally{await server.close();}
 });
 

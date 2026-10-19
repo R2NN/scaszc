@@ -79,7 +79,7 @@ export function createDispatchApi(store, options) {
             return json({...next,shift:store.get(next.shiftId),restarted:true});
           }
           if(!serverTick&&input.restartDay&&input.mode==='plan'&&Number(input.minute)===360&&session.lastMinute>360){
-            const speed=session.preTransportSpeed??session.preIncidentSpeed??input.speed??session.clock.speed;
+            const speed=session.clock.reviewSpeed??session.preTransportSpeed??session.preIncidentSpeed??input.speed??session.clock.speed;
             for(const incident of dispatch.all(shiftId))if(!['ACCEPTED','CANCELLED'].includes(incident.status))dispatch.cancel(incident.id);
             options?.onRestart?.(shiftId);
             const next=store.db.transaction(()=>{
@@ -113,8 +113,9 @@ export function createDispatchApi(store, options) {
           // Use this request's clock as the anchor before applying the queue override.
           const playing = serverTick ? Boolean(session.clock.playing) : Boolean(input.playing);
           const requestedSpeed = serverTick || staleOverride ? session.clock.speed : Number(input.speed);
+          if(!serverTick&&!staleOverride&&[1,30,60,120,300].includes(requestedSpeed)&&input.reviewSpeed===requestedSpeed&&(session.preTransportSpeed!=null||session.preIncidentSpeed!=null||dispatch.hasPending(shiftId)))session.clock.reviewSpeed=requestedSpeed;
           session.clock = { ...session.clock, minute, playing:playing && minute < 1439,
-            speed:session.preIncidentSpeed != null || session.preTransportSpeed != null ? 1 : [1,30,60,120,300].includes(requestedSpeed) ? requestedSpeed : session.clock.speed,
+            speed:[1,30,60,120,300].includes(requestedSpeed) ? requestedSpeed : session.clock.speed,
             anchorAt:Date.now(),version:(session.clock.version || 0)+1 };
           reconcileDispatchPlayback(session,dispatch.hasPending(shiftId),Date.now());
           store.db.prepare('UPDATE dispatch_sessions SET payload=? WHERE id=?').run(JSON.stringify(session), row.id);

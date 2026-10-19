@@ -53,6 +53,24 @@ test('rewinding a demonstration starts a clean durable day once and retains the 
   }finally{f.store.close();}
 });
 
+test('manual speed remains available after rewinding an unresolved transport review',async()=>{
+  const f=fixture(),api=createDispatchApi(f.store,{routing:f.dispatch.routing});api.close();
+  const post=async(path,body)=>{const response=await api.handle(new Request(`http://localhost/api/dispatch/${path}`,{method:'POST',body:JSON.stringify(body)}));const value=await response.json();assert.ok(response.ok,JSON.stringify(value));return value;};
+  try{
+    const session=await post('sessions',{baseShiftId:f.shift.id,speed:300}),path=`shifts/${session.shiftId}/`;
+    await post(path+'clock',{minute:570,playing:false,speed:300});
+    const review=await post(path+'transport',{});assert.equal(review.clock.speed,1);
+    let chosen=await post(path+'clock',{minute:540,playing:false,speed:120,reviewSpeed:120});
+    assert.equal(chosen.clock.speed,120);assert.equal(chosen.clock.minute,540);assert.equal(chosen.clock.awaitingTransport,true);
+    chosen=await post(path+'clock',{serverTick:true});assert.equal(chosen.clock.speed,120);assert.equal(chosen.clock.playing,false);
+    assert.equal((await post(path+'transport',{})).clock.speed,120,'A repeated search cannot override the operator');
+    chosen=await post(path+'clock',{minute:540,playing:false,speed:1,reviewSpeed:1});assert.equal(chosen.clock.speed,1);
+    chosen=await post(path+'clock',{minute:540,playing:false,speed:60,reviewSpeed:60});assert.equal(chosen.clock.speed,60);
+    const reset=await post(path+'clock',{minute:360,playing:false,speed:60,mode:'plan',restartDay:'manual-speed-rewind'});
+    assert.equal(reset.clock.speed,60);assert.equal(reset.clock.minute,360);assert.equal(reset.clock.awaitingTransport,undefined);
+  }finally{f.store.close();}
+});
+
 test('an improved offer retains the original receipt and can be accepted through either selection', async () => {
   const f = fixture();
   try {

@@ -10,6 +10,13 @@ const fixture=(scope)=>{
   const sync=createDispatchClockSync({clock,scope,send:snapshot=>new Promise(resolve=>requests.push({snapshot,resolve}))});
   return{clock,sync,requests,writes:()=>writes};
 };
+
+test('a speed selected before the restored session bridge mounts is not lost',async()=>{
+  let state={minute:569,playing:false,speed:120,reviewSpeed:120,awaitingTransport:true};
+  const requests=[],clock={getSnapshot:()=>state,subscribe:()=>()=>{},set:patch=>{state={...state,...patch};}};
+  const sync=createDispatchClockSync({clock,scope:'early-manual-speed',send:async snapshot=>{requests.push(snapshot);return {clock:{...snapshot,version:2}};}});
+  try{await sync.flush();assert.equal(requests.length,1);assert.equal(requests[0].speed,120);assert.equal(requests[0].reviewSpeed,120);assert.equal(state.speed,120);}finally{sync.close();}
+});
 test('polls cannot overwrite in-flight controls or reapply an older emergency speed after restoration',async()=>{
   const f=fixture();
   try{

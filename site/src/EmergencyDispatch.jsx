@@ -48,7 +48,9 @@ export function useEmergencyDispatch({ shift, active = false, onApply, notify, o
         const marker = `beego-dispatch-session:${shift.id}`;
         sessionStorage.setItem(marker, 'active');
         setSession(value); refs.current.onApply(value.shift);
-        shiftClock.set({ minute: value.clock.minute, playing: false, speed: value.clock.speed, awaitingDecision:Boolean(value.clock.awaitingDecision), confirmingDecision:Boolean(value.clock.confirmingDecision), restartDay:null, restartFromMinute:null });
+        const chosenSpeed=shiftClock.getSnapshot().reviewSpeed;
+        const reviewSpeed=chosenSpeed??value.clock.reviewSpeed??null;
+        shiftClock.set({ minute: value.clock.minute, playing: false, speed:reviewSpeed??value.clock.speed, reviewSpeed, awaitingDecision:Boolean(value.clock.awaitingDecision), awaitingTransport:Boolean(value.clock.awaitingTransport), confirmingDecision:Boolean(value.clock.confirmingDecision), restartDay:null, restartFromMinute:null });
       } catch (e) { if (alive) setError(e.message); }
     };
     restore();

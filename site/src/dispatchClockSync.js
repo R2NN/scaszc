@@ -14,7 +14,7 @@ export function createDispatchClockSync({clock, scope, send, onValue = () => {},
     if (!active || !value || (value.version ?? 0) < version) return false;
     version = value.version ?? version;
     const current = clock.getSnapshot();
-    const patch = {speed:value.speed,awaitingDecision:Boolean(value.awaitingDecision),awaitingTransport:Boolean(value.awaitingTransport),confirmingDecision:Boolean(value.confirmingDecision)};
+    const patch = {speed:value.speed,reviewSpeed:value.reviewSpeed??null,awaitingDecision:Boolean(value.awaitingDecision),awaitingTransport:Boolean(value.awaitingTransport),confirmingDecision:Boolean(value.confirmingDecision)};
     if (!current.playing || !value.playing || value.confirmingDecision) Object.assign(patch,{minute:value.minute,playing:value.playing});
     if (Object.entries(patch).every(([key,val]) => current[key] === val)) return true;
     applying = true;
@@ -44,10 +44,11 @@ export function createDispatchClockSync({clock, scope, send, onValue = () => {},
   };
   const adopt=value=>{
     epoch++;queued=false;version=value.version ?? version;
-    applying=true;try{clock.set({...value,awaitingDecision:Boolean(value.awaitingDecision),awaitingTransport:Boolean(value.awaitingTransport),confirmingDecision:Boolean(value.confirmingDecision)});}finally{applying=false;}
+    applying=true;try{clock.set({...value,reviewSpeed:value.reviewSpeed??null,awaitingDecision:Boolean(value.awaitingDecision),awaitingTransport:Boolean(value.awaitingTransport),confirmingDecision:Boolean(value.confirmingDecision)});}finally{applying=false;}
   };
   const unsubscribe = clock.subscribe(sync);
   if(scope){bridges.set(scope,adopt);if(pendingClocks.has(scope)){adopt(pendingClocks.get(scope));pendingClocks.delete(scope);}}
+  if(clock.getSnapshot().reviewSpeed!=null)sync();
   return {apply(value) {return running ? false : apply(value);},flush:async () => {await running;},
     close() {active=false;unsubscribe();if(scope&&bridges.get(scope)===adopt)bridges.delete(scope);}};
 }

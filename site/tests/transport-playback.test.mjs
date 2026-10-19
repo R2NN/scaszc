@@ -48,3 +48,24 @@ test('ordinary playback remembers acceleration through repeated checks and resum
   transportPlaybackClock(clock,'ordinary');transportPlaybackClock(clock,'ordinary');assert.equal(state.speed,1);assert.equal(state.playing,true);
   transportPlaybackClock(clock,'ordinary',null,{finish:true});assert.equal(state.speed,120);assert.equal(state.playing,true);assert.equal(state.awaitingTransport,false);
 });
+
+for(const emergency of [false,true])test(`manual speed survives transport retries, rewind and resolution (emergency=${emergency})`,()=>{
+  const s=setup();try{
+    transportDecisionPlayback(s,'shift',{now:1000});
+    let session=s.read();reconcileDispatchPlayback(session,emergency,1000);
+    session.clock={...session.clock,minute:540,playing:false,speed:120,reviewSpeed:120};s.write(session);
+    reconcileDispatchPlayback(session,emergency,31000);s.write(session);
+    assert.equal(session.clock.speed,120);assert.equal(session.clock.minute,540);assert.equal(session.clock.playing,false);
+    const retry=transportDecisionPlayback(s,'shift',{now:31000});assert.equal(retry.speed,120);
+    assert.equal(transportDecisionPlayback(s,'shift',{finish:true,now:31000}).speed,120);
+    session=s.read();reconcileDispatchPlayback(session,false,31000);assert.equal(session.clock.speed,120);assert.equal(session.clock.reviewSpeed,null);
+  }finally{s.db.close();}
+});
+
+test('ordinary review and publication respect the manually selected speed',()=>{
+  let state={minute:570,playing:false,speed:300};const clock={getSnapshot:()=>state,set:patch=>{state={...state,...patch};}};
+  transportPlaybackClock(clock,'ordinary');state={...state,minute:540,speed:60,reviewSpeed:60};
+  transportPlaybackClock(clock,'ordinary');assert.equal(state.speed,60);
+  transportPlaybackClock(clock,'ordinary',null,{finish:true});assert.equal(state.speed,60);assert.equal(state.reviewSpeed,null);
+  transportPlaybackClock(clock,'ordinary');assert.equal(state.speed,1,'The next independent problem defaults to real time');
+});

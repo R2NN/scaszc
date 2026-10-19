@@ -265,14 +265,13 @@ export function TransportMapLayer({map,theme}) {
   },[map]);
   useEffect(()=>{renderRef.current?.();},[state.enabled,state.management,state.metro,state.catalog,state.events,state.draft,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,state.comparison,impactKey,theme]);
   if(!state.enabled)return null;
-  const liveEvents=(state.events||[]).filter(event=>transportStatus(event,state.date,state.minute||0)==='Действует');
   return <>
-    {state.management===false?<button className='shift-map-problems' onClick={state.onOpen} aria-label={`Проблемы на маршрутах: ${liveEvents.length}`}><Car size={18}/><span>Проблемы на маршрутах</span><b>{liveEvents.length}</b></button>:<div className='transport-map-tools' aria-label='Выбор транспортного участка'>
+    {state.management!==false?<div className='transport-map-tools' aria-label='Выбор транспортного участка'>
       <button className={state.drawing&&state.kind==='road'?'active':''} onClick={()=>state.onKind?.('road')}><Car size={18}/>Участок дороги</button>
       <button className={state.drawing&&state.kind!=='road'?'active':''} onClick={()=>state.onKind?.('metro')}><TrainFront size={18}/>Метро</button>
       <button onClick={()=>transportMap.set({metro:!state.metro})} aria-pressed={state.metro} title='Показать станции и схему связей метро'><Layers3 size={18}/></button>
       {state.drawing?<button onClick={state.onUndo} aria-label='Отменить последний участок'><Undo2 size={18}/></button>:<button onClick={state.onNew}><Plus size={18}/>Ограничение</button>}
-    </div>}
+    </div>:null}
     {state.drawing?<div className='transport-map-hint'>{state.kind==='road'?'Нажмите на проезжую часть — привяжем участок к дорожной сети':state.kind==='entry'?'Выберите станцию на карте или найдите по названию':'Выберите связь метро или две соседние станции'}{state.kind==='road'?<button onClick={()=>{const p=map.getCenter();state.onRoad?.([p.lat,p.lng]);}} aria-label='Выбрать дорогу в центре карты'><Crosshair size={15}/></button>:null}</div>:null}
     {state.management!==false?<details className='transport-map-legend' open={legendOpen} onToggle={event=>setLegendOpen(event.currentTarget.open)}><summary>Легенда</summary><div><span><i className='closure'/>Закрыто для авто</span><span><TrainFront size={16}/>Движение метро</span><span><DoorOpen size={16}/>Вход</span><span><ArrowLeftRight size={16}/>Пересадка</span><span><i className='before'/>Прежний путь</span><span><i className='after'/>Новый путь</span><span><Footprints size={15}/><i className='walking'/>Пешком / пересадка</span></div></details>:null}
   </>;

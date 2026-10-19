@@ -3,17 +3,18 @@ export function reconcileDispatchPlayback(session, pending, now) {
   const previous = session.clock;
   if (pending && session.preIncidentSpeed == null) session.preIncidentSpeed = session.preTransportSpeed ?? previous.speed;
   const transport=session.preTransportSpeed!=null;
-  const speed = pending || transport ? 1 : session.preIncidentSpeed ?? previous.speed;
+  const speed = previous.reviewSpeed ?? (pending || transport ? 1 : session.preIncidentSpeed ?? previous.speed);
+  const reviewSpeed=pending||transport?previous.reviewSpeed??null:null;
   if (!pending) session.preIncidentSpeed = null;
-  const changed = previous.speed !== speed || Boolean(previous.awaitingDecision) !== pending || Boolean(previous.awaitingTransport)!==transport;
+  const changed = previous.speed !== speed || (previous.reviewSpeed??null)!==reviewSpeed || Boolean(previous.awaitingDecision) !== pending || Boolean(previous.awaitingTransport)!==transport;
   if (changed) {
     const minute = Math.min(1439,previous.minute + (previous.playing && !previous.confirmingDecision ? Math.max(0,now-previous.anchorAt)/60000*previous.speed : 0));
-    session.clock = {...previous,minute,speed,awaitingDecision:pending,awaitingTransport:transport,anchorAt:now,version:(previous.version || 0)+1};
+    session.clock = {...previous,minute,speed,reviewSpeed,awaitingDecision:pending,awaitingTransport:transport,anchorAt:now,version:(previous.version || 0)+1};
   }
   return session;
 }
 
-/** Keep transport review in real time and restore acceleration only after publication. */
+/** Default review to real time while retaining the operator's explicit speed choice. */
 export function transportDecisionPlayback(store,shiftId,{finish=false,minute,now=Date.now()}={}) {
   const row=store.db.prepare('SELECT id,payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(shiftId);
   if(!row)return null;
@@ -21,8 +22,9 @@ export function transportDecisionPlayback(store,shiftId,{finish=false,minute,now
   if(session.restartedAs)throw new Error('Сценарий устарел: показ начат заново');
   const current=Math.min(1439,clock.minute+(clock.playing&&!clock.confirmingDecision?Math.max(0,now-clock.anchorAt)/60000*clock.speed:0));
   const saved=session.preTransportSpeed??session.preIncidentSpeed??clock.speed;
+  const reviewSpeed=session.preTransportSpeed!=null||clock.awaitingDecision?clock.reviewSpeed??null:null;
   session.preTransportSpeed=finish?null:saved;
-  session.clock={...clock,minute:minute??current,playing:true,speed:finish&&!clock.awaitingDecision?saved:1,awaitingTransport:!finish,anchorAt:now,version:(clock.version||0)+1};
+  session.clock={...clock,minute:minute??current,playing:true,speed:reviewSpeed??(finish&&!clock.awaitingDecision?saved:1),reviewSpeed:finish&&!clock.awaitingDecision?null:reviewSpeed,awaitingTransport:!finish,anchorAt:now,version:(clock.version||0)+1};
   store.db.prepare('UPDATE dispatch_sessions SET payload=? WHERE id=?').run(JSON.stringify(session),row.id);
   return session.clock;
 }
