@@ -1476,7 +1476,7 @@ function MapCanvas({ratingWorkspace=false,onComplexityModeChange,complexityMode=
   };
 
   return <section className={`map-canvas real-map${shiftMapEmphasis?` shift-map-${shiftMapEmphasis}`:''}`}>
-    <div ref={containerRef} className="maplibre-host"/><TransportMapLayer map={map}/>
+    <div ref={containerRef} className="maplibre-host"/><TransportMapLayer map={map} theme={uiTheme}/>
     <ComplexityMapLayer map={map} enabled={complexityMode} view={objectTimeView} onLayerReady={objectLayerReady} panelOpen={complexityPanelOpen} onClosePanel={onCloseComplexityPanel} date={complexityDate} territory={complexityTerritory} territoryControl={complexityTerritoryControl} regionId={region?.id} routeOrderIds={activeRoute?.assignments?.map(visit=>visit.orderId)||[]}/>
     {engineerPopup?.engineer?<EngineerMapPopup map={map} {...engineerPopup}/>:null}
     {selectedTerritory?<div className={`district-map-badge ${districtBoundaryStatus}`}><MapPinned/><span><small>{territorySelection(selectedTerritory).kind==='zone'?'Зона из таблицы · показаны её заявки':districtBoundaryStatus==='points'?'Граница района не найдена · показаны заявки':'Сценарий района'}</small><b>{territorySelection(selectedTerritory).name}</b></span>{districtBoundaryStatus==='loading'?<i className="spinner"/>:districtBoundaryStatus==='unavailable'?<AlertTriangle/>:<Check/>}</div>:null}

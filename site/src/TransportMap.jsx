@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { Car, TrainFront, Undo2, Crosshair, Layers3, Plus, Footprints } from 'lucide-react';
 import { transportStatus } from './transportDomain.js';
@@ -29,8 +29,13 @@ const line=(geometry,properties)=>({type:'Feature',geometry:{type:'LineString',c
 const point=(coords,properties)=>({type:'Feature',geometry:{type:'Point',coordinates:[coords[1],coords[0]]},properties});
 
 /** Transport topology, closures and independently checked detours; never a second map. */
-export function TransportMapLayer({map}) {
+export function TransportMapLayer({map,theme}) {
   const state=useSyncExternalStore(transportMap.subscribe,transportMap.snapshot);
+  const current=useRef(state),renderRef=useRef(null);
+  current.current=state;
+  // Clock minutes change five times a second at ×300. Only crossing an event
+  // boundary changes this overlay; callbacks still read the latest panel state.
+  const statuses=[...(state.events || []),...(state.draft?[state.draft]:[])].map(event=>transportStatus(event,state.date,state.minute || 0)).join('|');
   useEffect(()=>{liveMap=map;return()=>{if(liveMap===map)liveMap=null;};},[map]);
   useEffect(()=>{
     if(!map)return;
@@ -38,6 +43,12 @@ export function TransportMapLayer({map}) {
     const backgroundVisibility=new Map();
     const restoreBackground=()=>{delete map.getContainer().dataset.transportComparison;for(const [id,visibility] of backgroundVisibility)if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visibility);backgroundVisibility.clear();};
     const sources=['beego-transport-network','beego-transport-stations','beego-transport-closed','beego-transport-before','beego-transport-after'];
+    const written=new Map();
+    const write=(id,data)=>{
+      const source=map.getSource(id),signature=JSON.stringify(data),previous=written.get(id);
+      if(previous?.source===source&&previous.signature===signature)return;
+      source.setData(data);written.set(id,{source,signature});
+    };
     const layers=[
       {id:'beego-transport-links',type:'line',source:sources[0],paint:{'line-color':['get','color'],'line-width':2.4,'line-opacity':.55,'line-dasharray':[2,1.6]}},
       {id:'beego-transport-stations',type:'circle',source:sources[1],paint:{'circle-radius':5,'circle-color':'#fff','circle-stroke-color':['get','color'],'circle-stroke-width':2.5}},
@@ -53,8 +64,13 @@ export function TransportMapLayer({map}) {
       {id:'beego-transport-closed-arrows',type:'symbol',source:sources[2],filter:['!=',['get','direction'],'both'],layout:{'symbol-placement':'line','symbol-spacing':65,'text-field':'❯','text-size':18,'text-font':['Noto Sans Regular'],'text-keep-upright':false,'text-allow-overlap':true},paint:{'text-color':'#ff1839','text-halo-color':'#fff','text-halo-width':2}},
     ];
     const render=()=>{
-      if(!state.enabled){markers.forEach(m=>m.remove());markers=[];for(const layer of layers)if(map.getLayer(layer.id))map.setLayoutProperty(layer.id,'visibility','none');return;}
-      if(!map.isStyleLoaded()){map.once('idle',render);return;}
+      const state=current.current;
+      map.getCanvas().style.cursor=state.enabled&&state.drawing?'crosshair':'';
+      if(!state.enabled){markers.forEach(m=>m.remove());markers=[];restoreBackground();for(const layer of layers)if(map.getLayer(layer.id))map.setLayoutProperty(layer.id,'visibility','none');return;}
+      // Updating a GeoJSON source temporarily makes isStyleLoaded() false.
+      // Existing layers are safe to update without waiting for every tile.
+      if(!map.getLayer(layers[0].id)&&!map.isStyleLoaded()){map.off('idle',render);map.once('idle',render);return;}
+      map.off('idle',render);
       markers.forEach(m=>m.remove());markers=[];
       if(!map.hasImage('beego-transport-arrow')){
         const canvas=document.createElement('canvas');canvas.width=40;canvas.height=40;const ctx=canvas.getContext('2d');
@@ -64,7 +80,8 @@ export function TransportMapLayer({map}) {
       for(const id of sources)if(!map.getSource(id))map.addSource(id,{type:'geojson',data:collection([])});
       for(const layer of layers)if(!map.getLayer(layer.id))map.addLayer(layer);
       const hide=state.preview?.result?.consequences?.orders?.length?['planned-route','planned-route-casing','planned-route-arrows','planned-route-hit','shift-route-remaining','shift-route-travelled']:state.drawing?['planned-route-hit']:[];
-      if(state.preview?.result||state.drawing)map.getContainer().dataset.transportComparison='true';
+      for(const [id,visibility] of backgroundVisibility)if(!hide.includes(id)){if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visibility);backgroundVisibility.delete(id);}
+      if(state.preview?.result||state.drawing)map.getContainer().dataset.transportComparison='true';else delete map.getContainer().dataset.transportComparison;
       for(const id of hide)if(map.getLayer(id)){if(!backgroundVisibility.has(id))backgroundVisibility.set(id,map.getLayoutProperty(id,'visibility') || 'visible');map.setLayoutProperty(id,'visibility','none');}
       const dark=map.getContainer().closest('.app-shell')?.classList.contains('dark');
       map.setPaintProperty('beego-transport-station-labels','text-color',dark?'#eff3fa':'#394650');
@@ -72,8 +89,8 @@ export function TransportMapLayer({map}) {
       for(const layer of layers)map.setLayoutProperty(layer.id,'visibility',state.enabled && (!layer.source.includes('network')&&!layer.source.includes('stations')||state.metro)?'visible':'none');
       const catalog=state.catalog;
       const colors=catalog?.lines || {};
-      map.getSource(sources[0]).setData(collection((catalog?.segments || []).map(s=>line(s.geometry,{id:s.id,color:colors[s.lineId]?.color || '#aab0bb',kind:s.kind}))));
-      map.getSource(sources[1]).setData(collection((catalog?.stations || []).map(s=>point(s.coords,{id:s.id,name:s.name,color:colors[s.lineId]?.color || '#d41317'}))));
+      write(sources[0],collection((catalog?.segments || []).map(s=>line(s.geometry,{id:s.id,color:colors[s.lineId]?.color || '#aab0bb',kind:s.kind}))));
+      write(sources[1],collection((catalog?.stations || []).map(s=>point(s.coords,{id:s.id,name:s.name,color:colors[s.lineId]?.color || '#d41317'}))));
       const events=[...(state.events || [])];
       if(state.draft?.segments?.length)events.push({...state.draft,id:'draft',title:state.draft.title||'Новое ограничение',status:'OPEN'});
       const closures=[];
@@ -87,7 +104,7 @@ export function TransportMapLayer({map}) {
           for(const p of [segment.geometry[0],...(segment.geometry.length>1?[segment.geometry.at(-1)]:[])]){
             const element=document.createElement('button');element.className=`transport-map-pin ${event.kind==='road'?'road':'metro'} ${status==='Запланировано'?'planned':''} ${status==='Завершено'?'ended':''}`;
             element.textContent=event.kind==='road'?'−':'M';element.type='button';element.title=event.title;element.setAttribute('aria-label',`Открыть ограничение: ${event.title}`);
-            element.onclick=e=>{e.stopPropagation();state.onSelect?.(event);};
+            element.onclick=e=>{e.stopPropagation();current.current.onSelect?.(event);};
             markers.push(new maplibregl.Marker({element}).setLngLat([p[1],p[0]]).addTo(map));
           }
         }
@@ -95,7 +112,7 @@ export function TransportMapLayer({map}) {
         if(selected){const p=selected.geometry[Math.floor(selected.geometry.length/2)],element=document.createElement('button');
           element.className='transport-map-caption';element.type='button';element.textContent=`${event.kind==='road'?'⊘ Авто':'M Метро'} · ${event.title}`;
           const time=document.createElement('small');time.textContent=`${status} · ${event.startsAt?.slice(11,16)}–${event.endsAt?.slice(11,16)||'срок неизвестен'}`;element.append(time);
-          element.onclick=()=>state.onSelect?.(event);
+          element.onclick=()=>current.current.onSelect?.(event);
           const projected=map.project([p[1],p[0]]);let level=0;
           while(captions.some(c=>Math.abs(c.x-projected.x)<245&&Math.abs(c.y-(projected.y-level*68))<60))level++;
           captions.push({x:projected.x,y:projected.y-level*68});
@@ -103,11 +120,11 @@ export function TransportMapLayer({map}) {
           markers.push(new maplibregl.Marker({element,anchor:right?'bottom-right':'bottom-left',offset:[right?-19:19,-20-level*68]}).setLngLat([p[1],p[0]]).addTo(map));
         }
       }
-      map.getSource(sources[2]).setData(collection(closures));
+      write(sources[2],collection(closures));
       const impacts=state.preview?.result?.consequences?.orders?.filter(o=>!o.lost) || [];
       const selected=impacts.filter(o=>!state.engineerId||o.engineerId===state.engineerId);
-      map.getSource(sources[3]).setData(collection(selected.filter(o=>o.geometryBefore?.length>1).map(o=>line(o.geometryBefore,{}))));
-      map.getSource(sources[4]).setData(collection(selected.flatMap(o=>o.stepsAfter?.some(s=>s.geometry?.length>1)?o.stepsAfter.filter(s=>s.geometry?.length>1).map(s=>line(s.geometry,{mode:s.mode})):o.geometryAfter?.length>1?[line(o.geometryAfter,{mode:'auto'})]:[])));
+      write(sources[3],collection(selected.filter(o=>o.geometryBefore?.length>1).map(o=>line(o.geometryBefore,{}))));
+      write(sources[4],collection(selected.flatMap(o=>o.stepsAfter?.some(s=>s.geometry?.length>1)?o.stepsAfter.filter(s=>s.geometry?.length>1).map(s=>line(s.geometry,{mode:s.mode})):o.geometryAfter?.length>1?[line(o.geometryAfter,{mode:'auto'})]:[])));
       selected.forEach((order,index)=>{
         const p=order.geometryAfter?.at(-1);if(!p)return;
         const element=document.createElement('span');element.className='transport-stop';element.textContent=String(index+1);element.title=order.address;
@@ -115,6 +132,7 @@ export function TransportMapLayer({map}) {
       });
     };
     const click=event=>{
+      const state=current.current;
       if(!state.enabled)return;
       const hit=map.queryRenderedFeatures(event.point,{layers:layers.filter(l=>map.getLayer(l.id)).map(l=>l.id)});
       const closure=hit.find(f=>f.layer.id==='beego-transport-closed');
@@ -127,10 +145,10 @@ export function TransportMapLayer({map}) {
       if(link)state.onSegment?.(state.catalog.segments.find(s=>s.id===link.properties.id));
       else if(station)state.onStation?.(station.properties.id);
     };
-    render();map.on('style.load',render);map.on('click',click);
-    map.getCanvas().style.cursor=state.enabled&&state.drawing?'crosshair':'';
-    return()=>{markers.forEach(m=>m.remove());restoreBackground();map.off('style.load',render);map.off('idle',render);map.off('click',click);};
-  },[map,state]);
+    renderRef.current=render;render();map.on('style.load',render);map.on('click',click);
+    return()=>{renderRef.current=null;markers.forEach(m=>m.remove());restoreBackground();map.getCanvas().style.cursor='';map.off('style.load',render);map.off('idle',render);map.off('click',click);};
+  },[map]);
+  useEffect(()=>{renderRef.current?.();},[state.enabled,state.metro,state.catalog,state.events,state.draft,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,theme]);
   if(!state.enabled)return null;
   return <>
     <div className='transport-map-tools' aria-label='Выбор транспортного участка'>
