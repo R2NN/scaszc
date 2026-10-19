@@ -173,8 +173,9 @@ export function TransportMapLayer({map,theme}) {
       {id:'beego-transport-closed-arrows',type:'symbol',source:sources[2],filter:['!=',['get','direction'],'both'],layout:{'symbol-placement':'line','symbol-spacing':65,'text-field':'❯','text-size':18,'text-font':['Noto Sans Regular'],'text-keep-upright':false,'text-allow-overlap':true},paint:{'text-color':'#ff1839','text-halo-color':'#fff','text-halo-width':2}},
       {id:'beego-transport-route-station-points',type:'circle',source:sources[5],paint:{'circle-radius':5,'circle-color':'#fff','circle-stroke-color':'#059669','circle-stroke-width':2.5}},
       {id:'beego-transport-route-station-labels',type:'symbol',source:sources[5],layout:{'text-field':['concat','M · ',['get','name']],'text-size':13,'text-font':['Noto Sans Regular'],'text-variable-anchor':['top-left','bottom-left','top-right','bottom-right'],'text-radial-offset':.8,'text-max-width':12,'text-padding':5,'text-optional':false,'symbol-sort-key':['case',['==',['get','role'],'transfer'],0,1]},paint:{'text-color':'#047857','text-halo-color':'#fff','text-halo-width':2.5}},
-      {id:'beego-transport-selection-halo',type:'circle',source:sources[1],filter:['!=',['get','selection'],''],paint:{'circle-radius':['case',['==',['get','selection'],'available'],12,18],'circle-color':['case',['==',['get','selection'],'selected'],'#ff344b','#7c16eb'],'circle-opacity':.22}},
-      {id:'beego-transport-selection-points',type:'circle',source:sources[1],filter:['!=',['get','selection'],''],paint:{'circle-radius':['case',['==',['get','selection'],'available'],6,10],'circle-color':['case',['==',['get','selection'],'pending'],'#ffdb2e',['==',['get','selection'],'selected'],'#ff344b','#fff'],'circle-stroke-color':['case',['==',['get','selection'],'selected'],'#fff','#7c16eb'],'circle-stroke-width':3}},
+      {id:'beego-transport-selected-metro',type:'line',source:sources[0],filter:['==',['get','selected'],true],layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':['get','color'],'line-width':6}},
+      {id:'beego-transport-selection-halo',type:'circle',source:sources[1],filter:['!=',['get','selection'],''],paint:{'circle-radius':['case',['==',['get','selection'],'available'],12,20],'circle-color':['get','color'],'circle-opacity':.25}},
+      {id:'beego-transport-selection-points',type:'circle',source:sources[1],filter:['!=',['get','selection'],''],paint:{'circle-radius':['case',['==',['get','selection'],'available'],6,11],'circle-color':['case',['==',['get','selection'],'pending'],'#ffdb2e',['==',['get','selection'],'selected'],['get','color'],'#fff'],'circle-stroke-color':['case',['==',['get','selection'],'selected'],'#fff',['get','color']],'circle-stroke-width':3}},
       {id:'beego-transport-selection-labels',type:'symbol',source:sources[1],filter:['in',['get','selection'],['literal',['pending','selected']]],layout:{'text-field':['get','name'],'text-size':15,'text-font':['Noto Sans Regular'],'text-variable-anchor':['top-left','bottom-left','top-right','bottom-right'],'text-radial-offset':1.1,'text-allow-overlap':true,'text-max-width':15},paint:{'text-color':['case',['==',['get','selection'],'pending'],'#7515d9','#db2443'],'text-halo-color':'#fff','text-halo-width':3}},
     ];
     const render=()=>{
@@ -206,7 +207,7 @@ export function TransportMapLayer({map,theme}) {
       const hide=state.preview?.result?.consequences?.orders?.length?['planned-route','planned-route-casing','planned-route-arrows','planned-route-hit','shift-route-remaining','shift-route-travelled']:state.drawing?['planned-route-hit']:[];
       for(const [id,visibility] of backgroundVisibility)if(!hide.includes(id)){if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visibility);backgroundVisibility.delete(id);}
       if(state.preview?.result||state.drawing)map.getContainer().dataset.transportComparison='true';else delete map.getContainer().dataset.transportComparison;
-      if(state.preview?.result){
+      if(state.preview?.result||state.drawing&&state.kind!=='road'){
         for(const layer of map.getStyle().layers){
           if(/^(beego-|planned-|shift-|object-|dispatch-)/.test(layer.id)||dimmed.has(layer.id))continue;
           const property=({raster:'raster-opacity',fill:'fill-opacity',line:'line-opacity',symbol:'text-opacity',circle:'circle-opacity'})[layer.type];
@@ -224,7 +225,8 @@ export function TransportMapLayer({map,theme}) {
       if(state.comparison==='after')for(const layer of layers)if(layer.source===sources[3])map.setLayoutProperty(layer.id,'visibility','none');
       const catalog=state.catalog;
       const colors=catalog?.lines || {};
-      write(sources[0],collection((catalog?.segments || []).map(s=>line(s.geometry,{id:s.id,color:colors[s.lineId]?.color || '#aab0bb',kind:s.kind}))));
+      const selectedMetro=new Set(state.draft?.kind!=='road'?state.draft?.segments.map(segment=>segment.id):[]);
+      write(sources[0],collection((catalog?.segments || []).map(s=>line(s.geometry,{id:s.id,color:colors[s.lineId]?.color || '#aab0bb',kind:s.kind,selected:selectedMetro.has(s.id)}))));
       const metroSelection=transportMetroSelection(catalog,state.draft,state.selectedStationId);
       write(sources[1],collection((catalog?.stations || []).map(s=>point(s.coords,{id:s.id,name:s.name,color:colors[s.lineId]?.color || '#d41317',selection:metroSelection.get(s.id)||''}))));
       const events=[...(state.events || [])];
@@ -238,6 +240,9 @@ export function TransportMapLayer({map,theme}) {
       map.setPaintProperty('beego-transport-stations','circle-opacity',state.preview?.result?['case',affected,1,.25]:1);
       map.setPaintProperty('beego-transport-stations','circle-stroke-opacity',state.preview?.result?['case',affected,1,.25]:1);
       map.setPaintProperty('beego-transport-links','line-opacity',state.preview?.result?.22:.55);
+      if(state.drawing&&state.kind!=='road'){
+        map.setPaintProperty('beego-transport-links','line-opacity',.9);map.setPaintProperty('beego-transport-links','line-width',4);map.setPaintProperty('beego-transport-links','line-dasharray',null);
+      }else{map.setPaintProperty('beego-transport-links','line-width',2.4);map.setPaintProperty('beego-transport-links','line-dasharray',[2,1.6]);}
       const closures=[];
       for(const event of events){
         if(event.id===state.editingId||event.status==='CANCELLED')continue;
@@ -259,7 +264,7 @@ export function TransportMapLayer({map,theme}) {
         }
       }
       write(sources[2],collection(closures));
-      const impacts=state.preview?.result?.consequences?.orders?.filter(o=>!state.impactOrderIds||state.impactOrderIds.includes(o.orderId)) || [];
+      const impacts=state.drawing&&state.kind!=='road'?[]:state.preview?.result?.consequences?.orders?.filter(o=>!state.impactOrderIds||state.impactOrderIds.includes(o.orderId)) || [];
       const selected=state.engineerId?transportCrewOrders(impacts,state.engineerId):impacts;
       write(sources[3],collection(selected.filter(o=>o.geometryBefore?.length>1).map(o=>line(o.geometryBefore,{}))));
       write(sources[4],collection(selected.flatMap(o=>o.stepsAfter?.some(s=>s.geometry?.length>1)?o.stepsAfter.filter(s=>s.geometry?.length>1).map(s=>line(s.geometry,{mode:s.mode})):o.geometryAfter?.length>1?[line(o.geometryAfter,{mode:'auto'})]:[])));
@@ -280,7 +285,7 @@ export function TransportMapLayer({map,theme}) {
       if(closure&&!state.drawing){state.onSelect?.((state.events || []).find(e=>e.id===closure.properties.id));return;}
       if(!state.drawing)return;
       if(state.kind==='road'){if(state.roadMode!=='brush')state.onRoad?.([event.lngLat.lat,event.lngLat.lng]);return;}
-      const station=hit.find(f=>['beego-transport-selection-points','beego-transport-stations','beego-transport-selection-halo'].includes(f.layer.id));
+      const station=hit.find(f=>['beego-transport-selection-points','beego-transport-stations','beego-transport-selection-halo','beego-transport-selection-labels','beego-transport-station-labels'].includes(f.layer.id));
       if(state.kind==='entry'&&station){state.onSegment?.((state.catalog.stations || []).find(s=>s.id===station.properties.id));return;}
       if(station){state.onStation?.(station.properties.id);return;}
       const link=hit.find(f=>f.layer.id==='beego-transport-links'&&f.properties.kind===state.kind);
@@ -301,7 +306,7 @@ export function TransportMapLayer({map,theme}) {
       <button onClick={()=>transportMap.set({metro:!state.metro})} aria-pressed={state.metro} title='Показать станции и схему связей метро'><Layers3 size={18}/></button>
       {state.drawing?<button onClick={state.onUndo} aria-label='Отменить последнюю точку'><Undo2 size={18}/></button>:<button onClick={state.onNew}><Plus size={18}/>Ограничение</button>}
     </div>:null}
-    {state.drawing&&state.kind==='road'?<div className='transport-draw-tools' aria-label='Рисование перекрытия'><div><button aria-pressed={state.roadMode!=='brush'} onClick={()=>state.onRoadMode?.('points')}><MousePointer2 size={16}/>По точкам</button><button aria-pressed={state.roadMode==='brush'} onClick={()=>state.onRoadMode?.('brush')}><Pencil size={16}/>Кисть</button><button disabled={state.roadBusy||!state.draft?.segments?.length} onClick={state.onFinish}><Check size={16}/>Готово</button></div><p role='status'>{state.roadBusy?'Проверяем линию и привязываем к проезжей части…':state.roadMode==='brush'?'Проведите линию вдоль дороги. По точкам — для перемещения карты.':state.draft?.roadPoints?.length?'Добавляйте точки на поворотах. Точки можно перетаскивать.':'Отметьте начало и конец участка. Между ними построим линию по дороге.'}</p></div>:state.drawing?<div className='transport-map-hint' role='status'>{state.kind==='entry'?'Нажмите станцию — выбранный вход подсветится красным':state.selectedStationId?'Начало выбрано. Нажмите соседнюю станцию с фиолетовой обводкой':state.draft?.segments?.length?'Участок выделен красным. Можно добавить ещё или сохранить ограничение':'Нажмите первую станцию или участок между станциями'}</div>:null}
+    {state.drawing&&state.kind==='road'?<div className='transport-draw-tools' aria-label='Рисование перекрытия'><div><button aria-pressed={state.roadMode!=='brush'} onClick={()=>state.onRoadMode?.('points')}><MousePointer2 size={16}/>По точкам</button><button aria-pressed={state.roadMode==='brush'} onClick={()=>state.onRoadMode?.('brush')}><Pencil size={16}/>Кисть</button><button disabled={state.roadBusy||!state.draft?.segments?.length} onClick={state.onFinish}><Check size={16}/>Готово</button></div><p role='status'>{state.roadBusy?'Проверяем линию и привязываем к проезжей части…':state.roadMode==='brush'?'Проведите линию вдоль дороги. По точкам — для перемещения карты.':state.draft?.roadPoints?.length?'Добавляйте точки на поворотах. Точки можно перетаскивать.':'Отметьте начало и конец участка. Между ними построим линию по дороге.'}</p></div>:state.drawing?<div className='transport-map-hint' role='status'>{state.kind==='entry'?'Нажмите станцию — выбранный вход подсветится красным':state.selectedStationId?'Начало выбрано. Нажмите вторую станцию этой линии':state.draft?.segments?.length?'Участок выделен красным. Можно добавить ещё или сохранить ограничение':'Нажмите первую станцию или участок между станциями'}</div>:null}
     {state.management!==false?<details className='transport-map-legend' open={legendOpen} onToggle={event=>setLegendOpen(event.currentTarget.open)}><summary>Легенда</summary><div><span><i className='closure'/>Закрыто для авто</span><span><TrainFront size={16}/>Движение метро</span><span><DoorOpen size={16}/>Вход</span><span><ArrowLeftRight size={16}/>Пересадка</span><span><i className='before'/>Прежний путь</span><span><i className='after'/>Новый путь</span><span><Footprints size={15}/><i className='walking'/>Пешком / пересадка</span></div></details>:null}
   </>;
 }

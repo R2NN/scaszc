@@ -10,6 +10,7 @@ import { ratingName } from './engineerPresentation.js';
 import { EngineerPortrait } from './EngineerPortrait.jsx';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { DateTimePicker } from './DateTimePicker.jsx';
+import { metroSectionBetween } from './transportMetroSelection.js';
 import './transport.css';
 
 const sessions=new Map();
@@ -73,11 +74,12 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const begin=(kind='road')=>{
     if(!shift?.plan){setError('Выберите день с опубликованным планом');return;}
     roadRequest.current++;clearPreview();setSelected(null);setSearch('');setError('');setStationFrom('');setBusy(false);
+    if(kind!=='road')transportMap.set({metro:true});
     setDraft({id:crypto.randomUUID(),title:'',reason:'',kind,direction:'both',startsAt:`${date}T${live?timeOf(minute):'09:30'}:00+03:00`,endsAt:`${date}T${live?timeOf(Math.min(1439,minute+45)):'10:15'}:00+03:00`,segments:[],roadPoints:[],roadMode:'points',source:'Диспетчер',actor,status:'OPEN'});
     setWhenMode(live?'now':'planned');setDrawing(true);
   };
   const clearPreview=()=>{generation.current++;calculationRequest.current++;clearTimeout(retryRef.current);const old=previewRef.current;previewRef.current=null;setPreview(null);if(old&&['RUNNING','READY'].includes(old.status))api(`previews/${old.id}/cancel`,{}).catch(()=>{});};
-  const change=patch=>{if(patch.kind){roadRequest.current++;setBusy(false);}clearPreview();setError('');setDraft(value=>({...value,...patch}));};
+  const change=patch=>{if(patch.kind){roadRequest.current++;setBusy(false);setStationFrom('');patch={...patch,roadPoints:[],roadLengthM:0};if(patch.kind!=='road')transportMap.set({metro:true});}clearPreview();setError('');setDraft(value=>({...value,...patch}));};
   const selectSegment=segment=>{
     if(!segment)return;
     const value=segment.kind?segment:{...segment,kind:'entry',fromId:segment.id,toId:null,geometry:[segment.coords]};
@@ -104,8 +106,9 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const selectStation=id=>{
     if(id===stationFrom){setStationFrom('');setError('');return;}
     if(!stationFrom){setStationFrom(id);setError('');return;}
-    const segment=catalog?.segments.find(s=>s.kind===draft?.kind&&((s.fromId===stationFrom&&s.toId===id)||(s.bidirectional&&s.toId===stationFrom&&s.fromId===id)));
-    if(segment){selectSegment(segment);setStationFrom('');}else setError('Между этими станциями нет прямого участка. Выберите соседнюю станцию с фиолетовой обводкой.');
+    const section=metroSectionBetween(catalog,draft?.kind,stationFrom,id);
+    if(section.length){clearPreview();setError('');setDraft(current=>({...current,segments:[...current.segments,...section.filter(segment=>!current.segments.some(saved=>saved.id===segment.id))]}));setStationFrom('');}
+    else setError(draft?.kind==='metro'?'Выберите станцию на той же линии метро. Пересадку можно закрыть отдельно.':'Выберите связанную станцию другой линии для закрытия пересадки.');
   };
   const selectEvent=event=>{if(!event||event.id==='draft')return;if(draft){setError('Сохраните ограничение или нажмите «Отмена», чтобы открыть другое событие');return;}setSelected(event);setDrawing(false);setSearch('');setBrowse(false);setComparison('both');focusResult.current={eventId:event.id};transportMap.focusProblem([event]);refs.current.calculate({selection:event.id});};
   const editEvent=event=>{setSelected(null);setDraft({...event,expectedRevision:event.revision});setDrawing(true);clearPreview();};
@@ -255,7 +258,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
       {draft.kind!=='road'?<><div className='transport-search'><Search size={17}/><input aria-label='Поиск станции или участка метро' placeholder='Название станции или пересадки' value={search} onChange={e=>setSearch(e.target.value)}/></div>{results.length?<div className='transport-station-results'>{results.map(s=><button key={s.id} onClick={()=>{selectSegment(s);setSearch('');}}><b>M</b><span>{s.name}<small>{catalog?.lines?.[s.lineId]?.name || ''}</small></span><Plus size={15}/></button>)}</div>:null}</>:null}
       <div className='transport-selection'><span><strong>{draft.segments.length?draft.kind==='road'?`${(draft.roadLengthM||draft.segments.reduce((sum,item)=>sum+item.lengthM,0)).toLocaleString('ru-RU')} м · ${sectionCount(draft.segments.length)}`:`Выбрано ${draft.segments.length} ${draft.kind==='entry'?'станций':'участков'}`:draft.roadPoints?.length?draft.roadPoints.length===1?'Отмечено начало участка':'Уточните линию на карте':'Участок ещё не выбран'}</strong>{busy||draft.segments.length?<small>{busy?'Привязываем линию к дороге…':[...new Set(draft.segments.map(s=>s.name))].join(' → ')}</small>:null}</span><button disabled={!draft.segments.length&&!draft.roadPoints?.length} onClick={undoRoad} aria-label='Отменить выбор последней точки'><Undo2 size={18}/></button><button disabled={busy||drawing&&!draft.segments.length} onClick={()=>setDrawing(value=>!value)}>{drawing?'Готово':'Изменить участок'}</button></div>
       {draft.kind==='road'&&(draft.roadPoints?.length||draft.segments.length)?<button className='transport-clear-selection' onClick={()=>{drawRoad([],draft.roadMode);setDrawing(true);}}>Очистить участок</button>:null}
-      {stationFrom?<p className='transport-source-note' role='status'><strong>{catalog?.stations.find(station=>station.id===stationFrom)?.name}</strong> выбрана. Нажмите подсвеченную соседнюю станцию; повторный клик снимет выбор.</p>:null}
+      {stationFrom?<p className='transport-source-note' role='status'><strong>{catalog?.stations.find(station=>station.id===stationFrom)?.name}</strong> выбрана. {draft.kind==='metro'?'Нажмите вторую станцию этой линии — выделим весь участок между ними.':'Нажмите станцию пересадки.'} Повторный клик снимет выбор.</p>:null}
     </>}
     {preview?.status==='RUNNING'?<section className='transport-calculating' role='status'><i className='spinner'/><div><b>Рассчитываем новый маршрут</b><p>{preview.phase}</p><p>Факты и опубликованный план сохранены · {elapsed} с{preview.progress?.routeChecks>0?` · проверок маршрута: ${preview.progress.routeChecks}`:''}</p></div><button onClick={async()=>{await api(`previews/${preview.id}/cancel`,{});setPreview(null);}}>Отмена</button></section>:null}
     {preview?.status==='FAILED'?<div className='transport-error' role='alert'><AlertTriangle size={18}/><span>{preview.error}</span><button onClick={calculate}>Повторить</button></div>:null}
