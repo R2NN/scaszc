@@ -4,18 +4,28 @@ import { loadComplexityArtifact } from './complexityArtifact.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const blankTask = () => ({ action: '', owner: '', deadline: '', access: 'unknown', equipment: 'unknown', customer: 'unknown' });
-export function demoServiceContext(shift) {
+export function demoServiceContext(shift, { spreadAcrossRegion = false } = {}) {
   const located = shift.orders.filter(order => Array.isArray(order.coords) && order.coords.length === 2 && order.coords.every(Number.isFinite));
-  const anchor = located.find(order => order.id === 'EAST-74198') || located[0];
-  const distance = order => Math.hypot((order.coords[0]-anchor.coords[0])*111,(order.coords[1]-anchor.coords[1])*63);
-  const orders = anchor ? [anchor, ...located.filter(order => order !== anchor).sort((a,b)=>distance(a)-distance(b)).slice(0, 1)] : [];
-  if (orders.length < 2) throw new Error('Для примера нужны минимум две заявки с координатами.');
-  const at = `${shift.date}T11:17:00+03:00`;
-  return {
-    components: [{ id: 'DEMO-NODE-042', demoVersion: 2, title: 'Учебный узел MSK-042', coords: [orders.reduce((sum, item) => sum + item.coords[0], 0) / orders.length + .0012, orders.reduce((sum, item) => sum + item.coords[1], 0) / orders.length - .0012], provenance: 'demo', locationBasis: 'Условная координата учебной схемы; не расположение реального узла.' }],
-    incidents: [{ id: 'DEMO-INC-042', title: 'Нет ответа от общего узла', componentId: 'DEMO-NODE-042', type: 'equipment', status: 'review', provenance: 'demo', orderIds: orders.slice(0, 2).map(order => String(order.id)), basis: 'Демонстрационная зависимость двух заявок от общего узла. Связь не подтверждена данными оператора.', observedAt: at, updatedAt: at, history: [{ at, text: 'Учебный сигнал: узел перестал отвечать. Живой мониторинг не подключён.' }], task: blankTask() }],
-    cases: [],
-  };
+  if (located.length < 2) throw new Error('Для примера нужны минимум две заявки с координатами.');
+  const distance = (a, b) => Math.hypot((a.coords[0] - b.coords[0]) * 111, (a.coords[1] - b.coords[1]) * 63);
+  const groups = [], used = new Set();
+  for (let index = 0; index < Math.min(3, Math.floor(located.length / 2)); index++) {
+    const remaining = located.filter(order => !used.has(String(order.id)));
+    const nearby = !spreadAcrossRegion && index > 0 ? remaining.filter(order => distance(order, groups[0][0]) <= 18) : remaining;
+    const available = nearby.length >= 2 ? nearby : remaining;
+    // Keep the original example stable; spread further teaching nodes over the day.
+    const anchor = index === 0 ? available.find(order => order.id === 'EAST-74198') || available[0]
+      : [...available].sort((a, b) => Math.min(...groups.map(group => distance(b, group[0]))) - Math.min(...groups.map(group => distance(a, group[0]))) || String(a.id).localeCompare(String(b.id)))[0];
+    const neighbour = available.filter(order => order !== anchor).sort((a, b) => distance(a, anchor) - distance(b, anchor) || String(a.id).localeCompare(String(b.id)))[0];
+    groups.push([anchor, neighbour]); used.add(String(anchor.id)); used.add(String(neighbour.id));
+  }
+  const components = [], incidents = [];
+  groups.forEach((orders, index) => {
+    const number = String(42 + index).padStart(3, '0'), at = `${shift.date}T11:${String(17 + index * 8).padStart(2, '0')}:00+03:00`;
+    components.push({ id: `DEMO-NODE-${number}`, demoVersion: 4, title: `Учебный узел MSK-${number}`, coords: [orders.reduce((sum, item) => sum + item.coords[0], 0) / orders.length + .0012, orders.reduce((sum, item) => sum + item.coords[1], 0) / orders.length - .0012], provenance: 'demo', locationBasis: 'Условная координата учебной схемы; не расположение реального узла.' });
+    incidents.push({ id: `DEMO-INC-${number}`, title: 'Нет ответа от общего узла', componentId: `DEMO-NODE-${number}`, type: 'equipment', status: 'review', provenance: 'demo', orderIds: orders.map(order => String(order.id)), basis: 'Демонстрационная зависимость двух заявок от общего узла. Связь не подтверждена данными оператора.', observedAt: at, updatedAt: at, history: [{ at, text: 'Учебный сигнал: узел перестал отвечать. Живой мониторинг не подключён.' }], task: blankTask() });
+  });
+  return { components, incidents, cases: [] };
 }
 
 export function createServiceContextApi(store, { seedDemo = false } = {}) {
@@ -29,12 +39,29 @@ export function createServiceContextApi(store, { seedDemo = false } = {}) {
     const current = read(shift.id);
     const oldDemo = current.incidents.find(item => item.id === 'DEMO-INC-042' && item.provenance === 'demo');
     const oldNode = current.components.find(item => item.id === 'DEMO-NODE-042' && item.provenance === 'demo');
-    if (!seedDemo || shift.regionId !== 'moscow' || shift.date !== '2026-08-17' || (current.revision && (!oldDemo || !oldNode || oldNode.demoVersion === 2))) return;
+    if (!seedDemo || shift.regionId !== 'moscow' || shift.date !== '2026-08-17' || (current.revision && (!oldDemo || !oldNode || oldNode.demoVersion >= 4))) return;
     const artifact = await loadComplexityArtifact();
     const originals = new Map((artifact?.orders || []).map(order => [String(order.id), order]));
     if (!originals.size || shift.orders.length !== originals.size || shift.orders.some(order => { const source = originals.get(String(order.id)); return !source || source.address !== order.address || JSON.stringify(source.coords) !== JSON.stringify(order.coords); })) return;
     const demo = demoServiceContext(shift);
-    const next = oldDemo ? { cases: current.cases, components: current.components.map(item => item.id === oldNode.id ? demo.components[0] : item), incidents: current.incidents.map(item => item.id === oldDemo.id ? { ...item, orderIds: demo.incidents[0].orderIds } : item) } : { ...demo, cases: [] };
+    const next = oldDemo ? {
+      cases: current.cases,
+      // Upgrade only our teaching version; retain saved locations, tasks and history.
+      components: current.components.map(item => item.id === oldNode.id ? { ...item, demoVersion: 4 } : item),
+      incidents: current.incidents.map(item => item.id === oldDemo.id && !(oldNode.demoVersion >= 2) ? { ...item, orderIds: demo.incidents[0].orderIds } : item),
+    } : { ...demo, cases: [] };
+    const previousDemo = oldNode?.demoVersion === 3 ? demoServiceContext(shift, { spreadAcrossRegion: true }) : null;
+    if (oldDemo) for (const incident of demo.incidents.slice(1)) {
+      const component = demo.components.find(item => item.id === incident.componentId);
+      const saved = next.incidents.find(item => item.id === incident.id), savedComponent = next.components.find(item => item.id === incident.componentId);
+      if (!saved && !savedComponent) { next.components.push(component); next.incidents.push(incident); continue; }
+      // Only relocate untouched v3 teaching examples from regional outliers into
+      // the city view. Imported/custom coordinates and operator work stay exact.
+      const prior = previousDemo?.incidents.find(item => item.id === incident.id), priorComponent = previousDemo?.components.find(item => item.id === incident.componentId);
+      if (saved?.provenance === 'demo' && savedComponent?.provenance === 'demo' && savedComponent.demoVersion === 3 && saved.status === 'review' && saved.history?.length === 1 && JSON.stringify(saved.task) === JSON.stringify(blankTask()) && JSON.stringify(saved.orderIds) === JSON.stringify(prior?.orderIds) && JSON.stringify(savedComponent.coords) === JSON.stringify(priorComponent?.coords)) {
+        savedComponent.coords = component.coords; savedComponent.demoVersion = 4; saved.orderIds = incident.orderIds;
+      }
+    }
     store.db.transaction(() => {
       if (read(shift.id).revision !== current.revision) return;
       const revision = current.revision + 1, data = JSON.stringify(validateServiceContext(next, shift.orders));

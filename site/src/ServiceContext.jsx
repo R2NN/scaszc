@@ -102,7 +102,8 @@ function NetworkEventForm({ model, onClose }) {
   return <form className='service-create' onSubmit={submit}><h3>Зарегистрировать общую проблему</h3><label>Что произошло<input required maxLength={250} value={form.title} onChange={event => change('title', event.target.value)}/></label><label>Тип проблемы<BusinessSelect portalMenu ariaLabel='Тип общей проблемы' value={form.type} options={statusOptions(INCIDENT_TYPES)} onChange={value => change('type', value)}/></label><label>Компонент / площадка<input required maxLength={250} value={form.component} onChange={event => change('component', event.target.value)}/></label><label>Основание связи с заявками<textarea required maxLength={2000} value={form.basis} onChange={event => change('basis', event.target.value)} placeholder='ID из реестра, результат проверки или ссылка на внешний инцидент'/></label><details><summary>Известные координаты</summary><p className='service-muted'>Без координат событие будет доступно в списке. Положение не угадывается по заявкам.</p><div className='service-fields'><label>Широта<input type='number' step='any' min='-90' max='90' required={form.lng !== ''} value={form.lat} onChange={event => change('lat', event.target.value)}/></label><label>Долгота<input type='number' step='any' min='-180' max='180' required={form.lat !== ''} value={form.lng} onChange={event => change('lng', event.target.value)}/></label></div><label>Источник координат<input required={form.lat !== ''} value={form.locationBasis} onChange={event => change('locationBasis', event.target.value)}/></label></details><details><summary>Связанные заявки · {form.orderIds.length}</summary><input aria-label='Поиск связанных заявок' placeholder='Номер или адрес' value={query} onChange={event => setQuery(event.target.value)}/><div className='service-order-choices'>{model.orders.filter(item => `${orderLabel(item)} ${item.address}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())).map(item => <label className='service-check' key={item.id}><input type='checkbox' checked={form.orderIds.includes(String(item.id))} onChange={event => change('orderIds', event.target.checked ? [...form.orderIds, String(item.id)] : form.orderIds.filter(id => id !== String(item.id)))}/>{orderLabel(item)} · {item.address}</label>)}</div></details><div className='service-actions'><button type='button' onClick={onClose}>Отмена</button><button type='submit' disabled={model.busy}>Зарегистрировать</button></div></form>;
 }
 function NetworkMapDrawing({ map, model, selected, visible, links }) {
-  const signature = JSON.stringify({ incidents: model.incidents, components: model.components, selected: selected?.id, orders: visible.map(order => ({ id: order.id, coords: order.coords })), links });
+  const overview = model.panelOpen && !selected;
+  const signature = JSON.stringify({ overview, incidents: model.incidents, components: model.components, selected: selected?.id, orders: visible.map(order => ({ id: order.id, coords: order.coords })), links });
   useEffect(() => {
     if (!map) return;
     const markers = [];
@@ -133,24 +134,28 @@ function NetworkMapDrawing({ map, model, selected, visible, links }) {
       if (selected) visible.forEach((order, index) => add(order.coords, String(index + 1), 'request', `Связанная заявка ${orderLabel(order)}`, () => window.dispatchEvent(new CustomEvent('beego:service-order', { detail: order }))));
       else {
         const affected = relatedOrders({orderIds:[...new Set(active.flatMap(item=>item.orderIds))]},model.orders);
-        affected.forEach(order=>{const incidents=active.filter(item=>item.orderIds.includes(String(order.id)));add(order.coords,'','affected',`Заявка ${orderLabel(order)}: связана с общей проблемой ${incidents.map(item=>item.id).join(', ')}`,()=>{model.setIncidentId(incidents[0].id);model.setPanelOpen(true);});});
+        affected.forEach((order,index)=>{const incidents=active.filter(item=>item.orderIds.includes(String(order.id)));add(order.coords,overview?String(index+1):'',overview?'request':'affected',`Заявка ${orderLabel(order)}: связана с общей проблемой ${incidents.map(item=>item.id).join(', ')}`,()=>{model.setIncidentId(incidents[0].id);model.setPanelOpen(true);});});
       }
     };
     drawMarkers(); map.on('moveend', drawMarkers);
-    const component = selected && model.components.find(item => item.id === selected.componentId);
     // Project dependency connectors independently from basemap tile/style loading.
     // They are UI links, not a claim about physical cable geometry.
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('network-connections');svg.setAttribute('aria-hidden','true');map.getContainer().append(svg);
     let frame=0;
     const renderLinks=()=>{
       frame=0;svg.replaceChildren();
-      if(!selected||!links||!Array.isArray(component?.coords))return;
+      const incidents = selected ? (links ? [selected] : []) : overview ? active : [];
+      if (!incidents.length) return;
       svg.setAttribute('viewBox',`0 0 ${map.getContainer().clientWidth} ${map.getContainer().clientHeight}`);
-      const start=map.project([component.coords[1],component.coords[0]]);
-      visible.filter(item=>Array.isArray(item.coords)&&item.coords.length===2&&item.coords.every(Number.isFinite)).forEach(order=>{
-        const end=map.project([order.coords[1],order.coords[0]]);
-        for(const kind of ['outline','link']){const line=document.createElementNS('http://www.w3.org/2000/svg','line');line.setAttribute('x1',start.x);line.setAttribute('y1',start.y);line.setAttribute('x2',end.x);line.setAttribute('y2',end.y);line.setAttribute('class',`network-connection-${kind}`);svg.append(line);}
-      });
+      for (const incident of incidents) {
+        const component = model.components.find(item => item.id === incident.componentId);
+        if (!Array.isArray(component?.coords)) continue;
+        const start = map.project([component.coords[1],component.coords[0]]);
+        relatedOrders(incident, model.orders).filter(item=>Array.isArray(item.coords)&&item.coords.length===2&&item.coords.every(Number.isFinite)).forEach(order=>{
+          const end=map.project([order.coords[1],order.coords[0]]);
+          for(const kind of ['outline','link']){const line=document.createElementNS('http://www.w3.org/2000/svg','line');line.setAttribute('x1',start.x);line.setAttribute('y1',start.y);line.setAttribute('x2',end.x);line.setAttribute('y2',end.y);line.setAttribute('class',`network-connection-${kind}`);svg.append(line);}
+        });
+      }
     };
     const queueLinks=()=>{if(!frame)frame=requestAnimationFrame(renderLinks);};
     renderLinks();map.on('move',queueLinks);map.on('resize',queueLinks);map.on('idle',queueLinks);
@@ -177,9 +182,11 @@ export function NetworkWorkspace({ map, enabled, onOrder }) {
     window.addEventListener('beego:service-order', open); return () => window.removeEventListener('beego:service-order', open);
   }, [onOrder]);
   useEffect(() => {
-    if (!enabled || !selected || !map || panelPresence.renderedKey !== selected.id || panelPresence.motionClass === 'is-closing') return;
-    const component = model.components.find(item => item.id === selected.componentId);
-    const points = [component, ...visible].filter(item => Array.isArray(item?.coords) && item.coords.length === 2 && item.coords.every(Number.isFinite));
+    if (!enabled || !map || (!model.panelOpen && !selected) || panelPresence.renderedKey !== (selected?.id || 'network-list') || panelPresence.motionClass === 'is-closing') return;
+    const incidents = selected ? [selected] : model.incidents.filter(item => item.status !== 'resolved');
+    const affected = selected ? visible : relatedOrders({ orderIds: incidents.flatMap(item => item.orderIds) }, model.orders);
+    const components = incidents.map(incident => model.components.find(item => item.id === incident.componentId));
+    const points = [...components, ...affected].filter(item => Array.isArray(item?.coords) && item.coords.length === 2 && item.coords.every(Number.isFinite));
     if (!points.length) return;
     const bounds = points.reduce((result, item) => result.extend([item.coords[1], item.coords[0]]), new LngLatBounds());
     const host = map.getContainer(), rect = host.getBoundingClientRect();
@@ -192,13 +199,14 @@ export function NetworkWorkspace({ map, enabled, onOrder }) {
       ? { top: 120 * scaleY, bottom: Math.min(host.clientHeight * .6, (rect.bottom - (rightPanel?.top || rect.bottom) + 30) * scaleY), left: 80 * scaleX, right: 25 * scaleX }
       : { top: 125 * scaleY, bottom: 100 * scaleY, left: (left ? Math.max(70, left.right - rect.left + 55) : 75) * scaleX, right: (rightPanel ? Math.max(75, rect.right - rightPanel.left + 55) : 80) * scaleX };
     map.fitBounds(bounds, { padding, bearing: map.getBearing(), pitch: map.getPitch(), maxZoom: 16.5, duration: 600 });
-  }, [map, selected?.id, panelPresence.renderedKey, panelPresence.motionClass]);
+  }, [map, selected?.id, model?.panelOpen, panelPresence.renderedKey, panelPresence.motionClass]);
   useEffect(() => {
     if (!enabled || !map) return;
     const container = map.getContainer().closest('.map-canvas');
-    container?.classList.toggle('network-focused', Boolean(selected));
-    return () => container?.classList.remove('network-focused');
-  }, [map, enabled, selected?.id]);
+    container?.classList.toggle('network-focused', Boolean(selected || model.panelOpen));
+    map.fire('beego:network-focus');
+    return () => { container?.classList.remove('network-focused'); map.fire('beego:network-focus'); };
+  }, [map, enabled, selected?.id, model?.panelOpen]);
   useEffect(() => {
     if (!model?.panelOpen || !enabled) return;
     const close = event => { if (event.key === 'Escape' && !document.querySelector('.business-select-menu')) { model.setPanelOpen(false); model.setIncidentId(''); } };
@@ -227,5 +235,5 @@ export function NetworkWorkspace({ map, enabled, onOrder }) {
     const route = model.plan?.routes?.find(item => item.assignments?.some(value => String(value.orderId) === String(order.id)));
     const assignment = route?.assignments.find(item => String(item.orderId) === String(order.id));
     return <article className='network-order' key={order.id}><span className='network-number'>{index + 1}</span><div><b>Заявка {orderLabel(order)}</b><p>{order.address}</p><small>Окно: {order.start && order.end ? `${order.start}–${order.end}` : 'не задано'}</small><small>{assignment ? `План: ${assignment.plannedStart} · ${route.engineerName || route.engineerId}` : 'Не назначена'}</small><div className='network-order-actions'><button type='button' className='service-secondary' onClick={() => openOrder(order)}>Открыть заявку<ChevronRight size={15}/></button><button type='button' className='service-primary' disabled={model.busy} onClick={() => model.prepare('incident', displayed, order).catch(() => {})}><Wrench size={15}/>Подготовить решение</button></div></div></article>;
-  }) : <p className='service-empty'>Связанных обращений пока нет.</p>}<label className='service-check'><input type='checkbox' checked={links} onChange={event => setLinks(event.target.checked)}/>Показать связи с заявками</label>{links ? <small className='service-footnote'>Пунктир — зависимость от источника, не кабельная трасса и не маршрут бригады.</small> : null}</> : tab === 'cause' ? <><section className='network-info-card'><h3>Основание связи</h3><p>{displayed.basis}</p></section><section className='network-info-card'><h3>Источник проблемы</h3><p>{component?.title || 'Неизвестен'}</p>{!component?.coords?<p className='service-muted'>Расположение источника неизвестно. На карте показаны только связанные заявки.</p>:null}{component?.locationBasis ? <p className='service-muted'>{component.locationBasis}</p> : null}<p className='service-muted'>Сигнал на {stamp(displayed.observedAt || displayed.updatedAt)}. Текущее состояние оборудования не измеряется. Причина требует проверки.</p></section><label>Результат проверки<BusinessSelect portalMenu ariaLabel='Статус сетевого события' value={displayed.status} options={statusOptions(INCIDENT_STATUSES)} onChange={status => patch({ action: 'status', status })}/></label><TaskEditor model={model} kind='incident' record={displayed}/></> : <><History record={displayed} model={model} onOrder={openOrder}/><RecordNotes model={model} kind='incident' record={displayed}/></>}</div></> : <><p className='service-muted'>Зарегистрированные общие проблемы. Живой мониторинг не подключён.</p><div className='network-stats'><span><b>{stats.active}</b>активных</span><span><b>{stats.orders}</b>заявок</span><span><b>{stats.review}</b>проверить</span></div><div className='service-tabs'><button type='button' className={!onlyLinked ? 'active' : ''} onClick={() => setOnlyLinked(false)}>Все события</button><button type='button' className={onlyLinked ? 'active' : ''} onClick={() => setOnlyLinked(true)}>Только с заявками</button></div>{model.incidents.filter(item => !onlyLinked || item.orderIds.length).map(item => <button className={`network-event ${item.status}`} type='button' key={item.id} onClick={() => { model.setIncidentId(item.id); }}><span className='network-event-icon'><Network size={19}/></span><span><b>{item.title}</b><small>{INCIDENT_TYPES[item.type]} · {INCIDENT_STATUSES[item.status]}</small><small>{item.orderIds.length} связанных заявок{!model.components.find(value=>value.id===item.componentId)?.coords?' · нет координат':''}{item.provenance === 'demo' ? ' · демо' : ''}</small></span><ChevronRight size={16}/></button>)}{!model.incidents.length ? <div className='service-empty'><Network size={24}/><h3>{model.ready ? 'Общих событий нет' : 'Загрузка контекста…'}</h3><p>Зарегистрируйте общую проблему и укажите связанные с ней заявки.</p><DemoButton model={model}/></div> : null}{creating ? <NetworkEventForm model={model} onClose={() => setCreating(false)}/> : <button type='button' className='service-primary' disabled={!model.ready} onClick={() => setCreating(true)}>Зарегистрировать проблему</button>}</>}</aside> : null}</>;
+  }) : <p className='service-empty'>Связанных обращений пока нет.</p>}<label className='service-check'><input type='checkbox' checked={links} onChange={event => setLinks(event.target.checked)}/>Показать связи с заявками</label>{links ? <small className='service-footnote'>Пунктир — зависимость от источника, не кабельная трасса и не маршрут бригады.</small> : null}</> : tab === 'cause' ? <><section className='network-info-card'><h3>Основание связи</h3><p>{displayed.basis}</p></section><section className='network-info-card'><h3>Источник проблемы</h3><p>{component?.title || 'Неизвестен'}</p>{!component?.coords?<p className='service-muted'>Расположение источника неизвестно. На карте показаны только связанные заявки.</p>:null}{component?.locationBasis ? <p className='service-muted'>{component.locationBasis}</p> : null}<p className='service-muted'>Сигнал на {stamp(displayed.observedAt || displayed.updatedAt)}. Текущее состояние оборудования не измеряется. Причина требует проверки.</p></section><label>Результат проверки<BusinessSelect portalMenu ariaLabel='Статус сетевого события' value={displayed.status} options={statusOptions(INCIDENT_STATUSES)} onChange={status => patch({ action: 'status', status })}/></label><TaskEditor model={model} kind='incident' record={displayed}/></> : <><History record={displayed} model={model} onOrder={openOrder}/><RecordNotes model={model} kind='incident' record={displayed}/></>}</div></> : <><p className='service-muted'>Зарегистрированные общие проблемы. Живой мониторинг не подключён.</p><div className='network-stats'><span><b>{stats.active}</b>активных</span><span><b>{stats.orders}</b>заявок</span><span><b>{stats.review}</b>проверить</span></div><div className='service-tabs'><button type='button' className={!onlyLinked ? 'active' : ''} onClick={() => setOnlyLinked(false)}>Все события</button><button type='button' className={onlyLinked ? 'active' : ''} onClick={() => setOnlyLinked(true)}>Только с заявками</button></div>{model.incidents.filter(item => !onlyLinked || item.orderIds.length).map(item => <button className={`network-event ${item.status}`} type='button' key={item.id} onClick={() => { model.setIncidentId(item.id); }}><span className='network-event-icon'><Network size={19}/></span><span><b>{model.components.find(component=>component.id===item.componentId)?.title || item.id}</b><small>{item.title}</small><small>{INCIDENT_TYPES[item.type]} · {INCIDENT_STATUSES[item.status]}</small><small>{item.orderIds.length} связанных заявок{!model.components.find(value=>value.id===item.componentId)?.coords?' · нет координат':''}{item.provenance === 'demo' ? ' · демо' : ''}</small></span><ChevronRight size={16}/></button>)}{!model.incidents.length ? <div className='service-empty'><Network size={24}/><h3>{model.ready ? 'Общих событий нет' : 'Загрузка контекста…'}</h3><p>Зарегистрируйте общую проблему и укажите связанные с ней заявки.</p><DemoButton model={model}/></div> : null}{creating ? <NetworkEventForm model={model} onClose={() => setCreating(false)}/> : <button type='button' className='service-primary' disabled={!model.ready} onClick={() => setCreating(true)}>Зарегистрировать проблему</button>}</>}</aside> : null}</>;
 }

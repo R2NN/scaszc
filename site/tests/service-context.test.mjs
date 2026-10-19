@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ShiftStore } from '../server/shiftStore.mjs';
-import { createServiceContextApi } from '../server/serviceContextApi.mjs';
+import { demoServiceContext, createServiceContextApi } from '../server/serviceContextApi.mjs';
+import { loadComplexityArtifact } from '../server/complexityArtifact.mjs';
 import { caseForOrder, relatedOrders, serviceStats } from '../src/serviceContextDomain.js';
 
 function fixture(file = ':memory:') {
@@ -137,4 +138,41 @@ test('automatic teaching overlay does not seed a changed or imported dataset', a
   const response=await api(new Request('http://localhost/api/service-context?shiftId=test-a'));
   const data=await response.json();assert.equal(data.revision,0);assert.equal(data.incidents.length,0);assert.deepEqual(store.get('test-a'),before);
  } finally {store.close();}
+});
+
+test('teaching network upgrades to three distinct nodes without replacing saved records or operational data', async () => {
+  const store = new ShiftStore(':memory:');
+  try {
+    const artifact = await loadComplexityArtifact(), date = '2026-08-17', id = 'canonical-demo';
+    store.db.prepare('INSERT INTO shifts(id,region_id,service_date,orders_json,team_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run(id, 'moscow', date, JSON.stringify(artifact.orders), '[]', date, date);
+    const shift = store.get(id), before = structuredClone(shift), demo = demoServiceContext(shift);
+    assert.equal(demo.components.length, 3); assert.equal(demo.incidents.length, 3);
+    assert.equal(new Set(demo.incidents.flatMap(item => item.orderIds)).size, 6);
+    for (const component of demo.components) { assert.equal(component.provenance, 'demo'); assert.equal(component.demoVersion, 4); }
+    for (let i = 0; i < 3; i++) for (let j = 0; j < i; j++) assert.ok(Math.hypot((demo.components[i].coords[0] - demo.components[j].coords[0]) * 111, (demo.components[i].coords[1] - demo.components[j].coords[1]) * 63) > 3);
+    const legacy = { cases: [], components: [{ ...demo.components[0], demoVersion: 2, coords: [55.7299, 37.6999] }, { id: 'OWN', title: 'Сохранённая площадка', provenance: 'operator' }], incidents: [{ ...demo.incidents[0], status: 'resolved', task: { ...demo.incidents[0].task, action: 'Сохранённая подготовка', owner: 'Ирина' }, history: [...demo.incidents[0].history, { at: '2026-08-17T12:00:00+03:00', text: 'Проверили питание' }] }] };
+    const api = createServiceContextApi(store, { seedDemo: true });
+    store.db.prepare('INSERT INTO service_contexts VALUES (?,?,?)').run(id, 1, JSON.stringify(legacy));
+    const read = async () => (await api(new Request(`http://localhost/api/service-context?shiftId=${id}`))).json();
+    const updated = await read();
+    assert.equal(updated.revision, 2, JSON.stringify(updated)); assert.equal(updated.incidents.length, 3);
+    assert.deepEqual(updated.incidents[0], legacy.incidents[0]);
+    assert.deepEqual(updated.components[0].coords, legacy.components[0].coords);
+    assert.deepEqual(updated.components.find(item => item.id === 'OWN'), legacy.components[1]);
+    assert.equal((await read()).revision, 2); assert.deepEqual(store.get(id), before);
+    // An earlier untouched teaching overlay is upgraded into the same city view.
+    const regional = demoServiceContext(shift, { spreadAcrossRegion: true });
+    regional.components.forEach(component => { component.demoVersion = 3; });
+    regional.components[0].coords = [55.712345, 37.612345];
+    regional.components[2].coords = [55.456789, 37.812345]; // explicit coordinate correction
+    regional.incidents[2].history.push({ at: '2026-08-17T12:00:00+03:00', text: 'Сохранённая проверка' });
+    store.db.prepare('UPDATE service_contexts SET revision=3,data_json=? WHERE shift_id=?').run(JSON.stringify(regional), id);
+    const city = await read();
+    assert.deepEqual(city.components[0].coords, regional.components[0].coords);
+    assert.deepEqual(city.components[1].coords, demo.components[1].coords);
+    assert.deepEqual(city.components[2], regional.components[2]);
+    assert.deepEqual(city.incidents[2], regional.incidents[2]);
+    assert.deepEqual(store.get(id), before);
+
+  } finally { store.close(); }
 });

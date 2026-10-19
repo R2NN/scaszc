@@ -69,3 +69,12 @@
 .network-panel input,.network-panel textarea{min-width:0;max-width:100%}
 .network-panel .service-fields{grid-template-columns:minmax(0,1fr)}
 .network-panel .business-select-trigger{width:100%;justify-content:space-between;text-align:left;font-weight:600}
+
+/* Departure houses remain identifiable when a network source overlaps them. */
+.real-map:not(.shift-map-crews):not(.shift-map-orders):not(.shift-map-overview) .route-start-marker{z-index:970!important}
+
+/* Network overview focuses explicit dependencies before choosing one node. */
+.network-focused .maplibregl-marker:not(.network-map-marker):not(:has(.network-map-marker)){opacity:.14!important;transition:opacity .2s ease}
+.real-map.network-focused:not(.shift-map-crews):not(.shift-map-orders):not(.shift-map-overview) .route-start-marker{z-index:100!important;opacity:.12!important}
+.network-focused .network-map-marker{opacity:1!important}
+@media(prefers-reduced-motion:reduce){.network-focused .maplibregl-marker{transition:none!important}}

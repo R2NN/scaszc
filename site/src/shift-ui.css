@@ -155,3 +155,18 @@
 .app-shell .shift-layer.operational-shift .emergency-dispatch :is(.dispatch-tech-details,.dispatch-policy,.dispatch-alternatives)[open]>summary{border-radius:11px 11px 0 0}
 
 .app-shell.dark .shift-layer.operational-shift .dispatch-scenario>small{color:#f1d56d}
+
+.shift-panel>header:has(.shift-workspace-close){position:relative;padding-right:64px!important}
+.shift-panel>header>.shift-workspace-close{position:absolute;right:18px;top:18px;display:grid;place-items:center;width:34px;height:34px;padding:6px;border:1px solid transparent;border-radius:9px;background:#f4f5f7;color:#626e7b;cursor:pointer;transition:background .16s ease,color .16s ease}
+.shift-panel>header>.shift-workspace-close:hover{background:#fff0b4;color:#4b3c13}
+.shift-panel>header>.shift-workspace-close:focus-visible{outline:2px solid #d5aa00;outline-offset:3px}
+.app-shell.dark .shift-panel>header>.shift-workspace-close{background:#30363e;color:#cbd3dc}
+.app-shell.dark .shift-panel>header>.shift-workspace-close:hover{background:#494126;color:#ffe58f}
+@media(prefers-reduced-motion:reduce){.shift-panel>header>.shift-workspace-close{transition:none}}
+
+@media(max-width:760px){
+  .app-shell .shift-layer.replanning-layer{--operational-panel-left:64px}
+  .app-shell .replanning-panel>header:has(.shift-workspace-close){padding:18px 16px!important}
+  .app-shell .replanning-panel>header:has(.shift-workspace-close)>small{display:block;min-height:24px;padding-right:42px}
+  .app-shell .replanning-panel>header:has(.shift-workspace-close)>h2{font-size:24px;line-height:1.25;overflow-wrap:anywhere;margin-top:8px}
+}
