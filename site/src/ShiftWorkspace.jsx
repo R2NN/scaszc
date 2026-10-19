@@ -277,6 +277,8 @@ export function ShiftWorkspace({
   standaloneReplanning = false,
   recalculateRequest = 0,
   manualAssignmentRequest = null,
+  servicePreparation = null,
+  onConsumeServicePreparation,
   onAlgorithmJob,
   onSelectOrder,
   selectedOrderId,
@@ -457,6 +459,16 @@ export function ShiftWorkspace({
     const frame = requestAnimationFrame(reveal);
     return () => cancelAnimationFrame(frame);
   }, [reportOnly, tab, clock.selectedEngineerId, crewQuery, crewLoadFilter, crewSkillFilter, crewEquipmentFilter, crewTerritoryFilter, crewTransportFilter, crewStatusFilter]);
+  useEffect(() => {
+    if (!servicePreparation || pendingEvent) return;
+    setEventType(EVENT_TYPES.CLIENT_WINDOW_SHIFT);
+    setTargetId(String(servicePreparation.orderId));
+    setEventStart(servicePreparation.start || ''); setEventEnd(servicePreparation.end || '');
+    setReason(servicePreparation.reason || '');
+    setTime(timeOf(Math.max(Math.floor(shiftClock.getSnapshot().minute), minuteOf(shift?.versions?.at(-1)?.effectiveAt) || 0)));
+    setPreview(null); setTab('event');
+    onConsumeServicePreparation?.();
+  }, [servicePreparation?.token]);
   useEffect(() => {
     if (!pendingEvent) return;
     setEventType(pendingEvent.type);
@@ -978,6 +990,7 @@ export function ShiftWorkspace({
           </span>
           {standaloneReplanning ? <p>Измените состав или заявки, рассчитайте черновик и сравните маршруты перед публикацией.</p> : null}
           {assistantOnly ? <button type="button" className="assistant-close" onClick={onClose} aria-label="Закрыть AI‑помощника"><X size={20}/></button> : null}
+          {!assistantOnly && onClose ? <button type="button" className="shift-workspace-close" onClick={onClose} aria-label={reportOnly ? 'Закрыть отчёт PDF' : standaloneReplanning ? 'Закрыть перепланирование' : 'Закрыть ход смены'} data-tooltip="Закрыть"><X size={20}/></button> : null}
         </header>
         {!reportOnly ? <nav ref={shiftTabsRef} className={`shift-tabs${standaloneReplanning ? ' replanning-tabs' : ''}`} aria-label={standaloneReplanning ? 'Разделы перепланирования' : 'Разделы смены'}>
           {tabIndicator ? <span className="shift-tab-indicator" aria-hidden="true" style={{ width: tabIndicator.width, height: tabIndicator.height, transform: `translate3d(${tabIndicator.x}px, ${tabIndicator.y}px, 0)` }} /> : null}
@@ -1417,7 +1430,7 @@ export function ShiftWorkspace({
                 <small>ОТЧЁТ ДИСПЕТЧЕРА</small>
                 <h3>Вся смена — в одном PDF</h3>
                 <p>Решения на первых двух страницах, подробные расчёты — дальше. Без длинной панели графиков перед скачиванием.</p>
-                <div className="report-generator-points"><span>8 страниц</span><span>Данные выбранного дня</span><span>Сохраняется в архиве</span></div>
+                <div className="report-generator-points"><span>Все разделы смены</span><span>Данные выбранного дня</span><span>Сохраняется в архиве</span></div>
               </aside>
               <div className="report-generator-form">
                 <small>ВЫБРАННЫЙ ДЕНЬ</small>

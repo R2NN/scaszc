@@ -1,3 +1,4 @@
+import { NetworkControl, useServiceContext } from './ServiceContext.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Clock3, DoorOpen, Flame, Route } from 'lucide-react';
 import { OBJECT_TIME_LEGEND } from './objectPresentation.js';
@@ -5,6 +6,8 @@ import { OBJECT_TIME_LEGEND } from './objectPresentation.js';
 /** One map-mode toolbar; heat measures belong to the heat button, never the basemap menu. */
 export function ObjectTimeControls({ enabled, view, onChange, onRoutes }) {
   const [heatOpen, setHeatOpen] = useState(false);
+  const network=useServiceContext();
+  const closeNetwork=()=>{network?.setPanelOpen(false);network?.setIncidentId('');};
   const [measure, setMeasure] = useState(view === 'access' ? 'access' : 'heat');
   const rootRef = useRef(null), heatButtonRef = useRef(null);
   useEffect(() => {
@@ -19,9 +22,10 @@ export function ObjectTimeControls({ enabled, view, onChange, onRoutes }) {
   }, [heatOpen]);
   const choose = value => { setMeasure(value); onChange(value); setHeatOpen(false); heatButtonRef.current?.focus(); };
   return <div ref={rootRef} className='cx-mode-switch' role='group' aria-label='Режим основной карты'>
-    <button type='button' aria-label='Заявки и маршруты' data-tooltip='Заявки и маршруты' aria-pressed={!enabled} onClick={() => { setHeatOpen(false); onRoutes(); }}><Route size={21}/></button>
-    <button type='button' aria-label='Метки времени' data-tooltip='Метки времени' aria-pressed={enabled && view === 'markers'} onClick={() => { setHeatOpen(false); onChange('markers'); }}><Clock3 size={21}/></button>
-    <button ref={heatButtonRef} type='button' aria-label='Тепловая карта' data-tooltip='Тепловая карта' aria-pressed={enabled && view !== 'markers'} aria-expanded={heatOpen} aria-controls='cx-heat-options' onClick={() => { onChange(measure); setHeatOpen(open => !open); }}><Flame size={21}/><ChevronDown className='cx-heat-chevron' size={11}/></button>
+    <button type='button' aria-label='Заявки и маршруты' data-tooltip='Заявки и маршруты' aria-pressed={!enabled&&!network?.panelOpen} onClick={() => { closeNetwork(); setHeatOpen(false); onRoutes(); }}><Route size={21}/></button>
+    <button type='button' aria-label='Метки времени' data-tooltip='Метки времени' aria-pressed={enabled && view === 'markers'} onClick={() => { closeNetwork(); setHeatOpen(false); onChange('markers'); }}><Clock3 size={21}/></button>
+    <NetworkControl onActivate={()=>{setHeatOpen(false);onRoutes();}}/>
+    <button ref={heatButtonRef} type='button' aria-label='Тепловая карта' data-tooltip='Тепловая карта' aria-pressed={enabled && view !== 'markers'} aria-expanded={heatOpen} aria-controls='cx-heat-options' onClick={() => { closeNetwork(); onChange(measure); setHeatOpen(open => !open); }}><Flame size={21}/><ChevronDown className='cx-heat-chevron' size={11}/></button>
     {heatOpen ? <section id='cx-heat-options' className='cx-heat-popover' aria-label='Показатель тепловой карты'><b>Тепловая карта</b>{[['heat', 'Время визита', Clock3], ['access', 'Задержки доступа', DoorOpen]].map(([value, label, Icon]) => <button key={value} type='button' aria-pressed={measure === value} onClick={() => choose(value)}><Icon size={18}/><span>{label}</span>{measure === value ? <Check size={17}/> : null}</button>)}</section> : null}
   </div>;
 }

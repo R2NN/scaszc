@@ -4167,3 +4167,9 @@ html[data-theme="dark"]{
 [data-theme=dark] .map-popup-duration{background:#30353c;border-color:#48515d}
 
 .map-popup-duration{min-height:100px;align-content:start;box-sizing:border-box}
+
+/* Transport stays visible before expanding a brigade's request list. */
+.app-shell .route-card-head .route-engineer-transport{display:flex;align-items:center;gap:5px;margin-top:3px;color:#735b0a;font-size:12px;line-height:1.35;font-weight:650;min-width:0}
+.app-shell .route-card-head .route-engineer-transport>svg{width:14px;height:14px;flex:none}
+.app-shell .route-card-head .route-engineer-transport>span{min-width:0;overflow-wrap:anywhere}
+.app-shell.dark .route-card-head .route-engineer-transport{color:#ffe083}
