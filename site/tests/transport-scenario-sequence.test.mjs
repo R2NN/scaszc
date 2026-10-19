@@ -59,6 +59,20 @@ test('scheduled events keep their times without requiring previous route publica
     assert.equal(missed.index,1);
     assert.ok(missed.waves.every(w=>w.status==='MISSED'));
     assert.equal((await scenario.handle('scenario/tick',{shiftId:late.id,minute:1080},url)).event,undefined,'Do not fabricate expired disruptions after upgrading a legacy day');
+    const moveLateClock=minute=>db.prepare('UPDATE dispatch_sessions SET payload=? WHERE shift_id=?').run(JSON.stringify({baseShiftId:base.id,clock:{minute,playing:false}}),late.id);
+    moveLateClock(707);
+    const afternoon=await scenario.handle('scenario',{shiftId:late.id},url);
+    assert.deepEqual(afternoon.waves.map(w=>w.status),['MISSED','PENDING'],'Rewinding to 11:47 restores the future metro event');
+    assert.equal(afternoon.index,0);
+    moveLateClock(360);
+    const morning=await scenario.handle('scenario',{shiftId:late.id},url);
+    assert.ok(morning.waves.every(w=>w.status==='PENDING'));
+    assert.equal(morning.index,-1);
+    moveLateClock(570);
+    const replayed=await scenario.handle('scenario/tick',{shiftId:late.id,minute:570},url);
+    assert.equal(replayed.event.kind,'road');
+    moveLateClock(360);
+    assert.equal((await scenario.handle('scenario',{shiftId:late.id},url)).waves[0].eventId,replayed.event.id,'An existing event is retained rather than duplicated on rewind');
     assert.equal(await scenario.handle('scenario',{shiftId:base.id},url),null,'The published baseline is not a scripted session');
     const legacy={...second.state,index:4,presentationVersion:undefined,waves:[...second.state.waves,
       {time:'15:15',kind:'road',status:'PENDING'},

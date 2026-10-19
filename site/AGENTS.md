@@ -1,3 +1,5 @@
+- Rewinding the scenario clock must rearm uncreated MISSED transport waves whose interval is available again, including a future metro event after rewinding from evening to 11:47. Retain actual saved event IDs, publications and history without duplication. The ?view=shift entry link opens the current durable day directly in Shift rather than the Orders landing screen.
+
 - Emergency comparison routes, impact labels and current-position markers belong only to the visible Shift → «Аварии» decision. Clear them and any candidate-focused ordinary route immediately on tab/workspace exit. Ignore late refinement/confirmation drawing callbacks while hidden; polling and style reloads must not resurrect the comparison. Returning to the decision may restore its selected verified candidate.
 
 # Prototype Instructions

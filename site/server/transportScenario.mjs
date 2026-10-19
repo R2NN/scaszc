@@ -47,6 +47,20 @@ export function createTransportScenario(store,transport,network) {
       state.index=state.waves.findLastIndex(wave=>wave.eventId);
       state.presentationVersion=2;put(state);
     }
+    if(state.variant!=='simultaneous'&&state.waves.some(wave=>!wave.eventId)){
+      const row=store.db.prepare('SELECT payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(id);
+      if(row){
+        const {clock}=JSON.parse(row.payload);
+        const minute=Number(clock.minute)+(clock.playing?(Date.now()-clock.anchorAt)/60000*clock.speed:0);
+        let changed=false;
+        for(const wave of state.waves){
+          if(wave.eventId)continue;
+          const status=wave.end&&minute>=minuteOf(wave.end)?'MISSED':'PENDING';
+          if(wave.status!==status){wave.status=status;changed=true;}
+        }
+        if(changed){state.index=state.waves.findLastIndex(wave=>wave.eventId||wave.status==='MISSED');put(state);}
+      }
+    }
     return state;
   };
   const pending=new Set();
