@@ -650,6 +650,9 @@ def main() -> int:
     ))
     if payload.get('dispatch'):
         return dispatch_variants(args, payload, canonical, dataset, state, event, source, history, oracle)
+    def progress(count=0, phase='EXACT_EVENT'):
+        write_json_atomic(args.output.with_suffix('.progress.json'), {'phase': phase, 'routeChecks': count})
+    progress()
     result = replan_after_event(
         dataset,
         state,
@@ -662,6 +665,7 @@ def main() -> int:
             if event.event_type == EventType.MANUAL_ASSIGNMENT else None
         ),
         source_dataset=canonical,
+        progress_callback=progress,
         **(_dispatch_constraints(dataset, plan, event.event_time, payload) if payload.get('transportRestrictions') else {}),
         transport_anchors=transport_anchors,
     )
@@ -680,6 +684,7 @@ def main() -> int:
             departure_timing_queries=args.departure_timing_queries,
             source_dataset=canonical,
             rebuild_future=True,
+            progress_callback=lambda count: progress(count, 'EXACT_FULL_DAY'),
         )
         search_phase = 'REBUILT_FUTURE_PLAN'
         if rebuilt.state is None:

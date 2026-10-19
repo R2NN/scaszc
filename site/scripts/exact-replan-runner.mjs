@@ -23,6 +23,7 @@ const inProject = (root, file) => {
 const fromProject = (root, file) => path.isAbsolute(file) ? file : path.join(root, file);
 
 const runPython = ({ python, script, args, payload, env, deadlineAt, signal }) => new Promise((resolve, reject) => {
+  signal?.throwIfAborted();
   const timeoutMs = remainingMilliseconds(deadlineAt);
   const child = spawn(python, [script, ...args], {
     cwd: env.BEEGO_REPOSITORY_ROOT,
@@ -33,6 +34,7 @@ const runPython = ({ python, script, args, payload, env, deadlineAt, signal }) =
   let stdout = '';
   let stderr = '';
   let timedOut = false;
+  let inputError = null;
   const abort = () => stopProcessTree(child);
   signal?.addEventListener('abort', abort, {once:true});
   const timer = setTimeout(() => { timedOut = true; stopProcessTree(child); }, timeoutMs);
@@ -45,13 +47,18 @@ const runPython = ({ python, script, args, payload, env, deadlineAt, signal }) =
   child.on('close', code => {
     signal?.removeEventListener('abort', abort);
     clearTimeout(timer);
+    if (signal?.aborted) { reject(signal.reason || new Error('Расчёт отменён')); return; }
     if (timedOut) { reject(new Error('Перепланирование остановлено после 15 минут: проверенный план не получен')); return; }
+    if (inputError) { reject(new Error(`Не удалось передать данные расчёту: ${inputError.message}`)); return; }
     const lastLine = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
     let result = null;
     try { result = lastLine ? JSON.parse(lastLine) : null; } catch { /* handled below */ }
     if (code === 0 && result?.status === 'EXACT_VALID') resolve(result);
     else reject(new Error(result?.error || stderr.trim() || stdout.trim() || `Exact planner exited with code ${code}`));
   });
+  // Cancellation can close Python's pipe while a large shift is still writing.
+  // Consume the stream error and settle through close, releasing the planner.
+  child.stdin.on('error', error => { inputError=error; stopProcessTree(child); });
   child.stdin.end(JSON.stringify(payload));
 });
 
@@ -242,6 +249,7 @@ export function compactExactReplan(raw, payload) {
  * Runs the Python exact replanner. Missing routing evidence is an error; no estimate is substituted.
  */
 export async function runExactReplan(payload, repositoryRoot = process.cwd(), { deadlineAt = Date.now() + PLANNING_DEADLINE_MS, onProgress = () => {}, signal } = {}) {
+  signal?.throwIfAborted();
   repositoryRoot = projectRoot(repositoryRoot);
   await mkdir(path.join(repositoryRoot, 'runtime', 'exact-replans'), { recursive: true });
   const output = path.join(repositoryRoot, 'runtime', 'exact-replans', `.pending-${randomUUID()}.json`);
@@ -333,7 +341,11 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd(), { 
     '--departure-timing-queries', String(payload.transportRestrictions ? 0 : Math.max(0, Math.min(100, Number(process.env.BEEGO_REPLAN_TIMING_QUERIES ?? 24)))),
   ];
   try {
+    signal?.throwIfAborted();
+    onProgress({phase:'PREPARING_ROUTES',routeChecks:0});
     await configureRouting({ python, repositoryRoot, env, deadlineAt });
+    // Cancellation during routing preparation must not start a fresh worker.
+    signal?.throwIfAborted();
     const progressFile = output.replace(/\.json$/, '.progress.json');
     const compactCandidates = new Map();
     let polling = false;

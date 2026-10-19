@@ -17,7 +17,7 @@ export function useTransportScenario({shift,onApply,onOpen,onError}) {
       },
       adopt:(id,value)=>{if(!adoptDispatchClock(id,value))shiftClock.set(value);},
       onEvent:result=>{
-        if(!result.preview){refs.current.onApply?.(result.shift);refs.current.onOpen?.();}
+        if(result.event){refs.current.onApply?.(result.shift);refs.current.onOpen?.();}
         window.dispatchEvent(new CustomEvent('beego:transport-scenario',{detail:result}));
       },
       onError:error=>refs.current.onError?.(error),

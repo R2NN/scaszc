@@ -9,6 +9,8 @@ import { minuteOf } from '../src/shiftDomain.js';
 import { transportConsequences } from '../src/transportDomain.js';
 import { createTransportScenario } from './transportScenario.mjs';
 import { transportEventsForDay } from './transportScope.mjs';
+import { algorithmPhaseLabel } from '../src/algorithmProgress.js';
+import { PLANNING_DEADLINE_MS, remainingMilliseconds } from '../scripts/process-deadline.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -19,11 +21,12 @@ const contextHash = events => hash(events.map(e => [e.id,e.revision,e.kind,e.dir
 export function transportNetwork(payload, { signal, timeout = 90_000 } = {}) {
   const root = projectRoot();
   return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
     const child = spawn(process.env.BEEGO_PYTHON || 'python', [path.join(root, 'algorithm/tools/transport_network.py')], {
       cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1' },
     });
-    let output = '', errors = '';
+    let output = '', errors = '', inputError = null;
     const abort = () => child.kill();
     signal?.addEventListener('abort', abort, { once: true });
     const timer = setTimeout(abort, timeout);
@@ -32,12 +35,15 @@ export function transportNetwork(payload, { signal, timeout = 90_000 } = {}) {
     child.on('error', reject);
     child.on('close', code => {
       clearTimeout(timer); signal?.removeEventListener('abort', abort);
+      if(signal?.aborted){reject(signal.reason || new Error('Проверка отменена'));return;}
+      if(inputError){reject(new Error(`Не удалось передать данные проверке сети: ${inputError.message}`));return;}
       try {
         const result = JSON.parse(output.trim());
         if (code !== 0 || result.error) throw new Error(result.error || errors || 'Проверка сети прервана');
         resolve(result);
       } catch (error) { reject(new Error(error.message.startsWith('Unexpected') ? errors || 'Нет ответа транспортного сервиса' : error.message)); }
     });
+    child.stdin.on('error',error=>{inputError=error;abort();});
     child.stdin.end(JSON.stringify(payload));
   });
 }
@@ -166,6 +172,8 @@ export function createTransportApi(store) {
       const input=['GET','HEAD'].includes(request.method)?{}:await request.json();
       const action=url.pathname.slice('/api/transport/'.length);
       if(action==='scenario'||action.startsWith('scenario/')) {
+        // Reading durable state remains available during network inspection.
+        if(action==='scenario')return json(await scenario.handle(action,input,url));
         const key=input.shiftId || input.baseShiftId || url.searchParams.get('shiftId');
         if(scenarioLocks.has(key))return json({error:'Подготавливаем транспортное событие. Подождите завершения.'},429);
         scenarioLocks.add(key);
@@ -196,7 +204,7 @@ export function createTransportApi(store) {
           const index=events.findIndex(e=>e.id===draft.id); if(index<0) events.push(draft); else events[index]=draft;
         }
         const release=acquirePlanningSlot(); if(!release) return planningBusyResponse();
-        const controller=new AbortController();
+        const controller=new AbortController(),deadlineAt=Date.now()+PLANNING_DEADLINE_MS;
         let previewId;
         try { previewId=store.startPreview(shift.id,shift.revision,{type:'RECALCULATE',time:input.time,reason:'Транспортные ограничения'}); }
         catch(error){release();throw error;}
@@ -206,19 +214,19 @@ export function createTransportApi(store) {
           try {
             const plan=await runExactReplan({orders:shift.orders,team:shift.team,plan:shift.plan,planningDate:shift.date,
               event:{type:'RECALCULATE',time:input.time,reason:'Транспортные ограничения'},transportRestrictions:events,
-              facts:shift.facts},undefined,{signal:controller.signal,onProgress:progress=>{item.progress=progress;transport.putPreview(item);}});
+              facts:shift.facts},undefined,{signal:controller.signal,deadlineAt,onProgress:progress=>{if(controller.signal.aborted)return;item.progress=progress;item.phase=algorithmPhaseLabel(progress.phase);transport.putPreview(item);}});
             if(controller.signal.aborted) throw new Error('Расчёт отменён');
             plan.transportRestrictions=events;
             item.phase='Независимая проверка закрытых переходов'; transport.putPreview(item);
             const raw=JSON.parse(await readFile(path.join(projectRoot(),'runtime/exact-replans',`${plan.contentSha256}.json`),'utf8'));
-            const audit=await transportNetwork({action:'audit',events,team:shift.team,plan,raw,date:shift.date,time:input.time},{signal:controller.signal,timeout:180_000});
+            const audit=await transportNetwork({action:'audit',events,team:shift.team,plan,raw,date:shift.date,time:input.time},{signal:controller.signal,timeout:Math.min(180_000,remainingMilliseconds(deadlineAt))});
             item.audit=audit;
             if(audit.status!=='VALID') throw new Error('Путь использует закрытый переход. Прежний план сохранён; уточните участок или выберите другое время');
             if(controller.signal.aborted) throw new Error('Расчёт отменён');
             item.result={plan,consequences:transportConsequences(await comparisonShift(shift),plan,input.time),audit};
             store.completePreview(item.id,{plan,orders:shift.orders,team:shift.team});
             item.status='READY';item.phase='Проверенный объезд готов';item.finishedAt=Date.now();
-          } catch(error){item.status=controller.signal.aborted?'CANCELLED':'FAILED';item.error=error.message;store.failPreview(item.id,error);}
+          } catch(error){item.status=controller.signal.aborted?'CANCELLED':'FAILED';item.finishedAt=Date.now();item.error=error.message;store.failPreview(item.id,error);}
           finally{transport.putPreview(item);running.delete(item.id);release();}
         })();
         return json(item,202);

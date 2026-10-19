@@ -44,6 +44,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const generation=useRef(0),previewRef=useRef(null),resumeRef=useRef(null),refs=useRef({});
   const [elapsed,setElapsed]=useState(0);
   const [scenario,setScenario]=useState(null),[scenarioBusy,setScenarioBusy]=useState(false);
+  const [waitingForPlanner,setWaitingForPlanner]=useState(false);
   const resultRef=useRef(null),groupRef=useRef(null);
   const [eventGroup,setEventGroup]=useState([]);
   const openGroup=items=>{setEventGroup(items);requestAnimationFrame(()=>groupRef.current?.scrollIntoView({block:'nearest'}));};
@@ -57,7 +58,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   const load=async()=>{if(!shift?.id)return;const id=shift.id,result=await api(`events?shiftId=${encodeURIComponent(id)}`);if(refs.current.shift?.id===id)setEvents(result.events);};
   useEffect(()=>{let active=true;(async()=>{try{const value=await api('catalog');if(active)setCatalog(value);}catch(e){if(active)setError(e.message);}})();return()=>{active=false;};},[]);
   useEffect(()=>{
-    const own=++generation.current;setEvents([]);setPreview(null);setSelected(null);setScenario(null);setEventGroup([]);setDraft(sessions.get(`${shift?.id}:${live}`)?.draft || null);
+    const own=++generation.current;previewRef.current=null;setWaitingForPlanner(false);setEvents([]);setPreview(null);setSelected(null);setScenario(null);setEventGroup([]);setDraft(sessions.get(`${shift?.id}:${live}`)?.draft || null);
     load().catch(e=>setError(e.message));
     if(shift?.id)(async()=>{try{const saved=await api(`previews/latest?shiftId=${shift.id}`);if(saved&&refs.current.shift?.id===shift.id&&own===generation.current){setPreview(saved);previewRef.current=saved;setEngineerId(saved.result?.consequences?.engineers[0]?.engineerId || '');}}catch(e){if(own===generation.current)setError(e.message);}})();
     if(live&&shift?.id)(async()=>{try{const value=await api(`scenario?shiftId=${shift.id}`);if(refs.current.shift?.id===shift.id)setScenario(value);}catch(e){setError(e.message);}})();
@@ -184,8 +185,11 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   useEffect(()=>{
     const receive=event=>{
       const result=event.detail;if(result?.shift?.id!==shift?.id)return;
-      generation.current++;setScenario(result.state);load().catch(error=>setError(error.message));
-      if(result.preview){setPreview(result.preview);previewRef.current=result.preview;setEngineerId('');setOrderId('');setSelected(result.event);if(refs.current.active)transportMap.focus(result.event.segments);}
+      setScenario(result.state);setWaitingForPlanner(Boolean(result.waitingForPlanner));
+      if(result.waitingForPlanner)return;
+      generation.current++;load().catch(error=>setError(error.message));
+      if(result.event){setSelected(result.event);setPreview(null);previewRef.current=null;}
+      if(result.preview){setPreview(result.preview);previewRef.current=result.preview;setEngineerId('');setOrderId('');if(result.event&&refs.current.active)transportMap.focus(result.event.segments);}
     };
     window.addEventListener('beego:transport-scenario',receive);
     return()=>window.removeEventListener('beego:transport-scenario',receive);
@@ -206,6 +210,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     {consequences&&!draft?<button className='transport-browse' onClick={()=>setBrowse(value=>!value)}>{browse?'Скрыть поиск':'Найти или добавить ограничение'}</button>:null}
     {!draft&&(!consequences||browse)?<div className='transport-intro'><div><b>{live?'Движение в течение смены':'Доступность дорог и метро'}</b><p>{live?'Закрытия, проверенные объезды и последствия для заявок':'Планируйте перекрытия на выбранный день'}</p></div><button className='transport-add' onClick={()=>begin()} aria-label='Добавить транспортное ограничение'><Plus size={18}/></button></div>:null}
     {pauseNotice?<div className='transport-clock-notice'><Clock3 size={16}/><span>Сценарий на паузе: фиксируем положение для проверки.</span><button onClick={restorePlayback}>Продолжить</button></div>:null}
+    {waitingForPlanner?<div className='transport-clock-notice' role='status'><Clock3 size={16}/><span>Событие уже на карте. Ожидаем свободный расчёт — проверка запустится автоматически.</span></div>:null}
     {error?<div className='transport-error' role='alert'><AlertTriangle size={18}/><span>{error}</span><button onClick={()=>setError('')} aria-label='Закрыть сообщение'><X size={15}/></button></div>:null}
     {!draft?<>
       <div className={`transport-search ${consequences&&!browse?'transport-collapsed':''}`}><Search size={17}/><input aria-label='Поиск транспортных ограничений' placeholder='Название, причина ограничения' value={search} onChange={e=>setSearch(e.target.value)}/></div>
@@ -229,7 +234,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
       <div className='transport-selection'><span><strong>{draft.segments.length?`Выбрано ${draft.segments.length} ${draft.kind==='entry'?'станций':'участков'}`:'Участок ещё не выбран'}</strong><small>{busy?'Привязываем к дорожной сети…':draft.segments.map(s=>s.name).join(' → ')||'Выберите на карте; координаты вводить не нужно'}</small></span><button disabled={!draft.segments.length} onClick={()=>change({segments:draft.segments.slice(0,-1)})} aria-label='Отменить выбор последнего участка'><Undo2 size={18}/></button><button onClick={()=>setDrawing(v=>!v)}>{drawing?'Готово':'Изменить участок'}</button></div>
       {stationFrom?<p className='transport-source-note'>Выбрана первая станция. Нажмите соседнюю станцию.</p>:null}
     </>}
-    {preview?.status==='RUNNING'?<section className='transport-calculating' role='status'><i className='spinner'/><div><b>{preview.phase}</b><p>Факты и опубликованный план сохранены · {elapsed} с</p></div><button onClick={async()=>{await api(`previews/${preview.id}/cancel`,{});setPreview(null);}}>Отмена</button></section>:null}
+    {preview?.status==='RUNNING'?<section className='transport-calculating' role='status'><i className='spinner'/><div><b>{preview.phase}</b><p>Факты и опубликованный план сохранены · {elapsed} с{preview.progress?.routeChecks>0?` · проверок маршрута: ${preview.progress.routeChecks}`:''}</p></div><button onClick={async()=>{await api(`previews/${preview.id}/cancel`,{});setPreview(null);}}>Отмена</button></section>:null}
     {preview?.status==='FAILED'?<div className='transport-error' role='alert'><AlertTriangle size={18}/><span>{preview.error}</span><button onClick={calculate}>Повторить</button></div>:null}
     {consequences?<section ref={resultRef} className='transport-result'><header><span className='transport-check-icon'><Check/></span><div><h3>{preview.status==='APPLIED'?'Изменения применены':'Пересчёт готов'}</h3><p>{consequences.lost?'Часть заявок не имеет допустимого назначения — требуется решение':consequences.engineers.length?'Найден и независимо проверен допустимый путь':'Текущий план проверен: изменения пути не требуются'}</p></div></header>
       <div className={`transport-outcome ${consequences.lost||consequences.late||consequences.overtime?'warning':''}`}><Check size={18}/><span>{consequences.lost?`${consequences.lost} назначений потеряно`:consequences.late?`${consequences.late} нарушений клиентского окна`:consequences.overtime?`${consequences.overtime} бригад выйдут за смену`:consequences.unknownWindows?'Назначения сохранены · часть клиентских окон неизвестна':'Назначения сохранены · клиентские окна соблюдены'}</span></div>

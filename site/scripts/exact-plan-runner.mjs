@@ -18,6 +18,7 @@ const run = (python, args, input, repositoryRoot, deadlineAt, transportRestricti
   let stdout = '';
   let stderr = '';
   let timedOut = false;
+  let inputError = null;
   const timer = setTimeout(() => { timedOut = true; stopProcessTree(child); }, timeoutMs);
   timer.unref();
   child.stdout.setEncoding('utf8');
@@ -31,6 +32,7 @@ const run = (python, args, input, repositoryRoot, deadlineAt, transportRestricti
       reject(new Error('Расчёт остановлен после 15 минут: проверенный план не получен'));
       return;
     }
+    if(inputError){reject(new Error(`Не удалось передать данные расчёту: ${inputError.message}`));return;}
     const last = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
     let result;
     try { result = JSON.parse(last); } catch { /* pipeline may exit before JSON summary */ }
@@ -44,6 +46,7 @@ const run = (python, args, input, repositoryRoot, deadlineAt, transportRestricti
       reject(error);
     }
   });
+  child.stdin.on('error',error=>{inputError=error;stopProcessTree(child);});
   child.stdin.end(input === undefined ? undefined : JSON.stringify(input));
 });
 

@@ -73,11 +73,7 @@ export function createTransportScenario(store,transport,network) {
       const previous=state.waves[state.index];
       if(previous?.eventId) {
         const applied=store.db.prepare("SELECT payload FROM transport_previews WHERE shift_id=? AND json_extract(payload,'$.status')='APPLIED' ORDER BY rowid DESC LIMIT 1").get(shiftId);
-        if(!applied||!JSON.parse(applied.payload).events.some(e=>e.id===previous.eventId)) {
-          if(action==='scenario/tick')return {state};
-          throw new Error('Сначала проверьте и примените решение предыдущего события');
-        }
-        previous.status='APPLIED';
+        if(applied&&JSON.parse(applied.payload).events.some(e=>e.id===previous.eventId))previous.status='APPLIED';
       }
       const index=state.index+1,wave=state.waves[index];
       if(!wave){put(state);return {state,complete:true};}
