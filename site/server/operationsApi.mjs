@@ -14,13 +14,15 @@ import { seedComplexity } from './complexitySeed.mjs';
 import { seedEngineerFeedback } from './engineerFeedbackSeed.mjs';
 import { createRatingApi } from './ratingApi.mjs';
 import { createDispatchApi } from './dispatchApi.mjs';
+import { createTransportApi } from './transportApi.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const bodyOf = async request => request.json().catch(() => ({}));
-const errorStatus = error => /устарел|уже изменился/.test(error.message) ? 409 : /не найден/.test(error.message) ? 404 : 422;
+const errorStatus = error => /устарел|уже изменился|Транспортные ограничения изменились/.test(error.message) ? 409 : /не найден/.test(error.message) ? 404 : 422;
 
 export function createOperationsApi({ store = new ShiftStore(), routing = exactShiftReplan, routingOptions = {}, ai = askShiftAi, aiOptions = {}, seedFromBase = false } = {}) {
   const dispatchApi = createDispatchApi(store);
+  const transportApi = createTransportApi(store);
   const ratingApi = createRatingApi(store);
   const seedPromise = seedFromBase ? (async () => { await seedComplexity(store.complexity); seedEngineerFeedback(store.complexity); await seedBaseShift(store); })() : Promise.resolve();
   const aiCalls = new Map();
@@ -51,6 +53,8 @@ export function createOperationsApi({ store = new ShiftStore(), routing = exactS
     await seedPromise;
     const url = new URL(request.url);
     if (url.pathname === '/api/runtime/readiness' && request.method === 'GET') return json(await planningRuntimeStatus());
+    const transportResponse = await transportApi.handle(request);
+    if (transportResponse) return transportResponse;
     if (url.pathname.startsWith('/api/ratings/')) return ratingApi(request);
     const incidentResponse = await dispatchApi.handle(request);
     if (incidentResponse) return incidentResponse;

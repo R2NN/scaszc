@@ -5,16 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import heapq
 import sqlite3
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from .errors import InvalidRoutingInput, RoutingError
 from .models import Coordinate, DetailedRoute, Provenance, RouteStatus, RouteStep, TransportMode
 from .valhalla import ValhallaRoutingClient
 from .metro_reference import MetroReference
+from .restrictions import TransportContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +60,8 @@ class LocalTransitRoutingClient:
             raise InvalidRoutingInput('metro_wait_seconds must be non-negative')
         self.database = database.resolve()
         self.walking = walking
+        self.transport_context = TransportContext()
+        self.query_departure = None
         self.horizon_seconds = horizon_seconds
         # Each instance is owned by one materialization worker. Cleanup happens
         # after the pool joins and can therefore run in the coordinator thread.
@@ -87,10 +91,53 @@ class LocalTransitRoutingClient:
         self._load_transfers()
         self.station_access = self._load_station_access()
         self.metro_paths_cache: dict[str, list[tuple[str, int, list[dict]]]] = {}
-        schema_path = self.database.parent.parent.parent.parent / 'research' / 'mosmetro-api' / 'schema.json'
+        schema_path = self.database.parent.parent.parent.parent / 'research/mosmetro-api/schema.json'
         self.metro_reference = (MetroReference(schema_path, walking,
                                                 boarding_wait_seconds=metro_wait_seconds)
                                 if schema_path.is_file() else None)
+        transport_schema = self._schema_path()
+        self.transport_graph = self.metro_reference
+        if self.transport_context.events and self.transport_graph is None and transport_schema.is_file():
+            self.transport_graph = MetroReference(transport_schema, walking, boarding_wait_seconds=metro_wait_seconds)
+
+    def _schema_path(self):
+        candidates = [Path(__file__).resolve().parents[3] / 'offline-assets/transit-sources/metro/schema.json',
+                      self.database.parent.parent.parent.parent / 'research/mosmetro-api/schema.json']
+        return next((p for p in candidates if p.is_file()), candidates[0])
+
+    def _at(self, seconds):
+        start = self.query_departure.replace(hour=0, minute=0, second=0)
+        return start + timedelta(seconds=seconds)
+
+    def _restricted_metro_paths(self, origin, start):
+        if not self.transport_graph:
+            raise RoutingError('Для обхода метро нужен доступный официальный граф станций')
+        graph = self.transport_graph
+        source = int(origin.removeprefix('m:'))
+        if source not in graph.stations:
+            return []
+        queue = [(start, source, -1, [])]
+        best = {(source, -1): start}
+        results = {}
+        while queue:
+            clock, station, line, path = heapq.heappop(queue)
+            if clock != best.get((station, line)):
+                continue
+            if station != source and (station not in results or clock < results[station][0]):
+                results[station] = (clock, path)
+            for target, duration, kind in graph.edges[station]:
+                target_line = graph.stations[station]['lineId'] if kind == 'metro' else -1
+                wait = 180 if kind == 'metro' and line != target_line else 0
+                a, b = f'm:{station}', f'm:{target}'
+                if self.transport_context.blocked(kind, a, b, self._at(clock + wait)):
+                    continue
+                arrival = clock + wait + duration
+                if arrival < best.get((target, target_line), 10**9):
+                    best[(target, target_line)] = arrival
+                    segment = {'from_id': a, 'to_id': b, 'kind': kind, 'seconds': duration,
+                               'wait_seconds': wait, 'line_id': graph.stations[station]['lineId']}
+                    heapq.heappush(queue, (arrival, target, target_line, path + [segment]))
+        return [(f'm:{station}', clock - start, path) for station, (clock, path) in results.items()]
 
     def _load_transfers(self) -> None:
         for origin, destination, seconds, source in self.db.execute(
@@ -109,7 +156,7 @@ class LocalTransitRoutingClient:
 
     def _load_station_access(self) -> dict[str, tuple[int, int]]:
         # The official schema provides platform entry/exit times for some stations.
-        schema_path = self.database.parent.parent.parent.parent / 'research' / 'mosmetro-api' / 'schema.json'
+        schema_path = self.database.parent.parent.parent.parent / 'research/mosmetro-api/schema.json'
         if not schema_path.is_file():
             return {}
         schema = json.loads(schema_path.read_text(encoding='utf-8'))['data']
@@ -201,6 +248,10 @@ class LocalTransitRoutingClient:
             if labels.get(current.stop_id) is not current:
                 continue
             for target, walk_time, source, distance in self.walk_transfers.get(current.stop_id, ()):
+                if source != 'VALHALLA_WALK_MATRIX' and self.transport_context.blocked('transfer', current.stop_id, target, self._at(current.time)):
+                    continue
+                if source == 'VALHALLA_WALK_MATRIX' and (self.transport_context.blocked('entry', current.stop_id, None, self._at(current.time)) or self.transport_context.blocked('entry', target, None, self._at(current.time + walk_time))):
+                    continue
                 if source == 'VALHALLA_WALK_MATRIX':
                     exit_time = self.station_access.get(current.stop_id, (0, 0))[1]
                     enter_time = self.station_access.get(target, (0, 0))[0]
@@ -214,7 +265,10 @@ class LocalTransitRoutingClient:
                     labels[target] = updated
                     queue.append(updated)
             if allow_metro and current.stop_id.startswith('m:'):
-                paths = self.metro_paths_cache.get(current.stop_id)
+                if any(e.get('kind') in ('metro', 'transfer') for e in self.transport_context.events):
+                    paths = self._restricted_metro_paths(current.stop_id, current.time)
+                else:
+                    paths = self.metro_paths_cache.get(current.stop_id)
                 if paths is None:
                     paths = [
                         (target, seconds, json.loads(path_json))
@@ -243,6 +297,7 @@ class LocalTransitRoutingClient:
             return self._unknown(origin, destination, departure_at, 'SCENARIO_DATE_NOT_INDEXED')
         if refresh:
             raise InvalidRoutingInput('The offline timetable index cannot be refreshed during a route query')
+        self.query_departure = departure_at
         metro_route = (self.metro_reference.route(origin, destination, departure_at)
                        if self.metro_reference else None)
         direct_walk = self._direct_walk_option(origin, destination, departure_at)
@@ -255,6 +310,8 @@ class LocalTransitRoutingClient:
                 origin, destination, departure_at, 'WALKING_ACCESS_UNAVAILABLE')
         labels: dict[str, _Label] = {}
         for stop_id, walk in access.items():
+            if self.transport_context.blocked('entry', stop_id, None, self._at(start + self._walk_seconds(walk))):
+                continue
             platform_enter = self.station_access.get(stop_id, (0, 0))[0]
             candidate = _Label(start + self._walk_seconds(walk) + platform_enter,
                                stop_id, 'access', None, (walk, platform_enter))
@@ -281,6 +338,8 @@ class LocalTransitRoutingClient:
         for stop_id, walk in egress.items():
             label = labels.get(stop_id)
             if label is None:
+                continue
+            if self.transport_context.blocked('entry', stop_id, None, self._at(label.time)):
                 continue
             platform_exit = self.station_access.get(stop_id, (0, 0))[1]
             arrival = label.time + platform_exit + self._walk_seconds(walk)
@@ -377,6 +436,7 @@ class LocalTransitRoutingClient:
                              ((source_stop.lat, source_stop.lon),
                               (target_stop.lat, target_stop.lon)),
                              {'source': 'MOSMETRO_SCHEMA',
+                              'from_id': segment['from_id'], 'to_id': segment['to_id'],
                               'from_station': source_stop.name,
                               'to_station': target_stop.name,
                               'line_id': segment['line_id'],

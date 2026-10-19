@@ -124,6 +124,8 @@ test('clock ticks retain the selected speed without loading full shift archives'
     const clock = `/api/dispatch/shifts/${created.shiftId}/clock`;
     const started = await (await post(clock,{minute:500,playing:true,speed:300})).json();
     assert.equal(started.clock.speed, 300);
+      const stale=await (await post(clock,{minute:420,playing:false,speed:60,serverClockVersion:created.clock.version})).json();
+      assert.equal(stale.clock.minute,500);assert.equal(stale.clock.speed,300);assert.equal(stale.clock.version,started.clock.version);
     let archiveReads = 0;
     const get = f.store.get.bind(f.store);
     f.store.get = (...args) => { archiveReads += 1; return get(...args); };

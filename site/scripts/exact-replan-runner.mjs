@@ -129,6 +129,9 @@ export function compactExactReplan(raw, payload) {
         claimLevel: explanation?.claim_level || 'EXACT_VALIDATED',
         explanation: explanation?.summary_ru || '',
         geometry: visit.travel?.type === 'IDENTITY' && Array.isArray(order.coords) ? [order.coords, order.coords] : Array.isArray(visit.travel?.geometry) ? visit.travel.geometry : [],
+        ...(payload.transportRestrictions?.length ? {travelSteps:(visit.travel?.itinerary || []).map(step=>({mode:step.mode,geometry:step.geometry,seconds:step.duration_seconds,distanceM:step.distance_m,
+          lineId:step.attributes?.line_id,line:step.attributes?.line,from:step.attributes?.from_station || step.attributes?.from_stop,
+          to:step.attributes?.to_station || step.attributes?.to_stop,geometryQuality:step.attributes?.geometry_quality}))} : {}),
       };
     });
     const waitingMinutes = assignments.reduce((sum, assignment) => {
@@ -204,6 +207,7 @@ export function compactExactReplan(raw, payload) {
   }).filter(Boolean);
   return {
     id: `exact-${raw.content_sha256.slice(0, 12)}`,
+    ...(payload.transportRestrictions ? {transportRestrictions:payload.transportRestrictions} : {}),
     algorithm: 'beeline-planning-ortools-exact-v2.1-duration-contract',
     provider: raw.routing_configuration?.provider || 'valhalla-local-transit',
     createdAt: raw.plan.planning_at,
@@ -250,6 +254,7 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd(), { 
     PYTHONPATH: path.join(repositoryRoot, 'algorithm', 'src'),
     PYTHONIOENCODING: 'utf-8',
     PYTHONUTF8: '1',
+    BEEGO_TRANSPORT_CONTEXT_JSON: JSON.stringify(payload.transportRestrictions || payload.plan?.transportRestrictions || []),
   };
   const sourceHash = String(payload.basePlanContentSha256 || payload.plan?.contentSha256 || '');
   if (!/^[a-f0-9]{64}$/.test(sourceHash)) throw new Error('У исходного плана нет корректной контрольной суммы');
@@ -325,7 +330,7 @@ export async function runExactReplan(payload, repositoryRoot = process.cwd(), { 
     '--transit-index', transitIndex,
     '--output', output,
     '--max-route-checks', String(Math.max(1, Math.min(400, Number(process.env.BEEGO_REPLAN_ROUTE_CHECKS) || 400))),
-    '--departure-timing-queries', String(Math.max(0, Math.min(100, Number(process.env.BEEGO_REPLAN_TIMING_QUERIES ?? 24)))),
+    '--departure-timing-queries', String(payload.transportRestrictions ? 0 : Math.max(0, Math.min(100, Number(process.env.BEEGO_REPLAN_TIMING_QUERIES ?? 24)))),
   ];
   try {
     await configureRouting({ python, repositoryRoot, env, deadlineAt });

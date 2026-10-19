@@ -10,6 +10,7 @@ from .errors import InvalidRoutingInput, ProviderResponseError, RoutingIncomplet
 from .http import JsonHttpClient, JsonResponse
 from .models import Coordinate, DetailedRoute, Provenance, RouteStatus, RouteStep, TransportMode
 from .traffic4cast import MOSCOW_TIMEZONE, Traffic4castProfile
+from .restrictions import TransportContext, trace_edges, road_violations, raw_valhalla
 
 
 PROVIDER = 'LOCAL_VALHALLA'
@@ -28,6 +29,7 @@ class ValhallaRoutingClient:
 
     def __init__(self, http: JsonHttpClient, endpoint: str | None = None) -> None:
         self.http = http
+        self.transport_context = TransportContext()
         self.endpoint = (endpoint or os.environ.get('VALHALLA_ROUTE_ENDPOINT') or DEFAULT_ENDPOINT).rstrip('/')
         self.runtime_revision = os.environ.get(
             'VALHALLA_RUNTIME_REVISION', DEFAULT_RUNTIME_REVISION
@@ -80,7 +82,35 @@ class ValhallaRoutingClient:
                 'type': 1,
                 'value': local_departure.strftime('%Y-%m-%dT%H:%M'),
             }
-        response = self.http.post_json(
+        return self._restricted_route(body, origin, destination, mode, departure_at, refresh)
+
+    def _restricted_route(self, body, origin, destination, mode, departure_at, refresh):
+        context = self.transport_context
+        events = context.road_events(mode.value)
+        if events and any(s.get('graphRevision') for e in events for s in e['segments']):
+            if not hasattr(self,'transport_graph_revision'):
+                status=raw_valhalla(self.endpoint,'status',{'verbose':True})
+                self.transport_graph_revision=f'{status.get("version")}:{status.get("tileset_last_modified")}'
+            if any(s.get('graphRevision') and s['graphRevision']!=self.transport_graph_revision for e in events for s in e['segments']):
+                raise RoutingIncomplete('Дорожный граф обновлён. Перевыберите участок ограничения в новой сети')
+        excluded = {}
+        for attempt in range(len(events) + 1):
+            if excluded:
+                locations = []
+                for event in excluded.values():
+                    for segment in event['segments']:
+                        point = segment['midpoint']
+                        headings = [segment['heading']]
+                        if event.get('direction') == 'reverse':
+                            headings = [(segment['heading'] + 180) % 360] if segment.get('opposingEdgeId') else []
+                        if event.get('direction', 'both') == 'both' and segment.get('opposingEdgeId'):
+                            headings.append((segment['heading'] + 180) % 360)
+                        for heading in headings:
+                            locations.append({'lat': point[0], 'lon': point[1], 'heading': heading,
+                                              'heading_tolerance': 8, 'radius': 2,
+                                              'search_cutoff': 4, 'node_snap_tolerance': 0})
+                body['exclude_locations'] = locations
+            response = self.http.post_json(
             # The tile/runtime format affects the response. Keep prior runtime
             # failures out of a cache created before a compatible upgrade.
             provider=f'{PROVIDER}:{self.runtime_revision}',
@@ -91,10 +121,24 @@ class ValhallaRoutingClient:
             validate_payload=self._validate_payload,
             refresh=refresh,
         )
-        route = self._parse(response, origin, destination, mode, departure_at)
-        if self.traffic_profile is not None:
-            route = self.traffic_profile.adjust(route)
-        return route
+            route = self._parse(response, origin, destination, mode, departure_at)
+            if self.traffic_profile is not None:
+                route = self.traffic_profile.adjust(route)
+            if not events or route.status != RouteStatus.OK:
+                if events and route.status != RouteStatus.OK and route.provider_status not in ('442','443','444'):
+                    raise RoutingIncomplete(f'Дорожные данные не подтверждены: Valhalla {route.provider_status}')
+                return route
+            edges = trace_edges(self.endpoint, route.geometry, _COSTING[mode])
+            blocked = list(road_violations(context, events, edges, departure_at, route.duration_seconds))
+            if not blocked:
+                route.provenance.provider_metadata['transport_context'] = context.digest
+                route.provenance.provider_metadata['audited_edge_ids'] = [str(e['id']) for e in edges]
+                route.provenance.provider_metadata['excluded_event_ids'] = list(excluded)
+                return route
+            if all(event['id'] in excluded for event in blocked):
+                raise RoutingIncomplete('Valhalla не подтвердил исключение выбранного дорожного ребра')
+            excluded.update((event['id'], event) for event in blocked)
+        raise RoutingIncomplete('Не завершена проверка совокупности дорожных ограничений')
 
     @staticmethod
     def _validate_payload(payload: Any, request_sha256: str) -> None:

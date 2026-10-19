@@ -97,7 +97,7 @@ export function useEmergencyDispatch({ shift, onApply, notify, onOpen }) {
   }, [shift?.id]);
   useEffect(() => {
     if (!shift?.regionId.includes(':scenario:')) return;
-    const bridge = createDispatchClockSync({clock:shiftClock,
+    const bridge = createDispatchClockSync({clock:shiftClock,scope:shift.id,
       send:snapshot => api(`shifts/${shift.id}/clock`,snapshot),
       onValue:value => {setIncidents(value.incidents || []);announce(value.incidents || []);},onError:e => setError(e.message)});
     clockSync.current = bridge;

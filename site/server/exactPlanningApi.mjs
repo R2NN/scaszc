@@ -28,10 +28,10 @@ async function calculateExactPlan(payload, onProgress = () => {}, complexity, pl
   const input = { ...payload, planningDate, orders: complexity ? complexity.prepareOrders(payload.orders, `${planningDate}T07:00:00+03:00`) : payload.orders };
   const retained = complexity ? await loadComplexityArtifact() : null;
   let plan;
-  if (!payload.recompute && matchesComplexityArtifact(input, retained)) {
+  if (!input.transportRestrictions?.length && !payload.recompute && matchesComplexityArtifact(input, retained)) {
     onProgress({ phase: 'LOOKUP_VALIDATED_PLAN' });
     plan = structuredClone(retained.plan);
-  } else if (!payload.recompute && isCanonicalPlanningInput(input, artifact, siteRoot)) {
+  } else if (!input.transportRestrictions?.length && !payload.recompute && isCanonicalPlanningInput(input, artifact, siteRoot)) {
     onProgress({ phase: 'LOOKUP_VALIDATED_PLAN' });
     const response = await exactWorker.fetch(new Request('http://localhost/api/plan', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
@@ -58,7 +58,7 @@ async function calculateExactPlan(payload, onProgress = () => {}, complexity, pl
 }
 
 /** Serve exact plans and expose real server phases for background calculations. */
-export async function handleExactPlanning(request, { complexity, planRunner = runExactPlan } = {}) {
+export async function handleExactPlanning(request, { complexity, planRunner = runExactPlan, store } = {}) {
   const url = new URL(request.url);
   const jobId = /^\/api\/plan\/jobs\/([\w-]+)$/.exec(url.pathname)?.[1];
   if (jobId && request.method === 'GET') {
@@ -68,6 +68,11 @@ export async function handleExactPlanning(request, { complexity, planRunner = ru
   if (!['/api/plan', '/api/plan/jobs'].includes(url.pathname) || request.method !== 'POST') return null;
   try {
     const payload = await request.json();
+    if (store) {
+      const date=payload.planningDate || payload.date || payload.orders?.[0]?.serviceDate || payload.orders?.[0]?.sourceData?.window_start?.slice(0,10);
+      payload.transportRestrictions=store.byDate(payload.regionId || 'moscow',date)?.transportRestrictions || [];
+      if(payload.transportRestrictions.length)payload.recompute=true;
+    }
     if (!Array.isArray(payload.orders) || !Array.isArray(payload.engineers)) {
       return json({ error: 'Передайте заявки и инженеров для расчёта.' }, 400);
     }

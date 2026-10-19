@@ -17,6 +17,7 @@ from typing import Callable, Mapping
 from beeline_routing.errors import RoutingError
 from beeline_routing.models import RouteStatus, TransportMode
 from beeline_routing.oracle import ExactRoutingOracle, OracleQuery
+from beeline_routing.restrictions import TransportContext
 
 from .domain import Event, EventType, PlanningDataset, Priority
 from .departure_timing import retime_replanned_departures
@@ -205,6 +206,7 @@ def replan_after_event(
     available_after_by_engineer: Mapping[str, datetime] | None = None,
     incumbent_plan: ProposedPlan | None = None,
     coverage_repair_seconds: float = 0,
+    transport_anchors: Mapping[str, dict] | None = None,
 ) -> ReplanningResult:
     """Apply one ordered event and return an exactly validated full-day plan.
 
@@ -260,6 +262,11 @@ def replan_after_event(
             frozen[engineer_id] = route.visits[:max(last_protected + 1, len(frozen[engineer_id]))]
     from .dispatch import checkpoint
     movements = {key: old_routes[key].movements if key in old_routes else () for key in dataset.engineers}
+    for engineer_id, anchor in (transport_anchors or {}).items():
+        if engineer_id in locked_engineer_ids or anchor['source_job_id'] in protected_job_ids:
+            continue
+        frozen[engineer_id] = tuple(v for v in old_routes[engineer_id].visits if v.service_start_at <= event.event_time)
+        movements[engineer_id] += (anchor,)
     interrupted = None
     if dispatch_engineer_id and dispatch_engineer_id in old_routes:
         interrupted = checkpoint(old_routes[dispatch_engineer_id], event.event_time, dataset.engineers[dispatch_engineer_id].transport_mode)
@@ -355,6 +362,7 @@ def replan_after_event(
         visit.job_id: visit
         for route in state.plan.engineer_plans for visit in route.visits
     }
+    transport_context = TransportContext()
     orders: dict[str, tuple[str, ...]] = {
         engineer_id: tuple(
             visit.job_id for visit in old_routes.get(
@@ -439,7 +447,9 @@ def replan_after_event(
         ) if original_route else False
         release = (available_after_by_engineer or {}).get(engineer_id, event.event_time)
         release_conflict = any(visit.departure_at < release for visit in (original_route.visits if original_route else ()) if visit not in frozen[engineer_id])
-        if order == original_suffix and not newly_unavailable and not shifted_window and not duration_changed and not release_conflict and not (interrupted and engineer_id == dispatch_engineer_id):
+        transport_changed = any(transport_context.affects_travel(visit.travel, dataset.engineers[engineer_id].transport_mode.value)
+                                for visit in (original_route.visits if original_route else ()) if visit not in frozen[engineer_id])
+        if order == original_suffix and not newly_unavailable and not shifted_window and not duration_changed and not release_conflict and not transport_changed and engineer_id not in (transport_anchors or {}) and not (interrupted and engineer_id == dispatch_engineer_id):
             result = _RouteTrial(original_route.visits if original_route else ())
             trial_cache[key] = result
             return result
@@ -500,6 +510,7 @@ def replan_after_event(
                 old_visit = original_visits.get(job_id)
                 if (
                     old_visit is not None
+                    and not transport_context.affects_travel(old_visit.travel, engineer.transport_mode.value)
                     and original_owner[job_id] == engineer_id
                     and old_visit.departure_at == at
                     and old_visit.travel.origin_id == previous_location

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -419,6 +420,7 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
             'routing_configuration': {'provider': 'valhalla-local-transit', 'transit_index': str(args.transit_index)},
             'ui_history': [*history, {'event': payload['event'], 'orders': payload['orders'], 'team': payload['team']}],
             'dispatch_input': payload,
+            'transport_restrictions': payload.get('transportRestrictions', []),
         })
         if incumbent:
             artifact['improves_content_sha256'] = incumbent['content_sha256']
@@ -474,7 +476,7 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
                 max_route_checks=min(1000 if rebuild else args.max_route_checks, remaining), departure_timing_queries=0,
                 forced_engineer_by_job={event.target_id: engineer_id}, source_dataset=canonical,
                 dispatch_engineer_id=engineer_id, rebuild_future=rebuild,
-                handoff_interrupted_job=handoff, **constraints)
+                handoff_interrupted_job=handoff, transport_anchors=payload.get('transportAnchors'), **constraints)
             checked += result.exact_route_checks
             if result.state is None or event.target_id in result.state.plan.unserved_job_ids:
                 rejected.append({'engineerId': engineer_id, 'reason': result.detail or result.unserved_reasons.get(event.target_id, 'Допустимая вставка не найдена в пределах поиска')})
@@ -509,7 +511,7 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
                 dispatch_engineer_id=engineer_id, rebuild_future=True,
                 handoff_interrupted_job=incumbent['dispatch_handoff'],
                 incumbent_plan=incumbent_plan, coverage_repair_seconds=min(10, repair_deadline - monotonic()),
-                progress_callback=repairing_progress, **constraints)
+                progress_callback=repairing_progress, transport_anchors=payload.get('transportAnchors'), **constraints)
             checked += result.exact_route_checks
             repair_reports.append({'engineerId': engineer_id, 'checks': result.exact_route_checks,
                                    **result.coverage_repair, 'accepted': False})
@@ -583,6 +585,22 @@ def main() -> int:
                 anchors[route.engineer_id] = anchor
         payload['event']['dispatchAnchors'] = anchors
         payload['event']['unknownPositions'] = unknown_positions
+    transport_anchors = {}
+    if payload.get('transportRestrictions'):
+        from beeline_planning.dispatch import transport_checkpoint
+        from beeline_routing.restrictions import TransportContext, trace_edges, road_violations
+        context = TransportContext(payload['transportRestrictions'])
+        for route in plan.engineer_plans:
+            anchor = transport_checkpoint(route, _at(canonical,payload['event']['time']),canonical.engineers[route.engineer_id].transport_mode,context)
+            if anchor and canonical.engineers[route.engineer_id].transport_mode.value == 'CAR':
+                travel = next(v.travel for v in route.visits if v.job_id == anchor['source_job_id'])
+                edges = trace_edges(os.environ.get('VALHALLA_ROUTE_ENDPOINT','http://127.0.0.1:8002/route'),travel.geometry)
+                if not list(road_violations(context,context.road_events('CAR'),edges,travel.departure_at,travel.duration_seconds,_at(canonical,payload['event']['time']))):
+                    anchor = None
+            if anchor:
+                transport_anchors[route.engineer_id] = anchor
+        payload['transportAnchors'] = transport_anchors
+        payload['event']['dispatchAnchors'] = {**payload['event'].get('dispatchAnchors',{}),**transport_anchors}
     dataset, event = _event_dataset(canonical, payload)
     prior_events = tuple(canonical.events) if history else ()
     event = replace(event, apply_order=len(prior_events) + 1)
@@ -628,6 +646,8 @@ def main() -> int:
             if event.event_type == EventType.MANUAL_ASSIGNMENT else None
         ),
         source_dataset=canonical,
+        **(_dispatch_constraints(dataset, plan, event.event_time, payload) if payload.get('transportRestrictions') else {}),
+        transport_anchors=transport_anchors,
     )
     search_phase = 'INSERT_IN_CURRENT_PLAN'
     if (
@@ -714,6 +734,7 @@ def main() -> int:
             'transit_index': str(args.transit_index),
         },
         'global_optimality_proven': False,
+        'transport_restrictions': payload.get('transportRestrictions', []),
         'ui_history': [*history, {
             'event': payload.get('event'),
             'orders': payload.get('orders', []),

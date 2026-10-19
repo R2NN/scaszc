@@ -1,0 +1,43 @@
+services:
+  app:
+    image: beego-complete-app
+    user: root
+    init: true
+    ports:
+      - '127.0.0.1:8788:8787'
+    environment:
+      VALHALLA_ROUTE_ENDPOINT: http://beego-complete-valhalla-1:8002/route
+      BEEGO_TRANSPORT_QA: '1'
+    command: [sh, -c, 'pnpm run build && node server/main.mjs']
+    volumes:
+      - ./site/src:/app/site/src:ro
+      - ./site/server:/app/site/server:ro
+      - ./site/scripts:/app/site/scripts:ro
+      - ./site/tests:/app/site/tests:ro
+      - ./algorithm:/app/algorithm:ro
+      - ./tools:/app/tools:ro
+      - ./site/models:/app/site/models:ro
+      - ./data/screening:/app/data/screening:ro
+      - qa-db:/app/site/.beego-data
+      - qa-runs:/app/runtime/ui-runs
+      - qa-cache:/app/runtime/ui-shared-cache
+      - qa-replans:/app/runtime/exact-replans
+      - transit:/app/data/transit:ro
+      - sources:/app/offline-assets/transit-sources:ro
+    networks:
+      - runtime
+volumes:
+  qa-db:
+  qa-runs:
+  qa-cache:
+  qa-replans:
+  transit:
+    external: true
+    name: beego-complete_complete-transit
+  sources:
+    external: true
+    name: beego-complete_complete-sources
+networks:
+  runtime:
+    external: true
+    name: beego-complete_default

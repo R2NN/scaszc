@@ -106,10 +106,10 @@ export async function exactShiftReplan(shift, model, onProgress = () => {}) {
     if (event.type === 'VISIT_CANCELLED') event.type = 'ORDER_CANCELLED';
     if (event.type === 'MANUAL_ASSIGN') event.type = 'FORCED_ASSIGNMENT';
     onProgress({ phase: 'EXACT_EVENT', checkedRoads: 0 });
-    plan = await runExactReplan({ orders: model.orders, team: model.team, plan: shift.plan, planningDate: shift.date, event }, undefined, { deadlineAt });
+    plan = await runExactReplan({ orders: model.orders, team: model.team, plan: shift.plan, planningDate: shift.date, event, transportRestrictions: shift.transportRestrictions || [] }, undefined, { deadlineAt });
   } else {
     onProgress({ phase: 'EXACT_FULL_DAY', checkedRoads: 0 });
-    plan = await runExactPlan({ orders: model.orders, engineers: model.team, regionId: shift.regionId, planningDate: shift.date, sharedInventory: await historicalInventory(shift.date), recompute: true }, undefined, onProgress, { deadlineAt });
+    plan = await runExactPlan({ orders: model.orders, engineers: model.team, regionId: shift.regionId, planningDate: shift.date, sharedInventory: await historicalInventory(shift.date), transportRestrictions:shift.transportRestrictions || [], recompute: true }, undefined, onProgress, { deadlineAt });
   }
   if (plan.status !== 'EXACT_VALID' || plan.publicationAllowed !== true || plan.validation?.status !== 'VALID' || plan.approximateTravel === true) {
     throw new Error('Пересчёт не прошёл независимую точную проверку.');

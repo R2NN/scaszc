@@ -71,6 +71,9 @@ export function createDispatchApi(store, options) {
           const row = store.db.prepare('SELECT id,payload FROM dispatch_sessions WHERE shift_id=? ORDER BY rowid DESC LIMIT 1').get(shiftId);
           if (!row) return json({ incident: null });
           const session = JSON.parse(row.payload), serverTick = input.serverTick === true;
+          // A scenario jump can overtake an already queued browser clock write.
+          // Return the authoritative revision instead of rewinding its minute.
+          if(!serverTick&&Number.isInteger(input.serverClockVersion)&&input.serverClockVersion!==session.clock.version)return json({...session,incidents:dispatch.all(shiftId)});
           const staleOverride = !serverTick && !dispatch.hasPending(shiftId) && (input.awaitingDecision || input.confirmingDecision);
           const minute = session.clock.confirmingDecision ? session.clock.minute : serverTick || staleOverride
             ? Math.min(1439, session.clock.minute + (session.clock.playing ? Math.max(0,Date.now() - session.clock.anchorAt) / 60000 * (Number(session.clock.speed) || 60) : 0))

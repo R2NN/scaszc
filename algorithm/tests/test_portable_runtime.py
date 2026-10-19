@@ -59,3 +59,15 @@ def test_docker_staging_preserves_public_index_identity_and_excludes_operations(
  assert not list(tmp_path.glob('roads/**/private.sqlite'))
  before=copy.stat().st_mtime_ns;runtime.stage_docker_resources(root,roads,transit,sources)
  assert copy.stat().st_mtime_ns==before
+
+
+def test_public_resource_permissions_are_repaired_without_replacing_content(tmp_path):
+ root,bundle,_=fixture(tmp_path);runtime.install(root,bundle)
+ for suffix in ['.manifest.json','.surface_walk_transfers.json','.walk_transfers.json']:
+  (root/('data/transit/moscow_2026-08-17'+suffix)).write_text('{}')
+ roads,transit,sources=[tmp_path/name for name in ['roads','transit','sources']]
+ runtime.stage_docker_resources(root,roads,transit,sources)
+ public=sources/'gtfs/routes.txt';public.chmod(0o600);before=public.read_bytes()
+ runtime.stage_docker_resources(root,roads,transit,sources)
+ assert public.read_bytes()==before
+ assert public.stat().st_mode & 0o044 == 0o044

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { compactExactReplan } from './exact-replan-runner.mjs';
@@ -7,11 +7,11 @@ import { ensureTransitIndex } from './transit-index.mjs';
 import { projectRoot } from './project-root.mjs';
 import { PLANNING_DEADLINE_MS, remainingMilliseconds, stopProcessTree } from './process-deadline.mjs';
 
-const run = (python, args, input, repositoryRoot, deadlineAt) => new Promise((resolve, reject) => {
+const run = (python, args, input, repositoryRoot, deadlineAt, transportRestrictions = []) => new Promise((resolve, reject) => {
   const timeoutMs = remainingMilliseconds(deadlineAt);
   const child = spawn(python, args, {
     cwd: repositoryRoot,
-    env: { ...process.env, BEELINE_ROUTING_USAGE_LEDGER: process.env.BEELINE_ROUTING_USAGE_LEDGER || path.join(repositoryRoot, 'runtime', 'routing-usage.sqlite3'), PYTHONPATH: path.join(repositoryRoot, 'algorithm', 'src'), PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+    env: { ...process.env, BEEGO_TRANSPORT_CONTEXT_JSON: JSON.stringify(transportRestrictions), BEELINE_ROUTING_USAGE_LEDGER: process.env.BEELINE_ROUTING_USAGE_LEDGER || path.join(repositoryRoot, 'runtime', 'routing-usage.sqlite3'), PYTHONPATH: path.join(repositoryRoot, 'algorithm', 'src'), PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
     windowsHide: true,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -50,6 +50,9 @@ const run = (python, args, input, repositoryRoot, deadlineAt) => new Promise((re
 /** Build and independently validate a new plan with the complete exact pipeline. */
 export async function runExactPlan(payload, repositoryRoot = process.cwd(), onProgress = () => {}, { deadlineAt = Date.now() + PLANNING_DEADLINE_MS } = {}) {
   repositoryRoot = projectRoot(repositoryRoot);
+  const transportContext = payload.transportRestrictions || [];
+  const transportKey = transportContext.length ? createHash('sha256').update(JSON.stringify(transportContext)).digest('hex') : '';
+  const sharedCache = path.join(repositoryRoot, 'runtime', 'ui-shared-cache', ...(transportKey ? ['transport', transportKey] : []));
   const runRoot = path.join(repositoryRoot, 'runtime', 'ui-runs', randomUUID());
   const dataset = path.join(runRoot, 'dataset');
   const results = path.join(runRoot, 'results');
@@ -69,17 +72,23 @@ export async function runExactPlan(payload, repositoryRoot = process.cwd(), onPr
     '--scenario', 'core',
     '--run-dir', results,
     '--transit-index', transitIndex,
-    '--shared-cache-dir', path.join(repositoryRoot, 'runtime', 'ui-shared-cache'),
-    '--stable-plan-cache-dir', path.join(repositoryRoot, 'runtime', 'ui-shared-cache', 'verified-plans'),
+    '--shared-cache-dir', sharedCache,
+    '--stable-plan-cache-dir', path.join(sharedCache, 'verified-plans'),
     '--valhalla-base-url', String(process.env.VALHALLA_ROUTE_ENDPOINT || 'http://127.0.0.1:8002/route').replace(/\/route\/?$/, ''),
     '--max-wall-seconds', String(pipelineBudgetSeconds),
     '--include-exact-improvement',
     ...(payload.recompute ? ['--recompute-stable-plan'] : []),
     ...(process.env.BEEGO_MATRIX_BATCH_SIZE ? ['--matrix-batch-size', process.env.BEEGO_MATRIX_BATCH_SIZE] : []),
     '--execute',
-  ], undefined, repositoryRoot, deadlineAt);
+  ], undefined, repositoryRoot, deadlineAt, transportContext);
   if (pipeline.status !== 'COMPLETE' || !pipeline.final_plan) throw new Error('Новый точный план не прошёл проверку');
   onProgress({ phase: 'READING_VALIDATED_PLAN' });
   const raw = JSON.parse(await readFile(pipeline.final_plan, 'utf8'));
-  return compactExactReplan(raw, { ...payload, team: payload.engineers });
+  const result = compactExactReplan(raw, { ...payload, team: payload.engineers });
+  if (transportContext.length) {
+    const audit = await run(python, [path.join(repositoryRoot, 'algorithm/tools/transport_network.py')], { action:'audit', events:transportContext, team:payload.engineers, plan:result, raw, date:payload.planningDate, time:'07:00' }, repositoryRoot, deadlineAt);
+    if (audit.status !== 'VALID') throw new Error('Новый план использует закрытый транспортный переход. Публикация запрещена.');
+    result.transportAudit = audit;
+  }
+  return result;
 }

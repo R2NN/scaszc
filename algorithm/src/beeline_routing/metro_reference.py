@@ -7,11 +7,12 @@ import heapq
 import json
 import math
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .models import Coordinate, DetailedRoute, Provenance, RouteStatus, RouteStep, TransportMode
 from .valhalla import ValhallaRoutingClient
+from .restrictions import TransportContext
 
 
 SCHEMA_URL = 'https://prodapp.mosmetro.ru/api/schema/v1.0'
@@ -38,6 +39,7 @@ class MetroReference:
             raise ValueError('boarding_wait_seconds must be non-negative')
         self.schema_path = schema_path
         self.walking = walking
+        self.transport_context = TransportContext()
         self.boarding_wait_seconds = boarding_wait_seconds
         data = json.loads(schema_path.read_text(encoding='utf-8'))['data']
         self.stations = {
@@ -135,6 +137,8 @@ class MetroReference:
         for station_id, walk in access.items():
             state = (station_id, -1, False)
             duration = self._walk_seconds(walk) + (self.stations[station_id].get('enterTime') or 0)
+            if self.transport_context.blocked('entry', f'm:{station_id}', None, departure_at + timedelta(seconds=self._walk_seconds(walk))):
+                continue
             if duration < times.get(state, 10**9):
                 times[state] = duration
                 roots[state] = walk
@@ -145,9 +149,13 @@ class MetroReference:
             if times[state] != elapsed:
                 continue
             for neighbor, duration, kind in self.edges[station_id]:
+                if self.transport_context.blocked(kind, f'm:{station_id}', f'm:{neighbor}', departure_at + timedelta(seconds=elapsed)):
+                    continue
                 if kind == 'metro':
                     line_id = self.stations[station_id]['lineId']
                     wait = 0 if onboard_line == line_id else self.boarding_wait_seconds
+                    if self.transport_context.blocked(kind, f'm:{station_id}', f'm:{neighbor}', departure_at + timedelta(seconds=elapsed + wait)):
+                        continue
                     if not self._train_available(station_id, neighbor, elapsed,
                                                  departure_at, wait):
                         continue
@@ -165,6 +173,8 @@ class MetroReference:
             exit_time = self.stations[station_id].get('exitTime') or 0
             for state, duration in times.items():
                 if state[0] == station_id and state[2]:
+                    if self.transport_context.blocked('entry', f'm:{station_id}', None, departure_at + timedelta(seconds=duration)):
+                        continue
                     options.append((duration + exit_time + self._walk_seconds(walk), state, walk))
         if not options:
             return None
@@ -212,6 +222,7 @@ class MetroReference:
                 _chord(self._point(source_state[0]), self._point(target_state[0])), 0,
                 (self._point(source_state[0]), self._point(target_state[0])),
                 {'source': 'MOSMETRO_SCHEMA', 'from_station': source_station['name']['ru'],
+                 'from_id': f'm:{source_state[0]}', 'to_id': f'm:{target_state[0]}',
                  'to_station': target_station['name']['ru'], 'line_id': source_station['lineId'],
                  'geometry_quality': 'station_to_station_chord',
                  'distance_quality': 'geodesic_lower_bound'})

@@ -145,7 +145,8 @@ function along(points, fraction) {
   return points.at(-1);
 }
 
-function splitGeometry(points, fraction) {
+/** Split a routed polyline by geodesic length without moving either endpoint. */
+export function splitGeometry(points, fraction) {
   const lengths = points.slice(1).map((point, index) => geometryLength(points[index], point));
   let remaining = Math.max(0, Math.min(1, fraction)) * lengths.reduce((sum, value) => sum + value, 0);
   for (let index = 0; index < lengths.length; index += 1) {

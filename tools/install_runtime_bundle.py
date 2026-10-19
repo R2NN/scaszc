@@ -144,6 +144,7 @@ def stage_docker_resources(root, roads, transit, sources):
         if source.is_symlink(): raise ValueError('Symlinks are not public runtime files')
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.is_file() and source.stat().st_size == destination.stat().st_size and digest(source) == digest(destination):
+            os.chmod(destination, 0o644)
             os.utime(destination, ns=(source.stat().st_atime_ns, source.stat().st_mtime_ns)); return
         with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as temp:
             temporary = Path(temp.name)
@@ -151,6 +152,7 @@ def stage_docker_resources(root, roads, transit, sources):
             shutil.copy2(source, temporary)
             if digest(source) != digest(temporary): raise ValueError('Docker routing copy checksum mismatch')
             os.replace(temporary, destination)
+            os.chmod(destination, 0o644)
         finally:
             if temporary.exists(): temporary.unlink()
     copy(root / TARGETS['roads'], roads / 'valhalla_tiles.tar')

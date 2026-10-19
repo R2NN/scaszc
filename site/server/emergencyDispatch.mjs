@@ -75,7 +75,7 @@ export class EmergencyDispatch {
     return policy;
   }
   fingerprint(shift) {
-    return hash({ revision: shift.revision, plan: shift.plan.contentSha256, facts: shift.factLog, team: shift.team,
+    return hash({ revision: shift.revision, plan: shift.plan.contentSha256, transport:shift.transportRestrictions || [], facts: shift.factLog, team: shift.team,
       model: this.store.db.prepare('SELECT * FROM duration_models').all(), conditions: this.store.db.prepare('SELECT * FROM object_conditions').all(),
       history: this.store.db.prepare('SELECT count(*) AS count, max(known_at) AS latest, max(revision) AS revision FROM duration_visits').get(),
       snapshots: shift.orders.map(item => item.durationSnapshot?.id), pending: this.active(shift.id).map(item => item.id).sort() });
@@ -170,7 +170,7 @@ export class EmergencyDispatch {
       const orders = this.prepareSearch(shift, item, time), prepared = orders.at(-1);
       const searchShift = { ...shift, orders: orders.slice(0,-1) }, searchItem = { ...item, order: prepared };
       const event = { type: 'NEW_ORDER', time, orderId: prepared.id, order: prepared, reason: 'Аварийный выезд', incidentId: item.id };
-      const result = await this.routing({ orders, team: shift.team, plan: shift.plan, planningDate: shift.date, basePlanContentSha256: shift.plan.contentSha256, event, dispatch: true, dispatchCoverageRepair:item.confirmation?.state !== 'CHECKING', facts: shift.facts }, undefined, {signal:controller.signal,onProgress:progress => {
+      const result = await this.routing({ orders, team: shift.team, plan: shift.plan, planningDate: shift.date, basePlanContentSha256: shift.plan.contentSha256, event, dispatch: true, transportRestrictions:shift.transportRestrictions || [], dispatchCoverageRepair:item.confirmation?.state !== 'CHECKING', facts: shift.facts }, undefined, {signal:controller.signal,onProgress:progress => {
         const fresh=this.get(id);
         if (!fresh || terminal(fresh) || controller.signal.aborted) return;
         const {dispatchCandidates:partial,...summary}=progress;
