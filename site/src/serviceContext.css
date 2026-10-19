@@ -29,8 +29,7 @@
 .maplibre-host .network-map-marker{z-index:900!important}@media(max-width:760px){.network-panel.is-detail{top:45dvh;max-height:calc(55dvh - 15px)}}
 .cx-mode-switch>.network-mode-control{position:relative;min-width:42px;padding:0 10px}.network-mode-dot{position:absolute;right:5px;top:5px;width:6px;height:6px;background:#e44336;border:1px solid var(--surface,#fff);border-radius:50%;pointer-events:none}
 .network-map-marker.affected{width:32px;min-width:32px;height:32px;border:3px solid #e59b13;border-radius:50%;padding:0;background:transparent;box-shadow:0 0 0 3px #fff7d87d}.network-map-marker.affected:after{content:'!';position:absolute;right:-5px;top:-6px;width:13px;height:13px;border-radius:50%;background:#de4936;color:#fff;border:1px solid #fff;font-size:10px;line-height:13px;text-align:center}.network-map-marker.source.review{background:#df4939}.network-map-marker.source.is-demo:after{content:'демо';position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);font:9px sans-serif;background:#fff4c6;color:#76520a;border-radius:3px;padding:1px 3px;pointer-events:none}
-.network-map-notice{position:absolute;z-index:30;top:80px;right:80px;display:flex;align-items:center;gap:7px;max-width:280px;padding:8px 11px;border:1px solid #efd17a;border-radius:9px;background:#fff9df;color:#6c5111;box-shadow:0 3px 12px #18212d12;font:inherit;font-size:12px;cursor:pointer}.dark .network-map-notice{background:#403820;color:#f9df89;border-color:#74632a}
-@media(max-width:760px){.cx-mode-switch>.network-mode-control{min-width:34px;padding:0 7px}.network-map-notice{top:114px;right:12px;max-width:240px}}
+@media(max-width:760px){.cx-mode-switch>.network-mode-control{min-width:34px;padding:0 7px}}
 
 .network-connections{position:absolute;inset:0;width:100%;height:100%;z-index:400;pointer-events:none;overflow:hidden}.network-connections line{vector-effect:non-scaling-stroke}.network-connection-outline{stroke:#fff;stroke-width:5;opacity:.8}.network-connection-link{stroke:#cc6439;stroke-width:2.4;stroke-dasharray:6 5;opacity:.95}.dark .network-connection-outline{stroke:#252a32}.dark .network-connection-link{stroke:#ffc16c}
 
@@ -42,3 +41,31 @@
 @keyframes network-panel-enter{from{opacity:0;transform:translateX(14px) scale(.99)}to{opacity:1;transform:translateX(0) scale(1)}}
 @keyframes network-panel-exit{from{opacity:1;transform:translateX(0) scale(1)}to{opacity:0;transform:translateX(10px) scale(.99)}}
 @media(prefers-reduced-motion:reduce){.network-panel.is-open,.network-panel.is-closing{animation:none;transform:none}.network-panel.is-closing{opacity:0}}
+
+/* Network context follows the same warm segmented controls and action hierarchy. */
+.network-panel .service-tabs{gap:4px;padding:4px;border:1px solid var(--svc-border);border-radius:11px;background:var(--svc-soft);margin:16px 0}
+.network-panel .service-tabs>button{flex:1;min-width:0;min-height:36px;padding:8px 7px;border:1px solid transparent;border-radius:8px;background:transparent;font-size:13px;font-weight:650;white-space:nowrap;transition:background .18s ease,border-color .18s ease,color .18s ease}
+.network-panel .service-tabs>button.active{background:#ffd21f;border-color:#eac000;color:#2c250c;box-shadow:0 1px 3px #74590012}
+.network-panel .service-tabs>button:not(.active):hover{background:var(--svc-bg);border-color:var(--svc-border)}
+.network-panel .network-order{margin:12px 0;padding:15px 13px;border:1px solid var(--svc-border);border-radius:12px;background:var(--svc-bg)}
+.network-panel .network-order>div{flex:1;min-width:0;gap:7px}.network-panel .network-order p{overflow-wrap:anywhere;line-height:1.5}
+.network-panel .network-order-actions{display:grid;gap:8px;margin-top:6px}
+.network-panel .network-order-actions>button{width:100%;min-height:38px;justify-content:center;font-size:13px;font-weight:650;padding:9px 10px;border-radius:9px;transition:background .18s ease,border-color .18s ease,box-shadow .18s ease}
+.network-panel .service-primary{background:#ffd21f;border-color:#eac000;color:#2b240b;box-shadow:0 2px 5px #8a6e0812}
+.network-panel .service-primary:hover:not(:disabled){background:#ffda3a;border-color:#dbb100;box-shadow:0 3px 8px #8a6e0820}
+.network-panel .service-secondary{background:var(--svc-soft);border-color:var(--svc-border);color:var(--svc-text)}
+.network-panel .service-secondary:hover{background:var(--svc-bg);border-color:#d5b637}
+.network-panel .network-info-card{border:1px solid var(--svc-border);border-radius:12px;padding:14px;margin:12px 0;background:var(--svc-soft)}
+.network-panel .network-info-card h3,.network-panel .service-task h3{font-size:14px;margin:0 0 8px}.network-panel .network-info-card p:last-child{margin-bottom:0}
+.network-panel .service-task,.network-panel .service-note{padding:14px;border:1px solid var(--svc-border);border-radius:12px;background:var(--svc-soft)}
+.network-panel .service-task>.service-primary,.network-panel .service-note>.service-primary{width:100%;justify-self:stretch;font-size:13px;min-height:40px;font-weight:650}
+.network-panel .service-history{margin:16px 0 18px 9px}.network-panel .service-history li{padding:0 0 18px 8px}.network-panel .service-history strong{font-size:13px;line-height:1.55}
+.network-panel .service-history li:last-child{padding-bottom:0}.network-panel .service-check{padding-top:4px}
+.network-panel button:focus-visible{outline:2px solid #dab000;outline-offset:3px}
+.network-tab-content{animation:network-content-in .18s ease both}
+@keyframes network-content-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.network-tab-content{animation:none}.network-panel .service-tabs>button,.network-panel .network-order-actions>button{transition:none}}
+
+.network-panel input,.network-panel textarea{min-width:0;max-width:100%}
+.network-panel .service-fields{grid-template-columns:minmax(0,1fr)}
+.network-panel .business-select-trigger{width:100%;justify-content:space-between;text-align:left;font-weight:600}

@@ -355,6 +355,30 @@ export function ComplexityPassport({ date, onOpen, onOrder, orders = [], actor =
   const [cause, setCause] = useState('unknown');
   const [notice, setNotice] = useState('');
   const bodyRef = useRef(null);
+  const panelRef = useRef(null), pendingBoundsRef = useRef(null), resizeAnimationRef = useRef(null);
+  const selectPassportTab = key => {
+    if (key === tab) return;
+    if ((key === 'building' || tab === 'building') && panelRef.current) {
+      pendingBoundsRef.current = panelRef.current.getBoundingClientRect();
+    }
+    setTab(key);
+  };
+  useLayoutEffect(() => {
+    const panel = panelRef.current, previous = pendingBoundsRef.current;
+    pendingBoundsRef.current = null;
+    resizeAnimationRef.current?.cancel();
+    resizeAnimationRef.current = null;
+    if (!panel || !previous || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const next = panel.getBoundingClientRect();
+    const scaleX = next.width / panel.offsetWidth || 1, scaleY = next.height / panel.offsetHeight || 1;
+    // Animate actual bounds like Rating's width transition, keeping text crisp.
+    // DOM rectangles are viewport pixels; layout properties account for app zoom.
+    resizeAnimationRef.current = panel.animate([
+      { left: `${panel.offsetLeft + (previous.left - next.left) / scaleX}px`, top: `${panel.offsetTop + (previous.top - next.top) / scaleY}px`, width: `${previous.width / scaleX}px`, height: `${previous.height / scaleY}px`, right: 'auto', bottom: 'auto', maxHeight: 'none' },
+      { left: `${panel.offsetLeft}px`, top: `${panel.offsetTop}px`, width: `${panel.offsetWidth}px`, height: `${panel.offsetHeight}px`, right: 'auto', bottom: 'auto', maxHeight: 'none' },
+    ], { duration: 420, easing: 'cubic-bezier(.4,0,.2,1)' });
+  }, [tab]);
+  useEffect(() => () => resizeAnimationRef.current?.cancel(), []);
   const onOpenRef = useRef(onOpen); onOpenRef.current = onOpen;
   useLayoutEffect(() => {
     const object = target?.passportSummary?.object || target;
@@ -381,12 +405,6 @@ export function ComplexityPassport({ date, onOpen, onOrder, orders = [], actor =
   }, [tab, detailsLoaded, target, kind]);
   useEffect(() => { const open = event => { const next = event.detail.target; setTarget(next); setPassportOpen(true); setTab(event.detail.tab === 'calculation' ? 'overview' : event.detail.tab === 'audit' ? 'conditions' : event.detail.tab || 'overview'); setCalculationOpen(event.detail.tab === 'calculation'); setVisitKind('all'); setVisitLimit(5); setKind(next?.passportKind || next?.durationSnapshot?.kind || 'local'); setError(''); setData(next?.passportSummary || (next?.durationSnapshot ? { object: { address: next.address }, estimate: next.durationSnapshot, fromOrder: true } : null)); setDetailsLoaded(false); setVisitId(next?.visitId || ''); setEditingCondition(''); setReason(''); setUntil(''); setNotice(''); onOpenRef.current?.(); }; window.addEventListener('beego:passport', open); const params = new URLSearchParams(window.location.search); const objectId = params.get('object'); if (objectId) open({ detail: { target: { objectId }, tab: params.get('passport') === 'building' ? 'building' : 'overview' } }); return () => window.removeEventListener('beego:passport', open); }, []);
   useEffect(() => { const close=()=>closePassport(); window.addEventListener('beego:service-prepare',close); return()=>window.removeEventListener('beego:service-prepare',close); },[closePassport]);
-  useEffect(()=>{
-    if(!passportOpen||tab!=='building')return;
-    const previous=document.body.style.overflow;document.body.style.overflow='hidden';
-    const trap=event=>{if(event.key!=='Tab')return;const panel=bodyRef.current?.closest('.cx-passport');const nodes=[...(panel?.querySelectorAll('button:not(:disabled),input:not(:disabled),select,textarea,a[href],[tabindex="0"]')||[])].filter(node=>node.getClientRects().length);if(!nodes.length)return;const first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}};
-    document.addEventListener('keydown',trap);return()=>{document.body.style.overflow=previous;document.removeEventListener('keydown',trap);};
-  },[passportOpen,tab]);
   useEffect(() => { if (!passportOpen) return; const key = event => { if (event.key === 'Escape') closePassport(); }; document.addEventListener('keydown', key); return () => document.removeEventListener('keydown', key); }, [passportOpen, closePassport]);
   useEffect(() => {
     if (!target) return;
@@ -427,7 +445,7 @@ export function ComplexityPassport({ date, onOpen, onOrder, orders = [], actor =
   const moment = new Date().toISOString();
   const location = condition => { const entity = data?.entities?.find(item => item.id === condition.entityId); return entity ? `${entity.label}${entity.location ? ' · ' + entity.location : ''}` : condition.scope === 'object' ? data?.object.address : condition.scope === 'operation' ? KINDS[condition.kind] : SCOPES[condition.scope]; };
   const stateLabel = item => item.excluded ? 'Ошибочное измерение исключено' : ({ confirmed: 'Перенос подтверждён', pending: 'Причина уточнена, ожидает решения', visit: 'Разовый случай', rejected: 'Перенос отклонён' })[item.learningDecision] || (item.eligible ? 'Измерение учтено в статистике' : 'Неполное измерение');
-  return <aside className={`cx-passport ${passportMotionClass} ${tab === 'building' ? 'cx-passport-building' : ''}`} role='dialog' aria-modal={tab==='building'||undefined} aria-label='Паспорт объекта' aria-hidden={!passportOpen || undefined} inert={!passportOpen || undefined}><header><Building2 size={23}/><div><small>{tab === 'building' ? 'Паспорт объекта' : 'ОБЪЕКТ'}</small><h2>{tab === 'building' ? String(data?.object.address || target.address || 'Объект').replace(/^(?:г\.\s*)?(?:Город\s+)?Москва,\s*/i, '').replace(/д\.\s*/g, '').replace(/(ул|пр-кт|пр-д|пер|ш)\.(?=\S)/g, '$1. ') : data?.object.address || target.address || 'Объект'}</h2></div><button type='button' onClick={closePassport} aria-label='Закрыть паспорт объекта'><X size={20}/></button></header><nav aria-label='Разделы паспорта'>{[['overview', 'Обзор'], ['building', 'Схема объекта'], ['visits', 'Визиты'], ['conditions', 'Особенности']].map(([key, label]) => <button type='button' key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>)}</nav><div className='cx-passport-body' ref={bodyRef}>{tab !== 'building' && tab !== 'visits' ? <label className='cx-filter-label'>Вид работ<BusinessSelect ariaLabel='Вид работ в паспорте' value={kind} onChange={value => { setKind(value); setData(null); setDetailsLoaded(false); }} options={options(KINDS)}/></label> : null}{error ? <div className='cx-error' role='alert'>{error}<button type='button' className='cx-action' onClick={() => setVersion(value => value + 1)}>Повторить загрузку</button></div> : null}{notice ? <p role='status' className='cx-saved'>{notice}</p> : null}{data ? <>
+  return <aside ref={panelRef} className={`cx-passport ${passportMotionClass} ${tab === 'building' ? 'cx-passport-building' : ''}`} role='dialog' aria-label='Паспорт объекта' aria-hidden={!passportOpen || undefined} inert={!passportOpen || undefined}><header><Building2 size={23}/><div><small>{tab === 'building' ? 'Паспорт объекта' : 'ОБЪЕКТ'}</small><h2>{tab === 'building' ? String(data?.object.address || target.address || 'Объект').replace(/^(?:г\.\s*)?(?:Город\s+)?Москва,\s*/i, '').replace(/д\.\s*/g, '').replace(/(ул|пр-кт|пр-д|пер|ш)\.(?=\S)/g, '$1. ') : data?.object.address || target.address || 'Объект'}</h2></div><button type='button' onClick={closePassport} aria-label='Закрыть паспорт объекта'><X size={20}/></button></header><nav aria-label='Разделы паспорта'>{[['overview', 'Обзор'], ['building', 'Схема объекта'], ['visits', 'Визиты'], ['conditions', 'Особенности']].map(([key, label]) => <button type='button' key={key} className={tab === key ? 'active' : ''} onClick={() => selectPassportTab(key)}>{label}</button>)}</nav><div className='cx-passport-body' ref={bodyRef}>{tab !== 'building' && tab !== 'visits' ? <label className='cx-filter-label'>Вид работ<BusinessSelect ariaLabel='Вид работ в паспорте' value={kind} onChange={value => { setKind(value); setData(null); setDetailsLoaded(false); }} options={options(KINDS)}/></label> : null}{error ? <div className='cx-error' role='alert'>{error}<button type='button' className='cx-action' onClick={() => setVersion(value => value + 1)}>Повторить загрузку</button></div> : null}{notice ? <p role='status' className='cx-saved'>{notice}</p> : null}{data ? <>
     {tab === 'building' ? detailsLoaded ? <BuildingWorkspace data={data} initialOrderId={target.orderId || target.id} date={day(date)} orders={orders} actor={actor} onOrder={order => { closePassport(); onOrder?.(order); }} onVisit={visit => { setTarget(current => ({ ...current, visitId: visit.id })); setKind(visit.kind); setTab('visits'); }}/> : <p role='status' className='cx-muted'>Загружаем сведения об объекте…</p> : null}
     {tab === 'overview' ? <>
       <p className='cx-context-label'>{data.fromOrder ? 'Время в сохранённой заявке' : target.passportVolume === 'standard' ? `Стандартный объём · ${standardVolumeLabel(kind)}` : (detailsLoaded && !data.object.examples?.some(example => example.id === data.example?.id) ? 'Стандартный визит' : 'Объём работ по заявке')}{!data.fromOrder && provisional ? ' · предварительная оценка' : ''}</p>
