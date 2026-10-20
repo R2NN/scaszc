@@ -1,5 +1,4 @@
 # Audited SHA-256 manifests require these exact checkout bytes on every platform.
-docs/assets/motion/** binary
 docs/assets/presentation/*.pdf binary
 algorithm/artifacts/tz3/home-starts/dataset/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 data/dataset/** text eol=lf

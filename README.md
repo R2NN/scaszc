@@ -1,14 +1,15 @@
 # BeeGo! - планирование выездных бригад в действии
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/R2NN/scaszc/main/docs/assets/motion/beego-motion.mp4">
-    <img src="https://raw.githubusercontent.com/R2NN/scaszc/3c2c0bd/docs/assets/motion/beego-preview.webp" alt="BeeGo в движении: маршруты на карте, паспорт здания и управление сменой" width="1280">
+  <a href="https://drive.google.com/drive/folders/16-bI1dDMEf5oGwzf21izeyWvwMPiTzwm?usp=sharing">
+    <img src="docs/assets/screencast/preview.png" alt="Смотреть скринкаст BeeGo: маршруты, команда и управление сменой" width="1280">
   </a>
 </p>
 
+<h3 align="center"><a href="https://drive.google.com/drive/folders/16-bI1dDMEf5oGwzf21izeyWvwMPiTzwm?usp=sharing">▶ Смотреть скринкаст BeeGo</a></h3>
+
 <p align="center">
-  <strong><a href="http://45.152.196.19/">Открыть стенд</a> · <a href="docs/README.md">Техническая документация</a> · <a href="docs/assets/presentation/BeeGo-presentation.pdf">Презентация</a></strong><br>
-  <a href="https://raw.githubusercontent.com/R2NN/scaszc/main/docs/assets/motion/beego-motion.mp4">Смотреть полное видео без звука · 3:50</a>
+  <strong><a href="http://45.152.196.19/">Открыть стенд</a> · <a href="docs/README.md">Техническая документация</a> · <a href="docs/assets/presentation/BeeGo-presentation.pdf">Презентация</a></strong>
 </p>
 
 **От адреса заявки до опубликованного плана смены, который диспетчер может проверить и изменить.**
