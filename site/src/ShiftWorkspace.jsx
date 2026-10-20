@@ -234,7 +234,7 @@ export function ShiftPlaybackBar({ compact = false, shift = null, onSelectOrder,
   const selectedTaskOrder = selectedTask ? point?.orders?.find(item => String(item.id) === String(selectedTask.orderId)) : null;
   const axisStart = 360, axisSpan = 1020;
   const orderNumber = order => String(order?.sourceId || order?.id || '—').split(/[:-]/).at(-1);
-  const seek = minute => shiftClock.seek(Math.max(axisStart, Math.min(1380, minute)), {restartDay:Boolean(shift?.regionId?.includes(':scenario:'))});
+  const seek = minute => shiftClock.seek(Math.max(axisStart, Math.min(1380, minute)), {restartDay:Boolean(shift?.plan)});
   return <div className={`shift-timeline${compact ? ' engineer-playback-bar' : ''}`}>
     <div className="shift-playback-controls">
       <button type="button" disabled={Boolean(clock.restartDay)} aria-label={clock.playing ? 'Пауза' : 'Воспроизвести'} onClick={() => shiftClock.set({ playing: !clock.playing })}>{clock.playing ? <Pause/> : <Play/>}</button>
