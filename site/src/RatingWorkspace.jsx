@@ -40,11 +40,16 @@ export function useRatingWorkspace({ active, regionId, date, actor }) {
   const [staffingSnapshot,setStaffingSnapshot]=useState(null),[staffingError,setStaffingError]=useState('');
   const staffingKey=new URLSearchParams({regionId,date,pool,qualityFloor,qualityCeiling}).toString();
   const staffingContext=staffingSnapshot?.key===staffingKey?staffingSnapshot.value:null;
+  const staffingDayContext=staffingSnapshot?.regionId===regionId&&staffingSnapshot?.date===date
+    ? {orders:staffingSnapshot.value.orders,hasPlan:staffingSnapshot.value.hasPlan,started:staffingSnapshot.value.started,
+      sourceHash:staffingSnapshot.value.sourceHash,sourceRevision:staffingSnapshot.value.sourceRevision}:null;
   useEffect(()=>{
     if(!Number.isFinite(qualityFloor)||!Number.isFinite(qualityCeiling)||qualityFloor<1||qualityCeiling>5||qualityFloor>qualityCeiling)return;
-    const controller=new AbortController();
-    ratingRequest(`staffing?${staffingKey}`,{signal:controller.signal}).then(value=>{setStaffingSnapshot({key:staffingKey,value});setStaffingError('');}).catch(issue=>{if(issue.name!=='AbortError')setStaffingError(issue.message);});
-    return()=>controller.abort();
+    const controller=new AbortController();let live=true;
+    const timer=setTimeout(()=>{
+      ratingRequest(`staffing?${staffingKey}`,{signal:controller.signal}).then(value=>{if(live){setStaffingSnapshot({key:staffingKey,regionId,date,value});setStaffingError('');}}).catch(issue=>{if(live&&issue.name!=='AbortError')setStaffingError(issue.message);});
+    },250);
+    return()=>{live=false;clearTimeout(timer);controller.abort();};
   },[regionId,date,pool,qualityFloor,qualityCeiling,version,scenario?.id,scenario?.status]);
 
   useEffect(()=>{if(scenario?.status==='READY'){setPlanRouteId(null);setPlanFitToken(Date.now());}},[scenario?.id,scenario?.status]);
@@ -126,7 +131,7 @@ export function useRatingWorkspace({ active, regionId, date, actor }) {
     catch (error) { setError(error.message); }
   };
   return { tab, setTab, full, setFull, closing, setClosing, catalog, version, reloadCatalog, loading, error, setError, selected, select, focus, scenario, setScenario, pool, setPool, scheduled, setScheduled,
-    staffingContext, staffingError, calculationStartedAt, planSettingsOpen, setPlanSettingsOpen, proposalOpen, setProposalOpen, confirm, planRouteId, setPlanRouteId, planFitToken, setPlanFitToken, qualityFloor, setQualityFloor, qualityCeiling, setQualityCeiling, calculate, save, reassign, caseFocus, setCaseFocus, saving, actor, regionId, date, active, nameForEngineer:ratingName, ready: scenario?.status === 'READY', running: posting || scenario?.status === 'RUNNING' };
+    staffingContext, staffingDayContext, staffingError, calculationStartedAt, planSettingsOpen, setPlanSettingsOpen, proposalOpen, setProposalOpen, confirm, planRouteId, setPlanRouteId, planFitToken, setPlanFitToken, qualityFloor, setQualityFloor, qualityCeiling, setQualityCeiling, calculate, save, reassign, caseFocus, setCaseFocus, saving, actor, regionId, date, active, nameForEngineer:ratingName, ready: scenario?.status === 'READY', running: posting || scenario?.status === 'RUNNING' };
 }
 
 function Avatar({ name, id, profile }) {

@@ -37,7 +37,7 @@ export function StaffingRatingRange({model}) {
 }
 
 export function StaffingPlanControls({ model, footer = false }) {
-  const context=model.staffingContext;
+  const context=model.staffingContext || model.staffingDayContext;
   const [error,setError]=useState(''), [history,setHistory]=useState([]), [clock,setClock]=useState(Date.now());
   const dialog=useRef(null), scenario=model.scenario;
   const settingsOpen=model.planSettingsOpen, proposalOpen=model.proposalOpen&&scenario?.status==='AWAITING_CONFIRMATION';
