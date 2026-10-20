@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/R2NN/scaszc/main/docs/assets/motion/beego-motion.mp4">
-    <img src="docs/assets/motion/beego-preview.webp" alt="BeeGo в движении: маршруты на карте, паспорт здания и управление сменой" width="1280">
+    <img src="https://raw.githubusercontent.com/R2NN/scaszc/3c2c0bd/docs/assets/motion/beego-preview.webp" alt="BeeGo в движении: маршруты на карте, паспорт здания и управление сменой" width="1280">
   </a>
 </p>
 
