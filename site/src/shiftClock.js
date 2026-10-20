@@ -24,7 +24,7 @@ export const shiftClock = {
   getSnapshot() { return state; },
   /** An explicit seek to the start can request a fresh demonstration without reloading. */
   seek(minute, { restartDay = false } = {}) {
-    if (state.restartDay) return;
+    if (state.restartDay || state.startingSession) return;
     const restart = restartDay && state.mode === 'plan' && minute === 360 && state.minute > 360;
     shiftClock.set({ minute, playing:false, ...(restart ? { restartDay:`${Date.now()}:${++seekSequence}`, restartFromMinute:state.minute } : {}) });
   },

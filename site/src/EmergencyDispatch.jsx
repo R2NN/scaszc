@@ -20,7 +20,7 @@ const api = async (path, body) => {
 const terminal = item => ['ACCEPTED', 'CANCELLED'].includes(item.status);
 
 /** Bridge durable incidents to BeeGo's existing notifications and playback clock. */
-export function useEmergencyDispatch({ shift, active = false, onApply, notify, onOpen, onRestart }) {
+export function useEmergencyDispatch({ shift, active = false, inShift = false, onApply, notify, onOpen, onRestart }) {
   const [incidents, setIncidents] = useState([]), [session, setSession] = useState(null), [selectedId, setSelectedId] = useState('');
   const [candidateId, setCandidateId] = useState(''), [error, setError] = useState(''), [policy, setPolicy] = useState(null);
   const [routeScope, setRouteScope] = useState('day');
@@ -42,7 +42,7 @@ export function useEmergencyDispatch({ shift, active = false, onApply, notify, o
     publishDispatchMapEvent(window,'clear');
     sessionStorage.setItem(`beego-dispatch-session:${value.baseShiftId}`,'active');
     setSession(value);setSelectedId('');setCandidateId('');setRouteScope('day');setIncidents([]);setError('');setSubmission(null);setAcceptingId('');
-    const clock={...value.clock,restartDay:null,restartFromMinute:null,selectedEngineerId:'',follow:false};
+    const clock={...value.clock,startingSession:null,restartDay:null,restartFromMinute:null,selectedEngineerId:'',follow:false};
     if(!adoptDispatchClock(value.shiftId,clock))shiftClock.set(clock);
     refs.current.onApply(value.shift);
     refs.current.onRestart?.();
@@ -55,25 +55,34 @@ export function useEmergencyDispatch({ shift, active = false, onApply, notify, o
   },[shift?.id]);
   useEffect(() => {
     if (!shift?.id || shift.regionId.includes(':scenario:') || initialized.current === shift.id) return;
-    initialized.current = shift.id;
-    // Only this browser's explicitly started scenario may replace the working day.
     const marker = `beego-dispatch-session:${shift.id}`;
-    if (!sessionStorage.getItem(marker)) return;
-    let alive = true;
+    const restoring=Boolean(sessionStorage.getItem(marker));
+    if(!restoring&&(!inShift||shiftClock.getSnapshot().mode!=='plan'))return;
+    if(shiftClock.getSnapshot().restartDay)return;
+    initialized.current = shift.id;
+    let alive = true,finished=false;
+    shiftClock.set({startingSession:shift.id});
     const restore = async () => {
       try {
-        const value = await api(`context?baseShiftId=${shift.id}`);
-        if (!alive || !value || shiftClock.getSnapshot().restartDay) return;
-        sessionStorage.setItem(marker, 'active');
-        setSession(value); refs.current.onApply(value.shift);
+        const value = restoring ? await api(`context?baseShiftId=${shift.id}`)
+          : await api('sessions/entry',{baseShiftId:shift.id,speed:shiftClock.getSnapshot().speed});
+        if (!alive || !value || refs.current.shift?.id!==shift.id || shiftClock.getSnapshot().restartDay) return;
         const chosenSpeed=shiftClock.getSnapshot().reviewSpeed;
         const reviewSpeed=chosenSpeed??value.clock.reviewSpeed??null;
-        shiftClock.set({ minute: value.clock.minute, playing: false, speed:reviewSpeed??value.clock.speed, reviewSpeed, awaitingDecision:Boolean(value.clock.awaitingDecision), awaitingTransport:Boolean(value.clock.awaitingTransport), confirmingDecision:Boolean(value.clock.confirmingDecision), restartDay:null, restartFromMinute:null });
+        enterSession({...value,clock:{...value.clock,playing:false,speed:reviewSpeed??value.clock.speed,reviewSpeed}});
       } catch (e) { if (alive) setError(e.message); }
+      finally {
+        finished=true;
+        if(alive&&shiftClock.getSnapshot().startingSession===shift.id)shiftClock.set({startingSession:null});
+      }
     };
     restore();
-    return () => { alive = false; };
-  }, [shift?.id]);
+    return () => {
+      alive=false;
+      if(!finished&&initialized.current===shift.id)initialized.current='';
+      if(shiftClock.getSnapshot().startingSession===shift.id)shiftClock.set({startingSession:null});
+    };
+  }, [shift?.id,inShift]);
   useEffect(() => {
     if (!shift?.id) return;
     let alive = true;

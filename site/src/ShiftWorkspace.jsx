@@ -237,7 +237,7 @@ export function ShiftPlaybackBar({ compact = false, shift = null, onSelectOrder,
   const seek = minute => shiftClock.seek(Math.max(axisStart, Math.min(1380, minute)), {restartDay:Boolean(shift?.plan)});
   return <div className={`shift-timeline${compact ? ' engineer-playback-bar' : ''}`}>
     <div className="shift-playback-controls">
-      <button type="button" disabled={Boolean(clock.restartDay)} aria-label={clock.playing ? 'Пауза' : 'Воспроизвести'} onClick={() => shiftClock.set({ playing: !clock.playing })}>{clock.playing ? <Pause/> : <Play/>}</button>
+      <button type="button" disabled={Boolean(clock.restartDay||clock.startingSession)} aria-label={clock.playing ? 'Пауза' : 'Воспроизвести'} onClick={() => shiftClock.set({ playing: !clock.playing })}>{clock.playing ? <Pause/> : <Play/>}</button>
       <b>{timeOf(Math.floor(clock.minute))}</b>
       {clock.restartDay?<span role="status">Начинаем смену заново…</span>:null}
       <PlaybackDropdown label="Режим смены" value={clock.mode} options={[{value:'plan',label:'По плану · демонстрация'},{value:'fact',label:'Фактическая смена'}]} onChange={mode => shiftClock.set({ mode })}/>
@@ -251,7 +251,7 @@ export function ShiftPlaybackBar({ compact = false, shift = null, onSelectOrder,
       <button type="button" className="shift-task-boundary finish" style={{ left: `${Math.max(0, Math.min(99, ((minuteOf(selected.route.shiftEnd) ?? 1380) - axisStart) / axisSpan * 100))}%` }} onClick={() => seek(minuteOf(selected.route.shiftEnd) ?? 1380)} title={`Завершение смены ${selected.route.shiftEnd}`} aria-label={`Завершение смены ${selected.route.shiftEnd}`}><Flag size={14}/></button>
     </div> : null}
     {!compact && selectedTask && selectedTaskOrder ? <div className="shift-timeline-task-detail"><b>№ {orderNumber(selectedTaskOrder)}</b><span title={selectedTaskOrder.name || selectedTaskOrder.sourceId}>{selectedTaskOrder.name || selectedTaskOrder.sourceId || 'Заявка'} · {selectedTask.plannedStart}–{selectedTask.plannedFinish}</span><em className={`shift-status status-${visits.get(String(selectedTask.orderId))?.status || 'planned'}`}>{visitStatusLabel(visits.get(String(selectedTask.orderId))?.status,clock.mode)}</em><button type="button" onClick={() => onEditOrder?.(selectedOrderId)}>Изменить</button></div> : null}
-    <input type="range" min="360" max="1380" step="1" disabled={Boolean(clock.restartDay)||(!compact&&!shift?.plan)} value={Math.floor(clock.minute)} onChange={event => seek(Number(event.target.value))} aria-label="Время смены"/>
+    <input type="range" min="360" max="1380" step="1" disabled={Boolean(clock.restartDay||clock.startingSession)||(!compact&&!shift?.plan)} value={Math.floor(clock.minute)} onChange={event => seek(Number(event.target.value))} aria-label="Время смены"/>
     <div className="shift-time-axis">{['06:00','09:00','12:00','15:00','18:00','21:00','23:00'].map(label => <span key={label}>{label}</span>)}</div>
   </div>;
 }

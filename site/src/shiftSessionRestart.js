@@ -3,7 +3,7 @@ export function createShiftSessionRestart({clock,getShift,start,onValue,onError}
   let active=true,running=false,requestToken=null;
   const check=async()=>{
     const snapshot=clock.getSnapshot(),shift=getShift();
-    if(!active||running||!snapshot.restartDay||snapshot.mode!=='plan'||snapshot.minute!==360
+    if(!active||running||snapshot.startingSession||!snapshot.restartDay||snapshot.mode!=='plan'||snapshot.minute!==360
       ||!shift?.plan||shift.regionId.includes(':scenario:'))return;
     const token=snapshot.restartDay,scope=shift.id;
     const owns=()=>active&&getShift()?.id===scope&&clock.getSnapshot().restartDay===token;

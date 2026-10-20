@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { EmergencyDispatch } from './emergencyDispatch.mjs';
 import { minuteOf } from '../src/shiftDomain.js';
 import { operationalStates } from '../src/operationalState.js';
-import { homeStartScenario } from './homeStartScenario.mjs';
+import { homeStartScenario,homeScenarioSourceKey } from './homeStartScenario.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 
@@ -32,10 +32,10 @@ export function createDispatchApi(store, options) {
     const row = store.db.prepare('SELECT payload FROM dispatch_sessions WHERE base_shift_id=? ORDER BY rowid DESC LIMIT 1').get(baseId);
     return row ? JSON.parse(row.payload) : null;
   };
-  const createSession = input => {
+  const createSession = (input, seeded) => {
     const base = store.get(input.baseShiftId);
     if (!base?.plan) throw new Error('Исходная смена не найдена');
-    const id = randomUUID(), first = homeStartScenario(base);
+    const id = randomUUID(), first = seeded || homeStartScenario(base);
     const shift = store.ensure({regionId:`${base.regionId.split(':')[0]}:scenario:${id}`,date:base.date,orders:first.orders,team:first.team,plan:first.plan});
     const requestedSpeed=Number(input.speed),speed=[1,30,60,120,300].includes(requestedSpeed)?requestedSpeed:60;
     const session={id,baseShiftId:input.baseShiftId,shiftId:shift.id,clock:{minute:360,playing:false,speed,anchorAt:Date.now(),awaitingDecision:false,confirmingDecision:false,version:1},lastMinute:360,fired:false};
@@ -55,6 +55,16 @@ export function createDispatchApi(store, options) {
       }
       if (url.pathname === '/api/dispatch/sessions' && request.method === 'POST') {
         return json(createSession(input),201);
+      }
+      if (url.pathname === '/api/dispatch/sessions/entry' && request.method === 'POST') {
+        const base=store.get(input.baseShiftId);
+        if(!base?.plan)throw new Error('Исходная смена не найдена');
+        if(base.regionId!=='moscow'||base.facts.length||base.events.some(event=>!['PLAN_REBUILT','RECALCULATE'].includes(event.type)))return json(null);
+        const source=base.versions[0];
+        if(homeScenarioSourceKey(base.date,{...source,orders:base.orders,team:base.team})!==homeScenarioSourceKey(base.date,source))return json(null);
+        const first=homeStartScenario(base);
+        if(first===base.versions[0])return json(null);
+        return json(createSession(input,first),201);
       }
       const route = /^\/api\/dispatch\/shifts\/([^/]+)\/(incidents|policy|clock|states|transport)$/.exec(url.pathname);
       if (route) {
