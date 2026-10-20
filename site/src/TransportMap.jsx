@@ -3,6 +3,7 @@ import * as maplibregl from 'maplibre-gl';
 import { Car, TrainFront, Undo2, Layers3, Plus, DoorOpen, ArrowLeftRight, Footprints, Pencil, MousePointer2, Check } from 'lucide-react';
 import { sampleRoadStroke } from './roadDrawing.js';
 import { transportMetroSelection } from './transportMetroSelection.js';
+import { createTransportCaptionVisibility } from './transportCaptionVisibility.js';
 import { groupTransportPins,transportBoxClear,transportUsesSidePanel,transportRouteStations,clipTransportSegment } from './transportMapLayout.js';
 import { transportStatus,transportCrewOrders } from './transportDomain.js';
 
@@ -43,6 +44,8 @@ export function TransportMapLayer({map,theme}) {
   useEffect(()=>{const media=matchMedia('(max-width:1100px)'),change=()=>setLegendOpen(!media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
   const state=useSyncExternalStore(transportMap.subscribe,transportMap.snapshot);
   const current=useRef(state),renderRef=useRef(null);
+  const captionVisibility=useRef(null);
+  captionVisibility.current ||= createTransportCaptionVisibility();
   current.current=state;
   // Clock minutes change five times a second at ×300. Only crossing an event
   // boundary changes this overlay; callbacks still read the latest panel state.
@@ -141,7 +144,7 @@ export function TransportMapLayer({map,theme}) {
         if(events.length>1){const count=document.createElement('sup');count.textContent=String(events.length);element.append(count);}
         const statuses=events.map(event=>transportStatus(event,current.current.date,current.current.minute||0));const status=statuses.includes('Действует')?'Действует':statuses.includes('Запланировано')?'Запланировано':'Завершено';element.classList.toggle('planned',status==='Запланировано');element.classList.toggle('ended',status==='Завершено');
         element.title=events.map(event=>event.title).join(' · ');element.setAttribute('aria-label',events.length>1?`Открыть группу ограничений: ${events.length}`:`Открыть ограничение: ${events[0].title}`);
-        element.onclick=event=>{event.stopPropagation();if(events.length>1)current.current.onGroup?.(events);else current.current.onSelect?.(events[0]);};
+        element.onclick=event=>{event.stopPropagation();for(const item of events)captionVisibility.current.show(item.id);renderRef.current?.();if(events.length>1)current.current.onGroup?.(events);else current.current.onSelect?.(events[0]);};
         pinMarkers.push(new maplibregl.Marker({element}).setLngLat(group.coords).addTo(map));
       }
     };
@@ -180,6 +183,7 @@ export function TransportMapLayer({map,theme}) {
     ];
     const render=()=>{
       const state=current.current;
+      captionVisibility.current.update(`${state.shiftId}:${state.date}`);
       map.getCanvas().style.cursor=state.enabled&&state.drawing?'crosshair':'';
       if(!state.enabled){markers.forEach(m=>m.remove());markers=[];captionsToPlace=[];pinItems=[];pinMarkers.forEach(marker=>marker.remove());pinMarkers=[];pinSignature='';leaders.replaceChildren();restoreBackground();for(const layer of layers)if(map.getLayer(layer.id))map.setLayoutProperty(layer.id,'visibility','none');return;}
       if(state.management!==false)map.getContainer().dataset.transportActive='true';else delete map.getContainer().dataset.transportActive;
@@ -255,10 +259,17 @@ export function TransportMapLayer({map,theme}) {
 
         }
         const selected=event.segments[0];
-        if(selected){const p=selected.geometry[Math.floor(selected.geometry.length/2)],element=document.createElement('button');
-          element.className='transport-map-caption';element.type='button';element.textContent=`${({road:'⊘ Авто',metro:'▣ Движение метро',entry:'↪ Вход',transfer:'⇄ Пересадка'})[event.kind]} · ${event.title}`;
-          const time=document.createElement('small');time.textContent=`${status} · ${event.startsAt?.slice(11,16)}–${event.endsAt?`${event.endsAt.slice(0,10)!==event.startsAt?.slice(0,10)?event.endsAt.slice(5,10).split('-').reverse().join('.')+' ':''}${event.endsAt.slice(11,16)}`:'срок неизвестен'}`;element.append(time);
-          element.onclick=()=>current.current.onSelect?.(event);
+        if(selected&&!captionVisibility.current.isHidden(event.id)){const p=selected.geometry[Math.floor(selected.geometry.length/2)],element=document.createElement('div');
+          element.className='transport-map-caption';element.dataset.eventId=event.id;
+          const content=document.createElement('button');content.type='button';content.className='transport-caption-content';content.textContent=`${({road:'⊘ Авто',metro:'▣ Движение метро',entry:'↪ Вход',transfer:'⇄ Пересадка'})[event.kind]} · ${event.title}`;
+          const time=document.createElement('small');time.textContent=`${status} · ${event.startsAt?.slice(11,16)}–${event.endsAt?`${event.endsAt.slice(0,10)!==event.startsAt?.slice(0,10)?event.endsAt.slice(5,10).split('-').reverse().join('.')+' ':''}${event.endsAt.slice(11,16)}`:'срок неизвестен'}`;content.append(time);
+          content.onclick=()=>current.current.onSelect?.(event);
+          const close=document.createElement('button');close.type='button';close.className='transport-caption-close';close.textContent='×';close.setAttribute('aria-label',`Скрыть пояснение: ${event.title}`);close.title='Скрыть пояснение';
+          const dismiss=()=>{captionVisibility.current.hide(event.id);map.getCanvas().focus({preventScroll:true});renderRef.current?.();};
+          close.onclick=dismiss;
+          element.onclick=click=>click.stopPropagation();
+          element.onkeydown=key=>{if(key.key==='Escape'){key.preventDefault();key.stopPropagation();dismiss();}};
+          element.append(content,close);
           const marker=new maplibregl.Marker({element,anchor:'top-left'}).setLngLat([p[1],p[0]]).addTo(map);
           markers.push(marker);captionsToPlace.push({marker,coords:[p[1],p[0]]});
         }
@@ -282,7 +293,7 @@ export function TransportMapLayer({map,theme}) {
       if(!state.enabled)return;
       const hit=map.queryRenderedFeatures(event.point,{layers:layers.filter(l=>map.getLayer(l.id)).map(l=>l.id)});
       const closure=hit.find(f=>f.layer.id==='beego-transport-closed');
-      if(closure&&!state.drawing){state.onSelect?.((state.events || []).find(e=>e.id===closure.properties.id));return;}
+      if(closure&&!state.drawing){captionVisibility.current.show(closure.properties.id);renderRef.current?.();state.onSelect?.((state.events || []).find(e=>e.id===closure.properties.id));return;}
       if(!state.drawing)return;
       if(state.kind==='road'){if(state.roadMode!=='brush')state.onRoad?.([event.lngLat.lat,event.lngLat.lng]);return;}
       const station=hit.find(f=>['beego-transport-selection-points','beego-transport-stations','beego-transport-selection-halo','beego-transport-selection-labels','beego-transport-station-labels'].includes(f.layer.id));
@@ -297,7 +308,7 @@ export function TransportMapLayer({map,theme}) {
     const observer=new ResizeObserver(place);observer.observe(outer);const panel=document.querySelector('.transport-workspace-panel,.shift-layer.operational-shift .shift-panel');if(panel)observer.observe(panel);
     return()=>{cancelAnimationFrame(pinFrame);observer.disconnect();leaders.remove();renderRef.current=null;markers.forEach(m=>m.remove());pinMarkers.forEach(m=>m.remove());restoreBackground();map.getCanvas().style.cursor='';map.off('style.load',styleLoaded);map.off('idle',render);map.off('click',click);map.off('move',place);map.off('resize',place);map.off('zoomend',refreshPins);map.off('zoom',schedulePins);map.off('resize',schedulePins);};
   },[map]);
-  useEffect(()=>{renderRef.current?.();},[state.enabled,state.management,state.metro,state.catalog,state.events,state.draft,state.selectedStationId,state.editingId,state.preview?.result,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,state.comparison,impactKey,theme]);
+  useEffect(()=>{renderRef.current?.();},[state.enabled,state.management,state.metro,state.catalog,state.events,state.draft,state.selectedStationId,state.editingId,state.preview?.result,state.shiftId,state.date,statuses,state.showEnded,state.engineerId,state.drawing,state.kind,state.comparison,impactKey,theme]);
   if(!state.enabled)return null;
   return <>
     {state.management!==false?<div className='transport-map-tools' aria-label='Выбор транспортного участка'>
