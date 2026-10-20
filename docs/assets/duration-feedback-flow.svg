@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1170" viewBox="0 0 1200 1170" role="img" aria-labelledby="title description">
+<title id="title">Из чего складывается время визита</title><desc id="description">Сервер рассчитывает норматив и объём работ. История содержит раздельные измерения этапов и обратную связь инженеров. Сопоставимость, повторяемость и проверка на поздних визитах позволяют подтвердить условие конкретной области. Итоговый снимок передаётся Python и сохраняется в плане.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#F8FAFF"/><stop offset="1" stop-color="#EEF5FC"/></linearGradient><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#7185A0" stroke-width="2" stroke-linecap="round"/></marker></defs>
+<style>text{font-family:Arial,Helvetica,sans-serif}.title{font-size:34px;font-weight:700;fill:#10213B}.sub{font-size:18px;fill:#52647D}.name{font-size:22px;font-weight:700;fill:#17324D}.note{font-size:17px;fill:#52647D}.tag{font-size:14px;font-weight:700;letter-spacing:1px;fill:#2563EB}</style>
+<rect width="1200" height="1170" rx="26" fill="url(#bg)"/>
+<text x="48" y="48" class="tag">BEEGO! · ТЕХНИЧЕСКАЯ СХЕМА</text>
+<text x="48" y="94" class="title">Из чего складывается время визита</text><text x="48" y="128" class="sub">Состав работ, измерения и подтверждённые причины</text>
+<g data-card="Норматив и объём"><rect x="48" y="170" width="530" height="150" rx="18" fill="#FFFFFF" stroke="#C8DAF5"/><rect x="48" y="170" width="6" height="150" rx="3" fill="#2563EB"/>
+<text x="70" y="210" class="name">Норматив и объём</text>
+<text x="70" y="243" class="note">Техническая база + устройства, кабель, точки</text>
+<text x="70" y="270" class="note">Пригодная линия может сократить работу</text>
+<text x="70" y="297" class="note">Оформление и доступ — отдельные компоненты</text>
+</g>
+<g data-card="Измерения и ответ инженера"><rect x="622" y="170" width="530" height="150" rx="18" fill="#F2FBF8" stroke="#B9E0D4"/><rect x="622" y="170" width="6" height="150" rx="3" fill="#0F766E"/>
+<text x="644" y="210" class="name">Измерения и ответ инженера</text>
+<text x="644" y="243" class="note">Техническая работа, доступ, оформление, ожидание</text>
+<text x="644" y="270" class="note">Причина, пояснение и подготовка к визиту</text>
+<text x="644" y="297" class="note">Объект / подъезд / узел / линия / клиент</text>
+</g>
+<path d="M887 328 L887 362" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<g data-card="Проверить перенос причины"><rect x="622" y="375" width="530" height="160" rx="18" fill="#F8F4FF" stroke="#D9CBF1"/><rect x="622" y="375" width="6" height="160" rx="3" fill="#7C3AED"/>
+<text x="644" y="415" class="name">Проверить перенос причины</text>
+<text x="644" y="448" class="note">Сопоставимые визиты; по умолчанию 120 дней</text>
+<text x="644" y="475" class="note">Для ответа: минимум 4 визита, 2 дня, 2 инженера</text>
+<text x="644" y="502" class="note">Поздние 20% — проверка уменьшения ошибки</text>
+</g>
+<path d="M887 544 L887 576" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<g data-card="Поправка по истории"><rect x="48" y="590" width="530" height="155" rx="18" fill="#F2FBF8" stroke="#B9E0D4"/><rect x="48" y="590" width="6" height="155" rx="3" fill="#0F766E"/>
+<text x="70" y="630" class="name">Поправка по истории</text>
+<text x="70" y="663" class="note">Медиана отклонений после отсечения выбросов</text>
+<text x="70" y="690" class="note">Сглаживание n / (n + 5), минимум 3 наблюдения</text>
+<text x="70" y="717" class="note">Повторная проверка при изменении условий</text>
+</g>
+<g data-card="Решение по области"><rect x="622" y="590" width="530" height="155" rx="18" fill="#FFFCED" stroke="#E8D99D"/><rect x="622" y="590" width="6" height="155" rx="3" fill="#A47A05"/>
+<text x="644" y="630" class="name">Решение по области</text>
+<text x="644" y="663" class="note">Диспетчер подтверждает причину и срок</text>
+<text x="644" y="690" class="note">Операция, линия, узел, подъезд или объект</text>
+<text x="644" y="717" class="note">Ожидание клиента — его лицевой счёт</text>
+</g>
+<path d="M612 668 L589 668" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M313 328 L313 577" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M313 754 L313 786" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<g data-card="Серверный снимок длительности"><rect x="48" y="800" width="1104" height="145" rx="18" fill="#FFFFFF" stroke="#C8DAF5"/><rect x="48" y="800" width="6" height="145" rx="3" fill="#2563EB"/>
+<text x="70" y="840" class="name">Серверный снимок длительности</text>
+<text x="70" y="873" class="note">Модель, момент расчёта, компоненты, основания, измерения и итоговые минуты</text>
+<text x="70" y="900" class="note">Пример: база 70 + состав работ 45 + история диагностики 13 = 128 минут</text>
+<text x="70" y="927" class="note">Python получает Job.service_duration_min; начатый визит сохраняет исходный снимок</text>
+</g>
+<path d="M600 954 L600 987" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<g data-card="Планирование и проверка"><rect x="48" y="1000" width="1104" height="120" rx="18" fill="#F2FBF8" stroke="#B9E0D4"/><rect x="48" y="1000" width="6" height="120" rx="3" fill="#0F766E"/>
+<text x="70" y="1040" class="name">Планирование и проверка</text>
+<text x="70" y="1073" class="note">Минуты влияют на допуск, порядок, окна и завершение смены; дорога считается отдельно</text>
+<text x="70" y="1100" class="note">В паспорте доступны формула, план / факт визитов, ответы и подтверждённые особенности</text>
+</g>
+</svg>

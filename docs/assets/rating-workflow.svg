@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200" role="img" aria-labelledby="title description">
+<title id="title">Качество специалиста → состав смены</title><desc id="description">Оценка относится к исполнителю завершённого визита. Разбор с перепиской и подтверждением обновляет рейтинг. Диапазон и пул дают предложение конкретных специалистов. После подтверждения сервер проверяет источник и рассчитывает маршруты с утверждённым составом.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#F8FAFF"/><stop offset="1" stop-color="#EEF5FC"/></linearGradient><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 9 5 1 9" fill="none" stroke="#7185A0" stroke-width="2" stroke-linecap="round"/></marker></defs>
+<style>text{font-family:Arial,Helvetica,sans-serif}.title{font-size:34px;font-weight:700;fill:#10213B}.sub{font-size:18px;fill:#52647D}.name{font-size:22px;font-weight:700;fill:#17324D}.note{font-size:17px;fill:#52647D}.tag{font-size:14px;font-weight:700;letter-spacing:1px;fill:#2563EB}</style>
+<rect width="1200" height="1200" rx="26" fill="url(#bg)"/>
+<text x="48" y="48" class="tag">BEEGO! · ТЕХНИЧЕСКАЯ СХЕМА</text>
+<text x="48" y="94" class="title">Качество специалиста → состав смены</text><text x="48" y="128" class="sub">От завершённого визита до подтверждённых людей и маршрутов</text>
+<g data-card="Отзыв о завершённом визите"><rect x="48" y="170" width="530" height="145" rx="18" fill="#FFFFFF" stroke="#C8DAF5"/><rect x="48" y="170" width="6" height="145" rx="3" fill="#2563EB"/>
+<text x="70" y="210" class="name">Отзыв о завершённом визите</text>
+<text x="70" y="243" class="note">Исполнитель из сохранённого плана</text>
+<text x="70" y="270" class="note">Один визит — одна оценка; звёзды и текст</text>
+<text x="70" y="297" class="note">Рейтинг сглажен: приоритет 20 × 4,20</text>
+</g>
+<g data-card="Разбор с основанием"><rect x="622" y="170" width="530" height="145" rx="18" fill="#F2FBF8" stroke="#B9E0D4"/><rect x="622" y="170" width="6" height="145" rx="3" fill="#0F766E"/>
+<text x="644" y="210" class="name">Разбор с основанием</text>
+<text x="644" y="243" class="note">Оценка → переписка и фото → решение</text>
+<text x="644" y="270" class="note">Участие в рейтинге или уточнение клиентом</text>
+<text x="644" y="297" class="note">Рейтинг до / после; исходный отзыв сохранён</text>
+</g>
+<path d="M588 242 L611 242" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M887 323 L887 354" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<g data-card="Условия состава"><rect x="48" y="365" width="530" height="145" rx="18" fill="#F8F4FF" stroke="#D9CBF1"/><rect x="48" y="365" width="6" height="145" rx="3" fill="#7C3AED"/>
+<text x="70" y="405" class="name">Условия состава</text>
+<text x="70" y="438" class="note">Нижняя и верхняя границы рейтинга 1–5</text>
+<text x="70" y="465" class="note">Штат либо расширенный пул профилей</text>
+<text x="70" y="492" class="note">Территория, старт, смена, навык, оснащение</text>
+</g>
+<g data-card="Предложение конкретных людей"><rect x="622" y="365" width="530" height="145" rx="18" fill="#FFFCED" stroke="#E8D99D"/><rect x="622" y="365" width="6" height="145" rx="3" fill="#A47A05"/>
+<text x="644" y="405" class="name">Предложение конкретных людей</text>
+<text x="644" y="438" class="note">Имена, оценки, навыки и потребность</text>
+<text x="644" y="465" class="note">AWAITING_CONFIRMATION</text>
+<text x="644" y="492" class="note">Диспетчер подтверждает состав</text>
+</g>
+<path d="M588 437 L611 437" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M887 518 L887 549" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<g data-card="Актуальность источника"><rect x="48" y="560" width="530" height="155" rx="18" fill="#FFFFFF" stroke="#C8DAF5"/><rect x="48" y="560" width="6" height="155" rx="3" fill="#2563EB"/>
+<text x="70" y="600" class="name">Актуальность источника</text>
+<text x="70" y="633" class="note">Ревизия и SHA плана; версия рейтинга</text>
+<text x="70" y="660" class="note">Отпечаток заявок, состава и пожеланий</text>
+<text x="70" y="687" class="note">Доступность; утверждённые ID инженеров</text>
+</g>
+<g data-card="Проверка и сокращение состава"><rect x="622" y="560" width="530" height="155" rx="18" fill="#F2FBF8" stroke="#B9E0D4"/><rect x="622" y="560" width="6" height="155" rx="3" fill="#0F766E"/>
+<text x="644" y="600" class="name">Проверка и сокращение состава</text>
+<text x="644" y="633" class="note">Перенос визитов и освобождение маршрута</text>
+<text x="644" y="660" class="note">Новые поездки по времени отправления</text>
+<text x="644" y="687" class="note">Проверка всего плана и общего склада</text>
+</g>
+<path d="M588 637 L611 637" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M887 723 L887 754" fill="none" stroke="#7185A0" stroke-width="2.5" marker-end="url(#arrow)"/>
+<g data-card="Результат на карте"><rect x="48" y="765" width="1104" height="145" rx="18" fill="#F2FBF8" stroke="#B9E0D4"/><rect x="48" y="765" width="6" height="145" rx="3" fill="#0F766E"/>
+<text x="70" y="805" class="name">Результат на карте</text>
+<text x="70" y="838" class="note">Назначения, используемые специалисты, рейтинг, покрытие и очередь с причинами</text>
+<text x="70" y="865" class="note">READY — готовый расчёт; полный реальный состав доступен для сохранения</text>
+<text x="70" y="892" class="note">Начатые работы и ручные закрепления сохраняются</text>
+</g>
+<g data-card="Прогноз спроса"><rect x="48" y="970" width="530" height="155" rx="18" fill="#F8F4FF" stroke="#D9CBF1"/><rect x="48" y="970" width="6" height="155" rx="3" fill="#7C3AED"/>
+<text x="70" y="1010" class="name">Прогноз спроса</text>
+<text x="70" y="1043" class="note">Дата модели, диапазон заявок и навыки</text>
+<text x="70" y="1070" class="note">Производительность проверенных маршрутов</text>
+<text x="70" y="1097" class="note">Подготовка резерва по территориям</text>
+</g>
+<g data-card="Рабочая операционная смена"><rect x="622" y="970" width="530" height="155" rx="18" fill="#FFFFFF" stroke="#C8DAF5"/><rect x="622" y="970" width="6" height="155" rx="3" fill="#2563EB"/>
+<text x="644" y="1010" class="name">Рабочая операционная смена</text>
+<text x="644" y="1043" class="note">Собственный черновик и подтверждение публикации</text>
+<text x="644" y="1070" class="note">Аварии и проезд — от текущего состояния</text>
+<text x="644" y="1097" class="note">Версии, факты, отчёт и история решений</text>
+</g>
+</svg>
