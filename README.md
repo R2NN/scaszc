@@ -1,5 +1,16 @@
 # BeeGo! - планирование выездных бригад в действии
 
+<p align="center">
+  <a href="https://raw.githubusercontent.com/R2NN/scaszc/main/docs/assets/motion/beego-motion.mp4">
+    <img src="docs/assets/motion/beego-preview.webp" alt="BeeGo в движении: маршруты на карте, паспорт здания и управление сменой" width="1280">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="http://45.152.196.19/">Открыть стенд</a> · <a href="docs/README.md">Техническая документация</a> · <a href="docs/assets/presentation/BeeGo-presentation.pdf">Презентация</a></strong><br>
+  <a href="https://raw.githubusercontent.com/R2NN/scaszc/main/docs/assets/motion/beego-motion.mp4">Смотреть полное видео без звука · 3:50</a>
+</p>
+
 **От адреса заявки до опубликованного плана смены, который диспетчер может проверить и изменить.**
 
 Мы сделали этот README рассказом о принятых решениях: что видно в продукте, как это обеспечено алгоритмом и почему компоненты устроены именно так. Команды, форматы данных и процедуры развёртывания вынесены в [техническую документацию](docs/README.md): [архитектура](docs/reference/architecture.md), [API](docs/reference/api.md), [алгоритм](docs/reference/planning.md).
@@ -13,7 +24,7 @@
 
 **[Смотреть скринкаст BeeGo](https://drive.google.com/drive/folders/16-bI1dDMEf5oGwzf21izeyWvwMPiTzwm?usp=sharing)**
 
-**[Открыть стенд](http://45.152.196.19/)** · **[Документация](docs/README.md)**
+**[Открыть стенд](http://45.152.196.19/)** · **[Документация](docs/README.md)** · **[Презентация](docs/assets/presentation/BeeGo-presentation.pdf)**
 
 ## Структура репозитория
 
