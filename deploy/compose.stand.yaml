@@ -1,0 +1,48 @@
+# Build/load the release image before switching the public stand.
+name: beego-stand
+services:
+  valhalla:
+    image: ${BEEGO_VALHALLA_IMAGE:-beego-valhalla:20261020}
+    pull_policy: never
+    entrypoint: [python3, /opt/beego/start-valhalla.py]
+    volumes:
+      - ${BEEGO_ROUTING_PATH:-/srv/beego/routing}/roads:/custom_files:ro
+      - ${BEEGO_RELEASE_PATH:?Set the absolute release directory}/runtime/start_complete_valhalla.py:/opt/beego/start-valhalla.py:ro
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://127.0.0.1:8002/status]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: '10m', max-file: '3'}
+  app:
+    image: ${BEEGO_APP_IMAGE:?Set the verified release image}
+    pull_policy: never
+    init: true
+    depends_on:
+      valhalla:
+        condition: service_healthy
+    ports: ['127.0.0.1:8787:8787']
+    env_file:
+      - ${BEEGO_API_ENV:-/etc/beego/api.env}
+    environment:
+      VALHALLA_ROUTE_ENDPOINT: http://valhalla:8002/route
+    volumes:
+      - ${BEEGO_STATE_PATH:-/srv/beego/state}/db:/app/site/.beego-data
+      - ${BEEGO_STATE_PATH:-/srv/beego/state}/runs:/app/runtime/ui-runs
+      - ${BEEGO_STATE_PATH:-/srv/beego/state}/cache:/app/runtime/ui-shared-cache
+      - ${BEEGO_STATE_PATH:-/srv/beego/state}/replans:/app/runtime/exact-replans
+      - ${BEEGO_ROUTING_PATH:-/srv/beego/routing}/transit:/app/data/transit:ro
+      - ${BEEGO_ROUTING_PATH:-/srv/beego/routing}/sources:/app/offline-assets/transit-sources:ro
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:8787/api/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 10s
+      timeout: 10s
+      start_period: 30s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: '10m', max-file: '3'}

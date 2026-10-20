@@ -1,4 +1,42 @@
-# Стенд BeeGo на Yandex Compute Cloud
+# Серверный стенд BeeGo
+
+## Развёртывание проверенных контейнеров
+
+Для Ubuntu с Docker Compose и Nginx используйте [compose.stand.yaml](compose.stand.yaml). Образы приложения и Valhalla предварительно собираются либо переносятся через `docker save` / `docker load`; конфигурация не скачивает и не подменяет их при запуске. Дорожный граф, индекс и исходники транспорта устанавливаются проверяемым `tools/install_runtime_bundle.py`.
+
+Постоянные каталоги этой конфигурации:
+
+| Каталог | Содержимое |
+| --- | --- |
+| `/opt/beego/releases/<commit>` | Код релиза, конфигурация и запуск Valhalla |
+| `/srv/beego/routing/{roads,transit,sources}` | Проверенные дорожные и транспортные ресурсы, только чтение для приложения |
+| `/srv/beego/state/{db,runs,cache,replans}` | SQLite, расчёты и кэши между обновлениями |
+| `/etc/beego/api.env` | Ключи внешних сервисов, права `600` |
+| `/etc/beego/stand.env` | Пути и идентификаторы образов, без клиентских секретов |
+
+Пример `stand.env`:
+
+```dotenv
+BEEGO_RELEASE_PATH=/opt/beego/releases/<commit>
+BEEGO_APP_IMAGE=beego-app:<commit>
+BEEGO_VALHALLA_IMAGE=beego-valhalla:<verified-version>
+```
+
+Образ приложения работает от UID 1000: каталоги `state` должны быть доступны этому пользователю. Конфигурация ключей передаётся через `env_file`, не включается в образ и не публикуется Nginx. Внешний трафик принимает [nginx-container.conf](nginx-container.conf); порты API и Valhalla наружу не открываются.
+
+```bash
+docker compose --env-file /etc/beego/stand.env \
+  -f /opt/beego/releases/<commit>/deploy/compose.stand.yaml config --quiet
+docker compose --env-file /etc/beego/stand.env \
+  -f /opt/beego/releases/<commit>/deploy/compose.stand.yaml up -d --wait
+curl --fail http://127.0.0.1:8787/api/health
+curl --fail http://127.0.0.1:8787/api/runtime/readiness
+sudo nginx -t
+```
+
+Перед переключением публичного прокси проверяйте готовность обоих контейнеров. После переключения проверьте внешний адрес, загрузку карты, сохранённый день, поиск адреса, AI, PDF и новый точный расчёт на отдельной тестовой базе. Полезно сравнить контрольные суммы таблиц планов и фактов до и после обновления; технические якоря часов могут меняться при перезапуске. Откат — возврат прежнего `BEEGO_APP_IMAGE` и каталога релиза с сохранением каталогов `state` и `routing`.
+
+## Вариант с Node API в systemd
 
 Стенд запускает один экземпляр `site/server/main.mjs` за Nginx. Поэтому все запросы к точному планировщику и предпросмотру перепланирования делят один слот; второй запуск получает HTTP 429 с кодом `PLANNING_BUSY`. Просмотр сайта и чтение API продолжают работать.
 
