@@ -166,11 +166,11 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
   useEffect(()=>()=>{generation.current++;calculationRequest.current++;clearTimeout(retryRef.current);transportMap.set({enabled:false,onRoad:null,onSegment:null,onSelect:null,onGroup:null});},[]);
   useEffect(()=>{
     const scoped=transportSelectedConsequences(preview?.result?.consequences,preview?.result?.eventImpacts,selected?.id);
-    transportMap.set({enabled:live||active,management:active,catalog,events,draft:active?draft:null,editingId:active&&draft?.expectedRevision?draft.id:null,preview:active?preview:null,date,minute,showEnded:active&&showEnded,engineerId,
+    transportMap.set({enabled:live||active,management:active,shiftId:shift?.id,catalog,events,draft:active?draft:null,editingId:active&&draft?.expectedRevision?draft.id:null,preview:active?preview:null,date,minute,showEnded:active&&showEnded,engineerId,
       impactOrderIds:scoped?.orders.map(order=>order.orderId),comparison,selectedStationId:active&&draft?stationFrom:'',
       drawing:active&&drawing,kind:draft?.kind,roadMode:draft?.roadMode||'points',roadBusy:busy,onRoad:selectRoad,onRoadStroke:points=>drawRoad(points,'brush'),onRoadPointMove:(index,coords)=>drawRoad(draft.roadPoints.map((point,i)=>i===index?coords:point)),onSegment:selectSegment,onStation:selectStation,onSelect:event=>{onScenarioEvent?.();selectEvent(event);},onGroup:items=>{onScenarioEvent?.();openGroup(items);},onOpen:onScenarioEvent,onNew:()=>begin(),
       onUndo:undoRoad,onFinish:()=>setDrawing(false),onRoadMode:roadMode=>change({roadMode}),onKind:kind=>{if(!draft)begin(kind);else{change({kind,segments:[],roadPoints:[]});setDrawing(true);}}});
-  },[active,catalog,events,draft,preview,date,minute,drawing,busy,showEnded,engineerId,stationFrom,selected?.id,comparison]);
+  },[active,catalog,events,draft,preview,shift?.id,date,minute,drawing,busy,showEnded,engineerId,stationFrom,selected?.id,comparison]);
   const save=async()=>{
     if(busy||!draft?.title.trim()||!draft.segments.length)return;
     setBusy(true);setError('');
