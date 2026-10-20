@@ -4,7 +4,14 @@
 
 ## Первый запуск
 
-Получите ветку с этой документацией через Git либо **Code → Download ZIP**. Из корневого каталога:
+Основная версия проекта находится в ветке `main`. Получите её через Git:
+
+```bash
+git clone --branch main https://github.com/R2NN/scaszc.git
+cd scaszc
+```
+
+Из корневого каталога запустите:
 
 ```bash
 docker compose -f compose.complete.yaml up --build -d
