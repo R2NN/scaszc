@@ -253,7 +253,9 @@ async function suggestMoscowAddresses(query, env = {}) {
   const results = (payload.results || []).filter(item => /москв/i.test([
     item.city, item.municipality, item.county, item.formatted,
   ].filter(Boolean).join(' '))).map(item => ({
-    address: item.formatted,
+    address: item.street && item.housenumber
+      ? [item.city || item.municipality || 'Москва', item.street, `дом ${item.housenumber}`].join(', ')
+      : item.formatted,
     coords: [Number(item.lat), Number(item.lon)],
     precision: item.result_type || '',
   })).filter(item => item.address && item.coords.every(Number.isFinite));

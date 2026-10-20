@@ -91,14 +91,11 @@ class LocalTransitRoutingClient:
         self._load_transfers()
         self.station_access = self._load_station_access()
         self.metro_paths_cache: dict[str, list[tuple[str, int, list[dict]]]] = {}
-        schema_path = self.database.parent.parent.parent.parent / 'research/mosmetro-api/schema.json'
+        schema_path = self._schema_path()
         self.metro_reference = (MetroReference(schema_path, walking,
                                                 boarding_wait_seconds=metro_wait_seconds)
                                 if schema_path.is_file() else None)
-        transport_schema = self._schema_path()
         self.transport_graph = self.metro_reference
-        if self.transport_graph is None and transport_schema.is_file():
-            self.transport_graph = MetroReference(transport_schema, walking, boarding_wait_seconds=metro_wait_seconds)
 
     def _schema_path(self):
         candidates = [Path(__file__).resolve().parents[3] / 'offline-assets/transit-sources/metro/schema.json',
@@ -161,7 +158,7 @@ class LocalTransitRoutingClient:
 
     def _load_station_access(self) -> dict[str, tuple[int, int]]:
         # The official schema provides platform entry/exit times for some stations.
-        schema_path = self.database.parent.parent.parent.parent / 'research/mosmetro-api/schema.json'
+        schema_path = self._schema_path()
         if not schema_path.is_file():
             return {}
         schema = json.loads(schema_path.read_text(encoding='utf-8'))['data']
@@ -246,11 +243,13 @@ class LocalTransitRoutingClient:
         return min(candidates, key=lambda route: route.duration_seconds or 10**9) if candidates else None
 
     def _relax_transfers(self, initial: _Label, labels: dict[str, _Label],
-                         *, allow_metro: bool) -> None:
+                         *, allow_metro: bool, arrival_bound: int | None = None) -> None:
         queue = deque([initial])
         while queue:
             current = queue.popleft()
             if labels.get(current.stop_id) is not current:
+                continue
+            if arrival_bound is not None and current.time >= arrival_bound:
                 continue
             for target, walk_time, source, distance in self.walk_transfers.get(current.stop_id, ()):
                 if source != 'VALHALLA_WALK_MATRIX' and self.transport_context.blocked('transfer', current.stop_id, target, self._at(current.time)):
@@ -264,6 +263,8 @@ class LocalTransitRoutingClient:
                 else:
                     duration = walk_time
                 candidate = current.time + duration
+                if arrival_bound is not None and candidate >= arrival_bound:
+                    continue
                 if candidate < labels.get(target, _Label(10**9, target, '', None, ())).time:
                     updated = _Label(candidate, target, 'transfer', current,
                                      (duration, source, distance, walk_time))
@@ -296,6 +297,8 @@ class LocalTransitRoutingClient:
                         paths=self._restricted_metro_paths(current.stop_id,current.time)
                 for target, duration, segments in paths:
                     candidate = current.time + duration
+                    if arrival_bound is not None and candidate >= arrival_bound:
+                        continue
                     if candidate < labels.get(target, _Label(10**9, target, '', None, ())).time:
                         updated = _Label(candidate, target, 'metro_path', current,
                                          (duration, segments))
@@ -318,6 +321,13 @@ class LocalTransitRoutingClient:
                        if self.metro_reference else None)
         direct_walk = self._direct_walk_option(origin, destination, departure_at)
         start = departure_at.hour * 3600 + departure_at.minute * 60 + departure_at.second
+        # A complete admissible route bounds the search: a later departure
+        # cannot improve its arrival when all travel and waiting times are nonnegative.
+        incumbent = self._fastest(metro_route, direct_walk)
+        arrival_bound = None
+        if incumbent is not None and incumbent.duration_seconds is not None:
+            arrival_bound = start + incumbent.duration_seconds
+        last_departure = min(start + self.horizon_seconds, arrival_bound) if arrival_bound is not None else start + self.horizon_seconds
         allow_metro = bool(self.transport_graph) or not (3600 <= start < 5 * 3600 + 30 * 60)
         access = self._walk_routes(origin, inbound=False, departure_at=departure_at)
         egress = self._walk_routes(destination, inbound=True, departure_at=departure_at)
@@ -336,11 +346,12 @@ class LocalTransitRoutingClient:
                                stop_id, 'access', None, (walk, platform_enter, opening_wait))
             if stop_id not in labels or candidate.time < labels[stop_id].time:
                 labels[stop_id] = candidate
-                self._relax_transfers(candidate, labels, allow_metro=allow_metro)
+                self._relax_transfers(candidate, labels, allow_metro=allow_metro,
+                                      arrival_bound=arrival_bound)
         cursor = self.db.execute(
             'SELECT from_id,to_id,dep,arr,trip_id,source FROM connections '
             'WHERE dep >= ? AND dep <= ? ORDER BY dep',
-            (start, start + self.horizon_seconds),
+            (start, last_departure),
         )
         for source_id, target_id, dep, arr, trip_id, timetable_source in cursor:
             source_label = labels.get(source_id)
@@ -352,7 +363,8 @@ class LocalTransitRoutingClient:
             updated = _Label(arr, target_id, 'ride', source_label,
                              (source_id, dep, arr, trip_id, timetable_source))
             labels[target_id] = updated
-            self._relax_transfers(updated, labels, allow_metro=allow_metro)
+            self._relax_transfers(updated, labels, allow_metro=allow_metro,
+                                  arrival_bound=arrival_bound)
         best = None
         for stop_id, walk in egress.items():
             label = labels.get(stop_id)

@@ -133,6 +133,64 @@ class LocalTransitMixedModeTests(unittest.TestCase):
         self.assertEqual(route.provenance.provider, 'LOCAL_GTFS_VALHALLA')
         self.assertIsNone(route.provenance.provider_metadata['rail_schedule_applied_to_date'])
 
+    def test_runtime_schema_supplies_platform_times_and_metro_reference(self) -> None:
+        schema = Path(self.temporary.name) / 'portable-schema.json'
+        schema.write_text(json.dumps({'data': {
+            'stations': [{'id': 1, 'lineId': 1, 'enterTime': 80, 'exitTime': 45}],
+            'connections': [], 'transitions': [],
+        }}), encoding='utf-8')
+        with sqlite3.connect(self.database) as db:
+            db.execute('INSERT INTO network_station_ids VALUES (?,?)', (1, 'm:1'))
+        with patch.object(LocalTransitRoutingClient, '_schema_path', return_value=schema):
+            client = LocalTransitRoutingClient(self.database, FakeWalkingClient())
+        self.clients.append(client)
+        self.assertEqual(client.station_access['m:1'], (80, 45))
+        self.assertIsNotNone(client.metro_reference)
+        self.assertIs(client.transport_graph, client.metro_reference)
+
+    def test_known_walk_bounds_scan_without_losing_faster_bus(self) -> None:
+        with sqlite3.connect(self.database) as db:
+            db.execute('INSERT INTO trips VALUES (?,?,?,?)', ('early', '1', 'B', 'bus'))
+            db.execute('INSERT INTO trips VALUES (?,?,?,?)', ('late', '2', 'B', 'bus'))
+            db.execute('INSERT INTO connections VALUES (?,?,?,?,?,?,?)',
+                       (1, 'g:a', 'g:b', 9 * 3600 + 30, 9 * 3600 + 90, 'early', 'GTFS'))
+            db.execute('INSERT INTO connections VALUES (?,?,?,?,?,?,?)',
+                       (2, 'g:a', 'g:b', 14 * 3600, 14 * 3600 + 60, 'late', 'GTFS'))
+        client = LocalTransitRoutingClient(self.database, FakeWalkingClient())
+        self.clients.append(client)
+        statements = []
+        client.db.set_trace_callback(statements.append)
+        route = client.route(
+            origin=Coordinate('origin', 55.7000, 37.6000),
+            destination=Coordinate('destination', 55.7301, 37.6301),
+            mode=TransportMode.PUBLIC_TRANSIT,
+            departure_at=datetime.fromisoformat('2026-08-17T09:00:00+03:00'),
+        )
+        self.assertEqual(route.status, RouteStatus.OK)
+        self.assertEqual(route.duration_seconds, 90)
+        self.assertIn('bus', [step.mode for step in route.itinerary])
+        scan = next(statement for statement in statements if 'FROM connections WHERE dep' in statement)
+        self.assertIn('dep <= 33400', scan)
+
+    def test_no_incumbent_keeps_arrivals_after_departure_horizon(self) -> None:
+        with sqlite3.connect(self.database) as db:
+            db.execute('INSERT INTO trips VALUES (?,?,?,?)', ('late', '1', 'B', 'bus'))
+            db.execute('INSERT INTO connections VALUES (?,?,?,?,?,?,?)',
+                       (1, 'g:a', 'g:b', 14 * 3600 + 50 * 60,
+                        15 * 3600 + 10 * 60, 'late', 'GTFS'))
+            db.execute('DELETE FROM metro_paths')
+        client = LocalTransitRoutingClient(self.database, FakeWalkingClient())
+        self.clients.append(client)
+        with patch.object(client, '_direct_walk_option', return_value=None):
+            route = client.route(
+                origin=Coordinate('origin', 55.7000, 37.6000),
+                destination=Coordinate('destination', 55.7301, 37.6301),
+                mode=TransportMode.PUBLIC_TRANSIT,
+                departure_at=datetime.fromisoformat('2026-08-17T09:00:00+03:00'),
+            )
+        self.assertEqual(route.status, RouteStatus.OK)
+        self.assertEqual(route.duration_seconds, 6 * 3600 + 10 * 60)
+
 
 if __name__ == '__main__':
     unittest.main()

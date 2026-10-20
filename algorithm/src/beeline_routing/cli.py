@@ -112,7 +112,7 @@ def create_route_client(
             cache,
             namespace=(
                 f'{transit_index.resolve()}:{stat.st_size}:{stat.st_mtime_ns}:'
-                f'metro-wait={metro_wait_seconds}:metro-hours-v2:'
+                f'metro-wait={metro_wait_seconds}:metro-hours-v3-entry-bounds:'
                 f'road-snapshot={valhalla.runtime_revision}'
                 + (f':transport={valhalla.transport_context.digest}' if any(e.get('kind') != 'road' or 'WALKING' in e.get('modes', []) for e in valhalla.transport_context.events) else '')
             ),
