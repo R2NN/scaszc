@@ -4,6 +4,7 @@ import { Marker, LngLatBounds } from 'maplibre-gl';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { INCIDENT_STATUSES, INCIDENT_TYPES, ORDER_DECISIONS, emptyServiceContext, orderLabel, relatedOrders, serviceEventAt, serviceHistoryRows, serviceStats } from './serviceContextDomain.js';
 import { useWorkspacePresence } from './useWorkspacePresence.js';
+import { browserId } from './browserId.js';
 import './serviceContext.css';
 
 const Context = createContext(null);
@@ -140,7 +141,7 @@ function NetworkEventForm({ model, onClose }) {
   const change = (key, value) => setForm(current => ({ ...current, [key]: value }));
   const submit = async event => {
     event.preventDefault();
-    const at = serviceEventAt(model.day, form.observedTime), recordedAt = new Date().toISOString(), id = crypto.randomUUID();
+    const at = serviceEventAt(model.day, form.observedTime), recordedAt = new Date().toISOString(), id = browserId();
     const component = { id: `ASSET-${id}`, title: form.component.trim(), provenance: 'operator', locationBasis: form.locationBasis.trim(), ...((form.lat !== '' && form.lng !== '') ? { coords: [Number(form.lat), Number(form.lng)] } : {}) };
     const incident = { id: `INC-${id.slice(0, 8)}`, title: form.title.trim(), componentId: component.id, type: form.type, status: 'review', provenance: 'operator', basis: form.basis.trim(), observedAt: at, updatedAt: recordedAt, orderIds: form.orderIds, history: [{ at, recordedAt, kind: 'signal', eventTimeKnown: true, text: 'Событие зарегистрировано диспетчером. Причина требует проверки.', actor: model.actor }], task: { ...taskDefaults } };
     try { await model.importData({ shiftId: model.shiftId, date: model.day, data: { cases: model.cases, incidents: [...model.incidents, incident], components: [...model.components, component] } }); onClose(); model.setIncidentId(incident.id); } catch { /* Shared error. */ }

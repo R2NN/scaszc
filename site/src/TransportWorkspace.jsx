@@ -11,6 +11,7 @@ import { EngineerPortrait } from './EngineerPortrait.jsx';
 import { BusinessSelect } from './BusinessSelect.jsx';
 import { DateTimePicker } from './DateTimePicker.jsx';
 import { metroSectionBetween } from './transportMetroSelection.js';
+import { browserId } from './browserId.js';
 import './transport.css';
 
 const sessions=new Map();
@@ -75,7 +76,7 @@ export function TransportPanel({shift,live=false,active=true,actor='Диспет
     if(!shift?.plan){setError('Выберите день с опубликованным планом');return;}
     roadRequest.current++;clearPreview();setSelected(null);setSearch('');setError('');setStationFrom('');setBusy(false);
     if(kind!=='road')transportMap.set({metro:true});
-    setDraft({id:crypto.randomUUID(),title:'',reason:'',kind,direction:'both',startsAt:`${date}T${live?timeOf(minute):'09:30'}:00+03:00`,endsAt:`${date}T${live?timeOf(Math.min(1439,minute+45)):'10:15'}:00+03:00`,segments:[],roadPoints:[],roadMode:'points',source:'Диспетчер',actor,status:'OPEN'});
+    setDraft({id:browserId(),title:'',reason:'',kind,direction:'both',startsAt:`${date}T${live?timeOf(minute):'09:30'}:00+03:00`,endsAt:`${date}T${live?timeOf(Math.min(1439,minute+45)):'10:15'}:00+03:00`,segments:[],roadPoints:[],roadMode:'points',source:'Диспетчер',actor,status:'OPEN'});
     setWhenMode(live?'now':'planned');setDrawing(true);
   };
   const clearPreview=()=>{generation.current++;calculationRequest.current++;clearTimeout(retryRef.current);const old=previewRef.current;previewRef.current=null;setPreview(null);if(old&&['RUNNING','READY'].includes(old.status))api(`previews/${old.id}/cancel`,{}).catch(()=>{});};
