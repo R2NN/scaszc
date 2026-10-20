@@ -120,6 +120,7 @@ export function attachDispatchMap(map, {events = window, dom = document, markerF
   };
   const refit = () => {
     if (!latestPreview) {if (incidentCoords) fit([]);return;}
+    if (latestPreview.focusRoute === false) return;
     preview({detail:{...latestPreview,focusRoute:true,restore:true}});
   };
   const layoutSettled = event => {

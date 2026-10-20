@@ -143,3 +143,19 @@ test('confirmation keeps the selected route without a yellow overlay or unrelate
   } finally {f.cleanup();}
   assert.equal(f.handlers.size,0);
 });
+
+test('applying an emergency keeps the camera through layout changes and style restoration', () => {
+  const f=setup();
+  try {
+    f.fire('dispatch-preview',{...f.preview,focusRoute:true});
+    f.loaded('idle');
+    const fits=f.fits.length;
+    f.fire('dispatch-preview',{...f.preview,focusRoute:false});
+    f.events.dispatchEvent(new Event('resize'));
+    f.loaded('idle');f.loaded('style.load');
+    assert.equal(f.fits.length,fits,'Confirmation and passive layout updates cannot override the user zoom');
+    assert.ok(f.sources.get('dispatch-after').data.features.length,'The applied route is still drawn');
+    f.fire('dispatch-scope',{scope:'next'});
+    assert.ok(f.fits.length>fits,'Explicit route navigation remains available');
+  }finally{f.cleanup();}
+});

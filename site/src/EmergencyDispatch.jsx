@@ -170,7 +170,7 @@ export function useEmergencyDispatch({ shift, active = false, inShift = false, o
     if (!preview(candidate, routeScope, candidate.engineer.id, false)) return;
     window.dispatchEvent(new CustomEvent('beego:dispatch-impact', {detail:{features:dispatchImpactPoints(rows)}}));
   };
-  const showResult = candidate => preview(candidate, routeScope);
+  const showResult = candidate => preview(candidate, routeScope, candidate.engineer.id, false);
   const startSession = async () => {
     try {
       const current=refs.current.shift;

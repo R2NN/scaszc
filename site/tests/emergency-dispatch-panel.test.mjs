@@ -251,7 +251,7 @@ test('preview controller emits the original revision after the shift plan was re
     controller.showResult({...candidate,changedEngineerIds:['E1','E2']});
     assert.equal(events[4].detail.highlightIds, undefined);
     assert.deepEqual(events[4].detail.ids, ['E1']);
-    assert.equal(events[4].detail.focusRoute, true);
+    assert.equal(events[4].detail.focusRoute, false,'Applying the decision preserves the operator camera');
     assert.equal(events[4].detail.before, before);
     controller.preview({...candidate,baseRevision:3});
     controller.showChanges({...candidate,baseRevision:3}, []);
