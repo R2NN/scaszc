@@ -451,15 +451,18 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
     available = tuple(key for key in eligible if key not in blocked and dataset.engineers[key].shift_start <= event.event_time < dataset.engineers[key].shift_end)
     intercepts = rank_interceptions(dataset, state.plan, event, available,
         payload['event'].get('dispatchAnchors', {}), oracle, checking_road)
-    # A local handoff is tried before ordinary insertions and regional rebuilding.
-    # Give each engineer a short exact first pass before a difficult handoff
-    # consumes hundreds of route trials. Exhaustion still falls back to the
-    # original broader search and never establishes infeasibility.
+    # The closest legal interception needs a full handoff check before ordinary
+    # offers. A 24-query probe cannot even revalidate many existing day routes.
+    # Reserve its broader fallback too, so other offers cannot consume its budget.
     quick_checks = min(24, args.max_route_checks)
-    attempts = [(key, False, True, quick_checks) for key in intercepts]
+    nearest = intercepts[:1]
+    current.update(priorityInterceptId=nearest[0] if nearest else None)
+    attempts = [(key, False, True, args.max_route_checks) for key in nearest]
+    attempts += [(key, True, True, 1000) for key in nearest]
+    attempts += [(key, False, True, quick_checks) for key in intercepts[1:]]
     attempts += [(key, False, False, quick_checks) for key in eligible]
-    attempts += [(key, False, True, args.max_route_checks) for key in intercepts]
-    attempts += [(key, True, True, 1000) for key in intercepts]
+    attempts += [(key, False, True, args.max_route_checks) for key in intercepts[1:]]
+    attempts += [(key, True, True, 1000) for key in intercepts[1:]]
     attempts += [(key, False, False, args.max_route_checks) for key in eligible]
     attempts += [(key, True, False, 1000) for key in eligible if key not in intercepts]
     for engineer_id, rebuild, handoff, trial_budget in attempts:

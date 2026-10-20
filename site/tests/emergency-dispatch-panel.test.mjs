@@ -5,6 +5,21 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 
+test('the nearest interception stays visible while its full route and handoff are checked', async () => {
+  const server=await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
+  try {
+    const {EmergencyDispatchPanel}=await server.ssrLoadModule('/src/EmergencyDispatch.jsx');
+    const item={id:'incident',status:'SEARCHING',order:{address:'Адрес аварии'},candidates:[],search:{complete:false},
+      progress:{stage:'INTERCEPT_HANDOFF',priorityIntercept:{id:'E1',name:'Выговский Сергей'}},policy:{enabled:false}};
+    const html=renderToStaticMarkup(React.createElement(EmergencyDispatchPanel,{controller:{selected:item}}));
+    assert.match(html,/dispatch-intercept-pending/);
+    assert.match(html,/Перехват в пути/);
+    assert.match(html,/Сергей Выговский/);
+    assert.match(html,/передачу прежней заявки/);
+    assert.doesNotMatch(html,/Направить на аварию/);
+  } finally {await server.close();}
+});
+
 test('emergency tab renders before an incident or submission exists', async () => {
   const server=await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
   try {

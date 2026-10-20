@@ -178,7 +178,9 @@ export class EmergencyDispatch {
         const fresh=this.get(id);
         if (!fresh || terminal(fresh) || controller.signal.aborted) return;
         const {dispatchCandidates:partial,...summary}=progress;
-        fresh.progress={...summary, engineerName:shift.team.find(e => String(e.sourceId || e.id).split(':').at(-1) === summary.engineerId)?.name};
+        const priorityIntercept=shift.team.find(e => String(e.sourceId || e.id).split(':').at(-1) === summary.priorityInterceptId);
+        fresh.progress={...summary, engineerName:shift.team.find(e => String(e.sourceId || e.id).split(':').at(-1) === summary.engineerId)?.name,
+          priorityIntercept:priorityIntercept ? {id:priorityIntercept.id,name:priorityIntercept.name} : null};
         // Scenario movement makes an offer require fresh confirmation; it must
         // not conceal an independently checked result while other crews search.
         if (partial?.length && this.fingerprint(this.store.get(item.shiftId))===fingerprint) {

@@ -274,6 +274,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
   const countdown = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
   const searching = Boolean(item && !terminal(item) && (['QUEUED', 'SEARCHING'].includes(item.status) || item.search?.complete === false && !item.search?.stoppedReason && item.status !== 'ERROR'));
   const checkingIntercept = searching && item?.progress?.stage?.startsWith('INTERCEPT_');
+  const pendingIntercept = searching && item?.progress?.priorityIntercept && !item.candidates.some(option => option.engineer.id === item.progress.priorityIntercept.id);
   const repairingCoverage = searching && item?.progress?.stage === 'COVERAGE_REPAIR';
   const recommended = item?.candidates.find(option => option.id === item.recommendedId);
   const recommendation = useMemo(() => recommended ? dispatchRecommendation(recommended, item.candidates) : '', [recommended, item?.candidates]);
@@ -310,7 +311,7 @@ export function EmergencyDispatchPanel({ controller, onRoute }) {
         </div> : null}
       </div> : null}
       {!pending && !accepted && item.candidates.length > 0 ? <p className='dispatch-preview-label'>Положение проверено на {item.candidates[0].scenarioTime}. Перед направлением уточним путь выбранного инженера по текущему времени.</p> : null}
-      {!pending && item.candidates.length > 0 ? <details className='dispatch-alternatives' open={accepted ? undefined : true} key={accepted ? 'accepted' : 'choosing'}><summary>{accepted ? 'Сравнить сохранённые варианты' : 'Варианты направления'}</summary>{!candidate ? <p className='dispatch-choice-hint'>Выберите карточку инженера для сравнения маршрута и заявок.</p> : null}<div className='dispatch-options' role='group' aria-label='Проверенные варианты'>{item.candidates.map(option => {
+      {!pending && (item.candidates.length > 0 || pendingIntercept) ? <details className='dispatch-alternatives' open={accepted ? undefined : true} key={accepted ? 'accepted' : 'choosing'}><summary>{accepted ? 'Сравнить сохранённые варианты' : 'Варианты направления'}</summary>{!candidate && item.candidates.length ? <p className='dispatch-choice-hint'>Выберите карточку инженера для сравнения маршрута и заявок.</p> : null}<div className='dispatch-options' role='group' aria-label='Проверенные варианты'>{pendingIntercept ? <div className='dispatch-option dispatch-intercept-pending' role='status'><span className='dispatch-option-kind'>Перехват в пути</span><b>{ratingName(item.progress.priorityIntercept)}</b><span>Проверяем маршрут от текущего положения и передачу прежней заявки</span></div> : null}{item.candidates.map(option => {
         const effect = impacts.get(option.id);
         return <button type='button' key={option.id} aria-pressed={option.id === candidate?.id} className={`dispatch-option ${option.id === candidate?.id ? 'selected' : ''}`} onClick={() => controller.preview(option)}>
           <span className='dispatch-option-head'><span className='dispatch-option-kind'>{option.kind}</span>{option.id === item.recommendedId ? <strong>Рекомендуем</strong> : option.responseMinutes === fastest && item.candidates.length > 1 ? <em>Быстрее всех</em> : null}</span>

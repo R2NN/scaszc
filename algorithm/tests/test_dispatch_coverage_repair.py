@@ -109,6 +109,48 @@ def test_dispatch_short_first_pass_keeps_the_broader_exact_fallback(tmp_path, mo
     assert final['dispatch_search']['complete']
 
 
+@pytest.mark.parametrize('needs_rebuild', [False, True])
+def test_nearest_travelling_engineer_gets_full_handoff_before_other_offers(tmp_path, monkeypatch, needs_rebuild):
+    from algorithm.tests.test_dispatch import scenario
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
+    import replan_ui_event as adapter
+    _, source, data, old, event, oracle, anchor = scenario()
+    calls, snapshots = [], []
+    real_replan, write = adapter.replan_after_event, adapter.write_json_atomic
+
+    def calculate(*args, **kwargs):
+        calls.append((kwargs['dispatch_engineer_id'], kwargs['handoff_interrupted_job'],
+                      kwargs['rebuild_future'], kwargs['max_route_checks']))
+        result = real_replan(*args, **kwargs)
+        if needs_rebuild and len(calls) == 1:
+            return replace(result, state=None, exact_route_checks=400, budget_exhausted=True)
+        return result
+
+    def capture(file, payload):
+        if 'dispatch_candidates' in payload:
+            snapshots.append(json.loads(json.dumps(payload)))
+        write(file, payload)
+
+    monkeypatch.setattr(adapter, 'replan_after_event', calculate)
+    monkeypatch.setattr(adapter, 'write_json_atomic', capture)
+    args = SimpleNamespace(output=tmp_path / 'offers.json', transit_index=Path('model-index.sqlite'),
+                           rebuild_route_checks=5000, max_route_checks=400)
+    adapter.dispatch_variants(args, {'event': {'dispatchAnchors': {'E1': anchor}},
+        'orders': [], 'team': [], 'dispatchCoverageRepair': False}, source, data, ReplanningState(old),
+        event, {'content_sha256': '0' * 64}, [], oracle)
+    assert calls[0] == ('E1', True, False, 400)
+    if needs_rebuild:
+        assert calls[1] == ('E1', True, True, 1000)
+    first = snapshots[0]['dispatch_candidates'][0]
+    assert first['dispatch_engineer_id'] == 'E1'
+    assert first['dispatch_handoff'] is True
+    assert first['validation']['status'] == 'VALID'
+    routes = {route['engineer_id']: route for route in first['plan']['engineer_plans']}
+    assert routes['E1']['visits'][0]['job_id'] == 'U'
+    assert any(visit['job_id'] == 'A' for key, route in routes.items() if key != 'E1' for visit in route['visits'])
+    assert not first['plan']['unserved_job_ids']
+
+
 @pytest.mark.parametrize('worsen', [None, 'response', 'another_assignment', 'confirmation'])
 def test_dispatch_publishes_first_offer_before_repair_then_replaces_only_with_strict_improvement(tmp_path, monkeypatch, worsen):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
