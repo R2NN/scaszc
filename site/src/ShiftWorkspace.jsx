@@ -251,7 +251,7 @@ export function ShiftPlaybackBar({ compact = false, shift = null, onSelectOrder,
       <button type="button" className="shift-task-boundary finish" style={{ left: `${Math.max(0, Math.min(99, ((minuteOf(selected.route.shiftEnd) ?? 1380) - axisStart) / axisSpan * 100))}%` }} onClick={() => seek(minuteOf(selected.route.shiftEnd) ?? 1380)} title={`Завершение смены ${selected.route.shiftEnd}`} aria-label={`Завершение смены ${selected.route.shiftEnd}`}><Flag size={14}/></button>
     </div> : null}
     {!compact && selectedTask && selectedTaskOrder ? <div className="shift-timeline-task-detail"><b>№ {orderNumber(selectedTaskOrder)}</b><span title={selectedTaskOrder.name || selectedTaskOrder.sourceId}>{selectedTaskOrder.name || selectedTaskOrder.sourceId || 'Заявка'} · {selectedTask.plannedStart}–{selectedTask.plannedFinish}</span><em className={`shift-status status-${visits.get(String(selectedTask.orderId))?.status || 'planned'}`}>{visitStatusLabel(visits.get(String(selectedTask.orderId))?.status,clock.mode)}</em><button type="button" onClick={() => onEditOrder?.(selectedOrderId)}>Изменить</button></div> : null}
-    <input type="range" min="360" max="1380" step="1" disabled={Boolean(clock.restartDay)} value={Math.floor(clock.minute)} onChange={event => seek(Number(event.target.value))} aria-label="Время смены"/>
+    <input type="range" min="360" max="1380" step="1" disabled={Boolean(clock.restartDay)||(!compact&&!shift?.plan)} value={Math.floor(clock.minute)} onChange={event => seek(Number(event.target.value))} aria-label="Время смены"/>
     <div className="shift-time-axis">{['06:00','09:00','12:00','15:00','18:00','21:00','23:00'].map(label => <span key={label}>{label}</span>)}</div>
   </div>;
 }
@@ -982,7 +982,7 @@ export function ShiftWorkspace({
     }
   };
   return (
-    <div className={`shift-layer${!reportOnly && !assistantOnly && !standaloneReplanning ? ' operational-shift' : ''}${reportOnly ? ' report-layer' : ''}${assistantOnly ? ' assistant-layer' : ''}${standaloneReplanning ? ' replanning-layer' : ''} ${motionClass}`}>
+    <div data-shift-id={shift?.id} className={`shift-layer${!reportOnly && !assistantOnly && !standaloneReplanning ? ' operational-shift' : ''}${reportOnly ? ' report-layer' : ''}${assistantOnly ? ' assistant-layer' : ''}${standaloneReplanning ? ' replanning-layer' : ''} ${motionClass}`}>
       <aside className={`shift-panel${!reportOnly && (tab === 'crews' || tab === 'orders') ? ' shift-list-panel' : ''}${standaloneReplanning ? ' replanning-panel' : ''}`}>
         <header>
           {!assistantOnly ? <small>{reportOnly ? 'ИТОГИ СМЕНЫ' : standaloneReplanning ? 'УПРАВЛЕНИЕ ПЛАНОМ' : 'ОПЕРАТИВНОЕ УПРАВЛЕНИЕ'}</small> : null}

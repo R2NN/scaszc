@@ -5,6 +5,18 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 
+test('the shift timeline waits for its saved day while compact engineer playback remains available',async()=>{
+  const server=await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
+  try{
+    const {ShiftPlaybackBar}=await server.ssrLoadModule('/src/ShiftWorkspace.jsx');
+    for(const compact of [false,true]){
+      const html=renderToStaticMarkup(React.createElement(ShiftPlaybackBar,{compact}));
+      const range=html.match(/<input[^>]*type="range"[^>]*>/)[0];
+      assert.equal(range.includes('disabled=""'),!compact);
+    }
+  }finally{await server.close();}
+});
+
 test('the nearest interception stays visible while its full route and handoff are checked', async () => {
   const server=await createServer({configFile:false,plugins:[react()],server:{middlewareMode:true,hmr:false},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
   try {
