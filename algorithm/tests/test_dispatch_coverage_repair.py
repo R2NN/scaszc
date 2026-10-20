@@ -203,3 +203,36 @@ def test_dispatch_publishes_first_offer_before_repair_then_replaces_only_with_st
     assert final['dispatch_search']['coverage_repair'][0]['accepted']
     assert final['dispatch_search']['complete']
     assert final['dispatch_search']['route_checks'] <= 5000
+
+
+def test_selected_interception_can_rebuild_without_handoff_when_its_receiver_is_unavailable(tmp_path, monkeypatch):
+    from algorithm.tests.test_dispatch import scenario
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
+    import replan_ui_event as adapter
+    _, source, data, old, event, oracle, anchor = scenario()
+    data = replace(data, engineers={key: replace(engineer, is_available=False) if key == 'E2' else engineer
+                                   for key, engineer in data.engineers.items()})
+    calculate = adapter.replan_after_event
+    calls = []
+    def bounded_search(*values, **options):
+        calls.append((options['dispatch_engineer_id'], options['handoff_interrupted_job'], options['rebuild_future']))
+        result = calculate(*values, **options)
+        if not options['rebuild_future']:
+            return replace(result, state=None, budget_exhausted=True)
+        return result
+    monkeypatch.setattr(adapter, 'replan_after_event', bounded_search)
+    args = SimpleNamespace(output=tmp_path / 'offers.json', transit_index=Path('model-index.sqlite'),
+                           rebuild_route_checks=5000, max_route_checks=400)
+    adapter.dispatch_variants(args, {'event': {'orderId': 'U', 'dispatchAnchors': {'E1': anchor}},
+        'orders': [], 'team': [], 'dispatchEngineerId': 'E1', 'dispatchCoverageRepair': False},
+        source, data, ReplanningState(old), event, {'content_sha256': '0' * 64}, [], oracle)
+    final = json.loads(args.output.read_text())['dispatch_candidates'][0]
+    assert calls[-1] == ('E1', False, True)
+    assert final['dispatch_engineer_id'] == 'E1'
+    assert final['validation']['status'] == 'VALID'
+    plan, _ = adapter.load_exact_plan_artifact(tmp_path / f'{final["content_sha256"]}.json', data.dataset_sha256)
+    route = next(route for route in plan.engineer_plans if route.engineer_id == 'E1')
+    assert route.visits[0].job_id == 'U'
+    assert any(visit.job_id == 'A' for visit in route.visits)
+    assert route.visits[0].departure_at == event.event_time
+    assert not plan.unserved_job_ids

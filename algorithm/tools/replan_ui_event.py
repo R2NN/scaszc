@@ -464,7 +464,7 @@ def dispatch_variants(args, payload, canonical, dataset, state, event, source, h
     attempts += [(key, False, True, args.max_route_checks) for key in intercepts[1:]]
     attempts += [(key, True, True, 1000) for key in intercepts[1:]]
     attempts += [(key, False, False, args.max_route_checks) for key in eligible]
-    attempts += [(key, True, False, 1000) for key in eligible if key not in intercepts]
+    attempts += [(key, True, False, 1000) for key in eligible]
     for engineer_id, rebuild, handoff, trial_budget in attempts:
         if any(item['dispatch_engineer_id'] == engineer_id for item in artifacts):
             continue
